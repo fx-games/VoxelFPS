@@ -1,0 +1,240 @@
+package quads
+
+import (
+    "github.com/go-gl/gl/v3.3-core/gl"
+    "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/quads/glhf"
+)
+
+const (
+    CubeShaderModelTransform int = iota
+    CubeShaderAtlasGridSize
+    CubeShaderDebugSwitch
+)
+
+func LoadCubeShader(uboBlock string) *glhf.Shader {
+    var (
+        vertexFormat = glhf.AttrFormat{
+            {Name: "compressedValue", Type: glhf.UInt},
+        }
+        uniformFormat = glhf.AttrFormat{
+            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+            glhf.Attr{Name: "atlasGridSize", Type: glhf.Vec2},  // 1
+            glhf.Attr{Name: "debugSwitch", Type: glhf.Float},   // 2
+        }
+        shader *glhf.Shader
+    )
+
+    var err error
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+chunkVertexShaderSource, fragmentShaderHeader(uboBlock)+chunkFragmentShaderSource)
+
+    if err != nil {
+        panic(err)
+    }
+
+    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+        panic(errorMsg)
+    }
+    shader.Begin()
+    shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
+    shader.SetUniformAttr(CubeShaderDebugSwitch, float32(0.0))
+    shader.End()
+
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+
+    return shader
+}
+
+const chunkVertexShaderSource = `
+layout(column_major) uniform;
+
+// Plan for the bit-packing
+// 32 bits per vertex
+// Bits 0..4: X position (0..31)
+// xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+//                                  ^ ^^^^
+//                                  X Position
+
+// Bits 5..9: Y position (0..31)
+// xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+//                            ^^ ^^^
+//                            Y Position
+
+// Bits 10..14: Z position (0..31)
+// xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+//                      ^^^ ^^
+//                      Z Position
+
+// Bits 15..17: Normal (0..5)
+// xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+//                  ^^ ^
+//                  Normal Direction (1,0,0) (-1,0,0) (0,1,0) (0,-1,0) (0,0,1) (0,0,-1)
+
+// Bits 18..31: Texture Index (0..4095)
+// xxxx xxxx xxxx xxxx xxxx xxxx xxxx xxxx
+// ^^^^ ^^^^ ^^^^ ^^
+// Texture Index
+
+//in vec3 position; // should be between 0..31
+// 32 states needs 5 bits, so 5 bits per axis => 15 bits
+//in vec3 normal;   // one of 6 directions, 0..5
+// 6 states needs 3 bits, so 3 bits per normal
+// what texture to apply? 1 byte?
+// uv coords for texture? derive from texture index and position of vertex in quad (0..3)
+// 4 states needs 2 bits, so 2 bits per uv coord
+
+// that's 20 bits per vertex without the texture index
+// if we assume a 32 bit int, that leaves 12 bits for the texture index
+
+/* Compression of position
+xAxis := position.X         // 6 bits
+yAxis := position.Y << 7   // 6 bits
+zAxis := position.Z << 14   // 6 bits
+*/
+/* Compression of attributes
+// 3 bits for the normal direction (0..5)
+attributes := int32(normalDirection) << 21
+// 8 bits for the texture index (0..255)
+attributes |= int32(textureIndex) << 24
+*/
+
+in uint compressedValue;
+
+flat out vec3 VertNormal;
+out float VertLightLevel;
+out vec3 VertPos;
+flat out uint VertTexIndex;
+
+// set uniform locations
+uniform mat4 modelTransform;
+
+vec3[6] normalLookup = vec3[6](
+    vec3(1.0, 0.0, 0.0),    // xp
+    vec3(-1.0, 0.0, 0.0),   // xn
+    vec3(0.0, 1.0, 0.0),    // yp
+    vec3(0.0, -1.0, 0.0),   // yn
+    vec3(0.0, 0.0, 1.0),    // zp
+    vec3(0.0, 0.0, -1.0)    // zn
+);
+
+void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir, out uint textureIndex, out float lightLevel)
+{
+    uint positionX = compressedValue & uint(0x3F);// 0x3F = 0b111111
+    uint yPart = compressedValue >> uint(6);
+    uint positionY = yPart & uint(0x1F); // 6 bits => 0x3F = 0b111111, 5 bits => 0x1F = 0b11111, 4 bits => 0xF = 0b1111
+    uint zPart = compressedValue >> uint(11);
+    uint positionZ = zPart & uint(0x3F);
+    position = vec3(float(positionX), float(positionY), float(positionZ));
+
+    normalDir = (compressedValue >> uint(17)) & uint(0x7);// 0x7 = 0b111
+    textureIndex = (compressedValue >> uint(20)) & uint(0xFF);// 0xFF = 0b11111111
+
+    uint light = (compressedValue >> uint(28)) & uint(0xF);
+    lightLevel = float(light);
+}
+
+
+void main() {
+    // decompress the vertex
+    uint normalDir = uint(1);
+
+    decompressVertex(compressedValue, VertPos, normalDir, VertTexIndex, VertLightLevel);
+
+    // pass-through for fragment shader
+    VertNormal = normalLookup[normalDir];
+
+    gl_Position = camProjectionView * modelTransform * vec4(VertPos, 1.0);
+}`
+
+const chunkFragmentShaderSource = `
+layout(column_major) uniform;
+
+flat in vec3 VertNormal;
+in vec3 VertPos;
+in float VertLightLevel;
+flat in uint VertTexIndex;
+
+uniform vec2 atlasGridSize;
+uniform mat4 modelTransform;
+uniform float debugSwitch;
+
+uniform sampler2D tex;
+
+uniform usampler3D voxelTexLookup;
+
+layout (location = 0) out vec4 fragmentColor;
+
+void main() {
+
+    ivec2 textureSize2d = textureSize(tex,0);
+
+    uint tilesPerRow = uint(atlasGridSize.x);
+    uint tilesPerColumn = uint(atlasGridSize.y);
+
+    float normalizedPixelSizeX = 1.0 / float(textureSize2d.x);
+    float normalizedPixelSizeY = 1.0 / float(textureSize2d.y);
+
+    uint textureIndex = VertTexIndex;
+    
+    if (debugSwitch > 0.0) {
+        uint voxX = uint(VertPos.x);
+        uint voxY = uint(VertPos.y);
+        uint voxZ = uint(VertPos.z);
+        uint mapSizeX = uint(32);
+        uint mapSizeY = uint(32);
+        uint mapSizeZ = uint(32);
+
+        float normalizedX = float(voxX) / float(mapSizeX);
+        float normalizedY = float(voxY) / float(mapSizeY);
+        float normalizedZ = float(voxZ) / float(mapSizeZ);
+
+        vec3 voxCoords = vec3(normalizedX, normalizedY, normalizedZ);
+        textureIndex = texture(voxelTexLookup, voxCoords).r;
+    }
+    
+
+    float xOffset = float(textureIndex % tilesPerRow);
+    float yOffset = float(textureIndex / tilesPerRow);
+
+    float u = 0.0;
+    float v = 0.0;
+
+    float floatSamplingAdjustmentX = 0.001 * normalizedPixelSizeX;
+    float floatSamplingAdjustmentY = 0.002 * normalizedPixelSizeY;
+
+    if (VertNormal.z > 0.0) {
+        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = (yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn) - floatSamplingAdjustmentY;
+    } else if (VertNormal.z < 0.0) {
+        u = ((xOffset + (1.0 - fract(VertPos.x))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = (yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn) - floatSamplingAdjustmentY;
+    } else if (VertNormal.x > 0.0) {
+        u = ((xOffset + (1.0 - fract(VertPos.z))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = ((yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+    } else if (VertNormal.x < 0.0) {
+        u = ((xOffset + fract(VertPos.z)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = ((yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+    } else if (VertNormal.y > 0.0) {
+        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn));// - floatSamplingAdjustmentY;
+    } else if (VertNormal.y < 0.0) {
+        u = ((xOffset + (1.0 - fract(VertPos.x))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
+        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn));// - floatSamplingAdjustmentY;
+    }
+
+    // clamp to 0-1 range
+    u = clamp(u, 0.0, 1.0);
+    v = clamp(v, 0.0, 1.0);
+
+    vec4 surfaceColor = texture(tex, vec2(u, v));
+    
+    vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0) * camDirection.xyz;
+    
+    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
+    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
+
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+}`

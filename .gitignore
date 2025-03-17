@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+bs1_audio/
+bs1_gfx/
+bs2_audio/
+bs2_gfx/
+assets/audio/
+*.exe

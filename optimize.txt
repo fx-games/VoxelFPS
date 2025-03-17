@@ -1,0 +1,33 @@
+Todo:
+ - Physics: Jumping, Gravity, Throwing
+ - Decals
+ - Textured Particles (Blood & Gore, Smoke, Fire, Shards)
+ - Pickups
+ - Destructible Props (Bottle, Barrel, Crate)
+ - Better Collisions
+ - Hitscan & Projectile Weapons
+ - Water
+ - Text View
+ - Dialog UI
+ - Container UI
+ - Stackable Boxes
+ - More Borders
+ - HDR / Bloom
+ - Enemy Movement
+ - Static Enemy/Weapon Import Format with Doom exporters
+ - SDF Font Rendering
+ - TTF Fonts: https://github.com/raedatoui/glfont
+
+If performance drops, this could help:
+
+ - Draw all static sprites/meshes in a single draw call
+ - Quad/Octree based culled rendering
+ - Do better frustum culling
+ - Instanced Rendering
+ - Remove Greedy Meshing limitations by moving texture information from the vertexes into a separate texture
+ - Deferred Rendering?
+
+Plan
+ - Scenery Objects (Sprite & Mesh)
+ - Actors & Paths & Dialogues
+ - Pickups & Inventory & Tools

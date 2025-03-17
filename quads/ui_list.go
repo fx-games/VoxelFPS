@@ -1,0 +1,346 @@
+package quads
+
+import (
+    "github.com/go-gl/glfw/v3.3/glfw"
+    "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/quads/glhf"
+    "math"
+)
+
+type GuiList struct {
+    labels        []*BitmapFontMesh
+    selectedIndex int
+
+    shader          *glhf.Shader
+    textColor       mgl32.Vec4
+    textSelectColor mgl32.Vec4
+    fontHeight      int
+    listOrigin      mgl32.Vec2
+    size            mgl32.Vec2
+
+    isHidden         bool
+    isCentered       bool
+    vertScrollOffset int
+    items            []string
+    keyHandler       func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool
+    border           *GuiBorder
+    uiTexture        *glhf.Texture
+
+    scale       mgl32.Vec2
+    shouldClose bool
+
+    font           BitmapFont
+    maxWidth       float32
+    maxHeight      float32
+    originIsCenter bool
+    layoutIsDirty  bool
+}
+
+func (g *GuiList) HandleDrop(names []string, x float64, y float64) bool {
+    return false
+}
+
+func (g *GuiList) ShouldClose() bool {
+    return g.shouldClose
+}
+
+func (g *GuiList) Close() {
+    g.shouldClose = true
+}
+
+func (g *GuiList) SetKeyHandler(handler func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool) {
+    g.keyHandler = handler
+}
+
+func (g *GuiList) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
+    if action != glfw.Press {
+        return false
+    }
+    if g.keyHandler != nil {
+        return g.keyHandler(g.selectedIndex, key, scancode, action, mods)
+    }
+    return false
+}
+
+func (g *GuiList) HandleMousePosEvents(xpos float64, ypos float64) (consumed bool) {
+    return false
+}
+
+func (g *GuiList) HandleMouseButtonEvents(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
+    return false
+}
+
+func (g *GuiList) HandleScrollEvents(xoff float64, yoff float64) (consumed bool) {
+    if yoff > 0 {
+        g.SelectNext()
+    } else {
+        g.SelectPrevious()
+    }
+    return true
+}
+
+// NewGuiList creates a new GuiList.
+func NewGuiList(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont) *GuiList {
+    _, h := font.Texture.GetAtlasItemSize()
+    return &GuiList{
+        shader:          shader,
+        font:            font,
+        uiTexture:       uiTexture,
+        fontHeight:      h,
+        textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
+        textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
+        scale:           mgl32.Vec2{1, 1},
+        maxWidth:        math.MaxFloat32,
+        maxHeight:       math.MaxFloat32,
+        layoutIsDirty:   true,
+    }
+}
+
+func (g *GuiList) SelectNext() {
+    if len(g.labels) == 0 {
+        g.selectedIndex = 0
+        return
+    }
+    g.selectedIndex = (g.selectedIndex + 1) % len(g.labels)
+    g.ensureSelectedVisible()
+}
+
+func (g *GuiList) SelectPrevious() {
+    if len(g.labels) == 0 {
+        g.selectedIndex = 0
+        return
+    }
+    g.selectedIndex = g.selectedIndex - 1
+    if g.selectedIndex < 0 {
+        g.selectedIndex = len(g.labels) - 1
+    }
+    g.ensureSelectedVisible()
+}
+
+func (g *GuiList) ScrollUp() {
+    if !g.verticalScrollingNeeded() {
+        return
+    }
+    g.vertScrollOffset -= 1
+    if g.vertScrollOffset < 0 {
+        g.vertScrollOffset = 0
+    }
+}
+
+func (g *GuiList) ScrollDown() {
+    if !g.verticalScrollingNeeded() {
+        return
+    }
+    g.vertScrollOffset += 1
+    if g.vertScrollOffset > len(g.labels)-g.linesShown() {
+        g.vertScrollOffset = len(g.labels) - g.linesShown()
+    }
+}
+
+func (g *GuiList) ensureSelectedVisible() {
+    if g.selectedIndex < g.vertScrollOffset {
+        g.vertScrollOffset = g.selectedIndex
+    } else if g.selectedIndex > g.lastVisibleLine() {
+        g.vertScrollOffset = g.selectedIndex - g.linesShown() + 1
+    }
+}
+
+func (g *GuiList) GetSelectedIndex() int {
+    return g.selectedIndex
+}
+
+func (g *GuiList) SetSelectedIndex(idx int) {
+    g.selectedIndex = idx
+}
+
+func (g *GuiList) yFromIndex(idx int) float32 {
+    return float32(g.lineHeight() * idx)
+}
+
+func (g *GuiList) heightNeeded(items []string, maxHeight int) int {
+    if len(items) == 0 {
+        return maxHeight
+    }
+    return g.lineHeight() * min(len(items), maxHeight/g.lineHeight())
+}
+
+func (g *GuiList) widthNeeded(items []string, maxWidth int) int {
+    if len(items) == 0 {
+        return maxWidth
+    }
+    var widthNeeded int
+    for idx := 0; idx < len(items); idx++ {
+        strW, _ := g.font.MeasureString([]string{items[idx]}, mgl32.Vec2{1, 1}, 0, 2)
+        if strW > widthNeeded {
+            widthNeeded = strW
+        }
+    }
+    return min(widthNeeded, maxWidth)
+}
+
+func (g *GuiList) linesShown() int {
+    return int(g.size[1]) / g.lineHeight()
+}
+
+func (g *GuiList) lineHeight() int {
+    horizPadding := 2
+    return int((float32(g.fontHeight) * g.scale.Y()) + float32(horizPadding))
+}
+
+func (g *GuiList) verticalScrollingNeeded() bool {
+    if len(g.labels) == 0 {
+        return false
+    }
+    return g.linesShown() < len(g.labels)
+}
+
+func (g *GuiList) lastVisibleLine() int {
+    return g.vertScrollOffset + g.linesShown() - 1
+}
+
+func (g *GuiList) SetItems(items []string) {
+    g.items = items
+    g.layoutIsDirty = true
+}
+
+func (g *GuiList) SetBounds(maxWidth, maxHeight float32) {
+    g.maxWidth = maxWidth
+    g.maxHeight = maxHeight
+    g.layoutIsDirty = true
+}
+
+func (g *GuiList) SetCenteredOnScreen() {
+    g.originIsCenter = true
+    g.layoutIsDirty = true
+}
+
+func (g *GuiList) SetOrigin(x, y float32) {
+    g.listOrigin = mgl32.Vec2{x, y}
+    g.layoutIsDirty = true
+}
+
+func (g *GuiList) layout() {
+    g.size = mgl32.Vec2{float32(g.widthNeeded(g.items, int(g.maxWidth))), float32(g.heightNeeded(g.items, int(g.maxHeight)))}
+    g.vertScrollOffset = 0
+    topLeft := g.topLeft()
+    size := g.size
+    items := g.items
+    // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
+
+    g.border = NewGuiBorder(g.shader, g.uiTexture, topLeft, size)
+    g.border.SetBackground(mgl32.Vec4{0, 0, 0, 0.6})
+    g.border.SetBorderColor(g.textColor)
+
+    g.labels = nil
+    for idx := 0; idx < len(items); idx++ {
+        mesh := g.newFontMesh(items[idx])
+        g.labels = append(g.labels, mesh)
+    }
+}
+
+func (g *GuiList) ReplaceText(index int, text string) {
+    if index < 0 || index >= len(g.labels) {
+        return
+    }
+    width, _ := g.font.MeasureString([]string{text}, g.scale, 0, 2)
+    //width, _ := g.labels[index].CalculateSizeScaled([]string{text})
+    if width > int(g.size.X()) {
+        g.labels[index].SetScale(mgl32.Vec2{(float32(g.size.X()) / float32(width)) * g.scale.X(), g.scale.Y()})
+    } else {
+        g.labels[index].SetScale(g.scale)
+    }
+    g.labels[index].SetText(text)
+}
+
+func (g *GuiList) newFontMesh(label string) *BitmapFontMesh {
+    size := g.size
+    mesh := NewBitmapFontMesh(g.shader, g.font)
+    mesh.SetWidth(int(size.X()))
+    mesh.SetCenterOrigin(g.isCentered)
+    mesh.SetBackground(g.textColor)
+    mesh.SetTintColor(g.textColor)
+    itemW, _ := mesh.CalculateSizeScaled([]string{label})
+    itemW = int(float32(itemW) * g.scale.X())
+    if itemW > int(size.X()) {
+        mesh.SetScale(mgl32.Vec2{(float32(size.X()) / float32(itemW)) * g.scale.X(), g.scale.Y()})
+    } else {
+        mesh.SetScale(g.scale)
+    }
+    mesh.SetText(label)
+    return mesh
+}
+
+func (g *GuiList) topLeft() mgl32.Vec2 {
+    if g.originIsCenter {
+        return mgl32.Vec2{g.listOrigin.X() - g.size.X()/2, g.listOrigin.Y() - g.size.Y()/2}
+    }
+    return g.listOrigin
+}
+
+func (g *GuiList) Draw() {
+    if g.isHidden {
+        return
+    }
+    if g.layoutIsDirty {
+        g.layout()
+        g.layoutIsDirty = false
+    }
+    g.shader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
+
+    if len(g.labels) > 0 {
+        g.border.Draw()
+    } else {
+        g.border.DrawWithoutBackground()
+    }
+
+    topLeft := g.topLeft()
+
+    for idx := 0; idx < min(g.linesShown(), len(g.labels)); idx++ {
+        itemIndex := idx + g.vertScrollOffset
+        if itemIndex >= len(g.labels) {
+            break
+        }
+        mesh := g.labels[itemIndex]
+        if itemIndex == g.selectedIndex {
+            mesh.SetTintColor(g.textSelectColor)
+            mesh.SetBackground(g.textColor)
+        } else {
+            mesh.SetTintColor(g.textColor)
+            mesh.NoBackground()
+        }
+        //curPos := mgl32.Vec2{g.size.X() / 2, g.yFromIndex(idx) + float32(g.lineHeight()/2)}
+        curPos := mgl32.Vec2{0, g.yFromIndex(idx)}
+        if g.isCentered {
+            curPos = curPos.Add(mgl32.Vec2{g.size.X() / 2, float32(g.lineHeight() / 2)})
+        }
+
+        drawPos := topLeft.Add(curPos)
+
+        mesh.SetPosition(drawPos)
+        mesh.Draw()
+    }
+}
+
+func (g *GuiList) SetTextCentered(centered bool) {
+    g.isCentered = centered
+}
+
+func (g *GuiList) Hide() {
+    g.isHidden = true
+}
+
+func (g *GuiList) Show() {
+    g.isHidden = false
+}
+
+func (g *GuiList) RemoveByIndex(index int) {
+    if index < 0 || index >= len(g.labels) {
+        return
+    }
+    g.labels = append(g.labels[:index], g.labels[index+1:]...)
+    g.items = append(g.items[:index], g.items[index+1:]...)
+    if g.selectedIndex >= len(g.labels) {
+        g.selectedIndex = len(g.labels) - 1
+    }
+    g.ensureSelectedVisible()
+}
