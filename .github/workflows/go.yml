@@ -1,7 +1,10 @@
 # This workflow will build a golang project
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+env:
+  GO_VERSION: 1.24.1
+  PROJECT_NAME: go-fps
 
-name: Go
+name: Go Multi-Build
 on:
   push:
     tags:
@@ -23,14 +26,28 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24.1'
+        go-version: "$GO_VERSION"
+
+    - name: Create Build directory
+      run: mkdir build
+
+    - name: Copy assets
+      run: cp -r assets build/assets
 
     - name: Build
-      run: CGOENABLED=1 go build -o gofps -v .
+      run: CGOENABLED=1 go build -o "./build/$PROJECT_NAME" -v .
+
+    - name: Archive Release
+      uses: thedoctor0/zip-release@0.7.5
+      with:
+        type: 'zip'
+        filename: "$PROJECT_NAME.zip"
+        directory: .
+        path: 'build'
 
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
         token: ${{ secrets.RELEASE_TOKEN }}
         files: |
-          gofps
+          "$PROJECT_NAME.zip"
