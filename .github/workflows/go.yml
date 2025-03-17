@@ -1,5 +1,6 @@
 # This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+# REQUIRES: secrets.RELEASE_TOKEN (Personal Access Token) to be configured in the repository secrets
+
 env:
   GO_VERSION: 1.24.1
   PROJECT_NAME: go-fps
@@ -42,7 +43,7 @@ jobs:
           CGO_ENABLED: 1
 
       - name: Copy assets
-        run: Copy-Item -Path assets -Destination "assets\$env:PROJECT_NAME" -Recurse -Container
+        run: Copy-Item -Path assets -Destination "$env:PROJECT_NAME\assets" -Recurse -Container
 
       - name: Archive Release
         uses: thedoctor0/zip-release@0.7.5
