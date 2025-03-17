@@ -6,18 +6,18 @@ import (
     "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/glhf"
     "io/fs"
-    "path/filepath"
+    "path"
 )
 
 //go:embed files/*
 var assets embed.FS
 
 func ReadFile(path string) ([]byte, error) {
-    return assets.ReadFile(filepath.Join("files", path))
+    return assets.ReadFile(path.Join("files", path))
 }
 
 func OpenFile(path string) (fs.File, error) {
-    return assets.Open(filepath.Join("files", path))
+    return assets.Open(path.Join("files", path))
 }
 
 func LoadTextureAtlas(fileName string, tileWidth int, tileHeight int) *glhf.Texture {
@@ -29,7 +29,7 @@ func LoadTextureAtlas(fileName string, tileWidth int, tileHeight int) *glhf.Text
 }
 
 func LoadBitmapFont(filename string, glyphWidth int, glyphHeight int, uiScale mgl32.Vec2) quads.BitmapFont {
-    extension := filepath.Ext(filename)
+    extension := path.Ext(filename)
     withoutExtension := filename[:len(filename)-len(extension)]
     fontTextureAtlas := LoadTextureAtlas(filename, glyphWidth, glyphHeight)
     indexReader, _ := OpenFile(withoutExtension + ".idx")
