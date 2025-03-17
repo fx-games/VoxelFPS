@@ -12,7 +12,53 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-windows:
+#    needs: build-darwin
+    name: Build Windows Executable
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW
+        uses: egor-tensin/setup-mingw@v2.2.0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Create Build directory (windows)
+        run: md "$env:PROJECT_NAME"
+
+      - name: Build Client
+        run: go build -o "$env:PROJECT_NAME\$env:PROJECT_NAME.exe" .
+#        working-directory: D:\a\voxel-combat-revolved\voxel-combat-revolved
+        env:
+          CGO_ENABLED: 1
+
+      - name: Copy assets
+        run: Copy-Item -Path assets -Destination "assets\$env:PROJECT_NAME" -Recurse -Container
+
+      - name: Archive Release
+        uses: thedoctor0/zip-release@0.7.5
+        with:
+          type: 'zip'
+          filename: ${{ env.PROJECT_NAME }}-windows.zip
+          directory: .
+          path: ${{ env.PROJECT_NAME }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          files: |
+            ${{ env.PROJECT_NAME }}-windows.zip
+
   build-linux:
+    if: false # DISABLED FOR TESTING
+    name: Build Linux Executable
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -29,25 +75,25 @@ jobs:
         go-version: ${{ env.GO_VERSION }}
 
     - name: Create Build directory
-      run: mkdir build
-
-    - name: Copy assets
-      run: cp -r assets build/assets
+      run: mkdir "$PROJECT_NAME"
 
     - name: Build
-      run: CGOENABLED=1 go build -o "./build/$PROJECT_NAME" -v .
+      run: CGOENABLED=1 go build -o "./$PROJECT_NAME/$PROJECT_NAME" -v .
+
+    - name: Copy assets
+      run: cp -r assets "$PROJECT_NAME/assets"
 
     - name: Archive Release
       uses: thedoctor0/zip-release@0.7.5
       with:
         type: 'zip'
-        filename: ${{ env.PROJECT_NAME }}.zip
+        filename: ${{ env.PROJECT_NAME }}-linux.zip
         directory: .
-        path: 'build'
+        path: ${{ env.PROJECT_NAME }}
 
     - name: Release
       uses: softprops/action-gh-release@v2
       with:
         token: ${{ secrets.RELEASE_TOKEN }}
         files: |
-          ${{ env.PROJECT_NAME }}.zip
+          ${{ env.PROJECT_NAME }}-linux.zip
