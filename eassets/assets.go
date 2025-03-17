@@ -12,12 +12,12 @@ import (
 //go:embed files/*
 var assets embed.FS
 
-func ReadFile(path string) ([]byte, error) {
-    return assets.ReadFile(path.Join("files", path))
+func ReadFile(filePath string) ([]byte, error) {
+    return assets.ReadFile(path.Join("files", filePath))
 }
 
-func OpenFile(path string) (fs.File, error) {
-    return assets.Open(path.Join("files", path))
+func OpenFile(filePath string) (fs.File, error) {
+    return assets.Open(path.Join("files", filePath))
 }
 
 func LoadTextureAtlas(fileName string, tileWidth int, tileHeight int) *glhf.Texture {
