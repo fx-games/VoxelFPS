@@ -27,8 +27,6 @@ type Chunk struct {
     isDirty     bool
     meshBuffer  *MeshBuffer
 
-    meshChannel chan *MeshBuffer
-
     lookupTexture3d *glhf.Texture3D
 }
 
@@ -47,9 +45,8 @@ func NewChunk(voxelMap *Map, x, y, z int32) *Chunk {
             visitZN: make([]bool, voxelMap.ChunkSizeCube),
             visitZP: make([]bool, voxelMap.ChunkSizeCube),
         },
-        isDirty:     true,
-        meshBuffer:  NewMeshBuffer(),
-        meshChannel: make(chan *MeshBuffer, 20),
+        isDirty:    true,
+        meshBuffer: NewMeshBuffer(),
     }
     for i := int32(0); i < voxelMap.ChunkSizeCube; i++ {
         c.data[i] = NewAirBlock()
@@ -77,6 +74,12 @@ func (c *Chunk) GetLocalBlock(i, j, k int32) *Block {
 func (c *Chunk) SetBlock(x, y, z int32, block *Block) {
     c.data[c.blockIndex(x, y, z)] = block
     c.isDirty = true
+    if !block.IsSolid { // repair holes in neighboring chunks, when destroying a block
+        neighborChunks := c.getNeighborChunks(x, y, z)
+        for _, chunk := range neighborChunks {
+            chunk.SetDirty()
+        }
+    }
 }
 
 type VoxelFace struct {
@@ -149,6 +152,13 @@ func (c *Chunk) bake3dTextureIndices() {
         }
     }
     c.lookupTexture3d = glhf.NewTexture3D(int(c.m.ChunkSizeHorizontal), int(c.m.ChunkSizeHeight), int(c.m.ChunkSizeHorizontal), false, pixels)
+}
+
+func (c *Chunk) GreedyMeshOnOtherThread() {
+    newMesh := c.GreedyMeshing()
+    glhf.CallNonBlock(func() {
+        c.MeshUpload(newMesh)
+    })
 }
 
 func (c *Chunk) GreedyMeshing() *MeshBuffer {
@@ -552,12 +562,20 @@ func (c *Chunk) ClearAllBlocks() {
     }
 }
 
-func (c *Chunk) GenerateMesh() {
+func (c *Chunk) GenerateAndUpload() {
     if !c.isDirty {
         return
     }
+    // This should run on a separate thread
+    newMesh := c.GreedyMeshing()
+
+    // This must run on the main thread
+    c.MeshUpload(newMesh)
+
     c.isDirty = false
-    newMesh := c.GreedyMeshing() // will set isDirty to false
+}
+
+func (c *Chunk) MeshUpload(newMesh *MeshBuffer) {
     newMesh.UploadMeshToGPU(c.m.chunkShader)
     c.meshBuffer = newMesh
 
@@ -588,4 +606,39 @@ func (c *Chunk) AsAABB() (mgl32.Vec3, mgl32.Vec3) {
     chunkMax := mgl32.Vec3{float32((c.chunkPosX + 1) * c.m.ChunkSizeHorizontal), float32((c.chunkPosY + 1) * c.m.ChunkSizeHeight), float32((c.chunkPosZ + 1) * c.m.ChunkSizeHorizontal)}
 
     return chunkMin, chunkMax
+}
+
+func (c *Chunk) getNeighborChunks(x int32, y int32, z int32) []*Chunk {
+    neighbors := make([]*Chunk, 0, 6)
+    if x == 0 {
+        if c.cXN != nil {
+            neighbors = append(neighbors, c.cXN)
+        }
+    } else if x == c.m.ChunkSizeHorizontal-1 {
+        if c.cXP != nil {
+            neighbors = append(neighbors, c.cXP)
+        }
+    }
+    if y == 0 {
+        if c.cYN != nil {
+            neighbors = append(neighbors, c.cYN)
+        }
+    } else if y == c.m.ChunkSizeHeight-1 {
+        if c.cYP != nil {
+            neighbors = append(neighbors, c.cYP)
+        }
+    }
+
+    if z == 0 {
+        if c.cZN != nil {
+            neighbors = append(neighbors, c.cZN)
+        }
+    } else if z == c.m.ChunkSizeHorizontal-1 {
+        if c.cZP != nil {
+            neighbors = append(neighbors, c.cZP)
+        }
+    }
+
+    return neighbors
+
 }

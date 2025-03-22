@@ -70,12 +70,12 @@ type Game struct {
     fireSmallGunAnim int
     relativeHitPos   mgl32.Vec3
     uiAtlas          *glhf.Texture
-    uiList           *quads.GuiList
+    entityMenu       *quads.GuiList
 
-    focusedWidget     InputReceiver
-    focusedIsBlocking bool
-    table             *quads.GameObject
-    defaultFont       quads.BitmapFont
+    widgetStack                []InputReceiver
+    widgetsAreBlockingMovement bool
+    table                      *quads.GameObject
+    defaultFont                quads.BitmapFont
 
     shouldDrawAABBs        bool
     shouldDrawChunkAABBs   bool
@@ -92,7 +92,6 @@ type Game struct {
     fogEnd                 float32
     currentResolutionIndex int
     smallGunAtlas          *glhf.Texture
-    focusedWidgetResize    func(windowWidth, windowHeight int)
     watchFileChanges       bool
     isMouseCursorCaptured  bool
     projectileFlyingAnim   int
@@ -101,11 +100,21 @@ type Game struct {
     lastHitResult        *RaycastResult
 
     gameObjectForSpawning *quads.GameObject
+    gravitationEnabled    bool
+    isMouseBeingDragged   bool
+
+    voxelBlock           *voxel.Block
+    voxelBrush           VoxelBrush
+    voxelSelection       []voxel.Int3
+    voxelSelectionEmpty  bool // if voxelSelectionEmpty is set to true, the selection will select the empty grid position right before the collision grid position
+    voxelSelectionAction func(pos []voxel.Int3)
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
     // Basics (Window / Camera)
     g.GlApplication = app
+
+    g.SetupUnitCubes()
     //g.SetCursor("assets/cursor.png", 7, 7)
 
     // Load Bitmap Font
@@ -123,9 +132,9 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.uiAtlas = eassets.LoadEmbeddedUIAtlas()
     g.smallGunAtlas = quads.LoadTextureAtlas("assets/smallgun_sheet.png", 64, 64)
 
-    g.uiList = g.NewList(g.uiAtlas, bitmapFont)
-    g.uiList.SetTextCentered(true)
-    g.uiList.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
+    g.entityMenu = g.NewList(g.uiAtlas, bitmapFont)
+    g.entityMenu.SetTextCentered(true)
+    g.entityMenu.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
         if key == glfw.KeyE {
             switch selectedIndex {
             case 0:
@@ -139,7 +148,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
         return false
     })
 
-    g.uiList.SetItems([]string{
+    g.entityMenu.SetItems([]string{
         "Idle Frames",
     })
 
@@ -211,8 +220,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     g.smallGun.PublishEventOnFrame(2, events.EventWeaponFired)
     events.Subscribe(events.EventWeaponFired, func(id events.EventID, event events.Event) {
-        g.fireProjectile()
-        //g.fireHitscan()
+        //g.fireProjectile()
+        g.fireHitscan()
     })
     events.Subscribe(events.EventWeaponHitScanHit, g.weaponHitScanHit)
     events.Subscribe(events.EventWeaponHitScanMiss, g.weaponHitScanMiss)
@@ -224,6 +233,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.Sprites.Clear()
     g.Meshes.Clear()
+
     if mapLoad.AtlasFilename == "" || mapLoad.AtlasFilename == "_internal" {
         g.defaultAtlas = eassets.LoadEmbeddedTerrainAtlas()
     } else {
@@ -259,17 +269,18 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 }
 
 func (g *Game) HandleResize(windowWidth, windowHeight int) {
-    if g.focusedWidgetResize != nil && g.focusedWidget != nil {
-        g.focusedWidgetResize(windowWidth, windowHeight)
+    if len(g.widgetStack) > 0 {
+        g.focusedWidget().HandleResize(windowWidth, windowHeight, g.UIScale)
     }
 
     screenCenter := mgl32.Vec2{float32(windowWidth) / 2, float32(windowHeight) / 2}
     listWidth := windowWidth / 3
     listHeight := min(windowHeight/2, 160)
+
     // center in the right side of the screen
     listX := float32(windowWidth)/2 + (float32(windowWidth) / 4) - (float32(listWidth) / 2)
-    g.uiList.SetOrigin(listX, screenCenter.Y())
-    g.uiList.SetBounds(float32(listWidth), float32(listHeight))
+    g.entityMenu.SetOrigin(listX, screenCenter.Y())
+    g.entityMenu.SetBounds(float32(listWidth), float32(listHeight))
 
     tileW, tileH := g.uiAtlas.GetAtlasItemSize()
     centerX := (float32(windowWidth) / 2) - (float32(tileW) / 2)
@@ -285,12 +296,17 @@ func (g *Game) HandleResize(windowWidth, windowHeight int) {
     g.smallGun.SetSize(doubleW, doubleH)
     g.smallGun.SetPosition(mgl32.Vec2{weaponX, weaponY})
 }
-
+func (g *Game) focusedWidget() InputReceiver {
+    if len(g.widgetStack) == 0 {
+        return nil
+    }
+    return g.widgetStack[len(g.widgetStack)-1]
+}
 func (g *Game) Update(elapsed float64) {
-    if g.focusedWidget != nil {
+    if len(g.widgetStack) > 0 {
         // event..
-        if g.focusedWidget.ShouldClose() {
-            g.closeFocusedWidget()
+        if g.focusedWidget().ShouldClose() {
+            g.popFromWidgetStack()
         }
     }
 
@@ -334,15 +350,48 @@ func vec3String(v mgl32.Vec3) string {
     return fmt.Sprintf("%.2f, %.2f, %.2f", v.X(), v.Y(), v.Z())
 }
 
-func (g *Game) closeFocusedWidget() {
-    g.focusedWidget = nil
-    g.focusedIsBlocking = false
-    g.focusedWidgetResize = nil
+func (g *Game) popFromWidgetStack() {
+    if len(g.widgetStack) == 0 {
+        return
+    }
+    g.widgetStack = g.widgetStack[:len(g.widgetStack)-1]
+    if len(g.widgetStack) == 0 {
+        g.widgetsAreBlockingMovement = false
+    }
 }
+
+func (g *Game) replaceWidgetStack(widget InputReceiver) {
+    g.widgetStack = []InputReceiver{widget}
+}
+
+func (g *Game) pushToWidgetStack(widget InputReceiver) {
+    for _, w := range g.widgetStack {
+        if w == widget {
+            g.bringToFront(widget)
+            return
+        }
+    }
+    g.widgetStack = append(g.widgetStack, widget)
+}
+
+func (g *Game) bringToFront(widget InputReceiver) {
+    for i, w := range g.widgetStack {
+        if w == widget {
+            g.widgetStack = append(g.widgetStack[:i], g.widgetStack[i+1:]...)
+            g.widgetStack = append(g.widgetStack, widget)
+            return
+        }
+    }
+}
+
 func (g *Game) Draw(elapsed float64) {
     g.cubeMap.Draw(g.Camera)
 
     gl.ActiveTexture(gl.TEXTURE0)
+
+    if g.UnitCube != nil {
+        g.UnitCube.DrawAllQueued()
+    }
 
     if g.shouldDrawMeshes {
         g.Meshes.Draw(g.Camera, elapsed)
@@ -375,13 +424,13 @@ func (g *Game) DrawGui(elapsed float64) {
     if g.uiLabel != nil && g.hoveredObj() != nil {
         g.uiLabel.Draw()
 
-        if g.uiList != nil {
-            g.uiList.Draw()
+        if g.entityMenu != nil {
+            g.entityMenu.Draw()
         }
     }
 
-    if g.focusedWidget != nil {
-        g.focusedWidget.Draw()
+    for _, widget := range g.widgetStack {
+        widget.Draw()
     }
 }
 
@@ -416,7 +465,7 @@ func (g *Game) hoveredObj() *quads.GameObject {
 }
 
 func (g *Game) updateGUI(elapsed float64) {
-    if g.focusedWidget != nil && g.focusedWidget != g.uiList {
+    if g.widgetsAreBlockingMovement {
         return
     }
     g.lastHitResult = nil
@@ -426,11 +475,15 @@ func (g *Game) updateGUI(elapsed float64) {
     g.uiRectSpriteBL.Hide()
     g.uiRectSpriteBR.Hide()
     g.uiLabel.Hide()
-    g.uiList.Hide()
+    g.entityMenu.Hide()
 
-    origin, dir := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
-
-    result := g.rayCast(origin, dir)
+    var result RaycastResult
+    if g.isMouseCursorCaptured {
+        result = g.rayCast(g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5))
+    } else {
+        result = g.rayCastFromScreenPos(g.Window.GetCursorPos())
+        g.UnitCube.QueueDraw(g.voxelSelection)
+    }
 
     g.lastHitResult = &result
 
@@ -440,6 +493,7 @@ func (g *Game) updateGUI(elapsed float64) {
             g.gameObjectForSpawning.Transform().SetPosition(groundPos)
         }
     }
+
     hoveredObj := g.hoveredObj()
 
     if hoveredObj == nil {
@@ -451,8 +505,8 @@ func (g *Game) updateGUI(elapsed float64) {
     g.uiRectSpriteBL.Show()
     g.uiRectSpriteBR.Show()
     g.uiLabel.Show()
-    g.uiList.Show()
-    g.focusedWidget = g.uiList
+    g.entityMenu.Show()
+    g.replaceWidgetStack(g.entityMenu)
 
     tileW, _ := g.uiAtlas.GetAtlasItemSize()
     aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
@@ -509,6 +563,12 @@ func (r RaycastResult) GroundPosition() (mgl32.Vec3, bool) {
     //worldPos := mgl32.Vec3{cwp.X(), float32(math.Floor(float64(cwp.Y()))), cwp.Z()}
     return cwp, r.HitInfo.Side == voxel.Top
 }
+func (g *Game) rayCastFromScreenPos(screenPosX, screenPosY float64) RaycastResult {
+    normalizedX := screenPosX / float64(g.WindowWidth)
+    normalizedY := screenPosY / float64(g.WindowHeight)
+    origin, dir := g.Camera.GetPickingRayFromScreenPosition(normalizedX, normalizedY)
+    return g.rayCast(origin, dir)
+}
 func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
     var hitInfo voxel.HitInfo3D
     var hitObject *quads.GameObject
@@ -556,24 +616,54 @@ func (g *Game) PrintMulti(text []string) {
 }
 
 func (g *Game) openSpriteEditor(obj *quads.GameObject) {
+    //TODO
+}
+func (g *Game) openAtlasPicker() {
+    if g.voxelBlock == nil {
+        g.Toast("No voxel block loaded")
+        return
+    }
     g.ShouldDrawMinimap = false
     g.shouldDrawDebugInfo = false
     g.SetMouseCapture(false)
 
-    g.focusedIsBlocking = true
-    spriteEditor := g.OpenSpriteEditor(g.uiAtlas, g.defaultFont, obj)
-    spriteEditor.SetCentered(g.WindowWidth, g.WindowHeight)
-    spriteEditor.SetOnClose(func() {
+    g.widgetsAreBlockingMovement = true
+    atlasPicker := g.OpenTextureCube(g.uiAtlas, g.defaultFont, g.defaultAtlas, g.voxelBlock.Textures)
+    atlasPicker.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+
+    atlasPicker.SetOnClose(func() {
         g.SetMouseCapture(true)
     })
-    g.focusedWidget = spriteEditor
-    g.focusedWidgetResize = func(windowWidth, windowHeight int) {
-        spriteEditor.SetCentered(windowWidth, windowHeight)
-    }
+    g.replaceWidgetStack(atlasPicker)
 }
 
+func (g *Game) openEscapeMenu() {
+    previousMouseState := g.setupModal()
+    configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
+
+    options := []quads.GuiOption{
+        quads.NewGuiOptionAction("Continue", g.popFromWidgetStack),
+        quads.NewGuiOptionAction("Quit", g.quitGame),
+    }
+    configMenu.SetOptions(options)
+    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    configMenu.SetOnClose(func() {
+        g.isMouseCursorCaptured = previousMouseState
+        g.SetMouseCapture(g.isMouseCursorCaptured)
+    })
+    g.pushToWidgetStack(configMenu)
+}
+
+func (g *Game) setupModal() bool {
+    g.player.Physics().SetVelocity(mgl32.Vec3{})
+    g.widgetsAreBlockingMovement = true
+    previousMouseState := g.isMouseCursorCaptured
+    g.isMouseCursorCaptured = false
+    g.SetMouseCapture(g.isMouseCursorCaptured)
+    return previousMouseState
+}
 func (g *Game) openWizardMenu() {
-    g.focusedIsBlocking = true
+    previousMouseState := g.setupModal()
     configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
     vModes := g.GetVideoModes()
     var resolutionOptions []string
@@ -606,19 +696,19 @@ func (g *Game) openWizardMenu() {
 
     if !g.watchFileChanges {
         options = append(options, quads.NewGuiOptionAction("Start Map Hot Reload", func() {
-            g.closeFocusedWidget()
+            g.popFromWidgetStack()
             g.CreateToast("Watching for map changes", g.defaultFont, g.uiAtlas)
             g.watchFileChanges = true
             go g.watchFileChangesLoop()
         }))
     }
-
-    configMenu.SetCentered(g.WindowWidth, g.WindowHeight, options)
-
-    g.focusedWidget = configMenu
-    g.focusedWidgetResize = func(windowWidth, windowHeight int) {
-        configMenu.SetCentered(windowWidth, windowHeight, options)
-    }
+    configMenu.SetOptions(options)
+    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    configMenu.SetOnClose(func() {
+        g.isMouseCursorCaptured = previousMouseState
+        g.SetMouseCapture(g.isMouseCursorCaptured)
+    })
+    g.pushToWidgetStack(configMenu)
 }
 func (g *Game) setWindowMode(index int) {
     g.shouldRenderFullscreen = false
@@ -660,18 +750,15 @@ func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
         return
     }
 
-    if g.focusedWidget != nil {
-        if g.focusedWidget.HandleDrop(names, screenDropX, screenDropY) {
+    if len(g.widgetStack) > 0 {
+        if g.focusedWidget().HandleDrop(names, screenDropX, screenDropY) {
             return
         }
     }
 
     if len(names) == 1 {
 
-        normalizedDropX := screenDropX / float64(g.WindowWidth)
-        normalizedDropY := screenDropY / float64(g.WindowHeight)
-
-        rayHit := g.rayCast(g.Camera.GetPickingRayFromScreenPosition(normalizedDropX, normalizedDropY))
+        rayHit := g.rayCastFromScreenPos(screenDropX, screenDropY)
         worldPos, hitGround := rayHit.GroundPosition()
         if hitGround {
             g.spawnDecorationFromFile(worldPos, names[0])
@@ -758,25 +845,6 @@ func (g *Game) colorForMinimap(x int, y int) [4]uint8 {
         alpha = 255
     }
     return [4]uint8{10, 10, uint8(10 + (len(collidersAt) * 120)), uint8(alpha)}
-}
-
-func (g *Game) toggleSpawnMode() {
-    if g.gameObjectForSpawning != nil {
-        g.gameObjectForSpawning.Kill()
-        g.gameObjectForSpawning = nil
-        return
-    }
-    spawnPos, hitGround := g.lastHitResult.GroundPosition()
-    if !hitGround {
-        return
-    }
-    entityDesc := core.MapEntity{
-        Name:           "Barrel",
-        TextureIndices: []uint16{157},
-        IsTransparent:  true,
-    }
-    g.gameObjectForSpawning = g.spawnEntity(spawnPos, entityDesc)
-    g.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
 }
 
 func getWolfCharAnimations() []quads.SpriteAnimation {

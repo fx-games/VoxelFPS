@@ -43,10 +43,6 @@ func (i Int3) ToBlockCenterVec3() mgl32.Vec3 {
     return mgl32.Vec3{float32(i.X) + 0.5, float32(i.Y), float32(i.Z) + 0.5}
 }
 
-func (i Int3) ToBlockCenterVec3D() mgl32.Vec3 {
-    return mgl32.Vec3{float32(i.X) + 0.5, float32(i.Y), float32(i.Z) + 0.5}
-}
-
 func (i Int3) ToString() string {
     return fmt.Sprintf("(%d,%d,%d)", i.X, i.Y, i.Z)
 }

@@ -276,8 +276,14 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
         value := value.(float32)
         gl.Uniform1fv(s.uniformLoc[uniform], 1, &value)
     case IVec2:
-        value := value.([2]int32)
-        gl.Uniform2iv(s.uniformLoc[uniform], 1, &value[0])
+        var ivec [2]int32
+        switch typedValue := value.(type) {
+        case [2]int32:
+            ivec = typedValue
+        case IntVec2:
+            ivec = [2]int32(typedValue)
+        }
+        gl.Uniform2iv(s.uniformLoc[uniform], 1, &ivec[0])
     case Vec2:
         value := value.(mgl32.Vec2)
         gl.Uniform2fv(s.uniformLoc[uniform], 1, &value[0])

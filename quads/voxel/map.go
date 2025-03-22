@@ -1,12 +1,16 @@
 package voxel
 
 import (
+    "bytes"
+    "compress/gzip"
+    "encoding/binary"
     "fmt"
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
     "github.com/memmaker/goray/quads/glhf"
     "math"
+    "os"
 )
 
 type Map struct {
@@ -45,6 +49,7 @@ func NewMap(width, height, depth, chunkSizeHorizontal, chunkSizeHeight int32) *M
         depth:                 depth,
         maxChunkHeightForDraw: height - 1,
     }
+
     m.ChunkSizeCube = m.ChunkSizeHorizontal * m.ChunkSizeHeight * m.ChunkSizeHorizontal
     //m.culler = occlusion.NewOcclusionCuller(512, m)
     return m
@@ -66,7 +71,7 @@ func (m *Map) ForceUpload() {
     for _, chunk := range m.chunks {
         if chunk != nil {
             chunk.isDirty = true
-            chunk.GenerateMesh()
+            chunk.GenerateAndUpload()
         }
     }
     m.verticesUploaded = true
@@ -129,8 +134,8 @@ func (m *Map) Draw(cam core.Camera) {
 
     if !m.verticesUploaded {
         m.ForceUpload()
-
     }
+
     m.chunkShader.Begin()
 
     m.chunkShader.SetTextureUnit("tex", gl.TEXTURE0)
@@ -143,6 +148,10 @@ func (m *Map) Draw(cam core.Camera) {
     for _, chunk := range m.chunks {
         if chunk == nil || !m.chunkIsVisible(cam, chunk) || chunk.chunkPosY > m.maxChunkHeightForDraw {
             continue
+        }
+        if chunk.isDirty {
+            chunk.isDirty = false
+            go chunk.GreedyMeshOnOtherThread()
         }
         m.trianglesDrawn += chunk.meshBuffer.TriangleCount()
         m.drawCallCount += 1
@@ -230,6 +239,9 @@ func (m *Map) ChunkExists(x, y, z int32) bool {
     return m.GetChunk(x, y, z) != nil
 }
 func (m *Map) SetBlock(x int32, y int32, z int32, block *Block) {
+    if !m.Contains(x, y, z) {
+        return
+    }
     chunkX := x / m.ChunkSizeHorizontal
     chunkY := y / m.ChunkSizeHeight
     chunkZ := z / m.ChunkSizeHorizontal
@@ -239,8 +251,20 @@ func (m *Map) SetBlock(x int32, y int32, z int32, block *Block) {
     }
 }
 
+func (m *Map) SetBlocks(pos []Int3, block *Block) {
+    for _, p := range pos {
+        m.SetBlock(p.X, p.Y, p.Z, block)
+    }
+}
+
 func (m *Map) SetAir(blockPos Int3) {
     m.SetBlock(blockPos.X, blockPos.Y, blockPos.Z, NewAirBlock())
+}
+
+func (m *Map) SetAirBlocks(pos []Int3) {
+    for _, p := range pos {
+        m.SetAir(p)
+    }
 }
 
 func (m *Map) ContainsVec(pos mgl32.Vec3) bool {
@@ -614,5 +638,144 @@ func (m *Map) DrawAABBs(lineShader *glhf.Shader) {
         if chunk != nil {
             NewAABB(chunk.AsAABB()).Draw(lineShader)
         }
+    }
+}
+
+func (m *Map) ChunkIndex(x int32, y int32, z int32) int {
+    return int(x + y*m.width + z*m.width*m.height)
+}
+
+func (m *Map) SaveToDisk(filename string) error {
+    // serialize this map manually to a byte array
+    outfile, err := os.Create(filename)
+    if err != nil {
+        return err
+    }
+    // use a gzip writer to compress the byte array
+    // then write the compressed byte array to the file
+
+    gzipWriter := gzip.NewWriter(outfile)
+    // write 2xint32
+    binary.Write(gzipWriter, binary.LittleEndian, m.ChunkSizeHorizontal)
+    binary.Write(gzipWriter, binary.LittleEndian, m.ChunkSizeHeight)
+
+    // write 3xint32
+    binary.Write(gzipWriter, binary.LittleEndian, m.width)
+    binary.Write(gzipWriter, binary.LittleEndian, m.height)
+    binary.Write(gzipWriter, binary.LittleEndian, m.depth)
+    // write the map dimensions
+    m.logVoxelInfo(fmt.Sprintf("[Map] Saving map with dimensions %d %d %d", m.width, m.height, m.depth))
+
+    // write the number of chunks
+    chunkCount := int16(len(m.chunks))
+    binary.Write(gzipWriter, binary.LittleEndian, chunkCount)
+    m.logVoxelInfo(fmt.Sprintf("[Map] Saving %d chunks", chunkCount))
+
+    // write the chunks
+    for _, chunk := range m.chunks {
+        binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosX)
+        binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosY)
+        binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosZ)
+        m.logVoxelInfo(fmt.Sprintf("[Map] Saving chunk %d %d %d", chunk.chunkPosX, chunk.chunkPosY, chunk.chunkPosZ))
+        for _, block := range chunk.data {
+            if block.IsSolid {
+                err = binary.Write(gzipWriter, binary.LittleEndian, uint8(1))
+                if err != nil {
+                    return err
+                }
+                for cs := CubeSide(0); cs < 6; cs++ {
+                    var texIndex uint16
+                    if texIdOfSide, hasTexId := block.Textures[cs]; hasTexId {
+                        texIndex = texIdOfSide
+                    }
+                    err = binary.Write(gzipWriter, binary.LittleEndian, texIndex)
+                    if err != nil {
+                        return err
+                    }
+                }
+            } else {
+                err = binary.Write(gzipWriter, binary.LittleEndian, uint8(0))
+                if err != nil {
+                    return err
+                }
+            }
+        }
+        m.logVoxelInfo(fmt.Sprintf("[Map] Saved %d blocks", len(chunk.data)))
+    }
+    err = gzipWriter.Flush()
+    if err != nil {
+        return err
+    }
+    err = gzipWriter.Close()
+    if err != nil {
+        return err
+    }
+    err = outfile.Close()
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+func (m *Map) LoadFromDisk(filename string) {
+
+    buffer, readErr := os.ReadFile(filename)
+    if readErr != nil {
+        panic(readErr)
+    }
+    m.LoadFromMemory(buffer)
+}
+func (m *Map) LoadFromMemory(source []byte) {
+    reader := bytes.NewReader(source)
+    gzipReader, err := gzip.NewReader(reader)
+    if err != nil {
+        panic(err)
+    }
+    // read chunk size
+    binary.Read(gzipReader, binary.LittleEndian, &m.ChunkSizeHorizontal)
+    binary.Read(gzipReader, binary.LittleEndian, &m.ChunkSizeHeight)
+
+    m.ChunkSizeCube = m.ChunkSizeHorizontal * m.ChunkSizeHeight * m.ChunkSizeHorizontal
+
+    // read the map dimensions
+    binary.Read(gzipReader, binary.LittleEndian, &m.width)
+    binary.Read(gzipReader, binary.LittleEndian, &m.height)
+    binary.Read(gzipReader, binary.LittleEndian, &m.depth)
+    m.logVoxelInfo(fmt.Sprintf("[Map] Loading map with dimensions %d %d %d", m.width, m.height, m.depth))
+
+    // read the number of chunks
+    m.maxChunkHeightForDraw = m.height - 1
+
+    chunkCount := int16(0)
+    binary.Read(gzipReader, binary.LittleEndian, &chunkCount)
+    m.logVoxelInfo(fmt.Sprintf("[Map] Loading %d chunks", chunkCount))
+
+    m.chunks = make([]*Chunk, chunkCount)
+
+    // read the chunks
+    for i := int16(0); i < chunkCount; i++ {
+        var chunkPos [3]int32
+        binary.Read(gzipReader, binary.LittleEndian, &chunkPos[0])
+        binary.Read(gzipReader, binary.LittleEndian, &chunkPos[1])
+        binary.Read(gzipReader, binary.LittleEndian, &chunkPos[2])
+        m.logVoxelInfo(fmt.Sprintf("[Map] Loading chunk %d %d %d", chunkPos[0], chunkPos[1], chunkPos[2]))
+        chunk := NewChunk(m, chunkPos[0], chunkPos[1], chunkPos[2])
+        m.chunks[i] = chunk
+        for j := int32(0); j < m.ChunkSizeCube; j++ {
+            blockIsSolid := uint8(0)
+            binary.Read(gzipReader, binary.LittleEndian, &blockIsSolid)
+            if blockIsSolid == 1 {
+                sideTextures := make(map[CubeSide]uint16)
+                for cs := CubeSide(0); cs < 6; cs++ {
+                    var texIndex uint16
+                    binary.Read(gzipReader, binary.LittleEndian, &texIndex)
+                    sideTextures[cs] = texIndex
+                }
+                chunk.data[j] = NewBlockWithSides(sideTextures)
+            } else {
+                chunk.data[j] = NewAirBlock()
+            }
+        }
+        chunk.SetDirty()
     }
 }

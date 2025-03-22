@@ -20,6 +20,12 @@ func NewBlock(id byte) *Block {
         },
     }
 }
+func NewBlockWithSides(textures map[CubeSide]uint16) *Block {
+    return &Block{
+        IsSolid:  true,
+        Textures: textures,
+    }
+}
 func NewAirBlock() *Block {
     return &Block{
         IsSolid: false,

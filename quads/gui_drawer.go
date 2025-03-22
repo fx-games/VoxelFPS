@@ -167,7 +167,7 @@ func (q *GuiDrawer) DrawnLastFrame() (int, int) {
 
 func (q *GuiDrawer) Add(texture *glhf.Texture, textureIndex uint16, x, y int) *GuiQuad {
     tileW, tileH := texture.GetAtlasItemSize()
-    sprite := NewGUIQuadVerts(q.shader, texture, textureIndex, int(x), int(y), tileW, tileH)
+    sprite := NewGUIQuadVertsFromSubImage(q.shader, texture, textureIndex, int(x), int(y), int(tileW), int(tileH))
     if _, ok := q.spritesPerTexture[texture]; !ok {
         q.spritesPerTexture[texture] = make(map[*GuiQuad]bool)
     }
@@ -193,8 +193,55 @@ func (q *GuiDrawer) TextureIndex(sprite *GuiQuad, elapsed float64) uint16 {
     return sprite.TextureIndexAnimated(frames, showTimes, elapsed, loop)
 }
 
-func NewGUIQuadVerts(shader *glhf.Shader, atlas *glhf.Texture, textureIndex uint16, x, y, width, height int) *glhf.VertexSlice[glhf.GlFloat] {
+func NewGUIQuadVertsFromSubImage(shader *glhf.Shader, atlas *glhf.Texture, textureIndex uint16, x, y, width, height int) *glhf.VertexSlice[glhf.GlFloat] {
     rawVerts := AppendGUIQuadVertices(make([]glhf.GlFloat, 0), atlas, textureIndex, mgl32.Vec2{float32(x), float32(y)}, glhf.GlFloat(width), glhf.GlFloat(height))
+    vertices := glhf.MakeVertexSlice(shader, len(rawVerts)/4, len(rawVerts)/4)
+    vertices.Begin()
+    vertices.SetVertexData(rawVerts)
+    vertices.End()
+    return vertices
+}
+
+type TexturedQuad struct {
+    Verts   *glhf.VertexSlice[glhf.GlFloat]
+    Texture *glhf.Texture
+}
+
+func (t *TexturedQuad) Draw() {
+    t.Texture.Begin()
+    t.Verts.Begin()
+    t.Verts.Draw()
+    t.Verts.End()
+    t.Texture.End()
+}
+
+func NewSelectionQuad(shader *glhf.Shader, width, height int) TexturedQuad {
+    tex := glhf.NewRectOutlineTexture(width, height, 1)
+    verts := NewGUIQuadVerts(shader, 0, 0, float32(width), float32(height))
+    return TexturedQuad{Verts: verts, Texture: tex}
+}
+
+func NewGUIQuadVerts(shader *glhf.Shader, x, y, width, height float32) *glhf.VertexSlice[glhf.GlFloat] {
+    widthInPx := glhf.GlFloat(width)
+    heightInPx := glhf.GlFloat(height)
+    leftU, topV, rightU, bottomV := glhf.GlFloat(0), glhf.GlFloat(0), glhf.GlFloat(1), glhf.GlFloat(1)
+    rawVerts := []glhf.GlFloat{
+        // first triangle
+        // Top-left
+        glhf.GlFloat(x), glhf.GlFloat(y), leftU, topV,
+        // Bottom-left
+        glhf.GlFloat(x), glhf.GlFloat(y) + heightInPx, leftU, bottomV,
+        // Bottom-right
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, rightU, bottomV,
+
+        // second triangle
+        // Top-left
+        glhf.GlFloat(x), glhf.GlFloat(y), leftU, topV,
+        // Bottom-right
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, rightU, bottomV,
+        // Top-right
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y), rightU, topV,
+    }
     vertices := glhf.MakeVertexSlice(shader, len(rawVerts)/4, len(rawVerts)/4)
     vertices.Begin()
     vertices.SetVertexData(rawVerts)

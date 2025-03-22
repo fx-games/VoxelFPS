@@ -23,8 +23,10 @@ type GuiList struct {
     vertScrollOffset int
     items            []string
     keyHandler       func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool
-    border           *GuiBorder
-    uiTexture        *glhf.Texture
+    mouseHandler     func(selectedIndex int, xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) bool
+
+    border    *GuiBorder
+    uiTexture *glhf.Texture
 
     scale       mgl32.Vec2
     shouldClose bool
@@ -34,6 +36,11 @@ type GuiList struct {
     maxHeight      float32
     originIsCenter bool
     layoutIsDirty  bool
+
+    closeCallback func()
+}
+
+func (g *GuiList) HandleResize(screenWidth int, screenHeight int, screenCoordScale mgl32.Vec2) {
 }
 
 func (g *GuiList) HandleDrop(names []string, x float64, y float64) bool {
@@ -46,10 +53,17 @@ func (g *GuiList) ShouldClose() bool {
 
 func (g *GuiList) Close() {
     g.shouldClose = true
+    if g.closeCallback != nil {
+        g.closeCallback()
+    }
 }
 
 func (g *GuiList) SetKeyHandler(handler func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool) {
     g.keyHandler = handler
+}
+
+func (g *GuiList) SetMouseHandler(handler func(selectedIndex int, xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) bool) {
+    g.mouseHandler = handler
 }
 
 func (g *GuiList) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
@@ -63,10 +77,24 @@ func (g *GuiList) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action
 }
 
 func (g *GuiList) HandleMousePosEvents(xpos float64, ypos float64) (consumed bool) {
+    listWidth := g.size[0]
+    for idx, label := range g.labels {
+        pos, size := label.GetRect()
+        if float32(xpos) >= pos[0] && float32(xpos) <= pos[0]+listWidth && float32(ypos) >= pos[1] && float32(ypos) <= pos[1]+size[1] {
+            g.selectedIndex = idx
+            return true
+        }
+    }
     return false
 }
 
-func (g *GuiList) HandleMouseButtonEvents(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
+func (g *GuiList) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
+    if action != glfw.Press {
+        return false
+    }
+    if g.mouseHandler != nil {
+        return g.mouseHandler(g.selectedIndex, xpos, ypos, button, action, mods)
+    }
     return false
 }
 
@@ -94,6 +122,10 @@ func NewGuiList(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont) *
         maxHeight:       math.MaxFloat32,
         layoutIsDirty:   true,
     }
+}
+
+func (g *GuiList) SetOnClose(closeCallback func()) {
+    g.closeCallback = closeCallback
 }
 
 func (g *GuiList) SelectNext() {
@@ -234,6 +266,15 @@ func (g *GuiList) layout() {
     g.labels = nil
     for idx := 0; idx < len(items); idx++ {
         mesh := g.newFontMesh(items[idx])
+        //curPos := mgl32.Vec2{g.size.X() / 2, g.yFromIndex(idx) + float32(g.lineHeight()/2)}
+        curPos := mgl32.Vec2{0, g.yFromIndex(idx)}
+        if g.isCentered {
+            curPos = curPos.Add(mgl32.Vec2{g.size.X() / 2, float32(g.lineHeight() / 2)})
+        }
+
+        drawPos := topLeft.Add(curPos)
+
+        mesh.SetPosition(drawPos)
         g.labels = append(g.labels, mesh)
     }
 }
@@ -293,8 +334,6 @@ func (g *GuiList) Draw() {
         g.border.DrawWithoutBackground()
     }
 
-    topLeft := g.topLeft()
-
     for idx := 0; idx < min(g.linesShown(), len(g.labels)); idx++ {
         itemIndex := idx + g.vertScrollOffset
         if itemIndex >= len(g.labels) {
@@ -308,15 +347,7 @@ func (g *GuiList) Draw() {
             mesh.SetTintColor(g.textColor)
             mesh.NoBackground()
         }
-        //curPos := mgl32.Vec2{g.size.X() / 2, g.yFromIndex(idx) + float32(g.lineHeight()/2)}
-        curPos := mgl32.Vec2{0, g.yFromIndex(idx)}
-        if g.isCentered {
-            curPos = curPos.Add(mgl32.Vec2{g.size.X() / 2, float32(g.lineHeight() / 2)})
-        }
 
-        drawPos := topLeft.Add(curPos)
-
-        mesh.SetPosition(drawPos)
         mesh.Draw()
     }
 }

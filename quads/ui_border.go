@@ -55,7 +55,7 @@ func (g *GuiBorder) GetAlpha() float32 {
 }
 
 func (g *GuiBorder) SetBackground(background mgl32.Vec4) {
-    g.backgroundVerts = NewGUIQuadVerts(g.shader, nil, 0, int(-g.paddingHoriz), int(-g.paddingVert), int(g.size.X()+float32(g.paddingHoriz)*2), int(g.size.Y()+float32(g.paddingVert)*2))
+    g.backgroundVerts = NewGUIQuadVertsFromSubImage(g.shader, nil, 0, int(-g.paddingHoriz), int(-g.paddingVert), int(g.size.X()+float32(g.paddingHoriz)*2), int(g.size.Y()+float32(g.paddingVert)*2))
     g.backgroundColor = background
 }
 

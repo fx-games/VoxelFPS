@@ -3,6 +3,7 @@ package voxel
 import (
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
+    "maps"
 )
 
 type CollidingObject interface {
@@ -64,4 +65,12 @@ func (b *Block) GetTexture(side CubeSide) byte {
         return 0
     }
     return byte(text)
+}
+
+func (b *Block) Copy() *Block {
+    return &Block{
+        IsSolid:    b.IsSolid,
+        Textures:   maps.Clone(b.Textures),
+        lightLevel: b.lightLevel,
+    }
 }

@@ -23,6 +23,7 @@ func NewGuiToast(label *BitmapFontMesh, uiShader *glhf.Shader, uiAtlas *glhf.Tex
     labelAlpha := label.GetAlpha()
     label.SetAlpha(0)
     border.SetAlpha(0)
+
     animRoutine.Define(0,
         actions.NewFunction(func(block *routine.Block) routine.Flow {
             curAlpha := label.GetAlpha()
@@ -52,7 +53,9 @@ func NewGuiToast(label *BitmapFontMesh, uiShader *glhf.Shader, uiAtlas *glhf.Tex
 
         actions.NewWait(250*time.Millisecond),
     )
+
     animRoutine.Run(0)
+
     return &GuiToast{
         guiShader: uiShader,
         label:     label,

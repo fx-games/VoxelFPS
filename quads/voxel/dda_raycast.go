@@ -2,7 +2,6 @@ package voxel
 
 import (
     "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/core"
     "math"
 )
 
@@ -148,6 +147,7 @@ func Raycast2D(startX, startY, directionX, directionY float64, shouldStopRay fun
 type CubeSide uint8
 
 const (
+    // DON'T CHANGE THE ORDER
     East CubeSide = iota
     West
     Top
@@ -156,12 +156,30 @@ const (
     North
 )
 
+func (s CubeSide) String() string {
+    switch s {
+    case North:
+        return "North"
+    case East:
+        return "East"
+    case South:
+        return "South"
+    case West:
+        return "West"
+    case Top:
+        return "Top"
+    case Bottom:
+        return "Bottom"
+    }
+    return "Unknown"
+}
+
 type HitInfo3D struct {
     Distance               float64
     Side                   CubeSide
     CollisionWorldPosition mgl32.Vec3
-    PreviousGridPosition   core.Int3
-    CollisionGridPosition  core.Int3
+    PreviousGridPosition   Int3
+    CollisionGridPosition  Int3
     Hit                    bool
 }
 
@@ -229,33 +247,33 @@ func DDARaycast(rayStart, rayDir mgl32.Vec3, stopRay func(x, y, z int32) bool) H
 
     for {
         if stopRay(ix, iy, iz) {
-            var previousGridPosition core.Int3
+            var previousGridPosition Int3
             var side CubeSide
             if steppedIndex == 0 {
                 if stepx > 0 {
                     side = West
-                    previousGridPosition = core.Int3{ix - 1, iy, iz}
+                    previousGridPosition = Int3{ix - 1, iy, iz}
                 } else {
                     side = East
-                    previousGridPosition = core.Int3{ix + 1, iy, iz}
+                    previousGridPosition = Int3{ix + 1, iy, iz}
                 }
             }
             if steppedIndex == 1 {
                 if stepy > 0 {
                     side = Bottom
-                    previousGridPosition = core.Int3{ix, iy - 1, iz}
+                    previousGridPosition = Int3{ix, iy - 1, iz}
                 } else {
                     side = Top
-                    previousGridPosition = core.Int3{ix, iy + 1, iz}
+                    previousGridPosition = Int3{ix, iy + 1, iz}
                 }
             }
             if steppedIndex == 2 {
                 if stepz > 0 {
                     side = North
-                    previousGridPosition = core.Int3{ix, iy, iz - 1}
+                    previousGridPosition = Int3{ix, iy, iz - 1}
                 } else {
                     side = South
-                    previousGridPosition = core.Int3{ix, iy, iz + 1}
+                    previousGridPosition = Int3{ix, iy, iz + 1}
                 }
             }
 
@@ -265,7 +283,7 @@ func DDARaycast(rayStart, rayDir mgl32.Vec3, stopRay func(x, y, z int32) bool) H
                 Side:                   side,
                 CollisionWorldPosition: rayStart.Add(rayDir.Mul(float32(t))),
                 PreviousGridPosition:   previousGridPosition,
-                CollisionGridPosition:  core.Int3{X: ix, Y: iy, Z: iz},
+                CollisionGridPosition:  Int3{X: ix, Y: iy, Z: iz},
             }
         }
 

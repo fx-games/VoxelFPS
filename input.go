@@ -4,20 +4,22 @@ import (
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/quads/voxel"
 )
 
 type InputReceiver interface {
     HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) (consumed bool)
     HandleMousePosEvents(xpos float64, ypos float64) (consumed bool)
-    HandleMouseButtonEvents(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool)
+    HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool)
     HandleScrollEvents(xoff float64, yoff float64) (consumed bool)
     Draw()
     ShouldClose() bool
     HandleDrop(names []string, x float64, y float64) bool
+    HandleResize(screenWidth int, screenHeight int, screenCoordScale mgl32.Vec2)
 }
 
 func (g *Game) pollInput(elapsed float64) {
-    if g.focusedWidget != nil && g.focusedIsBlocking {
+    if g.widgetsAreBlockingMovement {
         return
     }
     moveDir := [2]int{0, 0}
@@ -42,6 +44,9 @@ func (g *Game) pollInput(elapsed float64) {
     }
 
     var velocityChange = mgl32.Vec3{0, -9, 0}
+    if !g.gravitationEnabled {
+        velocityChange = mgl32.Vec3{0, 0, 0}
+    }
     if upDown > 0 {
         jumpVelocity := mgl32.Vec3{0, 1, 0}.Mul(14)
         velocityChange = velocityChange.Add(jumpVelocity)
@@ -60,8 +65,8 @@ func (g *Game) pollInput(elapsed float64) {
 }
 
 func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
-    if g.focusedWidget != nil {
-        if g.focusedWidget.HandleKeyEvents(key, scancode, action, mods) || g.focusedIsBlocking {
+    if len(g.widgetStack) > 0 {
+        if g.focusedWidget().HandleKeyEvents(key, scancode, action, mods) || g.widgetsAreBlockingMovement {
             return
         }
     }
@@ -70,7 +75,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         return
     }
     if key == glfw.KeyEscape {
-        g.Window.SetShouldClose(true)
+        g.openEscapeMenu()
     }
     if key == glfw.KeyF1 {
         g.openWizardMenu()
@@ -83,6 +88,16 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     if key == glfw.KeyF3 {
         g.toggleSpawnMode()
     }
+
+    if key == glfw.KeyF4 {
+        g.startVoxelEditing()
+
+    }
+
+    if key == glfw.KeyF5 {
+        g.openAtlasPicker()
+    }
+
     /*
        if key == glfw.KeyF2 {
 
@@ -95,11 +110,11 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 
     */
 
-    if key == glfw.KeyF4 {
+    if key == glfw.KeyF9 {
         g.Camera.SetFOV(g.Camera.GetFOV() + 5)
         g.Camera.LookSensitivity += 0.01
     }
-    if key == glfw.KeyF5 {
+    if key == glfw.KeyF10 {
         g.Camera.SetFOV(g.Camera.GetFOV() - 5)
         g.Camera.LookSensitivity -= 0.01
     }
@@ -111,24 +126,36 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
     }
 
+    if key == glfw.KeyF {
+        g.gravitationEnabled = !g.gravitationEnabled
+    }
+
+    if key == glfw.KeyE {
+        g.openVoxelEditMenu()
+    }
+
     if key == glfw.KeyL {
-        g.uiList.SelectNext()
+        g.entityMenu.SelectNext()
     }
     if key == glfw.KeyK {
-        g.uiList.SelectPrevious()
+        g.entityMenu.SelectPrevious()
     }
 
     if key == glfw.KeyO {
-        g.uiList.ScrollUp()
+        g.entityMenu.ScrollUp()
     }
     if key == glfw.KeyP {
-        g.uiList.ScrollDown()
+        g.entityMenu.ScrollDown()
     }
 }
 
+func (g *Game) quitGame() {
+    g.Window.SetShouldClose(true)
+}
+
 func (g *Game) HandleMousePosEvents(xpos float64, ypos float64) {
-    if g.focusedWidget != nil {
-        if g.focusedWidget.HandleMousePosEvents(xpos, ypos) || g.focusedIsBlocking {
+    if len(g.widgetStack) > 0 {
+        if g.focusedWidget().HandleMousePosEvents(xpos, ypos) || g.widgetsAreBlockingMovement {
             return
         }
     }
@@ -138,6 +165,11 @@ func (g *Game) HandleMousePosEvents(xpos float64, ypos float64) {
     g.lastMouseY = ypos
 
     if !g.isMouseCursorCaptured {
+        if g.isMouseBeingDragged {
+            g.HandleDragMove(xpos, ypos)
+        } else {
+            g.HandleMouseMove(xpos, ypos)
+        }
         return
     }
 
@@ -147,22 +179,103 @@ func (g *Game) HandleMousePosEvents(xpos float64, ypos float64) {
     g.Camera.ChangeAngles(float32(dx), float32(dy))
 }
 
-func (g *Game) HandleMouseButtonEvents(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
-    if g.focusedWidget != nil {
-        if g.focusedWidget.HandleMouseButtonEvents(button, action, mods) || g.focusedIsBlocking {
+func (g *Game) HandleScrollEvents(xoff float64, yoff float64) {
+    if len(g.widgetStack) > 0 {
+        if g.focusedWidget().HandleScrollEvents(xoff, yoff) || g.widgetsAreBlockingMovement {
+            return
+        }
+    }
+}
+func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
+    if len(g.widgetStack) > 0 {
+        if g.focusedWidget().HandleMouseButtonEvents(xpos, ypos, button, action, mods) || g.widgetsAreBlockingMovement {
             return
         }
     }
 
-    if action == glfw.Press && button == glfw.MouseButtonLeft {
-        g.startWeaponFireAnimation()
+    if button == glfw.MouseButtonRight && action == glfw.Press {
+        g.toggleMouseCapture()
+        return
+    }
+
+    if g.isMouseCursorCaptured {
+        if action == glfw.Press && button == glfw.MouseButtonLeft {
+            g.startWeaponFireAnimation()
+        }
+    } else if button == glfw.MouseButtonLeft {
+        switch action {
+        case glfw.Press:
+            g.isMouseBeingDragged = true
+            g.HandleDragStart(g.Window.GetCursorPos())
+        case glfw.Release:
+            if g.isMouseBeingDragged {
+                g.HandleDragStop(g.Window.GetCursorPos())
+                g.isMouseBeingDragged = false
+            }
+        }
     }
 }
 
-func (g *Game) HandleScrollEvents(xoff float64, yoff float64) {
-    if g.focusedWidget != nil {
-        if g.focusedWidget.HandleScrollEvents(xoff, yoff) || g.focusedIsBlocking {
-            return
+func (g *Game) HandleMouseMove(x float64, y float64) {
+    if g.voxelBrush != nil {
+        result := g.rayCastFromScreenPos(x, y)
+        var blockHit voxel.Int3
+        if g.voxelSelectionEmpty {
+            blockHit = result.HitInfo.PreviousGridPosition
+        } else {
+            blockHit = result.HitInfo.CollisionGridPosition
+        }
+
+        g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
+    }
+}
+
+func (g *Game) HandleDragStart(x float64, y float64) {
+    if g.voxelBrush != nil {
+        result := g.rayCastFromScreenPos(x, y)
+        var blockHit voxel.Int3
+        if g.voxelSelectionEmpty {
+            blockHit = result.HitInfo.PreviousGridPosition
+        } else {
+            blockHit = result.HitInfo.CollisionGridPosition
+        }
+
+        g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
+    }
+}
+
+func (g *Game) HandleDragMove(x float64, y float64) {
+    if g.voxelBrush != nil {
+        result := g.rayCastFromScreenPos(x, y)
+        var blockHit voxel.Int3
+        if g.voxelSelectionEmpty {
+            blockHit = result.HitInfo.PreviousGridPosition
+        } else {
+            blockHit = result.HitInfo.CollisionGridPosition
+        }
+
+        g.voxelSelection = g.voxelBrush.Drag(blockHit)
+    }
+}
+
+func (g *Game) HandleDragStop(x float64, y float64) {
+    if g.voxelBrush != nil {
+        result := g.rayCastFromScreenPos(x, y)
+        var blockHit voxel.Int3
+        if g.voxelSelectionEmpty {
+            blockHit = result.HitInfo.PreviousGridPosition
+        } else {
+            blockHit = result.HitInfo.CollisionGridPosition
+        }
+
+        g.voxelSelection = g.voxelBrush.Drag(blockHit)
+        if g.voxelSelectionAction != nil {
+            g.voxelSelectionAction(g.voxelSelection)
         }
     }
+}
+
+func (g *Game) captureMouse(capture bool) {
+    g.SetMouseCapture(capture)
+    g.isMouseCursorCaptured = capture
 }

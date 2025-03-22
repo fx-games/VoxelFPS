@@ -3,6 +3,7 @@ package quads
 import (
     "fmt"
     "github.com/go-gl/glfw/v3.3/glfw"
+    "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
 )
 
@@ -162,10 +163,20 @@ func NewGuiConfig(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont)
         GuiList: NewGuiList(shader, uiTexture, font),
     }
     g.SetKeyHandler(g.handleKeys)
+    g.SetMouseHandler(g.handleMouse)
     return g
 }
-func (g *GuiConfig) SetCentered(screenWidth int, screenHeight int, options []GuiOption) {
+func (g *GuiConfig) SetOptions(options []GuiOption) {
     g.options = options
+    labels := make([]string, len(options))
+    for i, option := range options {
+        labels[i] = option.String()
+    }
+    g.SetItems(labels)
+    g.layoutIsDirty = true
+}
+
+func (g *GuiConfig) HandleResize(screenWidth int, screenHeight int, uiScale mgl32.Vec2) {
     labels := make([]string, len(g.options))
     for i, option := range g.options {
         labels[i] = option.String()
@@ -174,7 +185,7 @@ func (g *GuiConfig) SetCentered(screenWidth int, screenHeight int, options []Gui
     g.SetOrigin(float32(screenWidth/2), float32(screenHeight/2))
     g.SetCenteredOnScreen()
     g.SetItems(labels)
-    g.layout()
+    g.layoutIsDirty = true
 }
 
 func (g *GuiConfig) handleKeys(index int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
@@ -210,4 +221,15 @@ func (g *GuiConfig) handleKeys(index int, key glfw.Key, scancode int, action glf
         return true
     }
     return false
+}
+
+func (g *GuiConfig) handleMouse(index int, xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) bool {
+    selected := g.GetSelectedIndex()
+    if selected < 0 || selected >= len(g.options) {
+        return false
+    }
+    selectedOption := g.options[selected]
+    selectedOption.Activate()
+    g.ReplaceText(selected, selectedOption.String())
+    return true
 }

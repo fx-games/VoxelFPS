@@ -279,6 +279,11 @@ func (t *BitmapFontMesh) SetAlpha(alpha float32) {
     t.backgroundColor = mgl32.Vec4{t.backgroundColor.X(), t.backgroundColor.Y(), t.backgroundColor.Z(), alpha}
 }
 
+func (t *BitmapFontMesh) ContainsPoint(point mgl32.Vec2) bool {
+    rectPos, rectSize := t.GetRect()
+    return point.X() >= rectPos.X() && point.X() <= rectPos.X()+rectSize.X() && point.Y() >= rectPos.Y() && point.Y() <= rectPos.Y()+rectSize.Y()
+}
+
 type BitmapFontIndex map[rune]uint16
 
 func (i BitmapFontIndex) WriteAtlasIndex(filename string) {

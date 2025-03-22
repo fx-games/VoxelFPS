@@ -12,6 +12,7 @@ const (
     GuiShaderUVOffset
     GuiShaderTintColor
     GuiShaderScale
+    GuiShaderVerticalCutoff
 )
 
 func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
@@ -25,7 +26,8 @@ func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
             glhf.Attr{Name: "screenPos", Type: glhf.Vec2},        // 1
             glhf.Attr{Name: "uvOffset", Type: glhf.Vec2},         // 2
             glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
-            glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 5
+            glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 4
+            glhf.Attr{Name: "verticalCutoff", Type: glhf.IVec2},  // 5
         }
         shader *glhf.Shader
     )
@@ -48,6 +50,7 @@ func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
     shader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
     shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
     shader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
+    shader.SetUniformAttr(GuiShaderVerticalCutoff, glhf.IntVec2{0, 8192})
     shader.End()
 
     glErr := gl.GetError()
@@ -87,11 +90,24 @@ in vec2 VertUV;
 
 uniform sampler2D tex;
 uniform vec4 appliedTintColor;
+uniform ivec2 verticalCutoff;
+
+layout(origin_upper_left) in vec4 gl_FragCoord;
 
 out vec4 color;
 
 void main() {
 
+    vec4 fragScreen = gl_FragCoord;
+
+    if (fragScreen.y > verticalCutoff.y) {
+        discard;
+    }
+
+    if (fragScreen.y < verticalCutoff.x) {
+        discard;
+    }
+    
     if (VertUV.x < 0.0 && VertUV.y < 0.0) {
         color = appliedTintColor;
         return;

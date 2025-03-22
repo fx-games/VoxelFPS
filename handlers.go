@@ -10,6 +10,7 @@ func (g *Game) weaponHitScanMiss(id events.EventID, event events.Event) {
     hit := event.(RaycastResult)
     hitPos := hit.HitInfo.CollisionWorldPosition
     g.EmitParticlesByName(quads.ParticlesBulletImpact, hitPos, 30)
+    g.cubeMap.SetAir(hit.HitInfo.CollisionGridPosition)
 }
 
 func (g *Game) weaponHitScanHit(id events.EventID, event events.Event) {

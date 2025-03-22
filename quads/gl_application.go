@@ -10,6 +10,7 @@ import (
     "github.com/memmaker/goray/quads/voxel"
     "math"
     "os"
+    "path/filepath"
     "unsafe"
 )
 
@@ -21,7 +22,7 @@ type GlApplication struct {
     DrawGuiFunc        func(elapsed float64)
     KeyHandler         func(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey)
     MousePosHandler    func(xpos float64, ypos float64)
-    MouseButtonHandler func(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey)
+    MouseButtonHandler func(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey)
     ScrollHandler      func(xoff float64, yoff float64)
     ResizeHandler      func(width int, height int)
     DropHandler        func(names []string, x, y float64)
@@ -40,6 +41,7 @@ type GlApplication struct {
     Gui          *GuiDrawer
     Meshes       *MeshDrawer
     Pathfinder   *PathfindingSystem
+    UnitCube     *UnitCube
 
     particleSystems map[ParticleName]*glhf.ParticleSystem
 
@@ -80,7 +82,8 @@ func (a *GlApplication) SetMouseCapture(isCaptured bool) {
 
 func (a *GlApplication) MouseButtonCallback(w *glfw.Window, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
     if a.MouseButtonHandler != nil {
-        a.MouseButtonHandler(button, action, mods)
+        x, y := w.GetCursorPos()
+        a.MouseButtonHandler(x, y, button, action, mods)
     }
 }
 
@@ -130,6 +133,13 @@ func (a *GlApplication) CreateToast(labelText string, font BitmapFont, uiAtlas *
     return toast
 }
 
+func (a *GlApplication) SetupUnitCubes() {
+    meshFile := filepath.Join("assets", "meshes", "cube.glb")
+    mesh := LoadGLTFWithTextures(meshFile)
+    mesh.UploadVertexData(a.meshShader)
+    a.UnitCube = NewUnitCube(a.meshShader, mesh)
+}
+
 func (a *GlApplication) SetupParticleSystem(name ParticleName, count int) {
     ps := glhf.NewParticleSystem(count, a.Camera.GetViewMatrix, a.Camera.GetProjectionMatrix)
     a.particleSystems[name] = ps
@@ -142,7 +152,7 @@ func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) 
     emptyMap := make([]uint8, width*height*4)
     minimapTexture := glhf.NewTexture(width, height, false, emptyMap)
     minimapTexture.SetAtlasItemSize(width, height)
-    guiQuadVerts := NewGUIQuadVerts(a.guiShader, minimapTexture, 0, 0, 0, width, height)
+    guiQuadVerts := NewGUIQuadVertsFromSubImage(a.guiShader, minimapTexture, 0, 0, 0, width, height)
 
     a.minimap = &Minimap{
         Width:    width,
@@ -271,8 +281,8 @@ func (a *GlApplication) NewLabel(font BitmapFont) *BitmapFontMesh {
 func (a *GlApplication) NewList(uiAtlas *glhf.Texture, font BitmapFont) *GuiList {
     return NewGuiList(a.guiShader, uiAtlas, font)
 }
-func (a *GlApplication) OpenSpriteEditor(uiAtlas *glhf.Texture, font BitmapFont, gameObj *GameObject) *GuiSpriteImporter {
-    return NewGuiSpriteImporter(a.guiShader, uiAtlas, font, a.Sprites, gameObj)
+func (a *GlApplication) OpenTextureCube(uiAtlas *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
+    return NewGuiTexturePickerCube(a.guiShader, uiAtlas, font, atlasForSelection, preselection)
 }
 func (a *GlApplication) OpenConfigMenu(uiAtlas *glhf.Texture, font BitmapFont) *GuiConfig {
     return NewGuiConfig(a.guiShader, uiAtlas, font)
@@ -471,6 +481,7 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
     glfw.WindowHint(glfw.Visible, glfw.True)
     glfw.WindowHint(glfw.CocoaRetinaFramebuffer, glfw.True)
     glfw.WindowHint(glfw.DoubleBuffer, glfw.True)
+    glfw.WindowHint(glfw.Decorated, glfw.True)
 
     var err error
     var monitor *glfw.Monitor
@@ -550,7 +561,7 @@ type GlGame interface {
     Update(elapsed float64)
     HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey)
     HandleMousePosEvents(xpos float64, ypos float64)
-    HandleMouseButtonEvents(button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey)
+    HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey)
     HandleScrollEvents(xoff float64, yoff float64)
     HandleResize(width int, height int)
     HandleDrop(names []string, x, y float64)

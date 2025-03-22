@@ -14,7 +14,7 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
         vertexFormat = glhf.AttrFormat{
             {Name: "position", Type: glhf.Vec3},
             {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertexColor", Type: glhf.Vec3},
+            {Name: "vertexColor", Type: glhf.Vec3}, // Take this out?
             {Name: "normal", Type: glhf.Vec3},
         }
         uniformFormat = glhf.AttrFormat{

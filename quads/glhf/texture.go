@@ -59,6 +59,21 @@ func AsRGBA(img image.Image) *image.RGBA {
     }
 }
 
+func NewRectOutlineTexture(width, height, borderWidth int) *Texture {
+    var borderColor = [4]uint8{255, 255, 255, 255}
+    var pixels []uint8
+    for y := 0; y < height; y++ {
+        for x := 0; x < width; x++ {
+            if x < borderWidth || x >= width-borderWidth || y < borderWidth || y >= height-borderWidth {
+                pixels = append(pixels, borderColor[:]...)
+            } else {
+                pixels = append(pixels, 0, 0, 0, 0)
+            }
+        }
+    }
+    return NewTexture(width, height, false, pixels)
+}
+
 // NewTexture creates a new texture with the specified width and height with some initial
 // pixel values. The pixels must be a sequence of RGBA values (one byte per component).
 func NewTexture(width, height int, smooth bool, pixels []uint8) *Texture {

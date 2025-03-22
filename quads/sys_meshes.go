@@ -20,6 +20,7 @@ type MeshDrawer struct {
 type MeshComponent struct {
     baseComponent
     MeshIndex int
+    IsHidden  bool
 }
 
 func NewMeshComponent(meshIndex int) *MeshComponent {
@@ -79,7 +80,7 @@ func (q *MeshDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
                 q.Remove(mesh)
                 continue
             }
-            if !mesh.GameObject().IsInViewFrustum(camera) {
+            if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(camera) {
                 continue
             }
             compoundMesh := q.loadedMeshes[mesh.MeshIndex]
