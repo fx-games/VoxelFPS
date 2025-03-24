@@ -63,6 +63,9 @@ func (q *GuiQuad) PlayAnimation(anim int) {
     q.currentFrame = 0
     q.currentFrameTime = 0
 }
+func (q *GuiQuad) ClearEvents() {
+    clear(q.eventOnFrame)
+}
 func (q *GuiQuad) PublishEventOnFrame(frame int, event events.EventID) {
     if q.eventOnFrame == nil {
         q.eventOnFrame = make(map[int]events.EventID)

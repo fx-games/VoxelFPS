@@ -33,8 +33,11 @@ jobs:
       - name: Create Build directory
         run: mkdir "$PROJECT_NAME"
 
-      - name: Build
-        run: CGOENABLED=1 go build -o "./$PROJECT_NAME/$PROJECT_NAME" -v .
+      - name: Build (amd64)
+        run: GOOS=darwin GOARCH=amd64 CGOENABLED=1 go build -o "./$PROJECT_NAME/$PROJECT_NAME-amd64" -v .
+
+      - name: Build (arm64)
+        run: GOOS=darwin GOARCH=arm64 CGOENABLED=1 go build -o "./$PROJECT_NAME/$PROJECT_NAME-arm64" -v .
 
       - name: Copy assets
         run: cp -r assets "$PROJECT_NAME/assets"

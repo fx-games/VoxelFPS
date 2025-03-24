@@ -17,7 +17,7 @@ type GuiToast struct {
 
 func NewGuiToast(label *BitmapFontMesh, uiShader *glhf.Shader, uiAtlas *glhf.Texture) *GuiToast {
     size, pos := label.GetRect()
-    border := NewGuiBorder(uiShader, uiAtlas, size, pos)
+    border := NewGuiBorderWithBounds(uiShader, uiAtlas, size, pos)
     border.SetBackground(mgl32.Vec4{0, 0, 0, 0.8})
     animRoutine := routine.New()
     labelAlpha := label.GetAlpha()

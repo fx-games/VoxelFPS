@@ -1,44 +1,26 @@
 package main
 
 import (
+    "fmt"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
     "github.com/memmaker/goray/quads"
+    "github.com/memmaker/goray/quads/glhf"
     "github.com/memmaker/goray/quads/voxel"
     "path/filepath"
     "strings"
 )
 
-func (g *Game) fireProjectile() {
-    origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
-    offsetOrigin := origin.Add(direction.Mul(0.8))
-
-    sprite := quads.NewSprite(g.defaultAtlas, []uint16{179})
-    newProjectile := quads.NewGameObject("Projectile")
-    newProjectile.SetLifeTime(5)
-    newProjectile.Transform().SetPosition(offsetOrigin)
-    newProjectile.SetComponent(sprite)
-
-    physics := quads.NewPhysicsComponent(false, voxel.NewAABB(mgl32.Vec3{-0.1, -0.1, -0.1}, mgl32.Vec3{0.1, 0.1, 0.1}))
-    newProjectile.SetComponent(physics)
-
-    g.Sprites.Add(sprite)
-    sprite.PlayAnimationLooping(g.projectileFlyingAnim)
-
-    g.physicsSystem.AddObject(physics)
-    physics.SetVelocity(direction.Mul(10))
-}
-
-func (g *Game) spawnProjectileImpact(worldPos mgl32.Vec3, anim int) {
-    firstFrameIndex := g.Sprites.GetFirstFrameIndex(anim, 0)
-    sprite := quads.NewSprite(g.defaultAtlas, []uint16{firstFrameIndex})
+func (g *Game) spawnProjectileImpact(worldPos mgl32.Vec3, atlas *glhf.Texture, spriteAnimationIndex int) {
+    firstFrameIndex := g.Sprites.GetFirstFrameIndex(spriteAnimationIndex, 0)
+    sprite := quads.NewSprite(atlas, []uint16{firstFrameIndex})
     newProjectile := quads.NewGameObject("Impact")
     newProjectile.Transform().SetPosition(worldPos)
     newProjectile.SetComponent(sprite)
 
     g.Sprites.Add(sprite)
 
-    sprite.PlayAnimationDieAfterLastFrame(anim)
+    sprite.PlayAnimationDieAfterLastFrame(spriteAnimationIndex)
 }
 
 func (g *Game) spawnPlayer(cam *core.FPSCamera, spawn mgl32.Vec3, dir mgl32.Vec2) *quads.GameObject {
@@ -103,7 +85,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
     }
 
     if len(entity.TextureIndices) > 0 {
-        atlas := g.defaultAtlas
+        atlas := g.AtlasSprites
 
         if entity.SpriteSheetName != "" {
             atlasFile := filepath.Join("assets", "sheets", entity.SpriteSheetName+".png") //"assets/scientist_sheet.png"
@@ -111,7 +93,12 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
             tileHeight := entity.SpriteSheetTileSize.Y
             atlas = quads.LoadTextureAtlas(atlasFile, tileWidth, tileHeight)
         }
-
+        for i, index := range entity.TextureIndices {
+            if int(index) > atlas.LastValidIndex() {
+                println(fmt.Sprintf("Invalid texture index %d for entity %s", index, entity.Name))
+                entity.TextureIndices[i] = 0
+            }
+        }
         sprite := quads.NewSpriteFloor(atlas, entity.TextureIndices)
 
         aabb = voxel.NewAABB(atlas.AABBFromOpaqueAtIndex(entity.TextureIndices[0]))
@@ -143,7 +130,9 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
         g.Pathfinder.AddMovingObject(pather)
     }
 
-    g.physicsSystem.AddObject(physics)
+    if entity.CreateCollider {
+        g.physicsSystem.AddObject(physics)
+    }
 
     return goFromEntity
 }

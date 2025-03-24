@@ -174,6 +174,25 @@ func (s CubeSide) String() string {
     return "Unknown"
 }
 
+func (s CubeSide) AsDirection() Int3 {
+    switch s {
+    case North:
+        return Int3{0, 0, -1}
+    case East:
+        return Int3{1, 0, 0}
+    case South:
+        return Int3{0, 0, 1}
+    case West:
+        return Int3{-1, 0, 0}
+    case Top:
+        return Int3{0, 1, 0}
+    case Bottom:
+        return Int3{0, -1, 0}
+    }
+    return Int3{}
+
+}
+
 type HitInfo3D struct {
     Distance               float64
     Side                   CubeSide

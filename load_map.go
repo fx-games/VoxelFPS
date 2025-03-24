@@ -230,7 +230,8 @@ func loadLDTK(filename string) core.MapLoadResult {
 
                 default:
                     mapEntity := core.MapEntity{
-                        Name: entityId,
+                        Name:           entityId,
+                        CreateCollider: true,
                     }
                     for _, field := range entity.FieldInstances {
                         switch field.Identifier {

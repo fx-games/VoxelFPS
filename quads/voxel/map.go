@@ -253,7 +253,7 @@ func (m *Map) SetBlock(x int32, y int32, z int32, block *Block) {
 
 func (m *Map) SetBlocks(pos []Int3, block *Block) {
     for _, p := range pos {
-        m.SetBlock(p.X, p.Y, p.Z, block)
+        m.SetBlock(p.X, p.Y, p.Z, block.Copy())
     }
 }
 
@@ -777,5 +777,92 @@ func (m *Map) LoadFromMemory(source []byte) {
             }
         }
         chunk.SetDirty()
+    }
+}
+
+func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index int) {
+    block, chunk := m.GetBlockAndChunk(blockPos)
+    block.Textures[side] = uint16(index)
+    chunk.SetDirty()
+}
+func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index int) {
+    block, chunk := m.GetBlockAndChunk(blockPos)
+    block.Textures[side] = uint16(index)
+    chunk.SetDirty()
+
+    exposedSideOffset := side.AsDirection()
+    var neighborsToCheck []Int3
+
+    switch side {
+    case Bottom:
+        fallthrough
+    case Top:
+        neighborsToCheck = append(neighborsToCheck,
+            Int3{1, 0, 0},
+            Int3{-1, 0, 0},
+            Int3{0, 0, 1},
+            Int3{0, 0, -1},
+        )
+    case South:
+        fallthrough
+    case North:
+        neighborsToCheck = append(neighborsToCheck,
+            Int3{1, 0, 0},
+            Int3{-1, 0, 0},
+            Int3{0, 1, 0},
+            Int3{0, -1, 0},
+        )
+    case East:
+        fallthrough
+    case West:
+        neighborsToCheck = append(neighborsToCheck,
+            Int3{0, 1, 0},
+            Int3{0, -1, 0},
+            Int3{0, 0, 1},
+            Int3{0, 0, -1},
+        )
+    }
+
+    openPositons := make(map[Int3]bool)
+    closedPositions := make(map[Int3]bool)
+
+    pop := func() Int3 {
+        for k := range openPositons {
+            delete(openPositons, k)
+            return k
+        }
+        return Int3{}
+    }
+
+    push := func(pos Int3) {
+        if _, exists := closedPositions[pos]; exists {
+            return
+        }
+        openPositons[pos] = true
+    }
+
+    push(blockPos)
+
+    for len(openPositons) > 0 {
+        currentPos := pop()
+        closedPositions[currentPos] = true
+
+        for _, offset := range neighborsToCheck {
+            neighbor := currentPos.Add(offset)
+            neighborBlock, neighborChunk := m.GetBlockAndChunk(neighbor)
+
+            if neighborBlock.IsAir() {
+                continue
+            }
+
+            exposedSide := neighbor.Add(exposedSideOffset)
+            if m.IsSolidBlockAt(exposedSide.X, exposedSide.Y, exposedSide.Z) {
+                continue
+            }
+
+            neighborChunk.SetDirty()
+            neighborBlock.Textures[side] = uint16(index)
+            push(neighbor)
+        }
     }
 }

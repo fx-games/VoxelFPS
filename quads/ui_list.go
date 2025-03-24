@@ -259,7 +259,7 @@ func (g *GuiList) layout() {
     items := g.items
     // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
 
-    g.border = NewGuiBorder(g.shader, g.uiTexture, topLeft, size)
+    g.border = NewGuiBorderWithBounds(g.shader, g.uiTexture, topLeft, size)
     g.border.SetBackground(mgl32.Vec4{0, 0, 0, 0.6})
     g.border.SetBorderColor(g.textColor)
 
@@ -374,4 +374,8 @@ func (g *GuiList) RemoveByIndex(index int) {
         g.selectedIndex = len(g.labels) - 1
     }
     g.ensureSelectedVisible()
+}
+
+func (g *GuiList) IsVisible() bool {
+    return !g.isHidden
 }

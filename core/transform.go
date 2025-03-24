@@ -257,6 +257,10 @@ func (t *Transform) GetForward2D() mgl32.Vec2 {
     return mgl32.Vec2{forward.X(), forward.Z()}
 }
 
+func (t *Transform) GetRelativePosition(pos mgl32.Vec3) mgl32.Vec3 {
+    return t.GetTransformMatrix().Inv().Mul4x1(mgl32.Vec4{pos.X(), pos.Y(), pos.Z(), 1}).Vec3()
+}
+
 // PositionToGridInt3 converts a Vec3 to a Int3 by flooring the values.
 // DO NOT USE THIS FOR NEGATIVE VALUES, eg. direction vectors
 func PositionToGridInt3(pos mgl32.Vec3) Int3 {

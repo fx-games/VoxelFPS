@@ -1,10 +1,14 @@
 package main
 
 import (
+    "fmt"
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/core"
+    "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/voxel"
+    "maps"
 )
 
 type InputReceiver interface {
@@ -70,10 +74,20 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
             return
         }
     }
-
+    if g.entityMenu != nil && g.entityMenu.IsVisible() && g.entityMenu.HandleKeyEvents(key, scancode, action, mods) {
+        return
+    }
     if action != glfw.Repeat && action != glfw.Press {
         return
     }
+
+    if key == glfw.KeyTab && g.voxelBlock != nil {
+        rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
+        hitBlock := g.cubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
+        g.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
+        g.Toast(fmt.Sprintf("Block textures copied from %v", rayHitBlock))
+    }
+
     if key == glfw.KeyEscape {
         g.openEscapeMenu()
     }
@@ -88,14 +102,17 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     if key == glfw.KeyF3 {
         g.toggleSpawnMode()
     }
-
     if key == glfw.KeyF4 {
+        g.changeDecorationTexture()
+    }
+
+    if key == glfw.KeyF5 {
         g.startVoxelEditing()
 
     }
 
-    if key == glfw.KeyF5 {
-        g.openAtlasPicker()
+    if key == glfw.KeyF6 {
+        g.openCubeTextureMapper()
     }
 
     /*
@@ -131,6 +148,10 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     }
 
     if key == glfw.KeyE {
+        g.spawnCurrentGameObject()
+    }
+
+    if key == glfw.KeyR {
         g.openVoxelEditMenu()
     }
 
@@ -146,6 +167,29 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     }
     if key == glfw.KeyP {
         g.entityMenu.ScrollDown()
+    }
+}
+
+func (g *Game) spawnCurrentGameObject() {
+    if g.gameObjectForSpawning != nil {
+        decoToSpawn := g.gameObjectForSpawning
+        sprite := decoToSpawn.Sprite()
+        g.Sprites.Remove(sprite)
+        sprite.Tint = mgl32.Vec4{1, 1, 1, 1}
+        g.Sprites.Add(sprite)
+
+        aabb := voxel.NewAABB(sprite.AtlasTexture.AABBFromOpaqueAtIndex(sprite.TextureIndices[0]))
+        physicsComponent := quads.NewPhysicsComponent(false, aabb)
+        decoToSpawn.SetComponent(physicsComponent)
+        g.physicsSystem.AddObject(physicsComponent)
+
+        g.gameObjectForSpawning = g.spawnEntity(decoToSpawn.Transform().GetPosition(), core.MapEntity{
+            Name:           decoToSpawn.DisplayName,
+            TextureIndices: sprite.TextureIndices,
+            CreateCollider: false,
+            IsTransparent:  true,
+        })
+        g.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
     }
 }
 
@@ -185,6 +229,10 @@ func (g *Game) HandleScrollEvents(xoff float64, yoff float64) {
             return
         }
     }
+    if g.entityMenu != nil && g.entityMenu.IsVisible() {
+        g.entityMenu.HandleScrollEvents(xoff, yoff)
+    }
+
 }
 func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
     if len(g.widgetStack) > 0 {
@@ -195,6 +243,11 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 
     if button == glfw.MouseButtonRight && action == glfw.Press {
         g.toggleMouseCapture()
+        return
+    }
+
+    if g.gameObjectForSpawning != nil && button == glfw.MouseButtonLeft && action == glfw.Press {
+        g.spawnCurrentGameObject()
         return
     }
 

@@ -24,6 +24,7 @@ const (
     ComponentTypeCamera
     ComponentTypeSprite
     ComponentTypeMesh
+    ComponentTypeProjectile
     ComponentTypePathing
 )
 
@@ -64,14 +65,14 @@ func NextID() uint64 {
 }
 
 type GameObject struct {
-    DisplayName string
-    isDead      bool
-    ID          uint64
-
-    lifeTime float64
-
-    components map[ComponentType]Component
+    ID         uint64
     transform  *core.Transform
+    components map[ComponentType]Component
+
+    DisplayName string
+
+    isDead   bool
+    lifeTime float64
 }
 
 func NewGameObject(name string) *GameObject {

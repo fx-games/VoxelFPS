@@ -13,7 +13,7 @@ require (
 	github.com/qmuntal/gltf v0.28.0
 	github.com/sinshu/go-meltysynth v0.0.0-20230205031334-05d311382fc4
 	github.com/solarlune/routine v0.0.0-20240401160545-0fca8842c80e
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.10.0
 )
 
 require (

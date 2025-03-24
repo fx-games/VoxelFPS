@@ -6,6 +6,7 @@ import (
     "github.com/memmaker/goray/geometry"
     "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/voxel"
+    "path/filepath"
 )
 
 func (g *Game) openVoxelBrushMenu() {
@@ -78,8 +79,20 @@ func (g *Game) openVoxelEditMenu() {
     configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
 
     options := []quads.GuiOption{
-        quads.NewGuiOptionAction("Set Brush", g.openVoxelBrushMenu),
-        quads.NewGuiOptionAction("Set Textures", g.openAtlasPicker),
+        quads.NewGuiOptionAction("Choose Brush", g.openVoxelBrushMenu),
+        quads.NewGuiOptionAction("Block Textures", g.openCubeTextureMapper),
+        quads.NewGuiOptionAction("Paint Gun", func() {
+            g.currentWeapon.WeaponEffect = WeaponEffectHitscanVoxelPaintGun
+        }),
+        quads.NewGuiOptionAction("Fill Gun", func() {
+            g.currentWeapon.WeaponEffect = WeaponEffectHitscanVoxelPaintGunFill
+        }),
+        quads.NewGuiOptionAction("Choose Paint Texture", func() {
+            g.pickTexture(g.AtlasMap, func(selectedIndex int) {
+                g.currentPaintGunTextureIndex = selectedIndex
+            })
+        }),
+        quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
         quads.NewGuiOptionAction("Add Blocks", func() {
             g.captureMouse(previousMouseState)
             if g.voxelBrush == nil {
@@ -102,7 +115,7 @@ func (g *Game) openVoxelEditMenu() {
             g.popFromWidgetStack()
         }),
         quads.NewGuiOptionAction("Save Map", func() {
-            saveErr := g.cubeMap.SaveToDisk("test.map")
+            saveErr := g.cubeMap.SaveToDisk(filepath.Join("assets", "map.bin"))
             if saveErr != nil {
                 g.Toast(saveErr.Error())
             } else {
@@ -111,10 +124,15 @@ func (g *Game) openVoxelEditMenu() {
             g.popFromWidgetStack()
         }),
         quads.NewGuiOptionAction("Load Map", func() {
-            g.cubeMap.LoadFromDisk("test.map")
+            g.cubeMap.LoadFromDisk(filepath.Join("assets", "map.bin"))
 
             g.Toast("Map loaded")
 
+            g.popFromWidgetStack()
+        }),
+        quads.NewGuiOptionAction("Clear Map", func() {
+            g.cubeMap.ClearAllChunks()
+            g.cubeMap.SetFloorAtHeight(0, g.voxelBlock)
             g.popFromWidgetStack()
         }),
     }
@@ -122,6 +140,14 @@ func (g *Game) openVoxelEditMenu() {
     configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
 
     g.replaceWidgetStack(configMenu)
+}
+
+func (g *Game) changeDecorationTexture() {
+    g.pickTexture(g.AtlasSprites, func(selectedIndex int) {
+        if g.gameObjectForSpawning != nil {
+            g.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
+        }
+    })
 }
 
 func (g *Game) toggleSpawnMode() {
@@ -137,6 +163,7 @@ func (g *Game) toggleSpawnMode() {
     entityDesc := core.MapEntity{
         Name:           "Barrel",
         TextureIndices: []uint16{157},
+        CreateCollider: false,
         IsTransparent:  true,
     }
     g.gameObjectForSpawning = g.spawnEntity(spawnPos, entityDesc)

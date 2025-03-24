@@ -44,9 +44,10 @@ func LoadBitmapFontWithoutIndex(filename string, glyphWidth int, glyphHeight int
     return fontTextureAtlas
 }
 func LoadTextureAtlas(filename string, tileWidth int, tileHeight int) *glhf.Texture {
-    fontTextureAtlas := LoadTexture(filename)
-    fontTextureAtlas.SetAtlasItemSize(tileWidth, tileHeight)
-    return fontTextureAtlas
+    textureAtlas := LoadTexture(filename)
+    textureAtlas.SetAtlasItemSize(tileWidth, tileHeight)
+    textureAtlas.SourceFile = filename
+    return textureAtlas
 }
 func LoadTexture(filePath string) *glhf.Texture {
     file, err := os.Open(filePath)
@@ -59,6 +60,7 @@ func LoadTexture(filePath string) *glhf.Texture {
         panic(err)
     }
     texture.SetAtlasItemSize(texture.Width(), texture.Height())
+    texture.SourceFile = filePath
     return texture
 }
 

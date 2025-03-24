@@ -19,7 +19,7 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
         }
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-            glhf.Attr{Name: "atlasGridSize", Type: glhf.Vec2},  // 1
+            glhf.Attr{Name: "atlasGridSize", Type: glhf.IVec2}, // 1
             glhf.Attr{Name: "debugSwitch", Type: glhf.Float},   // 2
         }
         shader *glhf.Shader
@@ -157,13 +157,17 @@ in vec3 VertPos;
 in float VertLightLevel;
 flat in uint VertTexIndex;
 
-uniform vec2 atlasGridSize;
+uniform ivec2 atlasGridSize;
 uniform mat4 modelTransform;
 uniform float debugSwitch;
 
 uniform sampler2D tex;
 
 uniform usampler3D voxelTexLookup;
+
+//uniform usampler2DArray xzLookup;
+//uniform usampler2DArray yzLookup;
+//uniform usampler2DArray xyLookup;
 
 layout (location = 0) out vec4 fragmentColor;
 
@@ -202,7 +206,7 @@ void main() {
     float u = 0.0;
     float v = 0.0;
 
-    float floatSamplingAdjustmentX = 0.001 * normalizedPixelSizeX;
+    float floatSamplingAdjustmentX = 0.002 * normalizedPixelSizeX;
     float floatSamplingAdjustmentY = 0.002 * normalizedPixelSizeY;
 
     if (VertNormal.z > 0.0) {
@@ -218,11 +222,11 @@ void main() {
         u = ((xOffset + fract(VertPos.z)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
         v = ((yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
     } else if (VertNormal.y > 0.0) {
-        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn));// - floatSamplingAdjustmentY;
+        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow)) - floatSamplingAdjustmentX;
+        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
     } else if (VertNormal.y < 0.0) {
         u = ((xOffset + (1.0 - fract(VertPos.x))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn));// - floatSamplingAdjustmentY;
+        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
     }
 
     // clamp to 0-1 range

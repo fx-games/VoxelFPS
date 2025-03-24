@@ -20,6 +20,10 @@ Todo:
 
 If performance drops, this could help:
 
+3 Texture arrays with 2 textures each:
+XZ, YZ, XY
+16 bit lookup values
+
  - Draw all static sprites/meshes in a single draw call
  - Quad/Octree based culled rendering
  - Do better frustum culling

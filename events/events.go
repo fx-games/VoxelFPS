@@ -1,11 +1,10 @@
 package events
 
 const (
-    EventWeaponFired EventID = iota
-    EventWeaponHitScanHit
-    EventWeaponHitScanMiss
+    EventPlayerWeaponFired EventID = iota
+    EventHitScanCollision
     EventPlayerInteractWith
-    EventCollision
+    EventPhysicsCollision
 )
 
 type EventID uint16

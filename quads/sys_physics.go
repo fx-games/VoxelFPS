@@ -698,7 +698,7 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, camer
                             continue
                         }
                         var c voxel.CollisionInfo
-                        if collider.GameObject == nil {
+                        if true || collider.GameObject == nil {
                             a := prevBox
                             b := collider.AABB
                             c = voxel.SweepAABB(a, b, velocity)
@@ -706,7 +706,7 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, camer
                             c = voxel.CheckAABBVsOBB(prevBox, collider.GameObject.OBB(camera), velocity)
                         }
                         if c.TimeOfImpact < 1 {
-                            events.Publish(events.EventCollision, CollisionEvent{
+                            events.Publish(events.EventPhysicsCollision, CollisionEvent{
                                 ObjectA:       movingEntity,
                                 ObjectB:       collider.GameObject,
                                 WorldPos:      movingEntity.Position().Add(velocity.Mul(c.TimeOfImpact)),

@@ -11,6 +11,8 @@ import (
     "math"
     "os"
     "path/filepath"
+    "regexp"
+    "strconv"
     "unsafe"
 )
 
@@ -70,6 +72,8 @@ type GlApplication struct {
 
     ShouldDrawSkybox  bool
     ShouldDrawMinimap bool
+    AtlasMap          *glhf.Texture
+    AtlasSprites      *glhf.Texture
 }
 
 func (a *GlApplication) SetMouseCapture(isCaptured bool) {
@@ -282,7 +286,20 @@ func (a *GlApplication) NewList(uiAtlas *glhf.Texture, font BitmapFont) *GuiList
     return NewGuiList(a.guiShader, uiAtlas, font)
 }
 func (a *GlApplication) OpenTextureCube(uiAtlas *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
-    return NewGuiTexturePickerCube(a.guiShader, uiAtlas, font, atlasForSelection, preselection)
+    return NewGuiTexturePickerCube(a.guiShader, uiAtlas, font, atlasForSelection, preselection, func(s string) {
+        a.CreateToast(s, font, uiAtlas)
+    }, func() {
+        gridSize := glhf.IntVec2{int32(atlasForSelection.GridWidth()), int32(atlasForSelection.GridHeight())}
+        a.cubeShader.Begin()
+        a.cubeShader.SetUniformAttr(CubeShaderAtlasGridSize, gridSize)
+        a.cubeShader.End()
+    })
+}
+
+func (a *GlApplication) OpenAtlasPicker(uiAtlas *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture) *GuiAtlasPicker {
+    picker := NewGuiAtlasPicker(a.guiShader, uiAtlas, font, atlasForSelection)
+    picker.HandleResize(a.WindowWidth, a.WindowHeight, a.UIScale)
+    return picker
 }
 func (a *GlApplication) OpenConfigMenu(uiAtlas *glhf.Texture, font BitmapFont) *GuiConfig {
     return NewGuiConfig(a.guiShader, uiAtlas, font)
@@ -420,8 +437,8 @@ func (a *GlApplication) updateUBO() {
     a.mainUbo.End()
 }
 
-func (a *GlApplication) ToVoxelMap(loadResult core.MapLoadResult, atlas *glhf.Texture) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
-    return toVoxelMap(loadResult, atlas, a.cubeShader)
+func (a *GlApplication) ToVoxelMap(loadResult core.MapLoadResult) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
+    return toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
 }
 func (a *GlApplication) OnResize(width int, height int) {
     a.WindowWidth = width
@@ -601,6 +618,36 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         shaderBlockSource := ubo.GetShaderBlockSource(uboBlockName)
 
         uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
+
+        // load the texture atlas
+        // map pattern map_64x64.png
+        mapAtlasRegex, _ := regexp.Compile("map_(\\d+)x(\\d+).png")
+        spriteAtlasRegex, _ := regexp.Compile("sprites_(\\d+)x(\\d+).png")
+        baseTexPath := filepath.Join("assets", "base")
+        entries, err := os.ReadDir(baseTexPath)
+        if err != nil {
+            panic(err)
+        }
+        var atlasMap *glhf.Texture
+        var atlasSprites *glhf.Texture
+        for _, entry := range entries {
+            if entry.IsDir() {
+                continue
+            }
+            var width, height int
+            if mapAtlasRegex.MatchString(entry.Name()) {
+                match := mapAtlasRegex.FindStringSubmatch(entry.Name())
+                width, _ = strconv.Atoi(match[1])
+                height, _ = strconv.Atoi(match[2])
+                atlasMap = LoadTextureAtlas(filepath.Join(baseTexPath, entry.Name()), width, height)
+            } else if spriteAtlasRegex.MatchString(entry.Name()) {
+                match := spriteAtlasRegex.FindStringSubmatch(entry.Name())
+                width, _ = strconv.Atoi(match[1])
+                height, _ = strconv.Atoi(match[2])
+                atlasSprites = LoadTextureAtlas(filepath.Join(baseTexPath, entry.Name()), width, height)
+            }
+        }
+
         glApp := &GlApplication{
             WindowWidth:     winSizeX,
             WindowHeight:    winSizeY,
@@ -618,6 +665,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             //frameBuffer:      glhf.NewFrame(fbSizeX, fbSizeY, false),
             UIScale:          uiScale,
             ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
+            AtlasMap:         atlasMap,
+            AtlasSprites:     atlasSprites,
         }
         window.SetKeyCallback(glApp.KeyCallback)
         window.SetCursorPosCallback(glApp.MousePosCallback)
@@ -740,12 +789,22 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.Texture, shader *glhf
     voxelMap.SetModelTransformAttrIndex(CubeShaderModelTransform)
 
     shader.Begin()
-    shader.SetUniformAttr(CubeShaderAtlasGridSize, mgl32.Vec2{atlas.GridWidth(), atlas.GridHeight()})
+    shader.SetUniformAttr(CubeShaderAtlasGridSize, glhf.IntVec2{int32(atlas.GridWidth()), int32(atlas.GridHeight())})
     shader.End()
 
     voxelMap.SetTerrainTexture(atlas)
 
     entitySpawns := make(map[mgl32.Vec3]core.MapEntity)
+
+    safeTex := func(tex int) uint16 {
+        if tex < 0 {
+            return 0
+        }
+        if tex > atlas.LastValidIndex() {
+            return 0
+        }
+        return uint16(tex)
+    }
 
     for z := 0; z < mapSizeZ; z++ {
         for x := 0; x < mapSizeX; x++ {
@@ -785,12 +844,12 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.Texture, shader *glhf
                 cube.Textures = make(map[voxel.CubeSide]uint16)
                 cube.SetSunLight(14)
                 cube.SetTorchLight(14)
-                cube.Textures[voxel.North] = uint16(tileInfo.WallTex)
-                cube.Textures[voxel.South] = uint16(tileInfo.WallTex)
-                cube.Textures[voxel.East] = uint16(tileInfo.WallTex)
-                cube.Textures[voxel.West] = uint16(tileInfo.WallTex)
-                cube.Textures[voxel.Top] = uint16(tileInfo.FloorTex)
-                cube.Textures[voxel.Bottom] = uint16(tileInfo.CeilTex)
+                cube.Textures[voxel.North] = safeTex(tileInfo.WallTex)
+                cube.Textures[voxel.South] = safeTex(tileInfo.WallTex)
+                cube.Textures[voxel.East] = safeTex(tileInfo.WallTex)
+                cube.Textures[voxel.West] = safeTex(tileInfo.WallTex)
+                cube.Textures[voxel.Top] = safeTex(tileInfo.FloorTex)
+                cube.Textures[voxel.Bottom] = safeTex(tileInfo.CeilTex)
             }
         }
     }

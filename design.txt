@@ -4,3 +4,5 @@
 1x Fixed Size Texture Atlas for each NPC/Enemy Type
 
 
+Example of bullet physics in go:
+https://github.com/Galaco/kero/tree/dev

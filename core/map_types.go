@@ -35,6 +35,7 @@ type MapEntity struct {
     SpriteSheetName     string
     SpriteSheetTileSize geometry.Point
     IsTransparent       bool
+    CreateCollider      bool
 }
 
 type TileInfo struct {

@@ -45,8 +45,6 @@ type Lifekeeper interface {
 type Game struct {
     *quads.GlApplication
 
-    defaultAtlas *glhf.Texture
-
     cubeMap *voxel.Map
 
     physicsSystem *quads.PhysicsSystem
@@ -66,11 +64,9 @@ type Game struct {
     uiLabel *quads.BitmapFontMesh
     player  *quads.GameObject
 
-    smallGun         *quads.GuiQuad
-    fireSmallGunAnim int
-    relativeHitPos   mgl32.Vec3
-    uiAtlas          *glhf.Texture
-    entityMenu       *quads.GuiList
+    relativeHitPos mgl32.Vec3
+    uiAtlas        *glhf.Texture
+    entityMenu     *quads.GuiList
 
     widgetStack                []InputReceiver
     widgetsAreBlockingMovement bool
@@ -91,10 +87,10 @@ type Game struct {
     fogStart               float32
     fogEnd                 float32
     currentResolutionIndex int
-    smallGunAtlas          *glhf.Texture
-    watchFileChanges       bool
-    isMouseCursorCaptured  bool
-    projectileFlyingAnim   int
+
+    watchFileChanges      bool
+    isMouseCursorCaptured bool
+    projectileFlyingAnim  int
 
     projectileImpactAnim int
     lastHitResult        *RaycastResult
@@ -108,10 +104,15 @@ type Game struct {
     voxelSelection       []voxel.Int3
     voxelSelectionEmpty  bool // if voxelSelectionEmpty is set to true, the selection will select the empty grid position right before the collision grid position
     voxelSelectionAction func(pos []voxel.Int3)
+
+    currentWeapon               *Weapon
+    weaponQuad                  *quads.GuiQuad
+    currentPaintGunTextureIndex int
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
     // Basics (Window / Camera)
+    g.currentPaintGunTextureIndex = -1
     g.GlApplication = app
 
     g.SetupUnitCubes()
@@ -130,7 +131,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     // Load Textures
     g.uiAtlas = eassets.LoadEmbeddedUIAtlas()
-    g.smallGunAtlas = quads.LoadTextureAtlas("assets/smallgun_sheet.png", 64, 64)
 
     g.entityMenu = g.NewList(g.uiAtlas, bitmapFont)
     g.entityMenu.SetTextCentered(true)
@@ -142,6 +142,11 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
                 if hoveredObj != nil && hoveredObj.HasComponent(quads.ComponentTypeSprite) {
                     g.openSpriteEditor(hoveredObj)
                 }
+            case 1:
+                hoveredObj := g.hoveredObj()
+                if hoveredObj != nil {
+                    hoveredObj.Kill()
+                }
             }
             return true
         }
@@ -150,6 +155,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     g.entityMenu.SetItems([]string{
         "Idle Frames",
+        "remove entity",
     })
 
     // Skybox
@@ -165,7 +171,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.SetupSkybox(skybox)
 
     // Setup HUD
-    g.smallGun = g.Gui.Add(g.smallGunAtlas, 0, 0, 0)
 
     g.crossHair = g.Gui.Add(g.uiAtlas, 4, int(0), int(0))
 
@@ -196,11 +201,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
         Loop:              false,
     })
 
-    g.fireSmallGunAnim = g.Gui.AddAnimation(quads.SpriteAnimation{
-        Frames:            [][]uint16{{0, 1, 2, 3, 4}},
-        ShowTimeInSeconds: []float32{0.01, 0.01, 0.1, 0.1, 0.1},
-    })
-
     g.SetupParticleSystem(quads.ParticlesBulletImpact, 2000)
     g.SetupParticleSystem(quads.ParticlesBlood, 2000)
     g.SetupParticleSystem(quads.ParticlesCustom, 2000)
@@ -218,14 +218,16 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     g.mapLoad(mapLoadResult, false)
 
-    g.smallGun.PublishEventOnFrame(2, events.EventWeaponFired)
-    events.Subscribe(events.EventWeaponFired, func(id events.EventID, event events.Event) {
-        //g.fireProjectile()
-        g.fireHitscan()
+    events.Subscribe(events.EventPlayerWeaponFired, func(id events.EventID, event events.Event) {
+        origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
+        g.fireWeapon(origin, direction, g.currentWeapon.WeaponEffect)
     })
-    events.Subscribe(events.EventWeaponHitScanHit, g.weaponHitScanHit)
-    events.Subscribe(events.EventWeaponHitScanMiss, g.weaponHitScanMiss)
-    events.Subscribe(events.EventCollision, g.collision)
+    events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
+    events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
+
+    smallGun := g.loadSmallGun()
+    g.weaponQuad = g.Gui.Add(smallGun.Texture, 0, 0, 0)
+    g.switchWeapon(smallGun)
 
     g.HandleResize(g.WindowWidth, g.WindowHeight)
 }
@@ -234,16 +236,16 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.Sprites.Clear()
     g.Meshes.Clear()
 
-    if mapLoad.AtlasFilename == "" || mapLoad.AtlasFilename == "_internal" {
-        g.defaultAtlas = eassets.LoadEmbeddedTerrainAtlas()
-    } else {
-        g.defaultAtlas = quads.LoadTextureAtlas(filepath.Join("assets", mapLoad.AtlasFilename), mapLoad.TileSize, mapLoad.TileSize)
-    }
-
     // Load Map
-    cubeMap, entitySpawns := g.ToVoxelMap(mapLoad, g.defaultAtlas)
+    cubeMap, entitySpawns := g.ToVoxelMap(mapLoad)
     g.cubeMap = cubeMap
-
+    /*
+       sphere := physics.NewSphericalHull(5)
+       bulletSDK := bullet.BulletNewPhysicsSDK()
+       world := bullet.BulletNewDynamicWorld(bulletSDK)
+       bullet.BulletAddRigidBody(world, sphere.BulletHandle())
+       bullet.BulletStepSimulation(world, 0.1)
+    */
     // Setup Collision Solver
     g.physicsSystem = quads.NewCollisionSolver(g.Camera, cubeMap.IsSolidBlockAt)
     g.SetupPathfinder(cubeMap.IsSolidBlockAt)
@@ -266,6 +268,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 
     //scientist.Sprite().PlayAnimationLooping(int(quads.AnimWalk))
     g.SetupMinimap(mapLoad.MapDimensions[0], mapLoad.MapDimensions[2], g.colorForMinimap)
+
 }
 
 func (g *Game) HandleResize(windowWidth, windowHeight int) {
@@ -293,8 +296,8 @@ func (g *Game) HandleResize(windowWidth, windowHeight int) {
     weaponX := (float32(windowWidth) / 2) - (float32(doubleW) / 2) - 12
     weaponY := float32(windowHeight) - float32(doubleH)
 
-    g.smallGun.SetSize(doubleW, doubleH)
-    g.smallGun.SetPosition(mgl32.Vec2{weaponX, weaponY})
+    g.weaponQuad.SetSize(doubleW, doubleH)
+    g.weaponQuad.SetPosition(mgl32.Vec2{weaponX, weaponY})
 }
 func (g *Game) focusedWidget() InputReceiver {
     if len(g.widgetStack) == 0 {
@@ -435,21 +438,12 @@ func (g *Game) DrawGui(elapsed float64) {
 }
 
 func (g *Game) startWeaponFireAnimation() {
-    if g.smallGun.CurrentAnimation() != -1 {
+    now := glfw.GetTime()
+    if g.currentWeapon.DelayBetweenShots > 0 && now-g.currentWeapon.LastShotTime < g.currentWeapon.DelayBetweenShots {
         return
     }
-    g.smallGun.PlayAnimation(g.fireSmallGunAnim)
-}
-
-func (g *Game) fireHitscan() {
-    origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
-    hit := g.rayCast(origin, direction)
-    // events..
-    if hit.HitObject != nil {
-        events.Publish(events.EventWeaponHitScanHit, hit)
-    } else {
-        events.Publish(events.EventWeaponHitScanMiss, hit)
-    }
+    g.weaponQuad.PlayAnimation(g.currentWeapon.Animation)
+    g.currentWeapon.LastShotTime = now
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {
@@ -506,7 +500,6 @@ func (g *Game) updateGUI(elapsed float64) {
     g.uiRectSpriteBR.Show()
     g.uiLabel.Show()
     g.entityMenu.Show()
-    g.replaceWidgetStack(g.entityMenu)
 
     tileW, _ := g.uiAtlas.GetAtlasItemSize()
     aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
@@ -579,7 +572,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
             return true
         }
         for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
-            if gObj.GameObject() == g.player {
+            if gObj.GameObject() == g.player || gObj.GameObject() == g.gameObjectForSpawning {
                 continue
             }
             intersectionDistance, intersects := voxel.IntersectRayOBB(origin, direction, gObj.OBB(g.Camera))
@@ -618,7 +611,7 @@ func (g *Game) PrintMulti(text []string) {
 func (g *Game) openSpriteEditor(obj *quads.GameObject) {
     //TODO
 }
-func (g *Game) openAtlasPicker() {
+func (g *Game) openCubeTextureMapper() {
     if g.voxelBlock == nil {
         g.Toast("No voxel block loaded")
         return
@@ -628,11 +621,25 @@ func (g *Game) openAtlasPicker() {
     g.SetMouseCapture(false)
 
     g.widgetsAreBlockingMovement = true
-    atlasPicker := g.OpenTextureCube(g.uiAtlas, g.defaultFont, g.defaultAtlas, g.voxelBlock.Textures)
+    atlasPicker := g.OpenTextureCube(g.uiAtlas, g.defaultFont, g.AtlasMap, g.voxelBlock.Textures)
     atlasPicker.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
 
     atlasPicker.SetOnClose(func() {
         g.SetMouseCapture(true)
+    })
+    g.replaceWidgetStack(atlasPicker)
+}
+
+func (g *Game) pickTexture(atlas *glhf.Texture, onSelected func(selectedIndex int)) {
+    previousMouseState := g.setupModal()
+    g.widgetsAreBlockingMovement = true
+    atlasPicker := g.OpenAtlasPicker(g.uiAtlas, g.defaultFont, atlas)
+    atlasPicker.SetOnIndexClicked(func(selection int) {
+        g.popFromWidgetStack()
+        onSelected(selection)
+    })
+    atlasPicker.SetOnClose(func() {
+        g.captureMouse(previousMouseState)
     })
     g.replaceWidgetStack(atlasPicker)
 }
@@ -648,8 +655,8 @@ func (g *Game) openEscapeMenu() {
     configMenu.SetOptions(options)
     configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
     configMenu.SetOnClose(func() {
-        g.isMouseCursorCaptured = previousMouseState
-        g.SetMouseCapture(g.isMouseCursorCaptured)
+        g.captureMouse(previousMouseState)
+        g.popFromWidgetStack()
     })
     g.pushToWidgetStack(configMenu)
 }
@@ -658,8 +665,7 @@ func (g *Game) setupModal() bool {
     g.player.Physics().SetVelocity(mgl32.Vec3{})
     g.widgetsAreBlockingMovement = true
     previousMouseState := g.isMouseCursorCaptured
-    g.isMouseCursorCaptured = false
-    g.SetMouseCapture(g.isMouseCursorCaptured)
+    g.captureMouse(false)
     return previousMouseState
 }
 func (g *Game) openWizardMenu() {
@@ -705,8 +711,8 @@ func (g *Game) openWizardMenu() {
     configMenu.SetOptions(options)
     configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
     configMenu.SetOnClose(func() {
-        g.isMouseCursorCaptured = previousMouseState
-        g.SetMouseCapture(g.isMouseCursorCaptured)
+        g.captureMouse(previousMouseState)
+        g.popFromWidgetStack()
     })
     g.pushToWidgetStack(configMenu)
 }

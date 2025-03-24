@@ -145,7 +145,7 @@ func (g *GuiTextureSlots) SetCentered(screenWidth int, screenHeight int) {
     backgWidth := 0.9 * float32(screenWidth)
     backgHeight := 0.3 * float32(screenHeight)
 
-    g.background = NewGuiBorder(g.uiShader, g.uiTexture, mgl32.Vec2{float32(screenWidth) * 0.05, float32(screenHeight) * 0.05}, mgl32.Vec2{backgWidth, backgHeight})
+    g.background = NewGuiBorderWithBounds(g.uiShader, g.uiTexture, mgl32.Vec2{float32(screenWidth) * 0.05, float32(screenHeight) * 0.05}, mgl32.Vec2{backgWidth, backgHeight})
     g.background.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.8})
 
     topLeftX := float32(screenWidth) * 0.1

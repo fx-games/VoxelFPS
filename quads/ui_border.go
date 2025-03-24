@@ -26,19 +26,23 @@ func CornersToPositionAndSize(cornerPositions []mgl32.Vec2) (pos, size mgl32.Vec
     maxY := cornerPositions[2].Y()
     return mgl32.Vec2{minX, minY}, mgl32.Vec2{maxX - minX, maxY - minY}
 }
-
-// NewGuiBorder creates a new GuiBorder.
-func NewGuiBorder(shader *glhf.Shader, texture *glhf.Texture, pos, size mgl32.Vec2) *GuiBorder {
+func NewGuiBorder(shader *glhf.Shader, texture *glhf.Texture) *GuiBorder {
     g := &GuiBorder{
         shader:       shader,
         texture:      texture,
         texIndices:   []uint16{7, 8, 10, 9, 6, 5},
         paddingHoriz: 5,
         paddingVert:  5,
-        position:     pos,
-        size:         size,
         borderColor:  mgl32.Vec4{1, 1, 1, 1},
     }
+    return g
+}
+
+// NewGuiBorderWithBounds creates a new GuiBorder.
+func NewGuiBorderWithBounds(shader *glhf.Shader, texture *glhf.Texture, pos, size mgl32.Vec2) *GuiBorder {
+    g := NewGuiBorder(shader, texture)
+    g.SetPosition(pos)
+    g.SetSize(size)
     g.uploadVerts()
     return g
 }
@@ -130,6 +134,9 @@ func (g *GuiBorder) Draw() {
         g.backgroundVerts.End()
 
     }
+    if g.verts == nil {
+        g.uploadVerts()
+    }
     g.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
     g.shader.SetUniformAttr(GuiShaderTintColor, g.borderColor)
 
@@ -154,4 +161,16 @@ func (g *GuiBorder) DrawWithoutBackground() {
 
 func (g *GuiBorder) ContainsPoint(point mgl32.Vec2) bool {
     return point.X() >= g.position.X() && point.X() <= g.position.X()+g.size.X() && point.Y() >= g.position.Y() && point.Y() <= g.position.Y()+g.size.Y()
+}
+
+func (g *GuiBorder) SetSize(size mgl32.Vec2) {
+    g.size = size
+}
+
+func (g *GuiBorder) Width() int {
+    return int(g.size.X() + float32(g.paddingHoriz)*2)
+}
+
+func (g *GuiBorder) Height() int {
+    return int(g.size.Y() + float32(g.paddingVert)*2)
 }

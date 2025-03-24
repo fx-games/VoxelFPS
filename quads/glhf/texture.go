@@ -1,13 +1,11 @@
 package glhf
 
 import (
-    "fmt"
     "image"
     "image/color"
     "image/draw"
     "image/png"
     "io"
-    "math"
     "os"
     "runtime"
 
@@ -27,6 +25,8 @@ type Texture struct {
     itemPaddingY int
     itemMarginX  int
     itemMarginY  int
+
+    SourceFile string
 }
 
 // NewTextureFromReader creates a new texture from an io.Reader.
@@ -257,7 +257,7 @@ func (t *Texture) SetAtlasMargin(x int, y int) {
     t.itemMarginY = y
 }
 
-func (t *Texture) SaveAsPNG(filename string) {
+func (t *Texture) SaveAsPNG(filename string) error {
     t.tex.bind()
     pixels := t.Pixels(0, 0, t.textureWidth, t.textureHeight)
     t.tex.restore()
@@ -276,21 +276,19 @@ func (t *Texture) SaveAsPNG(filename string) {
 
     file, err := os.Create(filename)
     if err != nil {
-        println(fmt.Sprintf("could not create %s", filename))
+        return err
     }
+    defer file.Close()
     err = png.Encode(file, outImage)
-    if err != nil {
-        println(fmt.Sprintf("could not encode %s", filename))
-    }
-    file.Close()
+    return err
 }
 
-func (t *Texture) GridWidth() float32 {
-    return float32(t.textureWidth) / float32(t.itemSizeX)
+func (t *Texture) GridWidth() int {
+    return (t.textureWidth) / (t.itemSizeX)
 }
 
-func (t *Texture) GridHeight() float32 {
-    return float32(t.textureHeight) / float32(t.itemSizeY)
+func (t *Texture) GridHeight() int {
+    return (t.textureHeight) / (t.itemSizeY)
 }
 
 func (t *Texture) AABBFromOpaque() (minCoords mgl32.Vec3, maxCoords mgl32.Vec3) {
@@ -317,7 +315,34 @@ func (t *Texture) AABBFromOpaqueAtIndex(index uint16) (mgl32.Vec3, mgl32.Vec3) {
 func (t *Texture) HasIndex(index int) bool {
     return index < int(t.GridWidth()*t.GridHeight())
 }
+func (t *Texture) LastValidIndex() int {
+    return int(t.GridWidth()*t.GridHeight()) - 1
+}
+func (t *Texture) SetPixelsAtIndexMulti(index int, pixels [][]uint8) {
+    lastIndex := index + len(pixels)
+    if lastIndex > t.LastValidIndex() {
+        panic("SetPixelsAtIndexMulti: index out of bounds")
+    }
+    t.tex.bind()
 
+    for i, p := range pixels {
+        topLeftU, topLeftV, _, _ := t.GetUV(uint16(index) + uint16(i))
+
+        w := t.itemSizeX
+        h := t.itemSizeY
+
+        minX := int(float32(topLeftU) * float32(t.textureWidth))
+        minY := int(float32(topLeftV) * float32(t.textureHeight))
+
+        t.SetPixels(minX, minY, w, h, p)
+
+        glErr := gl.GetError()
+        if glErr != gl.NO_ERROR {
+            panic(glErr)
+        }
+    }
+    t.tex.restore()
+}
 func (t *Texture) SetPixelsAtIndex(index uint16, pixels []uint8) {
     topLeftU, topLeftV, _, _ := t.GetUV(index)
 
@@ -336,19 +361,25 @@ func (t *Texture) SetPixelsAtIndex(index uint16, pixels []uint8) {
     }
 }
 
-func ExpandToIndex(t *Texture, index int) *Texture {
+func (t *Texture) AddRow() *Texture {
     newWidth := t.textureWidth
     gridWidth := t.GridWidth()
     isVertExpansion := true
-    if gridWidth == 1 {
+    if gridWidth < 8 {
         newWidth = t.textureWidth * 8
         gridWidth = 8
         isVertExpansion = false
     }
 
-    newGridHeight := int(math.Ceil(float64(float32(index) / gridWidth)))
+    newGridHeight := t.GridHeight()
+    if isVertExpansion {
+        newGridHeight++
+    }
     newHeight := newGridHeight * t.itemSizeY
     newPixels := make([]uint8, newWidth*newHeight*4)
+    for i := 0; i < len(newPixels); i++ {
+        newPixels[i] = 255
+    }
 
     sourcePixels := t.AllPixels()
 
@@ -364,9 +395,39 @@ func ExpandToIndex(t *Texture, index int) *Texture {
         }
     }
 
-    texture := NewTexture(newWidth, newHeight, t.smooth, newPixels)
-    texture.SetAtlasItemSize(t.itemSizeX, t.itemSizeY)
-    return texture
+    // deallocate old texture
+    gl.DeleteTextures(1, &t.tex.obj)
+
+    // create new texture
+    gl.GenTextures(1, &t.tex.obj)
+
+    t.Begin()
+
+    // initial data
+    gl.TexImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        int32(newWidth),
+        int32(newHeight),
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        gl.Ptr(newPixels),
+    )
+
+    borderColor := mgl32.Vec4{0, 0, 0, 0}
+    gl.TexParameterfv(gl.TEXTURE_2D, gl.TEXTURE_BORDER_COLOR, &borderColor[0])
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
+
+    t.SetSmooth(t.smooth)
+    t.End()
+
+    t.textureWidth = newWidth
+    t.textureHeight = newHeight
+
+    return t
 }
 
 func aabbFromOpaquePixels(pixels []uint8, textureWidth, textureHeight int) (mgl32.Vec3, mgl32.Vec3) {
