@@ -167,16 +167,10 @@ layout (location = 0) out vec4 fragmentColor;
 void main() {
     vec3 VertNormal = normalLookup[VertNormalIndex];
 
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
+    ivec2 textureSize2d = textureSize(tex, 0);
 
-    ivec2 textureSize2d = textureSize(tex,0);
-
-    uint tilesPerRow = uint(atlasGridSize.x);
-    uint tilesPerColumn = uint(atlasGridSize.y);
-
-    float normalizedPixelSizeX = 1.0 / float(textureSize2d.x);
-    float normalizedPixelSizeY = 1.0 / float(textureSize2d.y);
+    uint tileWidth  = uint(textureSize2d.x) / uint(atlasGridSize.x);
+    uint tileHeight = uint(textureSize2d.y) / uint(atlasGridSize.y);
 
     uint mapSizeX = uint(64);
     uint mapSizeY = uint(32);
@@ -186,49 +180,49 @@ void main() {
     uint normOffsetY = uint((VertNormal.y + 1.0) * 0.5);
     uint normOffsetZ = uint((VertNormal.z + 1.0) * 0.5);
 
-    uint gridX = uint(fragWorldPos.x) - normOffsetX;
-    uint gridY = uint(fragWorldPos.y) - normOffsetY;
-    uint gridZ = uint(fragWorldPos.z) - normOffsetZ;
+    uint gridX = uint(floor(fragWorldPos.x)) - normOffsetX;
+    uint gridY = uint(floor(fragWorldPos.y)) - normOffsetY;
+    uint gridZ = uint(floor(fragWorldPos.z)) - normOffsetZ;
 
     uint wallOffset = (gridX + gridY * mapSizeX + gridZ * mapSizeX * mapSizeY) * uint(6);
     uint textureIndex = texelFetch(voxelLookup, int(wallOffset + VertNormalIndex)).r;
 
-    float xOffset = float(textureIndex % tilesPerRow);
-    float yOffset = float(textureIndex / tilesPerRow);
+    // Compute tile position in texel space
+    uint tileX = uint(textureIndex % uint(atlasGridSize.x)) * tileWidth;
+    uint tileY = uint(textureIndex / uint(atlasGridSize.x)) * tileHeight;
 
-    float u = 0.0;
-    float v = 0.0;
-
-    float floatSamplingAdjustmentX = 0.002 * normalizedPixelSizeX;
-    float floatSamplingAdjustmentY = 0.002 * normalizedPixelSizeY;
+    // Compute texel coordinate within the tile
+    uint localU = uint(0);
+    uint localV = uint(0);
 
     if (VertNormal.z > 0.0) {
-        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = (yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn) - floatSamplingAdjustmentY;
+        localU = uint(fract(VertPos.x) * tileWidth);
+        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
     } else if (VertNormal.z < 0.0) {
-        u = ((xOffset + (1.0 - fract(VertPos.x))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = (yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn) - floatSamplingAdjustmentY;
+        localU = uint((1.0 - fract(VertPos.x)) * tileWidth);
+        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
     } else if (VertNormal.x > 0.0) {
-        u = ((xOffset + (1.0 - fract(VertPos.z))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = ((yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+        localU = uint((1.0 - fract(VertPos.z)) * tileWidth);
+        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
     } else if (VertNormal.x < 0.0) {
-        u = ((xOffset + fract(VertPos.z)) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = ((yOffset + (1.0 - fract(VertPos.y))) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+        localU = uint(fract(VertPos.z) * tileWidth);
+        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
     } else if (VertNormal.y > 0.0) {
-        u = ((xOffset + fract(VertPos.x)) / float(tilesPerRow)) - floatSamplingAdjustmentX;
-        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+        localU = uint(fract(VertPos.x) * tileWidth);
+        localV = uint(fract(VertPos.z) * tileHeight);
     } else if (VertNormal.y < 0.0) {
-        u = ((xOffset + (1.0 - fract(VertPos.x))) / float(tilesPerRow));// - floatSamplingAdjustmentX;
-        v = ((yOffset + fract(VertPos.z)) / float(tilesPerColumn)) - floatSamplingAdjustmentY;
+        localU = uint((1.0 - fract(VertPos.x)) * tileWidth);
+        localV = uint(fract(VertPos.z) * tileHeight);
     }
 
-    // clamp to 0-1 range
-    u = clamp(u, 0.0, 1.0);
-    v = clamp(v, 0.0, 1.0);
+    ivec2 texelCoord = ivec2(tileX + localU, tileY + localV);
 
-    vec4 surfaceColor = texture(tex, vec2(u, v));
+    vec4 surfaceColor = texelFetch(tex, texelCoord, 0);
     
-    vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0) * camDirection.xyz;
+    vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel / 15.0) * camDirection.xyz;
+
+    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
+    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
 }`

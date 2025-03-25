@@ -73,6 +73,9 @@ func (t *TextureBuffer) ID() uint32 {
 }
 
 func (t *TextureBuffer) Size() int {
+    if t == nil {
+        return 0
+    }
     return t.textureSize
 }
 
