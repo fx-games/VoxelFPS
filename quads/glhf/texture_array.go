@@ -15,7 +15,7 @@ type TextureArray struct {
 }
 
 // NewTextureArray creates a new array of 2D textures with the specified width, height, and layers,
-// along with initial pixel values. The pixels must be a sequence of Red values (one byte).
+// along with initial pixel values. The pixels must be a sequence of Red values (16bits).
 func NewTextureArray(width, height, layers int, smooth bool, pixels []uint16) *TextureArray {
     tex := &TextureArray{
         tex: binder{
@@ -36,7 +36,7 @@ func NewTextureArray(width, height, layers int, smooth bool, pixels []uint16) *T
 
     // Initialize texture data
     gl.TexImage3D(
-        gl.TEXTURE_3D,
+        gl.TEXTURE_2D_ARRAY,
         0,
         gl.R16UI,
         int32(width),
@@ -60,7 +60,7 @@ func NewTextureArray(width, height, layers int, smooth bool, pixels []uint16) *T
 
     tex.SetSmooth(smooth)
 
-    runtime.SetFinalizer(tex, (*Texture3D).delete)
+    runtime.SetFinalizer(tex, (*TextureArray).delete)
 
     return tex
 }
@@ -94,7 +94,7 @@ func (t *TextureArray) Depth() int {
 // SetPixels sets the content of a sub-region of the Texture3D. Pixels must be an RGBA byte sequence.
 func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint16) {
     d := 1
-    if len(pixels) != w*h*d*4 {
+    if len(pixels) != w*h*d {
         panic("set pixels: wrong number of pixels")
     }
     gl.TexSubImage3D(

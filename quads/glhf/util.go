@@ -21,7 +21,13 @@ func (b *binder) bind() *binder {
     }
     return b
 }
-
+func (b *binder) bindOnly() *binder {
+    b.prev = append(b.prev, uint32(0))
+    if b.prev[len(b.prev)-1] != b.obj {
+        b.bindFunc(b.obj)
+    }
+    return b
+}
 func (b *binder) restore() *binder {
     if b.prev[len(b.prev)-1] != b.obj {
         b.bindFunc(b.prev[len(b.prev)-1])

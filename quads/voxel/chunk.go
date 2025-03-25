@@ -2,9 +2,7 @@ package voxel
 
 import (
     "fmt"
-    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/core"
     "github.com/memmaker/goray/quads/glhf"
     "math"
 )
@@ -26,8 +24,6 @@ type Chunk struct {
     cZP         *Chunk
     isDirty     bool
     meshBuffer  *MeshBuffer
-
-    lookupTexture3d *glhf.Texture3D
 }
 
 func NewChunk(voxelMap *Map, x, y, z int32) *Chunk {
@@ -83,23 +79,13 @@ func (c *Chunk) SetBlock(x, y, z int32, block *Block) {
 }
 
 type VoxelFace struct {
-    inVisible    bool
-    side         CubeSide
-    textureIndex byte
-    lightLevel   byte
+    inVisible  bool
+    side       CubeSide
+    lightLevel byte
 }
 
 func (v *VoxelFace) EqualForMerge(face *VoxelFace) bool {
-    if core.BigDebugSwitch { // reduce to only visible faces
-        return face.inVisible == v.inVisible
-    }
-
-    if face.inVisible { // one is transparent
-        return face.inVisible == v.inVisible // so, both have to be transparent
-    }
-
-    // one is solid
-    return face.inVisible == v.inVisible && face.textureIndex == v.textureIndex && face.lightLevel == v.lightLevel
+    return face.inVisible == v.inVisible
 }
 
 func (c *Chunk) InitNeighbors() {
@@ -131,27 +117,6 @@ func (c *Chunk) InitNeighbors() {
     if c.chunkPosZ < c.m.depth-1 && c.cZP == nil {
         c.cZP = c.m.GetChunk(c.chunkPosX, c.chunkPosY, c.chunkPosZ+1)
     }
-}
-
-func (c *Chunk) bake3dTextureIndices() {
-    pixels := make([]uint8, c.m.ChunkSizeHorizontal*c.m.ChunkSizeHeight*c.m.ChunkSizeHorizontal)
-    for i := int32(0); i < c.m.ChunkSizeHorizontal; i++ {
-        for j := int32(0); j < c.m.ChunkSizeHeight; j++ {
-            for k := int32(0); k < c.m.ChunkSizeHorizontal; k++ {
-                indexIntoPixels := i + j*c.m.ChunkSizeHorizontal + k*(c.m.ChunkSizeHorizontal*c.m.ChunkSizeHeight)
-                //pixels[indexIntoPixels] = 0
-                //continue
-                block := c.GetLocalBlock(i, j, k)
-                if block == nil || len(block.Textures) == 0 {
-                    continue
-                }
-                textToBake := block.Textures[0]
-
-                pixels[indexIntoPixels] = uint8(textToBake) // WARNING: 16 bit to 8 bit conversion
-            }
-        }
-    }
-    c.lookupTexture3d = glhf.NewTexture3D(int(c.m.ChunkSizeHorizontal), int(c.m.ChunkSizeHeight), int(c.m.ChunkSizeHorizontal), false, pixels)
 }
 
 func (c *Chunk) GreedyMeshOnOtherThread() {
@@ -276,7 +241,7 @@ func (c *Chunk) GreedyMeshing() *MeshBuffer {
                                 topLeft := Int3{x[0] + du[0], x[1] + du[1], x[2] + du[2]}
                                 bottomRight := Int3{x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]}
                                 topRight := Int3{x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]}
-                                mesh.AppendQuad(topRight, bottomRight, bottomLeft, topLeft, mask[n].side, mask[n].textureIndex, mask[n].lightLevel)
+                                mesh.AppendQuad(topRight, bottomRight, bottomLeft, topLeft, mask[n].side, mask[n].lightLevel)
                                 // we also would have width (w) and height (h) here
                                 // backface is a bool, true if we are rendering the backface of a block
                             }
@@ -367,7 +332,7 @@ func (c *Chunk) getVoxelFace(x int32, y int32, z int32, side CubeSide) *VoxelFac
         }
     }
 
-    face := &VoxelFace{side: side, textureIndex: block.GetTexture(side)}
+    face := &VoxelFace{side: side}
     solidNeighbor := neighbor != nil && !neighbor.IsAir()
     if solidNeighbor && !neighborIsFromChunkAboveOrBelow {
         face.inVisible = true
@@ -498,20 +463,7 @@ func (c *Chunk) Draw(shader *glhf.Shader, modelUniformIndex int) {
 
     shader.SetUniformAttr(modelUniformIndex, c.GetMatrix())
 
-    if core.BigDebugSwitch && c.lookupTexture3d != nil {
-        c.lookupTexture3d.BeginOnUnit(gl.TEXTURE1)
-    }
-
     c.meshBuffer.Draw(shader.ID())
-
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-
-    if core.BigDebugSwitch && c.lookupTexture3d != nil {
-        c.lookupTexture3d.End()
-    }
 }
 func (c *Chunk) getDiscreteCamDir(camDir mgl32.Vec3) Int3 {
     intPos := Int3{0, 0, 0}
@@ -578,10 +530,6 @@ func (c *Chunk) GenerateAndUpload() {
 func (c *Chunk) MeshUpload(newMesh *MeshBuffer) {
     newMesh.UploadMeshToGPU(c.m.chunkShader)
     c.meshBuffer = newMesh
-
-    if core.BigDebugSwitch {
-        c.bake3dTextureIndices()
-    }
 }
 
 func (c *Chunk) ContainsWorldPosition(position mgl32.Vec3) bool {

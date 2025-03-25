@@ -33,7 +33,7 @@ func NewFrame(width, height int, smooth bool) *Frame {
                 gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, obj)
             },
         },
-        tex: NewTexture(width, height, smooth, make([]uint8, width*height*4)),
+        tex: NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4)),
     }
 
     gl.GenFramebuffers(1, &f.fb.obj)

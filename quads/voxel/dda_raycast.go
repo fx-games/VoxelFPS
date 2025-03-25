@@ -190,7 +190,6 @@ func (s CubeSide) AsDirection() Int3 {
         return Int3{0, -1, 0}
     }
     return Int3{}
-
 }
 
 type HitInfo3D struct {

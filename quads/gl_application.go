@@ -154,7 +154,7 @@ func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
     scale := float32(4)
     emptyMap := make([]uint8, width*height*4)
-    minimapTexture := glhf.NewTexture(width, height, false, emptyMap)
+    minimapTexture := glhf.NewTextureRGBA(width, height, false, emptyMap)
     minimapTexture.SetAtlasItemSize(width, height)
     guiQuadVerts := NewGUIQuadVertsFromSubImage(a.guiShader, minimapTexture, 0, 0, 0, width, height)
 

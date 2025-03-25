@@ -38,7 +38,7 @@ func NewTextureFromReader(r io.Reader) (*Texture, error) {
     nrgba := AsRGBA(img)
 
     var texture *Texture
-    texture = NewTexture(
+    texture = NewTextureRGBA(
         nrgba.Bounds().Dx(),
         nrgba.Bounds().Dy(),
         false,
@@ -71,12 +71,12 @@ func NewRectOutlineTexture(width, height, borderWidth int) *Texture {
             }
         }
     }
-    return NewTexture(width, height, false, pixels)
+    return NewTextureRGBA(width, height, false, pixels)
 }
 
-// NewTexture creates a new texture with the specified width and height with some initial
+// NewTextureRGBA creates a new texture with the specified width and height with some initial
 // pixel values. The pixels must be a sequence of RGBA values (one byte per component).
-func NewTexture(width, height int, smooth bool, pixels []uint8) *Texture {
+func NewTextureRGBA(width, height int, smooth bool, pixels []uint8) *Texture {
     tex := &Texture{
         tex: binder{
             restoreLoc: gl.TEXTURE_BINDING_2D,
@@ -139,8 +139,8 @@ func (t *Texture) Height() int {
     return t.textureHeight
 }
 
-// SetPixels sets the content of a sub-region of the Texture. Pixels must be an RGBA byte sequence.
-func (t *Texture) SetPixels(x, y, w, h int, pixels []uint8) {
+// SetPixelsRGBA sets the content of a sub-region of the Texture. Pixels must be an RGBA byte sequence.
+func (t *Texture) SetPixelsRGBA(x, y, w, h int, pixels []uint8) {
     if len(pixels) != w*h*4 {
         panic("set pixels: wrong number of pixels")
     }
@@ -334,7 +334,7 @@ func (t *Texture) SetPixelsAtIndexMulti(index int, pixels [][]uint8) {
         minX := int(float32(topLeftU) * float32(t.textureWidth))
         minY := int(float32(topLeftV) * float32(t.textureHeight))
 
-        t.SetPixels(minX, minY, w, h, p)
+        t.SetPixelsRGBA(minX, minY, w, h, p)
 
         glErr := gl.GetError()
         if glErr != gl.NO_ERROR {
@@ -353,7 +353,7 @@ func (t *Texture) SetPixelsAtIndex(index uint16, pixels []uint8) {
     minY := int(float32(topLeftV) * float32(t.textureHeight))
 
     t.tex.bind()
-    t.SetPixels(minX, minY, w, h, pixels)
+    t.SetPixelsRGBA(minX, minY, w, h, pixels)
     t.tex.restore()
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {

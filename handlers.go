@@ -161,14 +161,14 @@ func (g *Game) applyHitscanEffect(effect WeaponEffect, result RaycastResult) {
             paintedIndex := g.currentPaintGunTextureIndex
             blockPos := result.HitInfo.CollisionGridPosition
             cubeSide := result.HitInfo.Side
-            g.cubeMap.SetBlockSide(blockPos, cubeSide, paintedIndex)
+            g.cubeMap.SetBlockSide(blockPos, cubeSide, uint16(paintedIndex))
         }
     case WeaponEffectHitscanVoxelPaintGunFill:
         if hitObject == nil {
             paintedIndex := g.currentPaintGunTextureIndex
             blockPos := result.HitInfo.CollisionGridPosition
             cubeSide := result.HitInfo.Side
-            g.cubeMap.SetBlockSideFill(blockPos, cubeSide, paintedIndex)
+            g.cubeMap.SetBlockSideFill(blockPos, cubeSide, uint16(paintedIndex))
         }
     }
 

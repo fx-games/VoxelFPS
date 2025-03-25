@@ -59,12 +59,12 @@ func (b *Block) AddUnit(unit MapObject) {
 
 }
 
-func (b *Block) GetTexture(side CubeSide) byte {
+func (b *Block) GetTexture(side CubeSide) uint16 {
     text, ok := b.Textures[side]
     if !ok {
         return 0
     }
-    return byte(text)
+    return text
 }
 
 func (b *Block) Copy() *Block {
@@ -73,4 +73,49 @@ func (b *Block) Copy() *Block {
         Textures:   maps.Clone(b.Textures),
         lightLevel: b.lightLevel,
     }
+}
+
+/*
+
+func (s CubeSide) AsDirection() Int3 {
+    switch s {
+    case North:
+        return Int3{0, 0, -1}
+    case East:
+        return Int3{1, 0, 0}
+    case South:
+        return Int3{0, 0, 1}
+    case West:
+        return Int3{-1, 0, 0}
+    case Top:
+        return Int3{0, 1, 0}
+    case Bottom:
+        return Int3{0, -1, 0}
+    }
+    return Int3{}
+}
+
+*/
+func (b *Block) XYTextureIndexNeg() uint16 {
+    return b.Textures[North]
+}
+
+func (b *Block) XYTextureIndexPos() uint16 {
+    return b.Textures[South]
+}
+
+func (b *Block) ZYTextureIndexNeg() uint16 {
+    return b.Textures[West]
+}
+
+func (b *Block) ZYTextureIndexPos() uint16 {
+    return b.Textures[East]
+}
+
+func (b *Block) XZTextureIndexNeg() uint16 {
+    return b.Textures[Bottom]
+}
+
+func (b *Block) XZTextureIndexPos() uint16 {
+    return b.Textures[Top]
 }

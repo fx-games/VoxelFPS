@@ -20,7 +20,7 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
             glhf.Attr{Name: "atlasGridSize", Type: glhf.IVec2}, // 1
-            glhf.Attr{Name: "debugSwitch", Type: glhf.Float},   // 2
+            //glhf.Attr{Name: "debugSwitch", Type: glhf.Float},   // 2
         }
         shader *glhf.Shader
     )
@@ -37,7 +37,7 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
-    shader.SetUniformAttr(CubeShaderDebugSwitch, float32(0.0))
+    //shader.SetUniformAttr(CubeShaderDebugSwitch, float32(0.0))
     shader.End()
 
     glErr := gl.GetError()
@@ -89,38 +89,25 @@ layout(column_major) uniform;
 // that's 20 bits per vertex without the texture index
 // if we assume a 32 bit int, that leaves 12 bits for the texture index
 
-/* Compression of position
-xAxis := position.X         // 6 bits
-yAxis := position.Y << 7   // 6 bits
-zAxis := position.Z << 14   // 6 bits
-*/
-/* Compression of attributes
-// 3 bits for the normal direction (0..5)
-attributes := int32(normalDirection) << 21
-// 8 bits for the texture index (0..255)
-attributes |= int32(textureIndex) << 24
+/* Compression 
+xAxis  // 6 bits (0..63) 
+yAxis  // 5 bits (0..31)
+zAxis  // 6 bits (0..63)
+Normal // 3 bits (0..5)
+Total  // 20 bits used of 32
+12-14 bits left for animation/lighting information
 */
 
 in uint compressedValue;
 
-flat out vec3 VertNormal;
+flat out uint VertNormalIndex;
 out float VertLightLevel;
 out vec3 VertPos;
-flat out uint VertTexIndex;
 
 // set uniform locations
 uniform mat4 modelTransform;
 
-vec3[6] normalLookup = vec3[6](
-    vec3(1.0, 0.0, 0.0),    // xp
-    vec3(-1.0, 0.0, 0.0),   // xn
-    vec3(0.0, 1.0, 0.0),    // yp
-    vec3(0.0, -1.0, 0.0),   // yn
-    vec3(0.0, 0.0, 1.0),    // zp
-    vec3(0.0, 0.0, -1.0)    // zn
-);
-
-void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir, out uint textureIndex, out float lightLevel)
+void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir, out float lightLevel)
 {
     uint positionX = compressedValue & uint(0x3F);// 0x3F = 0b111111
     uint yPart = compressedValue >> uint(6);
@@ -130,7 +117,7 @@ void decompressVertex(uint compressedValue, out vec3 position, out uint normalDi
     position = vec3(float(positionX), float(positionY), float(positionZ));
 
     normalDir = (compressedValue >> uint(17)) & uint(0x7);// 0x7 = 0b111
-    textureIndex = (compressedValue >> uint(20)) & uint(0xFF);// 0xFF = 0b11111111
+    //textureIndex = (compressedValue >> uint(20)) & uint(0xFF);// 0xFF = 0b11111111
 
     uint light = (compressedValue >> uint(28)) & uint(0xF);
     lightLevel = float(light);
@@ -141,10 +128,10 @@ void main() {
     // decompress the vertex
     uint normalDir = uint(1);
 
-    decompressVertex(compressedValue, VertPos, normalDir, VertTexIndex, VertLightLevel);
+    decompressVertex(compressedValue, VertPos, normalDir, VertLightLevel);
 
     // pass-through for fragment shader
-    VertNormal = normalLookup[normalDir];
+    VertNormalIndex = normalDir;
 
     gl_Position = camProjectionView * modelTransform * vec4(VertPos, 1.0);
 }`
@@ -152,10 +139,20 @@ void main() {
 const chunkFragmentShaderSource = `
 layout(column_major) uniform;
 
-flat in vec3 VertNormal;
+
+vec3[6] normalLookup = vec3[6](
+    vec3(1.0, 0.0, 0.0),    // xp
+    vec3(-1.0, 0.0, 0.0),   // xn
+    vec3(0.0, 1.0, 0.0),    // yp
+    vec3(0.0, -1.0, 0.0),   // yn
+    vec3(0.0, 0.0, 1.0),    // zp
+    vec3(0.0, 0.0, -1.0)    // zn
+);
+
+
+flat in uint VertNormalIndex;
 in vec3 VertPos;
 in float VertLightLevel;
-flat in uint VertTexIndex;
 
 uniform ivec2 atlasGridSize;
 uniform mat4 modelTransform;
@@ -163,15 +160,15 @@ uniform float debugSwitch;
 
 uniform sampler2D tex;
 
-uniform usampler3D voxelTexLookup;
-
-//uniform usampler2DArray xzLookup;
-//uniform usampler2DArray yzLookup;
-//uniform usampler2DArray xyLookup;
+uniform usamplerBuffer voxelLookup;
 
 layout (location = 0) out vec4 fragmentColor;
 
 void main() {
+    vec3 VertNormal = normalLookup[VertNormalIndex];
+
+    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
+    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     ivec2 textureSize2d = textureSize(tex,0);
 
@@ -181,24 +178,20 @@ void main() {
     float normalizedPixelSizeX = 1.0 / float(textureSize2d.x);
     float normalizedPixelSizeY = 1.0 / float(textureSize2d.y);
 
-    uint textureIndex = VertTexIndex;
-    
-    if (debugSwitch > 0.0) {
-        uint voxX = uint(VertPos.x);
-        uint voxY = uint(VertPos.y);
-        uint voxZ = uint(VertPos.z);
-        uint mapSizeX = uint(32);
-        uint mapSizeY = uint(32);
-        uint mapSizeZ = uint(32);
+    uint mapSizeX = uint(64);
+    uint mapSizeY = uint(32);
+    uint mapSizeZ = uint(64);
 
-        float normalizedX = float(voxX) / float(mapSizeX);
-        float normalizedY = float(voxY) / float(mapSizeY);
-        float normalizedZ = float(voxZ) / float(mapSizeZ);
+    uint normOffsetX = uint((VertNormal.x + 1.0) * 0.5);
+    uint normOffsetY = uint((VertNormal.y + 1.0) * 0.5);
+    uint normOffsetZ = uint((VertNormal.z + 1.0) * 0.5);
 
-        vec3 voxCoords = vec3(normalizedX, normalizedY, normalizedZ);
-        textureIndex = texture(voxelTexLookup, voxCoords).r;
-    }
-    
+    uint gridX = uint(fragWorldPos.x) - normOffsetX;
+    uint gridY = uint(fragWorldPos.y) - normOffsetY;
+    uint gridZ = uint(fragWorldPos.z) - normOffsetZ;
+
+    uint wallOffset = (gridX + gridY * mapSizeX + gridZ * mapSizeX * mapSizeY) * uint(6);
+    uint textureIndex = texelFetch(voxelLookup, int(wallOffset + VertNormalIndex)).r;
 
     float xOffset = float(textureIndex % tilesPerRow);
     float yOffset = float(textureIndex / tilesPerRow);
@@ -236,9 +229,6 @@ void main() {
     vec4 surfaceColor = texture(tex, vec2(u, v));
     
     vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0) * camDirection.xyz;
-    
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
 }`

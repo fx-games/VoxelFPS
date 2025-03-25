@@ -33,6 +33,8 @@ type Map struct {
     verticesUploaded      bool
     modelIndex            int
     drawCallCount         int
+    lookupVoxels          *glhf.TextureBuffer
+    textureBufferIsDirty  bool
 }
 
 func NewDefaultMap(width, height, depth int32) *Map {
@@ -67,20 +69,6 @@ func NewMapWithEmptyChunks(width, height, depth, chunkSizeHorizontal, chunkSizeH
     return m
 }
 
-func (m *Map) ForceUpload() {
-    for _, chunk := range m.chunks {
-        if chunk != nil {
-            chunk.isDirty = true
-            chunk.GenerateAndUpload()
-        }
-    }
-    m.verticesUploaded = true
-    mapSizeX := m.width * m.ChunkSizeHorizontal
-    mapSizeY := m.height * m.ChunkSizeHeight
-    mapSizeZ := m.depth * m.ChunkSizeHorizontal
-    println(fmt.Sprintf("[Greedy] Map with %d cubes volume (%d, %d, %d) meshed into %d triangles", mapSizeX*mapSizeY*mapSizeZ, mapSizeX, mapSizeY, mapSizeZ, m.TriangleCount()))
-
-}
 func (m *Map) SetLogger(mapLogger func(string), gameErrorLogger func(string)) {
     m.mapInfoLogger = mapLogger
     m.gameErrorLogger = gameErrorLogger
@@ -130,8 +118,63 @@ func (m *Map) ChangeMaxChunkHeightForDraw(change int32) int32 {
 func (m *Map) ForceReupload() {
     m.verticesUploaded = false
 }
-func (m *Map) Draw(cam core.Camera) {
 
+func (m *Map) ForceUpload() {
+    for _, chunk := range m.chunks {
+        if chunk != nil {
+            chunk.isDirty = true
+            chunk.GenerateAndUpload()
+        }
+    }
+    m.bake3dTextureIndices()
+    m.verticesUploaded = true
+    mapSizeX := m.width * m.ChunkSizeHorizontal
+    mapSizeY := m.height * m.ChunkSizeHeight
+    mapSizeZ := m.depth * m.ChunkSizeHorizontal
+    println(fmt.Sprintf("[Greedy] Map with %d cubes volume (%d, %d, %d) meshed into %d triangles", mapSizeX*mapSizeY*mapSizeZ, mapSizeX, mapSizeY, mapSizeZ, m.TriangleCount()))
+
+}
+
+func (m *Map) bake3dTextureIndices() {
+    mapSizeX := m.width * m.ChunkSizeHorizontal
+    mapSizeY := m.height * m.ChunkSizeHeight
+    mapSizeZ := m.depth * m.ChunkSizeHorizontal
+
+    texSize := mapSizeX * mapSizeY * mapSizeZ * 6
+    lookupTable := make([]uint16, texSize)
+    for z := int32(0); z < mapSizeZ; z++ {
+        for y := int32(0); y < mapSizeY; y++ {
+            for x := int32(0); x < mapSizeX; x++ {
+                block := m.GetGlobalBlock(x, y, z)
+                blockWallsStartIndex := (x + y*mapSizeX + z*mapSizeX*mapSizeY) * 6
+
+                if block == nil || block.IsAir() {
+                    continue
+                }
+
+                lookupTable[blockWallsStartIndex+0] = block.ZYTextureIndexPos()
+                lookupTable[blockWallsStartIndex+1] = block.ZYTextureIndexNeg()
+
+                lookupTable[blockWallsStartIndex+2] = block.XZTextureIndexPos()
+                lookupTable[blockWallsStartIndex+3] = block.XZTextureIndexNeg()
+
+                lookupTable[blockWallsStartIndex+4] = block.XYTextureIndexPos()
+                lookupTable[blockWallsStartIndex+5] = block.XYTextureIndexNeg()
+            }
+        }
+    }
+    if m.lookupVoxels != nil || m.lookupVoxels.Size() != int(texSize) {
+        m.lookupVoxels = glhf.NewTextureBuffer(lookupTable)
+    } else {
+        m.lookupVoxels.SetPixels(0, lookupTable)
+    }
+}
+
+func (m *Map) Draw(cam core.Camera) {
+    if m.textureBufferIsDirty {
+        m.textureBufferIsDirty = false
+        m.bake3dTextureIndices()
+    }
     if !m.verticesUploaded {
         m.ForceUpload()
     }
@@ -139,9 +182,10 @@ func (m *Map) Draw(cam core.Camera) {
     m.chunkShader.Begin()
 
     m.chunkShader.SetTextureUnit("tex", gl.TEXTURE0)
-    m.chunkShader.SetTextureUnit("voxelTexLookup", gl.TEXTURE1)
+    m.chunkShader.SetTextureUnit("voxelLookup", gl.TEXTURE1)
 
     m.terrainTexture.BeginOnUnit(gl.TEXTURE0)
+    m.lookupVoxels.BeginOnUnit(gl.TEXTURE1)
 
     m.trianglesDrawn = 0
     m.drawCallCount = 0
@@ -156,8 +200,9 @@ func (m *Map) Draw(cam core.Camera) {
         m.trianglesDrawn += chunk.meshBuffer.TriangleCount()
         m.drawCallCount += 1
         chunk.Draw(m.chunkShader, m.modelIndex)
-
     }
+
+    m.lookupVoxels.End()
     m.terrainTexture.End()
 
     m.chunkShader.End()
@@ -276,7 +321,7 @@ func (m *Map) Contains(x int32, y int32, z int32) bool {
     return x >= 0 && x < m.width*m.ChunkSizeHorizontal && y >= 0 && y < m.height*m.ChunkSizeHeight && z >= 0 && z < m.depth*m.ChunkSizeHorizontal
 }
 
-func (m *Map) GetBlockFromVec(pos Int3) *Block {
+func (m *Map) GetBlockFromInt3(pos Int3) *Block {
     return m.GetGlobalBlock(int32(pos.X), int32(pos.Y), int32(pos.Z))
 }
 func (m *Map) GetGlobalBlock(x int32, y int32, z int32) *Block {
@@ -532,7 +577,7 @@ func (m *Map) FillTorchlight(origin Int3) {
             return false, 0
         }
 
-        nodeLight := m.GetBlockFromVec(currentNode).GetTorchLight()
+        nodeLight := m.GetBlockFromInt3(currentNode).GetTorchLight()
 
         neighborBlock, neighborChunk := m.GetBlockAndChunk(currentNeighbor)
         neighborLight := neighborBlock.GetTorchLight()
@@ -778,17 +823,33 @@ func (m *Map) LoadFromMemory(source []byte) {
         }
         chunk.SetDirty()
     }
+
+    m.textureBufferIsDirty = true
 }
 
-func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index int) {
-    block, chunk := m.GetBlockAndChunk(blockPos)
+func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index uint16) {
+    block := m.GetBlockFromInt3(blockPos)
+    if block == nil || block.GetTexture(side) == index {
+        return
+    }
     block.Textures[side] = uint16(index)
-    chunk.SetDirty()
+    blockIndex := (m.getBlockIndex(blockPos.X, blockPos.Y, blockPos.Z) * 6) + int32(side)
+    m.lookupVoxels.SetPixels(int(blockIndex), []uint16{uint16(index)})
 }
-func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index int) {
-    block, chunk := m.GetBlockAndChunk(blockPos)
+
+func (m *Map) getBlockIndex(x, y, z int32) int32 {
+    mapSizeX := m.width * m.ChunkSizeHorizontal
+    mapSizeY := m.height * m.ChunkSizeHeight
+    return x + y*mapSizeX + z*mapSizeX*mapSizeY
+}
+
+func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index uint16) {
+    var textureToReplace uint16
+
+    block := m.GetBlockFromInt3(blockPos)
+    textureToReplace = block.GetTexture(side)
     block.Textures[side] = uint16(index)
-    chunk.SetDirty()
+    m.textureBufferIsDirty = true
 
     exposedSideOffset := side.AsDirection()
     var neighborsToCheck []Int3
@@ -849,9 +910,9 @@ func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index int) {
 
         for _, offset := range neighborsToCheck {
             neighbor := currentPos.Add(offset)
-            neighborBlock, neighborChunk := m.GetBlockAndChunk(neighbor)
+            neighborBlock := m.GetBlockFromInt3(neighbor)
 
-            if neighborBlock.IsAir() {
+            if neighborBlock.IsAir() || neighborBlock.GetTexture(side) != textureToReplace {
                 continue
             }
 
@@ -860,7 +921,6 @@ func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index int) {
                 continue
             }
 
-            neighborChunk.SetDirty()
             neighborBlock.Textures[side] = uint16(index)
             push(neighbor)
         }

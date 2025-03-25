@@ -28,7 +28,7 @@ func (m *Minimap) Update() {
         }
     }
     m.Texture.Begin()
-    m.Texture.SetPixels(0, 0, m.Width, m.Height, m.Pixels)
+    m.Texture.SetPixelsRGBA(0, 0, m.Width, m.Height, m.Pixels)
     m.Texture.End()
 }
 

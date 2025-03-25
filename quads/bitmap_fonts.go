@@ -474,7 +474,7 @@ func CreateAtlasFromPBMs(directory string, glyphWidth, glyphHeight int) (*glhf.T
     	file.Close()
     */
 
-    texture := glhf.NewTexture(atlasWidth, atlasHeight, false, pixels.Pix)
+    texture := glhf.NewTextureRGBA(atlasWidth, atlasHeight, false, pixels.Pix)
     texture.SetAtlasItemSize(glyphWidth, glyphHeight)
     return texture, indices
 }

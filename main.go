@@ -680,8 +680,8 @@ func (g *Game) openWizardMenu() {
         quads.NewGuiOptionBool("Draw Debug Info", &g.shouldDrawDebugInfo),
         quads.NewGuiOptionAction("Toggle Voxel Renderer", func() {
             core.BigDebugSwitch = !core.BigDebugSwitch
-            g.SetCubeShaderDebugSwitch(core.BigDebugSwitch)
-            g.cubeMap.ForceReupload()
+            //g.SetCubeShaderDebugSwitch(core.BigDebugSwitch)
+            //g.cubeMap.ForceReupload()
         }),
         quads.NewGuiOptionAction("Fullscreen", g.toggleFullscreen),
         quads.NewGuiOptionAction("VSync", g.toggleVsync),
