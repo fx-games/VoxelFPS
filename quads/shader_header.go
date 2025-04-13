@@ -6,11 +6,11 @@ import (
 )
 
 func vertexShaderHeader(uboBlock string) string {
-    return fmt.Sprintf("#version 330 core\n%s\n", uboBlock)
+    return fmt.Sprintf("#version 400 core\n%s\n", uboBlock)
 }
 
 func fragmentShaderHeader(uboBlock string) string {
-    return fmt.Sprintf("#version 330 core\n%s\n%s", uboBlock, fragmentShaderSharedFunctions)
+    return fmt.Sprintf("#version 400 core\n%s\n%s", uboBlock, fragmentShaderSharedFunctions)
 }
 
 const (
@@ -24,6 +24,7 @@ const (
 )
 
 func mainUBO() *glhf.UniformBufferObject {
+
     return glhf.NewUniformBufferObject([]glhf.Attr{
         {Name: "fogRange", Type: glhf.Vec2},
         {Name: "camPosition", Type: glhf.Vec4},

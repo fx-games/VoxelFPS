@@ -6,4 +6,6 @@ bs2_audio/
 bs2_gfx/
 assets/audio/
 doom_likes/
+blake_stone/
 *.exe
+*.pk3

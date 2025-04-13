@@ -23,7 +23,7 @@ type Map struct {
     height          int32
     depth           int32
     chunkShader     *glhf.Shader
-    terrainTexture  *glhf.Texture
+    terrainTexture  *glhf.TextureAtlasFixed
     mapInfoLogger   func(string)
     gameErrorLogger func(string)
 
@@ -35,6 +35,8 @@ type Map struct {
     drawCallCount         int
     lookupVoxels          *glhf.TextureBuffer
     textureBufferIsDirty  bool
+    locationTex           int32
+    locationVox           int32
 }
 
 func NewDefaultMap(width, height, depth int32) *Map {
@@ -50,6 +52,8 @@ func NewMap(width, height, depth, chunkSizeHorizontal, chunkSizeHeight int32) *M
         height:                height,
         depth:                 depth,
         maxChunkHeightForDraw: height - 1,
+        locationTex:           -1,
+        locationVox:           -1,
     }
 
     m.ChunkSizeCube = m.ChunkSizeHorizontal * m.ChunkSizeHeight * m.ChunkSizeHorizontal
@@ -181,8 +185,13 @@ func (m *Map) Draw(cam core.Camera) {
 
     m.chunkShader.Begin()
 
-    m.chunkShader.SetTextureUnit("tex", gl.TEXTURE0)
-    m.chunkShader.SetTextureUnit("voxelLookup", gl.TEXTURE1)
+    if m.locationTex == -1 || m.locationVox == -1 {
+        m.locationTex = m.chunkShader.UniformLocation("tex")
+        m.locationVox = m.chunkShader.UniformLocation("voxelLookup")
+    }
+
+    m.chunkShader.SetTextureUnit(m.locationTex, gl.TEXTURE0)
+    m.chunkShader.SetTextureUnit(m.locationVox, gl.TEXTURE1)
 
     m.terrainTexture.BeginOnUnit(gl.TEXTURE0)
     m.lookupVoxels.BeginOnUnit(gl.TEXTURE1)
@@ -300,6 +309,7 @@ func (m *Map) SetBlocks(pos []Int3, block *Block) {
     for _, p := range pos {
         m.SetBlock(p.X, p.Y, p.Z, block.Copy())
     }
+    m.textureBufferIsDirty = true
 }
 
 func (m *Map) SetAir(blockPos Int3) {
@@ -372,7 +382,7 @@ func (m *Map) SetShader(chunkShader *glhf.Shader) {
     m.chunkShader = chunkShader
 }
 
-func (m *Map) SetTerrainTexture(texture *glhf.Texture) {
+func (m *Map) SetTerrainTexture(texture *glhf.TextureAtlasFixed) {
     m.terrainTexture = texture
 }
 
@@ -514,7 +524,7 @@ func (m *Map) ClearAllChunks() {
     }
 }
 
-func (m *Map) GetTerrainTexture() *glhf.Texture {
+func (m *Map) GetTerrainTexture() *glhf.TextureAtlasFixed {
     return m.terrainTexture
 }
 
@@ -829,7 +839,7 @@ func (m *Map) LoadFromMemory(source []byte) {
 
 func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index uint16) {
     block := m.GetBlockFromInt3(blockPos)
-    if block == nil || block.GetTexture(side) == index {
+    if block == nil || block.GetTexture(side) == index || block.IsAir() {
         return
     }
     block.Textures[side] = uint16(index)

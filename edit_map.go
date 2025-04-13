@@ -14,7 +14,7 @@ func (g *Game) openVoxelBrushMenu() {
         return
     }
     previousMouseState := g.setupModal()
-    configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
+    configMenu := g.OpenConfigMenu()
 
     options := []quads.GuiOption{
         quads.NewGuiOptionAction("Pen", func() {
@@ -76,7 +76,7 @@ func (g *Game) openVoxelEditMenu() {
         return
     }
     previousMouseState := g.setupModal()
-    configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
+    configMenu := g.OpenConfigMenu()
 
     options := []quads.GuiOption{
         quads.NewGuiOptionAction("Choose Brush", g.openVoxelBrushMenu),
@@ -147,6 +147,11 @@ func (g *Game) changeDecorationTexture() {
         if g.gameObjectForSpawning != nil {
             g.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
         }
+    })
+}
+func (g *Game) testPackedAtlasPicker() {
+    g.pickTexture(g.doomWeapon.Atlas, func(selectedIndex int) {
+        println("Selected index", selectedIndex)
     })
 }
 

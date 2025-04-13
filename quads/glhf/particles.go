@@ -55,8 +55,8 @@ func (p Particle) GetID() uint64 {
 }
 
 type ParticleSystem struct {
-    frontBuffer *vertexArray[GlFloat]
-    backBuffer  *vertexArray[GlFloat]
+    frontBuffer *VertexArray[GlFloat]
+    backBuffer  *VertexArray[GlFloat]
 
     frontIsSource bool
 
@@ -112,12 +112,13 @@ func (v *ParticleSystem) initializeBuffers(particleCount int) {
     //neededBufferSizeInBytes := vertexSize * particleCount
     //floatCount := neededBufferSizeInBytes / SizeOfFloat32
 
-    v.backBuffer = newIndexedVertexArray[GlFloat](v.transformFeedbackShader, particleCount, nil)
-    v.backBuffer.setPrimitiveType(primitiveType)
-
+    v.backBuffer = NewVertexArray[GlFloat](v.transformFeedbackShader, true)
+    v.backBuffer.SetPrimitiveType(primitiveType)
+    v.backBuffer.DebugName = "Particle_BackBuffer"
     // pre-fill the front buffer
-    v.frontBuffer = newIndexedVertexArray[GlFloat](v.transformFeedbackShader, particleCount, nil)
-    v.frontBuffer.setPrimitiveType(primitiveType)
+    v.frontBuffer = NewVertexArray[GlFloat](v.transformFeedbackShader, true)
+    v.frontBuffer.SetPrimitiveType(primitiveType)
+    v.frontBuffer.DebugName = "Particle_FrontBuffer"
 
     glError = gl.GetError()
     if glError != gl.NO_ERROR {
@@ -130,47 +131,47 @@ func (v *ParticleSystem) Draw(deltaTime float64) {
     }
     v.lastParticleLifetime -= float32(deltaTime)
 
-    // One Draw Call here
+    // One DrawWithOffset Call here
     v.doTransfer(v.currentBackBuffer(), v.currentFrontBuffer(), deltaTime)
-    // Another Draw Call here
+    // Another DrawWithOffset Call here
     v.draw(deltaTime, v.currentFrontBuffer())
     v.frontIsSource = !v.frontIsSource
 }
 
-func (v *ParticleSystem) currentBackBuffer() *vertexArray[GlFloat] {
+func (v *ParticleSystem) currentBackBuffer() *VertexArray[GlFloat] {
     if v.frontIsSource {
         return v.backBuffer
     }
     return v.frontBuffer
 }
 
-func (v *ParticleSystem) currentFrontBuffer() *vertexArray[GlFloat] {
+func (v *ParticleSystem) currentFrontBuffer() *VertexArray[GlFloat] {
     if v.frontIsSource {
         return v.frontBuffer
     }
     return v.backBuffer
 }
 
-func (v *ParticleSystem) doTransfer(src, dest *vertexArray[GlFloat], deltaTime float64) {
+func (v *ParticleSystem) doTransfer(src, dest *VertexArray[GlFloat], deltaTime float64) {
     gl.BindTransformFeedback(gl.TRANSFORM_FEEDBACK, v.xfbo)
 
     gl.Enable(gl.RASTERIZER_DISCARD) // no need for fragment transformFeedbackShader, this is just between the vertex transformFeedbackShader and these two buffers
 
     v.transformFeedbackShader.Begin()
     v.transformFeedbackShader.SetUniformAttr(0, float32(deltaTime))
-    src.begin()
+    src.Begin()
 
     gl.BindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, dest.vbo.obj)
 
     gl.BeginTransformFeedback(v.primitiveType)
-    src.draw(0, v.maxVertexCount)
+    src.DrawWithOffset(0, int32(v.maxVertexCount))
     gl.EndTransformFeedback()
 
     gl.BindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, 0)
 
     //srcData := src.vertexData(0, 2)
 
-    src.end()
+    src.End()
     v.transformFeedbackShader.End()
 
     gl.Disable(gl.RASTERIZER_DISCARD)
@@ -192,7 +193,7 @@ func (v *ParticleSystem) doTransfer(src, dest *vertexArray[GlFloat], deltaTime f
     */
 }
 
-func (v *ParticleSystem) draw(deltaTime float64, drawBuffer *vertexArray[GlFloat]) {
+func (v *ParticleSystem) draw(deltaTime float64, drawBuffer *VertexArray[GlFloat]) {
     v.totalTime += float32(deltaTime)
 
     view := v.getView()
@@ -204,9 +205,9 @@ func (v *ParticleSystem) draw(deltaTime float64, drawBuffer *vertexArray[GlFloat
     modelView := view.Mul4(modelMatrix)
     v.particleShader.SetUniformAttr(1, modelView)
 
-    drawBuffer.begin()
+    drawBuffer.Begin()
     gl.DrawTransformFeedback(gl.POINTS, v.xfbo)
-    drawBuffer.end()
+    drawBuffer.End()
 
     v.particleShader.End()
 }
@@ -235,7 +236,7 @@ func (v *ParticleSystem) Emit(props ParticleProperties, count int) int {
             v.flatData[flatIndex+i] = particle[i]
         }
     }
-    buffer.begin()
+    buffer.Begin()
     if vertexOffset+count > v.maxVertexCount {
         flatSpaceAtTheEnd := (v.maxVertexCount - vertexOffset) * flatStride
         flatRemainingSpace := flatCount - flatSpaceAtTheEnd
@@ -244,7 +245,7 @@ func (v *ParticleSystem) Emit(props ParticleProperties, count int) int {
     } else {
         buffer.setVertexDataWithOffset(vertexOffset, v.flatData[flatOffset:flatOffset+flatCount])
     }
-    buffer.end()
+    buffer.End()
 
     var maxComponents int32
     gl.GetIntegerv(gl.MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, &maxComponents)
@@ -323,8 +324,8 @@ func (v *ParticleSystem) Clear(vertexOffset int, vertexCount int) {
             v.flatData[flatIndex+i] = 0
         }
     }
-    for _, buffer := range []*vertexArray[GlFloat]{v.frontBuffer, v.backBuffer} {
-        buffer.begin()
+    for _, buffer := range []*VertexArray[GlFloat]{v.frontBuffer, v.backBuffer} {
+        buffer.Begin()
         if vertexOffset+vertexCount > v.maxVertexCount {
             flatSpaceAtTheEnd := (v.maxVertexCount - vertexOffset) * flatStride
             flatRemainingSpace := flatCount - flatSpaceAtTheEnd
@@ -333,6 +334,6 @@ func (v *ParticleSystem) Clear(vertexOffset int, vertexCount int) {
         } else {
             buffer.setVertexDataWithOffset(vertexOffset, v.flatData[flatOffset:flatOffset+flatCount])
         }
-        buffer.end()
+        buffer.End()
     }
 }

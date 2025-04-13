@@ -32,19 +32,19 @@ type SpriteAnimation struct {
 
 type SpriteDrawer struct {
     shader       *glhf.Shader
-    quadVertices *glhf.VertexSlice[glhf.GlUInt]
+    quadVertices *glhf.VertexArray[glhf.GlUInt]
     quadsDrawn   int
     drawCalls    int
 
     animations         []SpriteAnimation
-    spritesPerTexture  map[*glhf.Texture]map[*SpriteComponent]bool
+    spritesPerTexture  map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool
     transparentSprites []*SpriteComponent
 }
 
 func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
     return &SpriteDrawer{
         shader:            shader,
-        spritesPerTexture: make(map[*glhf.Texture]map[*SpriteComponent]bool),
+        spritesPerTexture: make(map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool),
     }
 }
 func (q *SpriteDrawer) AddAnimation(animation SpriteAnimation) int {
@@ -53,12 +53,12 @@ func (q *SpriteDrawer) AddAnimation(animation SpriteAnimation) int {
     return index
 }
 func (q *SpriteDrawer) uploadQuad() {
-    var indices []uint32
     var rawVertices []glhf.GlUInt
-    changedIndices, quadVertices := q.getQuadVertices(indices, 0)
-    indices = changedIndices
+    changedIndices, quadVertices := NewUInt32QuadIndexedVerts()
     rawVertices = append(rawVertices, quadVertices...)
-    vertices := glhf.MakeUintIndexedVertexSlice(q.shader, 4, indices)
+    vertices := glhf.NewVertexArray[glhf.GlUInt](q.shader, false)
+    vertices.DebugName = "SpriteDrawer"
+    vertices.SetIndices32(changedIndices)
     vertices.Begin()
     vertices.SetVertexData(rawVertices)
     vertices.End()
@@ -72,13 +72,6 @@ func (q *SpriteDrawer) uploadQuad() {
    2 -> rightU, bottomV
    3 -> leftU, bottomV
 */
-func (q *SpriteDrawer) getQuadVertices(indices []uint32, offset int) ([]uint32, []glhf.GlUInt) {
-    indices = append(indices, uint32(offset+1), uint32(offset+0), uint32(offset+2), uint32(offset+2), uint32(offset+0), uint32(offset+3))
-    quadVertices := []glhf.GlUInt{
-        0, 1, 2, 3,
-    }
-    return indices, quadVertices
-}
 
 func (q *SpriteDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
     q.shader.Begin()
@@ -262,7 +255,7 @@ func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
     }
 }
 func (q *SpriteDrawer) Clear() {
-    q.spritesPerTexture = make(map[*glhf.Texture]map[*SpriteComponent]bool)
+    q.spritesPerTexture = make(map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool)
 }
 
 func (q *SpriteDrawer) GetFirstFrameIndex(anim int, viewDirection int) uint16 {

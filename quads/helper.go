@@ -3,9 +3,20 @@ package quads
 import (
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
+    "github.com/memmaker/goray/quads/glhf"
     "github.com/memmaker/goray/quads/voxel"
     "math"
 )
+
+func NewUInt32QuadIndexedVerts() ([]uint32, []glhf.GlUInt) {
+    var indices []uint32
+    offset := 0
+    indices = append(indices, uint32(offset+1), uint32(offset+0), uint32(offset+2), uint32(offset+2), uint32(offset+0), uint32(offset+3))
+    quadVertices := []glhf.GlUInt{
+        0, 1, 2, 3,
+    }
+    return indices, quadVertices
+}
 
 func TransformVertex(x, y float32, cam core.Camera, projViewInverted mgl32.Mat4) mgl32.Vec3 {
     normalizedNearPos := mgl32.Vec4{x, y, cam.GetNearPlaneDist(), 1}

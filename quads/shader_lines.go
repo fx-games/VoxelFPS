@@ -60,8 +60,9 @@ func appendLine(rawVerts []glhf.GlFloat, start, end mgl32.Vec3) []glhf.GlFloat {
     return rawVerts
 }
 
-func NewVertexSliceFromLines(lineShader *glhf.Shader, rawVerts []glhf.GlFloat) *glhf.VertexSlice[glhf.GlFloat] {
-    vertices := glhf.MakeVertexSlice(lineShader, len(rawVerts)/3, len(rawVerts)/3)
+func NewVertexSliceFromLines(lineShader *glhf.Shader, rawVerts []glhf.GlFloat) *glhf.VertexArray[glhf.GlFloat] {
+    vertices := glhf.NewVertexArray[glhf.GlFloat](lineShader, false)
+    vertices.DebugName = "LineVertexArray"
     vertices.SetPrimitiveType(gl.LINES)
     vertices.Begin()
     vertices.SetVertexData(rawVerts)
@@ -69,7 +70,7 @@ func NewVertexSliceFromLines(lineShader *glhf.Shader, rawVerts []glhf.GlFloat) *
     return vertices
 }
 
-const lineVertexShaderSource = `#version 330 core
+const lineVertexShaderSource = `#version 400 core
 
 in vec3 position;
 
@@ -81,7 +82,7 @@ void main() {
     gl_Position =  camProjectionView * model * vec4(position, 1.0);
 }`
 
-const lineFragmentShaderSource = `#version 330 core
+const lineFragmentShaderSource = `#version 400 core
 
 out vec4 color;
 uniform vec3 drawColor;

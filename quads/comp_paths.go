@@ -12,7 +12,7 @@ type PathingComponent struct {
     moveSpeed            float32
     currentDestination   mgl32.Vec3
     Enabled              bool
-    vertexesForDebugDraw *glhf.VertexSlice[glhf.GlFloat]
+    vertexesForDebugDraw *glhf.VertexArray[glhf.GlFloat]
 }
 
 func NewPathingComponent() *PathingComponent {

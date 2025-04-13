@@ -15,9 +15,9 @@ type GuiToast struct {
     routine   *routine.Routine
 }
 
-func NewGuiToast(label *BitmapFontMesh, uiShader *glhf.Shader, uiAtlas *glhf.Texture) *GuiToast {
+func NewGuiToast(uiContext UIContext, label *BitmapFontMesh) *GuiToast {
     size, pos := label.GetRect()
-    border := NewGuiBorderWithBounds(uiShader, uiAtlas, size, pos)
+    border := NewGuiBorderWithBounds(uiContext, size, pos)
     border.SetBackground(mgl32.Vec4{0, 0, 0, 0.8})
     animRoutine := routine.New()
     labelAlpha := label.GetAlpha()
@@ -57,7 +57,7 @@ func NewGuiToast(label *BitmapFontMesh, uiShader *glhf.Shader, uiAtlas *glhf.Tex
     animRoutine.Run(0)
 
     return &GuiToast{
-        guiShader: uiShader,
+        guiShader: uiContext.Shader,
         label:     label,
         routine:   animRoutine,
         border:    border,
@@ -76,10 +76,6 @@ func (g *GuiToast) ShouldClose() bool {
 }
 
 func (g *GuiToast) Draw() {
-    g.guiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    g.guiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    g.guiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
     g.border.Draw()
-
     g.label.Draw()
 }

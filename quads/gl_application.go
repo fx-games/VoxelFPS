@@ -55,9 +55,10 @@ type GlApplication struct {
     cubeShader    *glhf.Shader
     lineShader    *glhf.Shader
     skyboxShader  *glhf.Shader
-    skybox        *glhf.VertexSlice[glhf.GlFloat]
+    skybox        *glhf.VertexArray[glhf.GlFloat]
     skyboxCubeMap *glhf.Cubemap
     mainUbo       *glhf.UniformBufferObject
+    colorBatch    *glhf.SpriteBatch
 
     frameBuffer            *glhf.Frame
     UIScale                mgl32.Vec2
@@ -72,8 +73,13 @@ type GlApplication struct {
 
     ShouldDrawSkybox  bool
     ShouldDrawMinimap bool
-    AtlasMap          *glhf.Texture
-    AtlasSprites      *glhf.Texture
+    AtlasMap          *glhf.TextureAtlasFixed
+    AtlasSprites      *glhf.TextureAtlasFixed
+
+    UIAtlas *glhf.TextureAtlasFixed
+    UIFont  BitmapFont
+
+    spriteBatches []*glhf.SpriteBatch
 }
 
 func (a *GlApplication) SetMouseCapture(isCaptured bool) {
@@ -123,16 +129,30 @@ func (a *GlApplication) ScrollCallback(w *glfw.Window, xoff float64, yoff float6
     }
 }
 
+func (a *GlApplication) LoadFixedGuiAtlasWithBatch(filename string, tileW int, tileH int, maxSprites int) *glhf.TextureAtlasFixed {
+    atlasFixed := LoadTextureAtlasFixed(filename, tileW, tileH)
+    atlasFixed.SetGuiShader(a.guiShader)
+    atlasFixed.SetMaxSprites(maxSprites)
+    a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
+    return atlasFixed
+}
+func (a *GlApplication) LoadPackedGuiAtlasWithBatch(filename string, maxSprites int) *glhf.TextureAtlasPacked {
+    atlasFixed := LoadTextureAtlasPacked(filename)
+    atlasFixed.SetShader(a.guiShader)
+    atlasFixed.SetMaxSprites(maxSprites)
+    a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
+    return atlasFixed
+}
 func (a *GlApplication) SetupSkybox(cubemap *glhf.Cubemap) {
     a.skyboxCubeMap = cubemap
     a.ShouldDrawSkybox = true
 }
 
-func (a *GlApplication) CreateToast(labelText string, font BitmapFont, uiAtlas *glhf.Texture) *GuiToast {
-    label := a.NewLabel(font)
+func (a *GlApplication) Toast(labelText string) *GuiToast {
+    label := a.NewLabel()
     label.SetPosition(mgl32.Vec2{10, 180})
     label.SetText(labelText)
-    toast := NewGuiToast(label, a.guiShader, uiAtlas)
+    toast := NewGuiToast(a.UiContext(), label)
     a.queuedToasts = append(a.queuedToasts, toast)
     return toast
 }
@@ -152,21 +172,7 @@ func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
     a.Pathfinder = NewPathfindingSystem(isSolid)
 }
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
-    scale := float32(4)
-    emptyMap := make([]uint8, width*height*4)
-    minimapTexture := glhf.NewTextureRGBA(width, height, false, emptyMap)
-    minimapTexture.SetAtlasItemSize(width, height)
-    guiQuadVerts := NewGUIQuadVertsFromSubImage(a.guiShader, minimapTexture, 0, 0, 0, width, height)
-
-    a.minimap = &Minimap{
-        Width:    width,
-        Height:   height,
-        GetColor: getColor,
-        Texture:  minimapTexture,
-        Pixels:   emptyMap,
-        Scale:    scale,
-        GuiQuad:  guiQuadVerts,
-    }
+    a.minimap = NewMiniMap(a.guiShader, width, height, getColor)
     a.minimap.Resize(a.WindowWidth, a.WindowHeight)
     a.ShouldDrawMinimap = true
 }
@@ -278,16 +284,30 @@ func (a *GlApplication) drawSkybox(cubemap *glhf.Cubemap) {
     gl.DepthMask(true)
 }
 
-func (a *GlApplication) NewLabel(font BitmapFont) *BitmapFontMesh {
-    return NewBitmapFontMesh(a.guiShader, font)
+func (a *GlApplication) NewLabel() *BitmapFontMesh {
+    return NewBitmapFontMesh(a.guiShader, a.UIFont, a.colorBatch)
 }
 
-func (a *GlApplication) NewList(uiAtlas *glhf.Texture, font BitmapFont) *GuiList {
-    return NewGuiList(a.guiShader, uiAtlas, font)
+func (a *GlApplication) NewList() *GuiList {
+    return NewGuiList(a.UiContext())
 }
-func (a *GlApplication) OpenTextureCube(uiAtlas *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
-    return NewGuiTexturePickerCube(a.guiShader, uiAtlas, font, atlasForSelection, preselection, func(s string) {
-        a.CreateToast(s, font, uiAtlas)
+
+func (a *GlApplication) SetupUIAtlas(atlas *glhf.TextureAtlasFixed) {
+    a.UIAtlas = atlas
+    a.UIAtlas.SetGuiShader(a.guiShader)
+    a.UIAtlas.SetMaxSprites(20)
+    a.spriteBatches = append(a.spriteBatches, a.UIAtlas.GetSpriteBatch())
+}
+
+func (a *GlApplication) SetupUIFont(font BitmapFont) {
+    a.UIFont = font
+    a.UIFont.Texture.SetGuiShader(a.guiShader)
+    a.UIFont.Texture.SetMaxSprites(512)
+    a.spriteBatches = append(a.spriteBatches, a.UIFont.Texture.GetSpriteBatch())
+}
+func (a *GlApplication) OpenTextureCube(atlasForSelection *glhf.TextureAtlasFixed, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
+    return NewGuiTexturePickerCube(a.UiContext(), atlasForSelection, preselection, func(s string) {
+        a.Toast(s)
     }, func() {
         gridSize := glhf.IntVec2{int32(atlasForSelection.GridWidth()), int32(atlasForSelection.GridHeight())}
         a.cubeShader.Begin()
@@ -296,13 +316,13 @@ func (a *GlApplication) OpenTextureCube(uiAtlas *glhf.Texture, font BitmapFont, 
     })
 }
 
-func (a *GlApplication) OpenAtlasPicker(uiAtlas *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture) *GuiAtlasPicker {
-    picker := NewGuiAtlasPicker(a.guiShader, uiAtlas, font, atlasForSelection)
+func (a *GlApplication) OpenAtlasPicker(atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
+    picker := NewGuiAtlasPicker(a.UiContext(), atlasForSelection)
     picker.HandleResize(a.WindowWidth, a.WindowHeight, a.UIScale)
     return picker
 }
-func (a *GlApplication) OpenConfigMenu(uiAtlas *glhf.Texture, font BitmapFont) *GuiConfig {
-    return NewGuiConfig(a.guiShader, uiAtlas, font)
+func (a *GlApplication) OpenConfigMenu() *GuiConfig {
+    return NewGuiConfig(a.UiContext())
 }
 func (a *GlApplication) SetFog(colour mgl32.Vec3, near, far float32) {
     a.mainUbo.Begin()
@@ -364,30 +384,43 @@ func (a *GlApplication) StartEventLoop() {
 
             // DRAW BEGIN
 
-            /* Framebuffer is doing depth testing right now..
+            /* Framebuffer is not doing depth testing right now..
                a.frameBuffer.Begin()
 
                buffers := []uint32{gl.COLOR_ATTACHMENT0}
                gl.DrawBuffers(1, &buffers[0])
             */
+
             a.DrawFunc(deltaTime)
 
             if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
                 a.drawSkybox(a.skyboxCubeMap)
             }
 
+            gl.Clear(gl.DEPTH_BUFFER_BIT)
+
             a.guiShader.Begin()
-            gl.Disable(gl.DEPTH_TEST)
+            //gl.Disable(gl.DEPTH_TEST)
+            glhf.PaintersOffset = 0.0001
+            for _, batch := range a.spriteBatches {
+                batch.Begin()
+            }
+
             a.Gui.Draw(deltaTime)
-            a.guiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
+
             a.DrawGuiFunc(deltaTime)
-            gl.Enable(gl.DEPTH_TEST)
 
             if a.minimap != nil && a.ShouldDrawMinimap {
-                a.minimap.Draw(a.guiShader)
+                a.minimap.Draw()
             }
 
             a.drawToasts()
+
+            for _, batch := range a.spriteBatches {
+                batch.End()
+                batch.Render()
+            }
+            //gl.Enable(gl.DEPTH_TEST)
             a.guiShader.End()
 
             /*
@@ -448,6 +481,7 @@ func (a *GlApplication) OnResize(width int, height int) {
     a.guiShader.Begin()
     a.guiShader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
     a.guiShader.End()
+
     if a.minimap != nil {
         a.minimap.Resize(width, height)
     }
@@ -479,6 +513,22 @@ func (a *GlApplication) drawToasts() {
 
     first := a.queuedToasts[0]
     first.Draw()
+}
+
+func (a *GlApplication) UiContext() UIContext {
+    return UIContext{
+        Shader:     a.guiShader,
+        Atlas:      a.UIAtlas,
+        Font:       a.UIFont,
+        ColorBatch: a.colorBatch,
+    }
+}
+
+type UIContext struct {
+    Shader     *glhf.Shader
+    Atlas      *glhf.TextureAtlasFixed
+    Font       BitmapFont
+    ColorBatch *glhf.SpriteBatch
 }
 
 func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.Window, func()) {
@@ -542,7 +592,9 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
     fmt.Println("OpenGL version", version)
 
     gl.DepthFunc(gl.LEQUAL)
+    gl.DepthRangef(0, 1)
     gl.Enable(gl.DEPTH_TEST)
+    gl.ClearDepth(1.0)
 
     gl.Enable(gl.CULL_FACE)
     gl.CullFace(gl.BACK)
@@ -586,7 +638,7 @@ type GlGame interface {
 
 // Start starts the OpenGL application with the given parentApp and screen dimensions.
 // Will block until the window is closed.
-// Will call the parentApp's Init, Draw, DrawGui, Update, HandleKeyEvents, HandleMousePosEvents, HandleMouseButtonEvents, and HandleScrollEvents functions.
+// Will call the parentApp's Init, DrawWithOffset, DrawGui, Update, HandleKeyEvents, HandleMousePosEvents, HandleMouseButtonEvents, and HandleScrollEvents functions.
 func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
     glAppUntyped := glhf.CallVal(func() any {
         mouseSensitivity := float32(0.1)
@@ -609,8 +661,18 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         fpsCamera.SetMouseInvertedY(true)
 
         maxTexSize := glQuery(gl.MAX_TEXTURE_SIZE)
-
         println(fmt.Sprintf("Max texture size: %dx%d", maxTexSize, maxTexSize))
+
+        maxTexLayers := glQuery(gl.MAX_ARRAY_TEXTURE_LAYERS)
+        println(fmt.Sprintf("Max texture layers: %d", maxTexLayers))
+
+        // the number of textures that can be accessed by the fragment shader
+        maxTexImageUnits := glQuery(gl.MAX_TEXTURE_IMAGE_UNITS)
+        println(fmt.Sprintf("Max texture image units: %d", maxTexImageUnits))
+
+        // total number of textures that can be used
+        maxCombinedTexImageUnits := glQuery(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS)
+        println(fmt.Sprintf("Max combined texture image units: %d", maxCombinedTexImageUnits))
 
         uboBlockName := "Main"
         ubo := mainUBO()
@@ -628,8 +690,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         if err != nil {
             panic(err)
         }
-        var atlasMap *glhf.Texture
-        var atlasSprites *glhf.Texture
+        var atlasMap *glhf.TextureAtlasFixed
+        var atlasSprites *glhf.TextureAtlasFixed
         for _, entry := range entries {
             if entry.IsDir() {
                 continue
@@ -639,13 +701,14 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
                 match := mapAtlasRegex.FindStringSubmatch(entry.Name())
                 width, _ = strconv.Atoi(match[1])
                 height, _ = strconv.Atoi(match[2])
-                atlasMap = LoadTextureAtlas(filepath.Join(baseTexPath, entry.Name()), width, height)
+                atlasMap = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
             } else if spriteAtlasRegex.MatchString(entry.Name()) {
                 match := spriteAtlasRegex.FindStringSubmatch(entry.Name())
                 width, _ = strconv.Atoi(match[1])
                 height, _ = strconv.Atoi(match[2])
-                atlasSprites = LoadTextureAtlas(filepath.Join(baseTexPath, entry.Name()), width, height)
+                atlasSprites = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
             }
+
         }
 
         glApp := &GlApplication{
@@ -655,7 +718,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             TerminateFunc:   terminateFunc,
             TimeFactor:      1.0,
             Camera:          fpsCamera,
-            guiShader:       LoadGuiShader(winSizeX, winSizeY),
+            guiShader:       LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
             quadShader:      LoadQuadShader(shaderBlockSource),
             cubeShader:      LoadCubeShader(shaderBlockSource),
             meshShader:      LoadMeshShader(shaderBlockSource),
@@ -668,6 +731,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             AtlasMap:         atlasMap,
             AtlasSprites:     atlasSprites,
         }
+
         window.SetKeyCallback(glApp.KeyCallback)
         window.SetCursorPosCallback(glApp.MousePosCallback)
 
@@ -686,14 +750,24 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.ScrollHandler = parentApp.HandleScrollEvents
         glApp.ResizeHandler = parentApp.HandleResize
         glApp.DropHandler = parentApp.HandleDrop
+
         glApp.Sprites = NewSpriteDrawer(glApp.quadShader)
         glApp.Gui = NewGuiDrawer(glApp.guiShader)
         glApp.Meshes = NewMeshDrawer(glApp.meshShader)
+        glApp.colorBatch = glhf.NewSpriteBatch(glApp.guiShader, NewOneWhitePixelTexture(), 10)
+        glApp.spriteBatches = []*glhf.SpriteBatch{glApp.colorBatch}
+        glApp.AtlasMap.SetGuiShader(glApp.guiShader)
+        glApp.AtlasMap.SetMaxSprites(10)
+        glApp.AtlasSprites.SetGuiShader(glApp.guiShader)
+        glApp.AtlasSprites.SetMaxSprites(10)
+        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
+        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
 
-        skyboxVA := glhf.MakeVertexSlice(glApp.skyboxShader, 36, 36)
+        skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
         skyboxVA.Begin()
         skyboxVA.SetVertexData(skyboxVertices())
         skyboxVA.End()
+        skyboxVA.DebugName = "SkyBox"
         glApp.skybox = skyboxVA
 
         ubo.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
@@ -775,7 +849,7 @@ func skyboxVertices() []glhf.GlFloat {
     }
 }
 
-func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.Texture, shader *glhf.Shader) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
+func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, shader *glhf.Shader) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
     chunkSize := 32
     mapData := loadResult.MapData
     mapSizeX, mapSizeY, mapSizeZ := loadResult.MapDimensions[0], loadResult.MapDimensions[1], loadResult.MapDimensions[2]

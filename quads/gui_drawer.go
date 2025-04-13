@@ -6,35 +6,26 @@ import (
     "github.com/memmaker/goray/quads/glhf"
 )
 
-type GuiQuad struct {
-    Verts                *glhf.VertexSlice[glhf.GlFloat]
+type AnimatedSprite struct {
     currentAnimation     int
     textureIndex         uint16
     currentFrameTime     float32
     currentFrame         int
     changedFrameThisTick bool
-    position             mgl32.Vec2
     isHidden             bool
     tintColor            mgl32.Vec4
     eventOnFrame         map[int]events.EventID
-    bakedSize            mgl32.Vec2
-    targetSize           mgl32.Vec2
+    dstRect              mgl32.Vec4
 }
 
-func (q *GuiQuad) Draw() {
-    q.Verts.Begin()
-    q.Verts.Draw()
-    q.Verts.End()
-}
-
-func (q *GuiQuad) CurrentAnimation() int {
+func (q *AnimatedSprite) CurrentAnimation() int {
     return q.currentAnimation
 }
 
-func (q *GuiQuad) TextureIndex(elapsed float64) uint16 {
+func (q *AnimatedSprite) TextureIndex(elapsed float64) uint16 {
     return q.textureIndex
 }
-func (q *GuiQuad) TextureIndexAnimated(frames []uint16, showTimes []float32, elapsed float64, loop bool) uint16 {
+func (q *AnimatedSprite) TextureIndexAnimated(frames []uint16, showTimes []float32, elapsed float64, loop bool) uint16 {
     q.currentFrameTime += float32(elapsed)
     q.changedFrameThisTick = false
     if q.currentFrameTime >= showTimes[q.currentFrame] {
@@ -58,47 +49,44 @@ func (q *GuiQuad) TextureIndexAnimated(frames []uint16, showTimes []float32, ela
     return textureIndexToShowThisFrame
 }
 
-func (q *GuiQuad) PlayAnimation(anim int) {
+func (q *AnimatedSprite) PlayAnimation(anim int) {
     q.currentAnimation = anim
     q.currentFrame = 0
     q.currentFrameTime = 0
 }
-func (q *GuiQuad) ClearEvents() {
+func (q *AnimatedSprite) ClearEvents() {
     clear(q.eventOnFrame)
 }
-func (q *GuiQuad) PublishEventOnFrame(frame int, event events.EventID) {
+func (q *AnimatedSprite) PublishEventOnFrame(frame int, event events.EventID) {
     if q.eventOnFrame == nil {
         q.eventOnFrame = make(map[int]events.EventID)
     }
     q.eventOnFrame[frame] = event
 }
 
-func (q *GuiQuad) GetPosition() mgl32.Vec2 {
-    return q.position
-}
-
-func (q *GuiQuad) SetPosition(offset mgl32.Vec2) {
-    q.position = offset
-}
-
-func (q *GuiQuad) Hide() {
+func (q *AnimatedSprite) Hide() {
     q.isHidden = true
 }
 
-func (q *GuiQuad) Show() {
+func (q *AnimatedSprite) Show() {
     q.isHidden = false
 }
 
-func (q *GuiQuad) SetTintColor(color mgl32.Vec4) {
+func (q *AnimatedSprite) SetTintColor(color mgl32.Vec4) {
     q.tintColor = color
 }
 
-func (q *GuiQuad) SetSize(width int, height int) {
-    q.targetSize = mgl32.Vec2{float32(width), float32(height)}
+func (q *AnimatedSprite) DestinationRect() mgl32.Vec4 {
+    return mgl32.Vec4{
+        q.dstRect.X(),
+        q.dstRect.Y(),
+        q.dstRect.Z(),
+        q.dstRect.W(),
+    }
 }
 
-func (q *GuiQuad) Scale() mgl32.Vec2 {
-    return mgl32.Vec2{q.targetSize.X() / q.bakedSize.X(), q.targetSize.Y() / q.bakedSize.Y()}
+func (q *AnimatedSprite) SetDestRect(rect mgl32.Vec4) {
+    q.dstRect = rect
 }
 
 type GuiDrawer struct {
@@ -107,13 +95,13 @@ type GuiDrawer struct {
     drawCalls  int
 
     animations        []SpriteAnimation
-    spritesPerTexture map[*glhf.Texture]map[*GuiQuad]bool
+    spritesPerTexture map[glhf.TextureAtlas]map[*AnimatedSprite]bool
 }
 
 func NewGuiDrawer(shader *glhf.Shader) *GuiDrawer {
     return &GuiDrawer{
         shader:            shader,
-        spritesPerTexture: make(map[*glhf.Texture]map[*GuiQuad]bool),
+        spritesPerTexture: make(map[glhf.TextureAtlas]map[*AnimatedSprite]bool),
     }
 }
 func (q *GuiDrawer) AddAnimation(animation SpriteAnimation) int {
@@ -125,41 +113,17 @@ func (q *GuiDrawer) Draw(elapsed float64) {
     spritesDrawn := 0
     drawCalls := 0
     for currentAtlas, spriteIndices := range q.spritesPerTexture {
-        currentAtlas.Begin()
-
+        curBatch := currentAtlas.GetSpriteBatch()
         for sprite := range spriteIndices {
             if sprite.isHidden {
                 continue
             }
             texIndex := q.TextureIndex(sprite, elapsed)
-            baseTexIndex := sprite.textureIndex
-            if texIndex != baseTexIndex {
-                baseU, baseV, _, _ := currentAtlas.GetUV(baseTexIndex)
-                leftU, topV, _, _ := currentAtlas.GetUV(texIndex)
-                offU := leftU - baseU
-                offV := topV - baseV
-                q.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{float32(offU), float32(offV)})
-            } else {
-                q.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-            }
 
-            offset := sprite.GetPosition()
-            q.shader.SetUniformAttr(GuiShaderPosition, offset)
-            q.shader.SetUniformAttr(GuiShaderTintColor, sprite.tintColor)
-
-            scale := sprite.Scale()
-            q.shader.SetUniformAttr(GuiShaderScale, scale)
-
-            sprite.Draw()
+            curBatch.DrawTextured(currentAtlas.GetSourceRect(texIndex), sprite.DestinationRect(), sprite.tintColor)
             spritesDrawn++
-            drawCalls++
         }
-
-        currentAtlas.End()
     }
-    q.shader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-    q.shader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-
     q.quadsDrawn = spritesDrawn
     q.drawCalls = drawCalls
 }
@@ -168,45 +132,39 @@ func (q *GuiDrawer) DrawnLastFrame() (int, int) {
     return q.quadsDrawn * 2, q.drawCalls
 }
 
-func (q *GuiDrawer) Add(texture *glhf.Texture, textureIndex uint16, x, y int) *GuiQuad {
-    tileW, tileH := texture.GetAtlasItemSize()
-    sprite := NewGUIQuadVertsFromSubImage(q.shader, texture, textureIndex, int(x), int(y), int(tileW), int(tileH))
+func (q *GuiDrawer) Add(texture *glhf.TextureAtlasFixed, textureIndex uint16, x, y int) *AnimatedSprite {
     if _, ok := q.spritesPerTexture[texture]; !ok {
-        q.spritesPerTexture[texture] = make(map[*GuiQuad]bool)
+        q.spritesPerTexture[texture] = make(map[*AnimatedSprite]bool)
     }
-    quad := &GuiQuad{Verts: sprite, textureIndex: textureIndex, currentAnimation: -1, tintColor: mgl32.Vec4{1, 1, 1, 1}, bakedSize: mgl32.Vec2{float32(tileW), float32(tileH)}, targetSize: mgl32.Vec2{float32(tileW), float32(tileH)}}
+    quad := &AnimatedSprite{
+        textureIndex:     textureIndex,
+        currentAnimation: -1,
+        tintColor:        mgl32.Vec4{1, 1, 1, 1},
+        dstRect:          texture.GetDestinationRect(mgl32.Vec2{float32(x), float32(y)}, mgl32.Vec2{1, 1}),
+    }
     q.spritesPerTexture[texture][quad] = true
     return quad
 }
 
-func (q *GuiDrawer) Remove(sprite *GuiQuad, texture *glhf.Texture) {
+func (q *GuiDrawer) Remove(sprite *AnimatedSprite, texture *glhf.TextureAtlasFixed) {
     delete(q.spritesPerTexture[texture], sprite)
 }
 
-func (q *GuiDrawer) TextureIndex(sprite *GuiQuad, elapsed float64) uint16 {
+func (q *GuiDrawer) TextureIndex(sprite *AnimatedSprite, elapsed float64) int {
     currentAnimation := sprite.CurrentAnimation()
     if currentAnimation < 0 || currentAnimation >= len(q.animations) {
-        return sprite.TextureIndex(elapsed)
+        return int(sprite.TextureIndex(elapsed))
     }
     var frames []uint16
 
     showTimes := q.animations[currentAnimation].ShowTimeInSeconds
     frames = q.animations[currentAnimation].Frames[0]
     loop := q.animations[currentAnimation].Loop
-    return sprite.TextureIndexAnimated(frames, showTimes, elapsed, loop)
-}
-
-func NewGUIQuadVertsFromSubImage(shader *glhf.Shader, atlas *glhf.Texture, textureIndex uint16, x, y, width, height int) *glhf.VertexSlice[glhf.GlFloat] {
-    rawVerts := AppendGUIQuadVertices(make([]glhf.GlFloat, 0), atlas, textureIndex, mgl32.Vec2{float32(x), float32(y)}, glhf.GlFloat(width), glhf.GlFloat(height))
-    vertices := glhf.MakeVertexSlice(shader, len(rawVerts)/4, len(rawVerts)/4)
-    vertices.Begin()
-    vertices.SetVertexData(rawVerts)
-    vertices.End()
-    return vertices
+    return int(sprite.TextureIndexAnimated(frames, showTimes, elapsed, loop))
 }
 
 type TexturedQuad struct {
-    Verts   *glhf.VertexSlice[glhf.GlFloat]
+    Verts   *glhf.VertexArray[glhf.GlFloat]
     Texture *glhf.Texture
 }
 
@@ -218,61 +176,88 @@ func (t *TexturedQuad) Draw() {
     t.Texture.End()
 }
 
-func NewSelectionQuad(shader *glhf.Shader, width, height int) TexturedQuad {
-    tex := glhf.NewRectOutlineTexture(width, height, 1)
-    verts := NewGUIQuadVerts(shader, 0, 0, float32(width), float32(height))
-    return TexturedQuad{Verts: verts, Texture: tex}
-}
-
-func NewGUIQuadVerts(shader *glhf.Shader, x, y, width, height float32) *glhf.VertexSlice[glhf.GlFloat] {
-    widthInPx := glhf.GlFloat(width)
-    heightInPx := glhf.GlFloat(height)
-    leftU, topV, rightU, bottomV := glhf.GlFloat(0), glhf.GlFloat(0), glhf.GlFloat(1), glhf.GlFloat(1)
+func NewGUIQuadVerts(shader *glhf.Shader, layer float32, x, y, width, height, scale float32) *glhf.VertexArray[glhf.GlFloat] {
+    widthInPx := glhf.GlFloat(width * scale)
+    heightInPx := glhf.GlFloat(height * scale)
+    leftU, topV, rightU, bottomV := glhf.GlFloat(0), glhf.GlFloat(0), glhf.GlFloat(width-1), glhf.GlFloat(height-1)
     rawVerts := []glhf.GlFloat{
         // first triangle
         // Top-left
-        glhf.GlFloat(x), glhf.GlFloat(y), leftU, topV,
+        glhf.GlFloat(x), glhf.GlFloat(y), glhf.GlFloat(layer), leftU, topV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
         // Bottom-left
-        glhf.GlFloat(x), glhf.GlFloat(y) + heightInPx, leftU, bottomV,
+        glhf.GlFloat(x), glhf.GlFloat(y) + heightInPx, glhf.GlFloat(layer), leftU, bottomV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
         // Bottom-right
-        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, rightU, bottomV,
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, glhf.GlFloat(layer), rightU, bottomV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
 
         // second triangle
         // Top-left
-        glhf.GlFloat(x), glhf.GlFloat(y), leftU, topV,
+        glhf.GlFloat(x), glhf.GlFloat(y), glhf.GlFloat(layer), leftU, topV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
         // Bottom-right
-        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, rightU, bottomV,
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y) + heightInPx, glhf.GlFloat(layer), rightU, bottomV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
         // Top-right
-        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y), rightU, topV,
+        glhf.GlFloat(x) + widthInPx, glhf.GlFloat(y), glhf.GlFloat(layer), rightU, topV, glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1), glhf.GlFloat(1),
     }
-    vertices := glhf.MakeVertexSlice(shader, len(rawVerts)/4, len(rawVerts)/4)
+    vertices := glhf.NewVertexArray[glhf.GlFloat](shader, false)
     vertices.Begin()
     vertices.SetVertexData(rawVerts)
     vertices.End()
     return vertices
 }
 
-func AppendGUIQuadVertices(rawVertices []glhf.GlFloat, t *glhf.Texture, textureIndex uint16, drawPos mgl32.Vec2, widthInPx glhf.GlFloat, heightInPx glhf.GlFloat) []glhf.GlFloat {
+func AppendGUIQuadVertices(rawVertices []glhf.GlFloat, t glhf.TextureAtlas, textureIndex int, layer float32, drawPos mgl32.Vec2, widthInPx glhf.GlFloat, heightInPx glhf.GlFloat, color mgl32.Vec4) []glhf.GlFloat {
     var leftU, topV, rightU, bottomV glhf.GlFloat
     if t != nil {
-        leftU, topV, rightU, bottomV = t.GetUV(textureIndex)
+        minU, minV, maxU, maxV := t.GetUVInPx(textureIndex)
+        leftU, topV, rightU, bottomV = glhf.GlFloat(minU), glhf.GlFloat(minV), glhf.GlFloat(maxU), glhf.GlFloat(maxV)
     }
+    r, g, b, a := color.X(), color.Y(), color.Z(), color.W()
     rawVertices = append(rawVertices, []glhf.GlFloat{
         // first triangle
         // Top-left
-        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()), leftU, topV,
+        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()), glhf.GlFloat(layer), leftU, topV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
         // Bottom-left
-        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()) + heightInPx, leftU, bottomV,
+        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()) + heightInPx, glhf.GlFloat(layer), leftU, bottomV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
         // Bottom-right
-        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()) + heightInPx, rightU, bottomV,
+        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()) + heightInPx, glhf.GlFloat(layer), rightU, bottomV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
 
         // second triangle
         // Top-left
-        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()), leftU, topV,
+        glhf.GlFloat(drawPos.X()), glhf.GlFloat(drawPos.Y()), glhf.GlFloat(layer), leftU, topV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
         // Bottom-right
-        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()) + heightInPx, rightU, bottomV,
+        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()) + heightInPx, glhf.GlFloat(layer), rightU, bottomV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
         // Top-right
-        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()), rightU, topV,
+        glhf.GlFloat(drawPos.X()) + widthInPx, glhf.GlFloat(drawPos.Y()), glhf.GlFloat(layer), rightU, topV, glhf.GlFloat(r), glhf.GlFloat(g), glhf.GlFloat(b), glhf.GlFloat(a),
     }...)
     return rawVertices
+}
+func NewGUIQuadVertsFromSize(shader *glhf.Shader, widthInPx, heightInPx int) *glhf.VertexArray[glhf.GlFloat] {
+    var rawVertices []glhf.GlFloat
+    var leftU, topV, rightU, bottomV glhf.GlFloat
+    rightU = 1
+    bottomV = 1
+    quadWidth := glhf.GlFloat(widthInPx)
+    quadHeight := glhf.GlFloat(heightInPx)
+    rawVertices = append(rawVertices, []glhf.GlFloat{
+        // first triangle
+        // Top-left
+        glhf.GlFloat(0), glhf.GlFloat(0), leftU, topV,
+        // Bottom-left
+        glhf.GlFloat(0), glhf.GlFloat(0) + quadHeight, leftU, bottomV,
+        // Bottom-right
+        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0) + quadHeight, rightU, bottomV,
+
+        // second triangle
+        // Top-left
+        glhf.GlFloat(0), glhf.GlFloat(0), leftU, topV,
+        // Bottom-right
+        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0) + quadHeight, rightU, bottomV,
+        // Top-right
+        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0), rightU, topV,
+    }...)
+
+    vertices := glhf.NewVertexArray[glhf.GlFloat](shader, false)
+    vertices.Begin()
+    vertices.SetVertexData(rawVertices)
+    vertices.End()
+    return vertices
 }

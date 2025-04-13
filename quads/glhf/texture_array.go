@@ -16,7 +16,7 @@ type TextureArray struct {
 
 // NewTextureArray creates a new array of 2D textures with the specified width, height, and layers,
 // along with initial pixel values. The pixels must be a sequence of Red values (16bits).
-func NewTextureArray(width, height, layers int, smooth bool, pixels []uint16) *TextureArray {
+func NewTextureArray(width, height, layers int, smooth bool, pixels []uint8) *TextureArray {
     tex := &TextureArray{
         tex: binder{
             restoreLoc: gl.TEXTURE_BINDING_2D_ARRAY,
@@ -38,13 +38,13 @@ func NewTextureArray(width, height, layers int, smooth bool, pixels []uint16) *T
     gl.TexImage3D(
         gl.TEXTURE_2D_ARRAY,
         0,
-        gl.R16UI,
+        gl.RGBA8UI,
         int32(width),
         int32(height),
         int32(layers),
         0,
-        gl.RED_INTEGER,
-        gl.UNSIGNED_SHORT,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_BYTE,
         gl.Ptr(pixels),
     )
 
@@ -92,7 +92,7 @@ func (t *TextureArray) Depth() int {
 }
 
 // SetPixels sets the content of a sub-region of the Texture3D. Pixels must be an RGBA byte sequence.
-func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint16) {
+func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint8) {
     d := 1
     if len(pixels) != w*h*d {
         panic("set pixels: wrong number of pixels")
@@ -106,8 +106,8 @@ func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint16) {
         int32(w),
         int32(h),
         int32(d),
-        gl.RED,
-        gl.UNSIGNED_SHORT,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_BYTE,
         gl.Ptr(pixels),
     )
 }
@@ -119,7 +119,7 @@ func (t *TextureArray) SetSmooth(smooth bool) {
         gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     } else {
-        gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     }
 }

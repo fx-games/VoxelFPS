@@ -4,7 +4,6 @@ import (
     "fmt"
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
 )
 
 type GuiOption interface {
@@ -158,9 +157,9 @@ func (o *GuiOptionFloat) Activate() {
     }
 }
 
-func NewGuiConfig(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont) *GuiConfig {
+func NewGuiConfig(uiContext UIContext) *GuiConfig {
     g := &GuiConfig{
-        GuiList: NewGuiList(shader, uiTexture, font),
+        GuiList: NewGuiList(uiContext),
     }
     g.SetKeyHandler(g.handleKeys)
     g.SetMouseHandler(g.handleMouse)

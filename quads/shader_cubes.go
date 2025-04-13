@@ -166,6 +166,7 @@ layout (location = 0) out vec4 fragmentColor;
 
 void main() {
     vec3 VertNormal = normalLookup[VertNormalIndex];
+    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
 
     ivec2 textureSize2d = textureSize(tex, 0);
 
@@ -214,14 +215,12 @@ void main() {
         localU = uint((1.0 - fract(VertPos.x)) * tileWidth);
         localV = uint(fract(VertPos.z) * tileHeight);
     }
-
     ivec2 texelCoord = ivec2(tileX + localU, tileY + localV);
 
     vec4 surfaceColor = texelFetch(tex, texelCoord, 0);
     
     vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel / 15.0) * camDirection.xyz;
 
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);

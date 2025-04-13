@@ -6,9 +6,9 @@ import (
     "github.com/go-gl/gl/v3.3-core/gl"
 )
 
-// Frame is a fixed resolution texture that you can draw on.
+// Frame is a fixed resolution texture that you can DrawWithOffset on.
 type Frame struct {
-    fb, rf, df binder // framebuffer, read framebuffer, draw framebuffer
+    fb, rf, df binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
     tex        *Texture
 }
 
@@ -33,7 +33,7 @@ func NewFrame(width, height int, smooth bool) *Frame {
                 gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, obj)
             },
         },
-        tex: NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4)),
+        tex: NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D),
     }
 
     gl.GenFramebuffers(1, &f.fb.obj)
@@ -58,12 +58,12 @@ func (f *Frame) ID() uint32 {
     return f.fb.obj
 }
 
-// Begin binds the Frame. All draw operations will target this Frame until End is called.
+// Begin binds the Frame. All DrawWithOffset operations will target this Frame until End is called.
 func (f *Frame) Begin() {
     f.fb.bind()
 }
 
-// End unbinds the Frame. All draw operations will go to whatever was bound before this Frame.
+// End unbinds the Frame. All DrawWithOffset operations will go to whatever was bound before this Frame.
 func (f *Frame) End() {
     f.fb.restore()
 }

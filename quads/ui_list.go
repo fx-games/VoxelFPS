@@ -3,7 +3,6 @@ package quads
 import (
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
     "math"
 )
 
@@ -11,7 +10,6 @@ type GuiList struct {
     labels        []*BitmapFontMesh
     selectedIndex int
 
-    shader          *glhf.Shader
     textColor       mgl32.Vec4
     textSelectColor mgl32.Vec4
     fontHeight      int
@@ -25,19 +23,33 @@ type GuiList struct {
     keyHandler       func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool
     mouseHandler     func(selectedIndex int, xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) bool
 
-    border    *GuiBorder
-    uiTexture *glhf.Texture
+    border *GuiBorder
 
     scale       mgl32.Vec2
     shouldClose bool
 
-    font           BitmapFont
     maxWidth       float32
     maxHeight      float32
     originIsCenter bool
     layoutIsDirty  bool
 
     closeCallback func()
+    uiContext     UIContext
+}
+
+// NewGuiList creates a new GuiList.
+func NewGuiList(uiContext UIContext) *GuiList {
+    _, h := uiContext.Font.Texture.GetAtlasItemSize()
+    return &GuiList{
+        uiContext:       uiContext,
+        fontHeight:      h,
+        textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
+        textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
+        scale:           mgl32.Vec2{1, 1},
+        maxWidth:        math.MaxFloat32,
+        maxHeight:       math.MaxFloat32,
+        layoutIsDirty:   true,
+    }
 }
 
 func (g *GuiList) HandleResize(screenWidth int, screenHeight int, screenCoordScale mgl32.Vec2) {
@@ -105,23 +117,6 @@ func (g *GuiList) HandleScrollEvents(xoff float64, yoff float64) (consumed bool)
         g.SelectPrevious()
     }
     return true
-}
-
-// NewGuiList creates a new GuiList.
-func NewGuiList(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont) *GuiList {
-    _, h := font.Texture.GetAtlasItemSize()
-    return &GuiList{
-        shader:          shader,
-        font:            font,
-        uiTexture:       uiTexture,
-        fontHeight:      h,
-        textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
-        textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
-        scale:           mgl32.Vec2{1, 1},
-        maxWidth:        math.MaxFloat32,
-        maxHeight:       math.MaxFloat32,
-        layoutIsDirty:   true,
-    }
 }
 
 func (g *GuiList) SetOnClose(closeCallback func()) {
@@ -202,7 +197,7 @@ func (g *GuiList) widthNeeded(items []string, maxWidth int) int {
     }
     var widthNeeded int
     for idx := 0; idx < len(items); idx++ {
-        strW, _ := g.font.MeasureString([]string{items[idx]}, mgl32.Vec2{1, 1}, 0, 2)
+        strW, _ := g.uiContext.Font.MeasureString([]string{items[idx]}, mgl32.Vec2{1, 1}, 0, 2)
         if strW > widthNeeded {
             widthNeeded = strW
         }
@@ -259,7 +254,7 @@ func (g *GuiList) layout() {
     items := g.items
     // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
 
-    g.border = NewGuiBorderWithBounds(g.shader, g.uiTexture, topLeft, size)
+    g.border = NewGuiBorderWithBounds(g.uiContext, topLeft, size)
     g.border.SetBackground(mgl32.Vec4{0, 0, 0, 0.6})
     g.border.SetBorderColor(g.textColor)
 
@@ -283,7 +278,7 @@ func (g *GuiList) ReplaceText(index int, text string) {
     if index < 0 || index >= len(g.labels) {
         return
     }
-    width, _ := g.font.MeasureString([]string{text}, g.scale, 0, 2)
+    width, _ := g.uiContext.Font.MeasureString([]string{text}, g.scale, 0, 2)
     //width, _ := g.labels[index].CalculateSizeScaled([]string{text})
     if width > int(g.size.X()) {
         g.labels[index].SetScale(mgl32.Vec2{(float32(g.size.X()) / float32(width)) * g.scale.X(), g.scale.Y()})
@@ -295,7 +290,7 @@ func (g *GuiList) ReplaceText(index int, text string) {
 
 func (g *GuiList) newFontMesh(label string) *BitmapFontMesh {
     size := g.size
-    mesh := NewBitmapFontMesh(g.shader, g.font)
+    mesh := NewBitmapFontMesh(g.uiContext.Shader, g.uiContext.Font, g.uiContext.ColorBatch)
     mesh.SetWidth(int(size.X()))
     mesh.SetCenterOrigin(g.isCentered)
     mesh.SetBackground(g.textColor)
@@ -326,7 +321,6 @@ func (g *GuiList) Draw() {
         g.layout()
         g.layoutIsDirty = false
     }
-    g.shader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
 
     if len(g.labels) > 0 {
         g.border.Draw()

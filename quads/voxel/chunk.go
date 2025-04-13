@@ -457,7 +457,7 @@ func (i Int3) Length() float64 {
 }
 
 func (c *Chunk) Draw(shader *glhf.Shader, modelUniformIndex int) {
-    if c.meshBuffer == nil || c.meshBuffer.TriangleCount() == 0 {
+    if c.meshBuffer == nil {
         return
     }
 

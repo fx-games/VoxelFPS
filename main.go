@@ -12,6 +12,7 @@ import (
     "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/glhf"
     "github.com/memmaker/goray/quads/voxel"
+    "github.com/memmaker/goray/zdwep"
     _ "image/png"
     "log"
     "path/filepath"
@@ -54,24 +55,22 @@ type Game struct {
     lastMouseX float64
     lastMouseY float64
 
-    crossHair *quads.GuiQuad
+    crossHair *quads.AnimatedSprite
 
-    uiRectSpriteTL *quads.GuiQuad
-    uiRectSpriteTR *quads.GuiQuad
-    uiRectSpriteBL *quads.GuiQuad
-    uiRectSpriteBR *quads.GuiQuad
+    uiRectSpriteTL *quads.AnimatedSprite
+    uiRectSpriteTR *quads.AnimatedSprite
+    uiRectSpriteBL *quads.AnimatedSprite
+    uiRectSpriteBR *quads.AnimatedSprite
 
     uiLabel *quads.BitmapFontMesh
     player  *quads.GameObject
 
     relativeHitPos mgl32.Vec3
-    uiAtlas        *glhf.Texture
     entityMenu     *quads.GuiList
 
     widgetStack                []InputReceiver
     widgetsAreBlockingMovement bool
     table                      *quads.GameObject
-    defaultFont                quads.BitmapFont
 
     shouldDrawAABBs        bool
     shouldDrawChunkAABBs   bool
@@ -106,8 +105,9 @@ type Game struct {
     voxelSelectionAction func(pos []voxel.Int3)
 
     currentWeapon               *Weapon
-    weaponQuad                  *quads.GuiQuad
+    weaponQuad                  *quads.AnimatedSprite
     currentPaintGunTextureIndex int
+    doomWeapon                  *DoomWeapon
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
@@ -115,24 +115,26 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.currentPaintGunTextureIndex = -1
     g.GlApplication = app
 
+    g.SetupUIAtlas(eassets.LoadEmbeddedUIAtlas())
+    g.SetupUIFont(eassets.LoadEmbeddedFont(g.UIScale))
+
+    //g.loadDoomWeapon("Charge_Pistol")
+    //g.loadDoomWeapon("Borstal_Shotgun")
+    //g.loadDoomWeapon("Ol_Faithful")
+
     g.SetupUnitCubes()
     //g.SetCursor("assets/cursor.png", 7, 7)
 
     // Load Bitmap Font
-    bitmapFont := eassets.LoadEmbeddedFont(g.UIScale)
-    g.defaultFont = bitmapFont
     // Setup Text Labels
-    g.textLabel = g.NewLabel(bitmapFont)
+    g.textLabel = g.NewLabel()
     g.textLabel.SetBackground(mgl32.Vec4{0, 0, 0, 0.9})
 
-    g.uiLabel = g.NewLabel(bitmapFont)
+    g.uiLabel = g.NewLabel()
     g.uiLabel.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
     g.uiLabel.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.74})
 
-    // Load Textures
-    g.uiAtlas = eassets.LoadEmbeddedUIAtlas()
-
-    g.entityMenu = g.NewList(g.uiAtlas, bitmapFont)
+    g.entityMenu = g.NewList()
     g.entityMenu.SetTextCentered(true)
     g.entityMenu.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
         if key == glfw.KeyE {
@@ -172,12 +174,12 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     // Setup HUD
 
-    g.crossHair = g.Gui.Add(g.uiAtlas, 4, int(0), int(0))
+    g.crossHair = g.Gui.Add(g.UIAtlas, 4, int(0), int(0))
 
-    g.uiRectSpriteTL = g.Gui.Add(g.uiAtlas, 0, 0, 0)
-    g.uiRectSpriteTR = g.Gui.Add(g.uiAtlas, 1, 0, 0)
-    g.uiRectSpriteBR = g.Gui.Add(g.uiAtlas, 2, 0, 0)
-    g.uiRectSpriteBL = g.Gui.Add(g.uiAtlas, 3, 0, 0)
+    g.uiRectSpriteTL = g.Gui.Add(g.UIAtlas, 0, 0, 0)
+    g.uiRectSpriteTR = g.Gui.Add(g.UIAtlas, 1, 0, 0)
+    g.uiRectSpriteBR = g.Gui.Add(g.UIAtlas, 2, 0, 0)
+    g.uiRectSpriteBL = g.Gui.Add(g.UIAtlas, 3, 0, 0)
     g.uiRectSpriteTL.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
     g.uiRectSpriteTR.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
     g.uiRectSpriteBL.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
@@ -225,11 +227,43 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
     events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
 
-    smallGun := g.loadSmallGun()
-    g.weaponQuad = g.Gui.Add(smallGun.Texture, 0, 0, 0)
-    g.switchWeapon(smallGun)
+    //smallGun := g.loadSmallGun()
+
+    //g.weaponQuad = g.Gui.Add(smallGun.Texture, 0, 0, 0)
+
+    //g.switchWeapon(smallGun)
 
     g.HandleResize(g.WindowWidth, g.WindowHeight)
+}
+
+func (g *Game) loadDoomWeapon(weaponName string) {
+    atlas, zscript, err := zdwep.ReadDoomAtlasFromFile(filepath.Join("assets", weaponName+".png"))
+    if err != nil {
+        panic(err)
+    }
+    doomWeapon, err := zdwep.ParseActorScript(zscript)
+    if err != nil {
+        panic(err)
+    }
+    labelMap := make(map[string]int)
+    for i, label := range doomWeapon.ParsedScript {
+        labelMap[label.Label] = i
+    }
+    spriteMap := make(map[string]int)
+    for i := 0; i <= atlas.LastValidIndex(); i++ {
+        spriteName := atlas.NameOfFrame(i)
+        spriteMap[spriteName] = i
+    }
+    d := &DoomWeapon{
+        Name:          weaponName,
+        Atlas:         atlas,
+        WeaponScript:  doomWeapon.ParsedScript,
+        labelToIndex:  labelMap,
+        spriteToIndex: spriteMap,
+        Scale:         g.UIScale,
+    }
+    d.SetState("Ready")
+    g.doomWeapon = d
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
@@ -285,19 +319,20 @@ func (g *Game) HandleResize(windowWidth, windowHeight int) {
     g.entityMenu.SetOrigin(listX, screenCenter.Y())
     g.entityMenu.SetBounds(float32(listWidth), float32(listHeight))
 
-    tileW, tileH := g.uiAtlas.GetAtlasItemSize()
+    tileW, tileH := g.UIAtlas.GetAtlasItemSize()
     centerX := (float32(windowWidth) / 2) - (float32(tileW) / 2)
     centerY := (float32(windowHeight) / 2) - (float32(tileH) / 2)
 
-    g.crossHair.SetPosition(mgl32.Vec2{centerX, centerY})
+    g.crossHair.SetDestRect(mgl32.Vec4{centerX, centerY, centerX + float32(tileW), centerY + float32(tileH)})
+    /*
+       doubleW := windowWidth / 3
+       doubleH := doubleW
+       weaponX := (float32(windowWidth) / 2) - (float32(doubleW) / 2) - 12
+       weaponY := float32(windowHeight) - float32(doubleH)
 
-    doubleW := windowWidth / 3
-    doubleH := doubleW
-    weaponX := (float32(windowWidth) / 2) - (float32(doubleW) / 2) - 12
-    weaponY := float32(windowHeight) - float32(doubleH)
-
-    g.weaponQuad.SetSize(doubleW, doubleH)
-    g.weaponQuad.SetPosition(mgl32.Vec2{weaponX, weaponY})
+       g.weaponQuad.SetSize(doubleW, doubleH)
+       g.weaponQuad.SetPosition(mgl32.Vec2{weaponX, weaponY})
+    */
 }
 func (g *Game) focusedWidget() InputReceiver {
     if len(g.widgetStack) == 0 {
@@ -313,14 +348,13 @@ func (g *Game) Update(elapsed float64) {
         }
     }
 
-    if g.shouldDrawDebugInfo {
+    if true || g.shouldDrawDebugInfo {
         g.printDebugInfo()
     }
 
     g.pollInput(elapsed)
 
     g.physicsSystem.Update(elapsed)
-
     g.updateGUI(elapsed)
 }
 
@@ -420,7 +454,7 @@ func (g *Game) Draw(elapsed float64) {
     }
 }
 func (g *Game) DrawGui(elapsed float64) {
-    if g.textLabel != nil && g.shouldDrawDebugInfo {
+    if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
         g.textLabel.Draw()
     }
 
@@ -438,12 +472,18 @@ func (g *Game) DrawGui(elapsed float64) {
 }
 
 func (g *Game) startWeaponFireAnimation() {
-    now := glfw.GetTime()
-    if g.currentWeapon.DelayBetweenShots > 0 && now-g.currentWeapon.LastShotTime < g.currentWeapon.DelayBetweenShots {
-        return
-    }
-    g.weaponQuad.PlayAnimation(g.currentWeapon.Animation)
-    g.currentWeapon.LastShotTime = now
+    /*
+       now := glfw.GetTime()
+
+       if g.currentWeapon.DelayBetweenShots > 0 && now-g.currentWeapon.LastShotTime < g.currentWeapon.DelayBetweenShots {
+           return
+       }
+       g.weaponQuad.PlayAnimation(g.currentWeapon.Animation)
+       g.currentWeapon.LastShotTime = now
+
+    */
+    //g.doomWeapon.SetState("Fire")
+
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {
@@ -501,7 +541,7 @@ func (g *Game) updateGUI(elapsed float64) {
     g.uiLabel.Show()
     g.entityMenu.Show()
 
-    tileW, _ := g.uiAtlas.GetAtlasItemSize()
+    tileW, _ := g.UIAtlas.GetAtlasItemSize()
     aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
     var transform mgl32.Mat4
     if hoveredObj.HasComponent(quads.ComponentTypeSprite) {
@@ -518,10 +558,10 @@ func (g *Game) updateGUI(elapsed float64) {
     bottomRight[0] -= tileW
     bottomRight[1] -= tileW
 
-    g.uiRectSpriteTL.SetPosition(mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1])})
-    g.uiRectSpriteTR.SetPosition(mgl32.Vec2{float32(topRight[0]), float32(topRight[1])})
-    g.uiRectSpriteBL.SetPosition(mgl32.Vec2{float32(bottomLeft[0]), float32(bottomLeft[1])})
-    g.uiRectSpriteBR.SetPosition(mgl32.Vec2{float32(bottomRight[0]), float32(bottomRight[1])})
+    g.uiRectSpriteTL.SetDestRect(mgl32.Vec4{float32(topLeft[0]), float32(topLeft[1]), float32(topLeft[0] + tileW), float32(topLeft[1] + tileW)})
+    g.uiRectSpriteTR.SetDestRect(mgl32.Vec4{float32(topRight[0]), float32(topRight[1]), float32(topRight[0] + tileW), float32(topRight[1] + tileW)})
+    g.uiRectSpriteBL.SetDestRect(mgl32.Vec4{float32(bottomLeft[0]), float32(bottomLeft[1]), float32(bottomLeft[0] + tileW), float32(bottomLeft[1] + tileW)})
+    g.uiRectSpriteBR.SetDestRect(mgl32.Vec4{float32(bottomRight[0]), float32(bottomRight[1]), float32(bottomRight[0] + tileW), float32(bottomRight[1] + tileW)})
 
     if g.uiLabel != nil {
         hitZone := "body"
@@ -621,7 +661,7 @@ func (g *Game) openCubeTextureMapper() {
     g.SetMouseCapture(false)
 
     g.widgetsAreBlockingMovement = true
-    atlasPicker := g.OpenTextureCube(g.uiAtlas, g.defaultFont, g.AtlasMap, g.voxelBlock.Textures)
+    atlasPicker := g.OpenTextureCube(g.AtlasMap, g.voxelBlock.Textures)
     atlasPicker.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
 
     atlasPicker.SetOnClose(func() {
@@ -630,10 +670,10 @@ func (g *Game) openCubeTextureMapper() {
     g.replaceWidgetStack(atlasPicker)
 }
 
-func (g *Game) pickTexture(atlas *glhf.Texture, onSelected func(selectedIndex int)) {
+func (g *Game) pickTexture(atlas glhf.TextureAtlas, onSelected func(selectedIndex int)) {
     previousMouseState := g.setupModal()
     g.widgetsAreBlockingMovement = true
-    atlasPicker := g.OpenAtlasPicker(g.uiAtlas, g.defaultFont, atlas)
+    atlasPicker := g.OpenAtlasPicker(atlas)
     atlasPicker.SetOnIndexClicked(func(selection int) {
         g.popFromWidgetStack()
         onSelected(selection)
@@ -643,10 +683,9 @@ func (g *Game) pickTexture(atlas *glhf.Texture, onSelected func(selectedIndex in
     })
     g.replaceWidgetStack(atlasPicker)
 }
-
 func (g *Game) openEscapeMenu() {
     previousMouseState := g.setupModal()
-    configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
+    configMenu := g.OpenConfigMenu()
 
     options := []quads.GuiOption{
         quads.NewGuiOptionAction("Continue", g.popFromWidgetStack),
@@ -670,32 +709,31 @@ func (g *Game) setupModal() bool {
 }
 func (g *Game) openWizardMenu() {
     previousMouseState := g.setupModal()
-    configMenu := g.OpenConfigMenu(g.uiAtlas, g.defaultFont)
+    configMenu := g.OpenConfigMenu()
     vModes := g.GetVideoModes()
     var resolutionOptions []string
     for _, vMode := range vModes {
         resolutionOptions = append(resolutionOptions, fmt.Sprintf("%dx%d", vMode.Width, vMode.Height))
     }
     options := []quads.GuiOption{
-        quads.NewGuiOptionBool("Draw Debug Info", &g.shouldDrawDebugInfo),
-        quads.NewGuiOptionAction("Toggle Voxel Renderer", func() {
-            core.BigDebugSwitch = !core.BigDebugSwitch
-            //g.SetCubeShaderDebugSwitch(core.BigDebugSwitch)
-            //g.cubeMap.ForceReupload()
+        quads.NewGuiOptionBool("Show Debug Info", &g.shouldDrawDebugInfo),
+        quads.NewGuiOptionAction("Generate MipMaps for Terrain", func() {
+            //core.BigDebugSwitch = !core.BigDebugSwitch
+            g.cubeMap.GetTerrainTexture().GenerateMipMaps()
         }),
         quads.NewGuiOptionAction("Fullscreen", g.toggleFullscreen),
         quads.NewGuiOptionAction("VSync", g.toggleVsync),
 
         quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowMode),
-        quads.NewGuiOptionBool("Draw Chunk AABBs", &g.shouldDrawChunkAABBs),
-        quads.NewGuiOptionBool("Draw AABBs", &g.shouldDrawAABBs),
-        quads.NewGuiOptionBool("Draw OBBs", &g.shouldDrawOBBs),
-        quads.NewGuiOptionBool("Draw Paths", &g.shouldDrawPaths),
-        quads.NewGuiOptionBool("Draw Sprites", &g.shouldDrawSprites),
-        quads.NewGuiOptionBool("Draw Meshes", &g.shouldDrawMeshes),
-        quads.NewGuiOptionBool("Draw Skybox", &g.ShouldDrawSkybox),
-        quads.NewGuiOptionBool("Draw Minimap", &g.ShouldDrawMinimap),
-        quads.NewGuiOptionBool("Draw Particles", &g.shouldDrawParticles),
+        quads.NewGuiOptionBool("Show Chunk AABBs", &g.shouldDrawChunkAABBs),
+        quads.NewGuiOptionBool("Show AABBs", &g.shouldDrawAABBs),
+        quads.NewGuiOptionBool("Show OBBs", &g.shouldDrawOBBs),
+        quads.NewGuiOptionBool("Show Paths", &g.shouldDrawPaths),
+        quads.NewGuiOptionBool("Show Sprites", &g.shouldDrawSprites),
+        quads.NewGuiOptionBool("Show Meshes", &g.shouldDrawMeshes),
+        quads.NewGuiOptionBool("Show Skybox", &g.ShouldDrawSkybox),
+        quads.NewGuiOptionBool("Show Minimap", &g.ShouldDrawMinimap),
+        quads.NewGuiOptionBool("Show Particles", &g.shouldDrawParticles),
         quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
         quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
     }
@@ -703,7 +741,7 @@ func (g *Game) openWizardMenu() {
     if !g.watchFileChanges {
         options = append(options, quads.NewGuiOptionAction("Start Map Hot Reload", func() {
             g.popFromWidgetStack()
-            g.CreateToast("Watching for map changes", g.defaultFont, g.uiAtlas)
+            g.Toast("Watching for map changes")
             g.watchFileChanges = true
             go g.watchFileChangesLoop()
         }))
@@ -725,10 +763,6 @@ func (g *Game) updateFog() {
     toastMessage := fmt.Sprintf("Fog: %.0f - %.0f", g.fogStart, g.fogEnd)
     g.Toast(toastMessage)
     g.SetFog(g.CeilingColor.Vec3(), g.fogStart, g.fogEnd)
-}
-
-func (g *Game) Toast(toastMessage string) *quads.GuiToast {
-    return g.CreateToast(toastMessage, g.defaultFont, g.uiAtlas)
 }
 
 func (g *Game) toggleFullscreen() {
@@ -762,16 +796,6 @@ func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
         }
     }
 
-    if len(names) == 1 {
-
-        rayHit := g.rayCastFromScreenPos(screenDropX, screenDropY)
-        worldPos, hitGround := rayHit.GroundPosition()
-        if hitGround {
-            g.spawnDecorationFromFile(worldPos, names[0])
-        }
-
-        return
-    }
     /*
        rectSize := 64
        padding := 6

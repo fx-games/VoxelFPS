@@ -284,6 +284,15 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
             ivec = [2]int32(typedValue)
         }
         gl.Uniform2iv(s.uniformLoc[uniform], 1, &ivec[0])
+    case IVec4:
+        var ivec [4]int32
+        switch typedValue := value.(type) {
+        case [4]int32:
+            ivec = typedValue
+        case IntVec4:
+            ivec = [4]int32(typedValue)
+        }
+        gl.Uniform4iv(s.uniformLoc[uniform], 1, &ivec[0])
     case Vec2:
         value := value.(mgl32.Vec2)
         gl.Uniform2fv(s.uniformLoc[uniform], 1, &value[0])
@@ -323,7 +332,10 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
     default:
         panic("set uniform attr: invalid attribute type")
     }
-
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     return true
 }
 
@@ -346,44 +358,20 @@ func (s *Shader) IsUniformsValid() (string, bool) {
     return "", true
 }
 
-func (s *Shader) SetTextureUnit(variableNameInGlsl string, glTextureUnit int) {
+func (s *Shader) SetTextureUnit(uniformLocation int32, glTextureUnit int) {
+    textunit := int32(glTextureUnit - gl.TEXTURE0)
+    gl.Uniform1i(uniformLocation, textunit)
+}
+
+func (s *Shader) UniformLocation(variableNameInGlsl string) int32 {
+    uniformLocation := gl.GetUniformLocation(s.ID(), gl.Str(variableNameInGlsl+"\x00"))
+    return uniformLocation
+}
+func (s *Shader) SetTextureUnitArray(uniformLocation int32, glTextureUnitCount int) {
     // gl.Uniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0)
-    textunit := int32(0)
-    switch glTextureUnit {
-    case gl.TEXTURE0:
-        textunit = 0
-    case gl.TEXTURE1:
-        textunit = 1
-    case gl.TEXTURE2:
-        textunit = 2
-    case gl.TEXTURE3:
-        textunit = 3
-    case gl.TEXTURE4:
-        textunit = 4
-    case gl.TEXTURE5:
-        textunit = 5
-    case gl.TEXTURE6:
-        textunit = 6
-    case gl.TEXTURE7:
-        textunit = 7
-    case gl.TEXTURE8:
-        textunit = 8
-    case gl.TEXTURE9:
-        textunit = 9
-    case gl.TEXTURE10:
-        textunit = 10
-    case gl.TEXTURE11:
-        textunit = 11
-    case gl.TEXTURE12:
-        textunit = 12
-    case gl.TEXTURE13:
-        textunit = 13
-    case gl.TEXTURE14:
-        textunit = 14
-    case gl.TEXTURE15:
-        textunit = 15
-    case gl.TEXTURE16:
-        textunit = 16
+    textunits := make([]int32, glTextureUnitCount)
+    for i := 0; i < glTextureUnitCount; i++ {
+        textunits[i] = int32(i)
     }
-    gl.Uniform1i(gl.GetUniformLocation(s.ID(), gl.Str(variableNameInGlsl+"\x00")), textunit)
+    gl.Uniform1iv(uniformLocation, int32(glTextureUnitCount), &textunits[0])
 }

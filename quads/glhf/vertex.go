@@ -2,8 +2,8 @@ package glhf
 
 import (
     "errors"
-    "fmt"
     "runtime"
+    "unsafe"
 
     "github.com/go-gl/gl/v3.3-core/gl"
 )
@@ -19,193 +19,41 @@ const SizeOfFloat32 = 4
 //
 // Note that you need to Begin a VertexSlice before getting or updating it's elements or drawing it.
 // After you're done with it, you need to End it.
-type VertexSlice[V any] struct {
-    va                   *vertexArray[V]
-    startIndex, endIndex int
-}
 
-// MakeVertexSlice allocates a new vertex array with specified capacity and returns a VertexSlice
-// that points to it's first len elements.
-//
-// Note, that a vertex array is specialized for a specific shader and can't be used with another
-// transformFeedbackShader.
-func MakeVertexSlice(shader *Shader, len, cap int) *VertexSlice[GlFloat] {
-    if len > cap {
-        panic("failed to make vertex slice: len > cap")
-    }
-    return &VertexSlice[GlFloat]{
-        va:         newIndexedVertexArray[GlFloat](shader, cap, nil),
-        startIndex: 0,
-        endIndex:   len,
-    }
-}
-
-func MakeIntVertexSlice(shader *Shader, len, cap int, indices []uint32) *VertexSlice[GlInt] {
-    if len > cap {
-        panic("failed to make vertex slice: len > cap")
-    }
-    return &VertexSlice[GlInt]{
-        va:         newIndexedVertexArray[GlInt](shader, cap, indices),
-        startIndex: 0,
-        endIndex:   len,
-    }
-}
-
-func MakeUIntVertexSlice(shader *Shader, len, cap int, indices []uint32) *VertexSlice[GlUInt] {
-    if len > cap {
-        panic("failed to make vertex slice: len > cap")
-    }
-    return &VertexSlice[GlUInt]{
-        va:         newIndexedVertexArray[GlUInt](shader, cap, indices),
-        startIndex: 0,
-        endIndex:   len,
-    }
-}
-
-type GlInt int32
 type GlUInt uint32
 type GlFloat float32
 
-func MakeIndexedVertexSlice(shader *Shader, len, cap int, indices []uint32) *VertexSlice[GlFloat] {
-    if len > cap {
-        panic("failed to make vertex slice: len > cap")
-    }
-    return &VertexSlice[GlFloat]{
-        va:         newIndexedVertexArray[GlFloat](shader, cap, indices),
-        startIndex: 0,
-        endIndex:   len,
-    }
-}
-func MakeUintIndexedVertexSlice(shader *Shader, capacity int, indices []uint32) *VertexSlice[GlUInt] {
-    return &VertexSlice[GlUInt]{
-        va:         newIndexedVertexArray[GlUInt](shader, capacity, indices),
-        startIndex: 0,
-        endIndex:   len(indices),
-    }
-}
+type VertexArray[V any] struct {
+    vao, vbo                binder
+    format                  AttrFormat
+    vertexSizeInBytes       int
+    attrOffsets             []int
+    shader                  *Shader
+    ibo                     binder
+    primitiveType           uint32
+    arrayElementSizeInBytes int
+    indexType               uint32
+    vertexCount             int
+    indexCount              int
+    use                     uint32
+    currentBufferSize       int
 
-// VertexFormat returns the format of vertex attributes inside the underlying vertex array of this
-// VertexSlice.
-func (vs *VertexSlice[V]) VertexFormat() AttrFormat {
-    return vs.va.format
-}
-
-// Stride returns the number of float32/int32 elements occupied by one vertex.
-func (vs *VertexSlice[V]) Stride() int {
-    return vs.va.stride / 4
-}
-
-// Len returns the length of the VertexSlice (number of vertices).
-func (vs *VertexSlice[V]) Len() int {
-    return vs.endIndex - vs.startIndex
-}
-
-// Cap returns the capacity of an underlying vertex array.
-func (vs *VertexSlice[V]) Cap() int {
-    return vs.va.cap - vs.startIndex
-}
-
-// Slice returns a sub-slice of this VertexSlice covering the range [startIndex, endIndex) (relative to this
-// VertexSlice).
-//
-// Note, that the returned VertexSlice shares an underlying vertex array with the original
-// VertexSlice. Modifying the contents of one modifies corresponding contents of the other.
-func (vs *VertexSlice[V]) Slice(i, j int) *VertexSlice[V] {
-    maxVal := vs.va.cap
-    if len(vs.va.indices) > 0 {
-        maxVal = len(vs.va.indices)
-    }
-    if i < 0 || j < i || j > maxVal {
-        panic("failed to slice vertex slice: index out of range")
-    }
-    return &VertexSlice[V]{
-        va:         vs.va,
-        startIndex: vs.startIndex + i,
-        endIndex:   vs.startIndex + j,
-    }
-}
-
-// SetVertexData sets the contents of the VertexSlice.
-//
-// The data is a slice of float32's or int32's, where each vertex attribute occupies a certain number of
-// elements. Namely, Float occupies 1, Vec2 occupies 2, Vec3 occupies 3 and Vec4 occupies 4. The
-// attribues in the data slice must be in the same order as in the vertex format of this Vertex
-// Slice.
-//
-// If the length of vertices does not match the length of the VertexSlice, this method panics.
-func (vs *VertexSlice[V]) SetVertexData(data []V) {
-    startIndex := vs.startIndex
-    if len(data)/vs.Stride() != vs.Len() && len(vs.va.indices) == 0 {
-        fmt.Println(len(data)/vs.Stride(), vs.Len())
-        panic("set vertex data: wrong length of vertices")
-    }
-    if len(vs.va.indices) > 0 {
-        // vertex offset from index offset
-        startIndex = vs.startIndex / 6 * 4
-    }
-    vs.va.setVertexDataWithOffset(startIndex, data)
-}
-
-// VertexData returns the contents of the VertexSlice.
-//
-// The data is in the same format as with SetVertexData.
-func (vs *VertexSlice[V]) VertexData() []V {
-    return vs.va.vertexData(vs.startIndex, vs.endIndex)
-}
-
-// Draw draws the content of the VertexSlice.
-func (vs *VertexSlice[V]) Draw() {
-    vs.va.draw(vs.startIndex, vs.endIndex)
-}
-
-func (vs *VertexSlice[V]) MultiDraw(startIndices, counts []int32) {
-    vs.va.multiDraw(startIndices, counts)
-}
-
-// Begin binds the underlying vertex array. Calling this method is necessary before using the VertexSlice.
-func (vs *VertexSlice[V]) Begin() {
-    vs.va.begin()
-}
-
-// End unbinds the underlying vertex array. Call this method when you're done with VertexSlice.
-func (vs *VertexSlice[V]) End() {
-    vs.va.end()
-}
-
-func (vs *VertexSlice[V]) SetPrimitiveType(glPrimitiveType uint32) {
-    vs.va.setPrimitiveType(glPrimitiveType)
-}
-
-func (vs *VertexSlice[V]) TriangleCount() int {
-    if len(vs.va.indices) > 0 {
-        return len(vs.va.indices) / 3
-    }
-    return vs.Len() / 3
-}
-
-type vertexArray[V any] struct {
-    vao, vbo      binder
-    cap           int
-    format        AttrFormat
-    stride        int
-    offset        []int
-    shader        *Shader
-    indices       []uint32
-    ibo           binder
-    primitiveType uint32
+    DebugName string
 }
 
 const vertexArrayMinCap = 4
 
-func newIndexedVertexArray[V any](shader *Shader, cap int, indices []uint32) *vertexArray[V] {
-    if cap < vertexArrayMinCap {
-        cap = vertexArrayMinCap
+func NewVertexArray[V any](shader *Shader, isDynamic bool) *VertexArray[V] {
+    usageHint := uint32(gl.STATIC_DRAW)
+    if isDynamic {
+        usageHint = gl.DYNAMIC_DRAW
     }
     glError := gl.GetError()
     if glError != gl.NO_ERROR {
         println("failure before binding buffers", glError)
     }
-    va := &vertexArray[V]{
+    var dummy V
+    va := &VertexArray[V]{
         primitiveType: gl.TRIANGLES,
         vao: binder{
             restoreLoc: gl.VERTEX_ARRAY_BINDING,
@@ -225,12 +73,12 @@ func newIndexedVertexArray[V any](shader *Shader, cap int, indices []uint32) *ve
                 gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj)
             },
         },
-        indices: indices,
-        cap:     cap,
-        format:  shader.VertexFormat(),
-        stride:  shader.VertexFormat().Size(),
-        offset:  make([]int, len(shader.VertexFormat())),
-        shader:  shader,
+        format:                  shader.VertexFormat(),
+        vertexSizeInBytes:       shader.VertexFormat().Size(),
+        arrayElementSizeInBytes: int(unsafe.Sizeof(dummy)),
+        attrOffsets:             make([]int, len(shader.VertexFormat())),
+        shader:                  shader,
+        use:                     usageHint,
     }
 
     offset := 0
@@ -240,28 +88,13 @@ func newIndexedVertexArray[V any](shader *Shader, cap int, indices []uint32) *ve
         default:
             panic(errors.New("failed to create vertex array: invalid attribute type"))
         }
-        va.offset[i] = offset
+        va.attrOffsets[i] = offset
         offset += attr.Type.Size()
     }
     glError = gl.GetError()
     if glError != gl.NO_ERROR {
         println("failure before array buffers", glError)
     }
-    if len(indices) > 0 {
-        gl.GenBuffers(1, &va.ibo.obj) // create buffer and get the name
-        glError = gl.GetError()
-        if glError != gl.NO_ERROR {
-            println("failed to create vertex array: failed to generate index buffer:", glError)
-        }
-        va.ibo.bind()
-        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW) // set the index buffer data
-        glError = gl.GetError()
-        if glError != gl.NO_ERROR {
-            println("failed to create vertex array: failed to set index buffer data:", glError)
-        }
-        va.ibo.restore()
-    }
-
     gl.GenVertexArrays(1, &va.vao.obj) // create a vertex array object
 
     va.vao.bind()
@@ -269,8 +102,7 @@ func newIndexedVertexArray[V any](shader *Shader, cap int, indices []uint32) *ve
     gl.GenBuffers(1, &va.vbo.obj) // create buffer
     defer va.vbo.bind().restore()
 
-    emptyData := make([]byte, cap*va.stride) // creaty an empty buffer of the right size
-    gl.BufferData(gl.ARRAY_BUFFER, len(emptyData), gl.Ptr(emptyData), gl.STATIC_DRAW)
+    println("BUFFER name created", va.DebugName, va.vbo.obj)
 
     glError = gl.GetError()
     if glError != gl.NO_ERROR {
@@ -285,12 +117,80 @@ func newIndexedVertexArray[V any](shader *Shader, cap int, indices []uint32) *ve
 
     va.vao.restore()
 
-    runtime.SetFinalizer(va, (*vertexArray[V]).delete)
+    runtime.SetFinalizer(va, (*VertexArray[V]).delete)
 
     return va
 }
 
-func (va *vertexArray[V]) setAttributesForArray() {
+func (va *VertexArray[V]) CreateQuadIndexBuffer(quadCount int) {
+    indices := make([]uint32, quadCount*6)
+    for i := 0; i < quadCount; i++ {
+        indexOffset := i * 6
+        vertexOffset := i * 4
+        InsertQuadIndices(indices, indexOffset, vertexOffset)
+    }
+    va.SetIndices32(indices)
+}
+
+func InsertQuadIndices(indices []uint32, atIndex int, vertexOffset int) {
+    // Top-left
+    indices[atIndex+0] = uint32(vertexOffset + 0)
+    // Bottom-left
+    indices[atIndex+1] = uint32(vertexOffset + 2)
+    // Bottom-right
+
+    indices[atIndex+2] = uint32(vertexOffset + 3)
+    // Top-left
+    indices[atIndex+3] = uint32(vertexOffset + 0)
+    // Bottom-right
+    indices[atIndex+4] = uint32(vertexOffset + 3)
+    // Top-right
+    indices[atIndex+5] = uint32(vertexOffset + 1)
+}
+
+// ElementsPerVertex returns the number of float32/int32 elements occupied by one vertex.
+func (va *VertexArray[V]) ElementsPerVertex() int {
+    return va.vertexSizeInBytes / va.arrayElementSizeInBytes
+}
+
+// setIndices Creates an index buffer object and sets the indices for the vertex array.
+func (va *VertexArray[V]) setIndices8(indices []uint8) {
+    if len(indices) > 0 {
+        va.indexType = gl.UNSIGNED_BYTE
+        gl.GenBuffers(1, &va.ibo.obj) // create buffer and get the name
+        glError := gl.GetError()
+        if glError != gl.NO_ERROR {
+            println("failed to create vertex array: failed to generate index buffer:", glError)
+        }
+        va.ibo.bind()
+        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices), gl.Ptr(indices), gl.STATIC_DRAW) // set the index buffer data
+        glError = gl.GetError()
+        if glError != gl.NO_ERROR {
+            println("failed to create vertex array: failed to set index buffer data:", glError)
+        }
+        va.ibo.restore()
+        va.indexCount = len(indices)
+    }
+}
+func (va *VertexArray[V]) SetIndices32(indices []uint32) {
+    if len(indices) > 0 {
+        va.indexType = gl.UNSIGNED_INT
+        gl.GenBuffers(1, &va.ibo.obj) // create buffer and get the name
+        glError := gl.GetError()
+        if glError != gl.NO_ERROR {
+            println("failed to create vertex array: failed to generate index buffer:", glError)
+        }
+        va.ibo.bind()
+        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW) // set the index buffer data
+        glError = gl.GetError()
+        if glError != gl.NO_ERROR {
+            println("failed to create vertex array: failed to set index buffer data:", glError)
+        }
+        va.ibo.restore()
+        va.indexCount = len(indices)
+    }
+}
+func (va *VertexArray[V]) setAttributesForArray() {
     for i, attr := range va.format {
         loc := gl.GetAttribLocation(va.shader.program.obj, gl.Str(attr.Name+"\x00")) // get variable location index from shader
 
@@ -315,6 +215,10 @@ func (va *vertexArray[V]) setAttributesForArray() {
             size = 2
             glType = gl.INT
             isFloat = false
+        case IVec4:
+            size = 4
+            glType = gl.INT
+            isFloat = false
         case Vec3:
             size = 3
         case Vec4:
@@ -327,7 +231,7 @@ func (va *vertexArray[V]) setAttributesForArray() {
         if isArrayOfArrays {
             startLocation := uint32(loc)
             for matrixOffset := uint32(0); matrixOffset < 4; matrixOffset++ {
-                gl.VertexAttribPointerWithOffset(startLocation+matrixOffset, size, gl.FLOAT, false, int32(va.stride), uintptr(matrixOffset*uint32(size)*SizeOfFloat32))
+                gl.VertexAttribPointerWithOffset(startLocation+matrixOffset, size, gl.FLOAT, false, int32(va.vertexSizeInBytes), uintptr(matrixOffset*uint32(size)*SizeOfFloat32))
                 gl.VertexAttribDivisor(startLocation+matrixOffset, 0)
                 gl.EnableVertexAttribArray(startLocation + matrixOffset)
             }
@@ -341,8 +245,8 @@ func (va *vertexArray[V]) setAttributesForArray() {
                 size,
                 glType,
                 false,
-                int32(va.stride),
-                uintptr(va.offset[i]),
+                int32(va.vertexSizeInBytes),
+                uintptr(va.attrOffsets[i]),
             )
             glError = gl.GetError()
             if glError != gl.NO_ERROR {
@@ -358,8 +262,8 @@ func (va *vertexArray[V]) setAttributesForArray() {
                 uint32(loc),
                 size,
                 glType,
-                int32(va.stride),
-                uintptr(va.offset[i]),
+                int32(va.vertexSizeInBytes),
+                uintptr(va.attrOffsets[i]),
             )
             gl.EnableVertexAttribArray(uint32(loc)) // Enable and use this attribute for rendering the associated array
         }
@@ -369,7 +273,7 @@ func (va *vertexArray[V]) setAttributesForArray() {
         println("After Vertex Attributes:", glError)
     }
 }
-func (va *vertexArray[V]) delete() {
+func (va *VertexArray[V]) delete() {
     CallNonBlock(func() {
         gl.DeleteVertexArrays(1, &va.vao.obj)
         gl.DeleteBuffers(1, &va.vbo.obj)
@@ -377,98 +281,109 @@ func (va *vertexArray[V]) delete() {
     })
 }
 
-func (va *vertexArray[V]) begin() {
+func (va *VertexArray[V]) Begin() {
     va.vao.bind()
     va.vbo.bind()
-    if len(va.indices) > 0 {
+    if va.isIndexed() {
         va.ibo.bind()
     }
 }
 
-func (va *vertexArray[V]) end() {
-    if len(va.indices) > 0 {
+func (va *VertexArray[V]) isIndexed() bool {
+    return va.ibo.obj > 0
+}
+
+func (va *VertexArray[V]) End() {
+    if va.isIndexed() {
         va.ibo.restore()
     }
     va.vbo.restore()
     va.vao.restore()
 }
 
-// draw draws the content of the VertexSlice.
-// Will result in ONE OpenGL Draw Call
-func (va *vertexArray[V]) draw(startIndex, endIndex int) {
-    count := endIndex - startIndex
-    if len(va.indices) > 0 {
-        // each quad is 6 elements in the index buffer
-        //indexIntoIndexBufferStart := startIndex / 4
-        //indexIntoIndexBufferEnd := endIndex / 4
-        //count = indexIntoIndexBufferEnd - indexIntoIndexBufferStart
-        //count = len(va.indices)
-        //gl.DrawRangeElements(va.primitiveType, uint32(startIndex), uint32(endIndex), int32(endIndex-startIndex), gl.UNSIGNED_INT, gl.Ptr(va.indices))
-        //gl.DrawRangeElements(va.primitiveType, uint32(indexIntoIndexBufferStart), uint32(indexIntoIndexBufferEnd), int32(count), gl.UNSIGNED_INT, gl.Ptr(nil))
-        //gl.DrawElements(va.primitiveType, int32(count), gl.UNSIGNED_INT, gl.Ptr(nil))
-        //0-12 draws both
-        //0-6 draws first
-        //6-12 draws NOTHING?!
-        sizeOfUnsignedInt := 4
-        gl.DrawElementsWithOffset(va.primitiveType, int32(count), gl.UNSIGNED_INT, uintptr(startIndex*sizeOfUnsignedInt))
-        glErr := gl.GetError()
-        if glErr != gl.NO_ERROR {
-            panic(glErr)
-        }
+// DrawWithOffset draws the content of the VertexSlice.
+// Will result in ONE OpenGL draw call.
+// In order to submit one triangle, you need to set the vertex count to 3.
+func (va *VertexArray[V]) DrawWithOffset(startIndex, vertexCount int32) {
+    if va.isIndexed() {
+        gl.DrawElementsWithOffset(va.primitiveType, int32(vertexCount), va.indexType, uintptr(startIndex))
     } else {
-        gl.DrawArrays(va.primitiveType, int32(startIndex), int32(count))
-
+        gl.DrawArrays(va.primitiveType, int32(startIndex), int32(vertexCount))
     }
 }
+func (va *VertexArray[V]) Draw() {
+    var totalCount int32
+    if va.isIndexed() {
+        totalCount = int32(va.indexCount)
+    } else {
+        totalCount = int32(va.vertexCount)
+    }
+    va.DrawWithOffset(0, totalCount)
+}
 
-func (va *vertexArray[V]) drawFromFeedback() {
+func (va *VertexArray[V]) drawInstanced(startIndex, endIndex int, instanceCount int32) {
+    count := endIndex - startIndex
+    sizeOfUnsignedInt := 4
+    gl.DrawElementsInstanced(va.primitiveType, int32(count), va.indexType, gl.Ptr(startIndex*sizeOfUnsignedInt), instanceCount)
+}
+func (va *VertexArray[V]) drawFromFeedback() {
     gl.DrawTransformFeedback(va.primitiveType, va.vbo.obj)
-    err := gl.GetError()
-    if err != gl.NO_ERROR {
-        println("draw from feedback error:", err)
-    }
 }
-func (va *vertexArray[V]) multiDraw(startIndices, counts []int32) {
-    gl.MultiDrawArrays(va.primitiveType, &startIndices[0], &counts[0], int32(len(startIndices)))
-}
-
-func (va *vertexArray[V]) setVertexDataWithOffset(i int, data []V) {
+func (va *VertexArray[V]) setVertexDataWithOffset(offset int, data []V) {
     if len(data) == 0 {
         // avoid setting 0 bytes of buffer data
         return
     }
-
-    glError := gl.GetError()
-    if glError != gl.NO_ERROR {
-        println("before setVertexDataWithOffset:", glError)
-    }
-    //gl.BufferData(gl.ARRAY_BUFFER, len(data)*4, gl.Ptr(data), gl.DYNAMIC_DRAW)
-    gl.BufferSubData(gl.ARRAY_BUFFER, i*va.stride, len(data)*4, gl.Ptr(data))
-
-    glError = gl.GetError()
-    if glError != gl.NO_ERROR {
-        println("after setVertexDataWithOffset:", glError)
-    }
-}
-
-func (va *vertexArray[V]) setVertexData(data []V) {
-    if len(data) == 0 {
-        // avoid setting 0 bytes of buffer data
+    if va.currentBufferSize == 0 {
+        va.setNewBuffer(data)
         return
     }
-    gl.BufferSubData(gl.ARRAY_BUFFER, 0, len(data)*4, gl.Ptr(data))
+    dataSizeInBytes := len(data) * va.arrayElementSizeInBytes
+    startingOffset := offset * va.vertexSizeInBytes
+    requiredSize := (dataSizeInBytes) + startingOffset
+
+    if requiredSize > va.currentBufferSize {
+        va.Orphanize()
+        va.setNewBuffer(data)
+        return
+    }
+    va.vertexCount = len(data) / va.ElementsPerVertex()
+    gl.BufferSubData(gl.ARRAY_BUFFER, startingOffset, dataSizeInBytes, gl.Ptr(data))
+    //println("BUFFER update", va.vbo.obj, va.DebugName, "size", dataSizeInBytes)
 }
 
-func (va *vertexArray[V]) vertexData(i, j int) []V {
+func (va *VertexArray[V]) Orphanize() {
+    gl.BufferData(gl.ARRAY_BUFFER, va.currentBufferSize, nil, va.use)
+    println("BUFFER orphanized", va.DebugName, va.vbo.obj)
+}
+func (va *VertexArray[V]) SetVertexData(data []V) {
+    va.setVertexDataWithOffset(0, data)
+}
+
+func (va *VertexArray[V]) setNewBuffer(data []V) {
+    va.vertexCount = len(data) / va.ElementsPerVertex()
+    va.currentBufferSize = len(data) * va.arrayElementSizeInBytes
+    gl.BufferData(gl.ARRAY_BUFFER, va.currentBufferSize, gl.Ptr(data), va.use)
+    println("BUFFER created", va.vbo.obj, va.DebugName, "size", va.currentBufferSize)
+}
+
+func (va *VertexArray[V]) VertexData() []V {
+    return va.VertexDataFrom(0, va.vertexCount)
+}
+func (va *VertexArray[V]) VertexDataFrom(i, j int) []V {
     if j-i == 0 {
         // avoid getting 0 bytes of buffer data
         return nil
     }
-    data := make([]V, (j-i)*va.stride/4)
-    gl.GetBufferSubData(gl.ARRAY_BUFFER, i*va.stride, len(data)*4, gl.Ptr(data))
+    data := make([]V, (j-i)*va.vertexSizeInBytes/va.arrayElementSizeInBytes)
+    gl.GetBufferSubData(gl.ARRAY_BUFFER, i*va.vertexSizeInBytes, len(data)*va.arrayElementSizeInBytes, gl.Ptr(data))
     return data
 }
 
-func (va *vertexArray[V]) setPrimitiveType(primitiveType uint32) {
+func (va *VertexArray[V]) SetPrimitiveType(primitiveType uint32) {
     va.primitiveType = primitiveType
+}
+
+func (va *VertexArray[V]) TriangleCount() int {
+    return (va.vertexCount / 4) / 2
 }

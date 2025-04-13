@@ -7,16 +7,16 @@ import (
 
 type GuiBorder struct {
     shader          *glhf.Shader
-    texture         *glhf.Texture
-    verts           *glhf.VertexSlice[glhf.GlFloat]
+    texture         glhf.TextureAtlas
     texIndices      []uint16 // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left, 4: top, 5: bottom
     paddingHoriz    int
     paddingVert     int
-    backgroundVerts *glhf.VertexSlice[glhf.GlFloat]
     backgroundColor mgl32.Vec4
     borderColor     mgl32.Vec4
     position        mgl32.Vec2
     size            mgl32.Vec2
+    drawBackground  bool
+    colorBatch      *glhf.SpriteBatch
 }
 
 func CornersToPositionAndSize(cornerPositions []mgl32.Vec2) (pos, size mgl32.Vec2) {
@@ -26,24 +26,24 @@ func CornersToPositionAndSize(cornerPositions []mgl32.Vec2) (pos, size mgl32.Vec
     maxY := cornerPositions[2].Y()
     return mgl32.Vec2{minX, minY}, mgl32.Vec2{maxX - minX, maxY - minY}
 }
-func NewGuiBorder(shader *glhf.Shader, texture *glhf.Texture) *GuiBorder {
+func NewGuiBorder(uiContext UIContext) *GuiBorder {
     g := &GuiBorder{
-        shader:       shader,
-        texture:      texture,
+        shader:       uiContext.Shader,
+        texture:      uiContext.Atlas,
         texIndices:   []uint16{7, 8, 10, 9, 6, 5},
         paddingHoriz: 5,
         paddingVert:  5,
         borderColor:  mgl32.Vec4{1, 1, 1, 1},
+        colorBatch:   uiContext.ColorBatch,
     }
     return g
 }
 
 // NewGuiBorderWithBounds creates a new GuiBorder.
-func NewGuiBorderWithBounds(shader *glhf.Shader, texture *glhf.Texture, pos, size mgl32.Vec2) *GuiBorder {
-    g := NewGuiBorder(shader, texture)
+func NewGuiBorderWithBounds(uiContext UIContext, pos, size mgl32.Vec2) *GuiBorder {
+    g := NewGuiBorder(uiContext)
     g.SetPosition(pos)
     g.SetSize(size)
-    g.uploadVerts()
     return g
 }
 func (g *GuiBorder) SetBorderColor(colors mgl32.Vec4) {
@@ -59,104 +59,73 @@ func (g *GuiBorder) GetAlpha() float32 {
 }
 
 func (g *GuiBorder) SetBackground(background mgl32.Vec4) {
-    g.backgroundVerts = NewGUIQuadVertsFromSubImage(g.shader, nil, 0, int(-g.paddingHoriz), int(-g.paddingVert), int(g.size.X()+float32(g.paddingHoriz)*2), int(g.size.Y()+float32(g.paddingVert)*2))
     g.backgroundColor = background
+    g.drawBackground = true
 }
 
 func (g *GuiBorder) SetPosition(position mgl32.Vec2) {
     g.position = position
 }
 
-func (g *GuiBorder) uploadVerts() {
-    // we need one quad for each corner
-    // and one quad each for a top and bottom border
-
-    tileWidth, tileHeight := g.texture.GetAtlasItemSize()
-
-    var rawVerts []glhf.GlFloat
-
-    tlPos := mgl32.Vec2{float32(-g.paddingHoriz), float32(-g.paddingVert)}
-    tlTextureIndex := g.texIndices[0]
-
-    // top-left corner
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, tlTextureIndex, tlPos, glhf.GlFloat(tileWidth), glhf.GlFloat(tileHeight))
-
-    trPos := mgl32.Vec2{g.size.X() - float32(tileWidth) + float32(g.paddingHoriz), float32(-g.paddingVert)}
-    trTextureIndex := g.texIndices[1]
-
-    // top-right corner
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, trTextureIndex, trPos, glhf.GlFloat(tileWidth), glhf.GlFloat(tileHeight))
-
-    brPos := mgl32.Vec2{g.size.X() - float32(tileWidth) + float32(g.paddingHoriz), g.size.Y() - float32(tileHeight) + float32(g.paddingVert)}
-    brTextureIndex := g.texIndices[2]
-
-    // bottom-right corner
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, brTextureIndex, brPos, glhf.GlFloat(tileWidth), glhf.GlFloat(tileHeight))
-
-    blPos := mgl32.Vec2{float32(-g.paddingHoriz), g.size.Y() - float32(tileHeight) + float32(g.paddingVert)}
-    blTextureIndex := g.texIndices[3]
-
-    // bottom-left corner
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, blTextureIndex, blPos, glhf.GlFloat(tileWidth), glhf.GlFloat(tileHeight))
-
-    // top border (stretch)
-
-    topPos := tlPos
-    borderWidth := g.size.X() + float32(g.paddingHoriz)*2
-    topTextureIndex := g.texIndices[4]
-
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, topTextureIndex, topPos, glhf.GlFloat(borderWidth), glhf.GlFloat(tileHeight))
-
-    // bottom border (stretch)
-
-    bottomPos := blPos
-    bottomTextureIndex := g.texIndices[5]
-
-    rawVerts = AppendGUIQuadVertices(rawVerts, g.texture, bottomTextureIndex, bottomPos, glhf.GlFloat(borderWidth), glhf.GlFloat(tileHeight))
-
-    vertices := glhf.MakeVertexSlice(g.shader, len(rawVerts)/4, len(rawVerts)/4)
-    vertices.Begin()
-    vertices.SetVertexData(rawVerts)
-    vertices.End()
-
-    g.verts = vertices
+func (g *GuiBorder) getBackgroundDstRect() mgl32.Vec4 {
+    minX := g.position.X() - float32(g.paddingHoriz)
+    minY := g.position.Y() - float32(g.paddingVert)
+    maxX := g.position.X() + g.size.X() + float32(g.paddingHoriz)
+    maxY := g.position.Y() + g.size.Y() + float32(g.paddingVert)
+    return mgl32.Vec4{minX, minY, maxX, maxY}
 }
 
 func (g *GuiBorder) Draw() {
-    g.shader.SetUniformAttr(GuiShaderPosition, g.position)
-
-    if g.backgroundVerts != nil {
-        g.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{-1, -1})
-        g.shader.SetUniformAttr(GuiShaderTintColor, g.backgroundColor)
-
-        g.backgroundVerts.Begin()
-        g.backgroundVerts.Draw()
-        g.backgroundVerts.End()
-
+    if g.drawBackground {
+        g.colorBatch.DrawColoredRect(g.getBackgroundDstRect(), g.backgroundColor)
     }
-    if g.verts == nil {
-        g.uploadVerts()
-    }
-    g.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    g.shader.SetUniformAttr(GuiShaderTintColor, g.borderColor)
-
-    g.texture.Begin()
-    g.verts.Begin()
-    g.verts.Draw()
-    g.verts.End()
-    g.texture.End()
+    g.DrawWithoutBackground()
 }
 
 func (g *GuiBorder) DrawWithoutBackground() {
-    g.shader.SetUniformAttr(GuiShaderPosition, g.position)
-    g.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    g.shader.SetUniformAttr(GuiShaderTintColor, g.borderColor)
+    // we need one quad for each corner
+    // and one quad each for a top and bottom border
+    batch := g.texture.GetSpriteBatch()
 
-    g.texture.Begin()
-    g.verts.Begin()
-    g.verts.Draw()
-    g.verts.End()
-    g.texture.End()
+    // top-left corner
+    tlPos := mgl32.Vec2{float32(-g.paddingHoriz), float32(-g.paddingVert)}.Add(g.position)
+    tlTextureIndex := g.texIndices[0]
+    tlSrc, tlDst := g.texture.GetSourceAndDestRects(int(tlTextureIndex), tlPos, mgl32.Vec2{0, 0}, mgl32.Vec2{1, 1})
+    batch.DrawTextured(tlSrc, tlDst, g.borderColor)
+
+    // top-right corner
+    trPos := mgl32.Vec2{float32(g.size.X()) + float32(g.paddingHoriz), float32(-g.paddingVert)}.Add(g.position)
+    trTextureIndex := g.texIndices[1]
+    trSrc, trDst := g.texture.GetSourceAndDestRects(int(trTextureIndex), trPos, mgl32.Vec2{1, 0}, mgl32.Vec2{1, 1})
+    batch.DrawTextured(trSrc, trDst, g.borderColor)
+
+    // bottom-left corner
+    blPos := mgl32.Vec2{float32(-g.paddingHoriz), float32(g.size.Y()) + float32(g.paddingVert)}.Add(g.position)
+    blTextureIndex := g.texIndices[3]
+    blSrc, blDst := g.texture.GetSourceAndDestRects(int(blTextureIndex), blPos, mgl32.Vec2{0, 1}, mgl32.Vec2{1, 1})
+    batch.DrawTextured(blSrc, blDst, g.borderColor)
+
+    // bottom-right corner
+    brPos := mgl32.Vec2{float32(g.size.X()) + float32(g.paddingHoriz), float32(g.size.Y()) + float32(g.paddingVert)}.Add(g.position)
+    brTextureIndex := g.texIndices[2]
+    brSrc, brDst := g.texture.GetSourceAndDestRects(int(brTextureIndex), brPos, mgl32.Vec2{1, 1}, mgl32.Vec2{1, 1})
+    batch.DrawTextured(brSrc, brDst, g.borderColor)
+
+    // top border (stretch)
+    borderWidth := g.size.X() + float32(g.paddingHoriz)*2
+
+    topPos := tlPos
+    topTextureIndex := g.texIndices[4]
+    topSrc := g.texture.GetSourceRect(int(topTextureIndex))
+    topHeight := topSrc[3] - topSrc[1]
+    topDst := mgl32.Vec4{topPos.X(), topPos.Y(), topPos.X() + borderWidth, topPos.Y() + topHeight}
+    batch.DrawTextured(topSrc, topDst, g.borderColor)
+
+    // bottom border (stretch)
+    bottomTextureIndex := g.texIndices[5]
+    botSrc := g.texture.GetSourceRect(int(bottomTextureIndex))
+    botDst := mgl32.Vec4{blDst.X(), blDst.Y(), blDst.X() + borderWidth, blDst.W()}
+    batch.DrawTextured(botSrc, botDst, g.borderColor)
 }
 
 func (g *GuiBorder) ContainsPoint(point mgl32.Vec2) bool {

@@ -8,26 +8,30 @@ import (
 
 const (
     GuiShaderProjection = 0 + iota
-    GuiShaderPosition
-    GuiShaderUVOffset
+    GuiShaderPositionOffset
+    GuiShaderScaleFactor
     GuiShaderTintColor
-    GuiShaderScale
     GuiShaderVerticalCutoff
 )
 
-func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
+const (
+    GuiShaderEffectTextureMapping = uint32(0) + iota
+    GuiShaderEffectColoredBackground
+    GuiShaderEffectColoredBorder
+)
+
+func LoadGuiShader(windowSizeX, windowSizeY int, uiScale mgl32.Vec2) *glhf.Shader {
     var (
         vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec2},
+            {Name: "position", Type: glhf.Vec3},
             {Name: "texCoord", Type: glhf.Vec2},
+            {Name: "vertColor", Type: glhf.Vec4},
         }
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "projection", Type: glhf.Mat4},       // 0
-            glhf.Attr{Name: "screenPos", Type: glhf.Vec2},        // 1
-            glhf.Attr{Name: "uvOffset", Type: glhf.Vec2},         // 2
+            glhf.Attr{Name: "positionOffset", Type: glhf.Vec2},   // 1
+            glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 2
             glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
-            glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 4
-            glhf.Attr{Name: "verticalCutoff", Type: glhf.IVec2},  // 5
         }
         shader *glhf.Shader
     )
@@ -47,10 +51,8 @@ func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
     projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(windowSizeX, windowSizeY)
     shader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
     shader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    shader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-    shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    shader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-    shader.SetUniformAttr(GuiShaderVerticalCutoff, glhf.IntVec2{0, 8192})
+    shader.SetUniformAttr(GuiShaderScaleFactor, uiScale)
+
     shader.End()
 
     glErr := gl.GetError()
@@ -60,62 +62,63 @@ func LoadGuiShader(windowSizeX, windowSizeY int) *glhf.Shader {
     return shader
 }
 
+/*
+shader.SetTextureUnitArray("tex", 2)
+->
+uniform sampler2D tex[2]; // bound texture units 0, 1
+// but cannot be indexed by values passed via the vertex array..
+// -> changing textures would require a new draw call so we can set a uniform
+*/
+
 const guiVertexShaderSource = `
-#version 330 core
+#version 400 core
 
-in vec2 position;
+in vec3 position;
 in vec2 texCoord;
+in vec4 vertColor;
 
-uniform vec2 uvOffset;
-uniform vec2 uiScale;
+uniform uint specialEffect;
 uniform mat4 projection;
-uniform vec2 screenPos;
+
 uniform vec2 scaleFactor;
+uniform vec2 positionOffset;
 
 out vec2 VertUV;
+out vec4 VertColor;
 
 void main() {
-    vec2 pos = (position * scaleFactor) + screenPos;
-    gl_Position = projection * vec4(pos, 0.0, 1.0);
+    // gl_InstanceID, will change for every instance (quad)
+    // gl_VertexID, will change for every vertex index (6 indices per quad)
+
+    vec2 pos = (position.xy * scaleFactor) + positionOffset;
+    vec4 glPos = projection * vec4(pos, 0.0, 1.0);
+    glPos.z = position.z;
+    gl_Position = glPos;
 
     // pass-through for fragment shader
-    VertUV = texCoord + uvOffset;
+    VertUV = texCoord;
+    VertColor = vertColor;
 }
 `
 
 const guiFragmentShaderSource = `
-#version 330 core
+#version 400 core
 
 in vec2 VertUV;
+in vec4 VertColor;
 
 uniform sampler2D tex;
 uniform vec4 appliedTintColor;
-uniform ivec2 verticalCutoff;
 
-layout(origin_upper_left) in vec4 gl_FragCoord;
+//layout(origin_upper_left) in vec4 gl_FragCoord;
 
-out vec4 color;
+out vec4 fragmentColor;
 
 void main() {
-
-    vec4 fragScreen = gl_FragCoord;
-
-    if (fragScreen.y > verticalCutoff.y) {
+  	vec4 texColor = texelFetch(tex, ivec2(VertUV), 0);
+    if (texColor.a == 0.0) {
         discard;
     }
-
-    if (fragScreen.y < verticalCutoff.x) {
-        discard;
-    }
-    
-    if (VertUV.x < 0.0 && VertUV.y < 0.0) {
-        color = appliedTintColor;
-        return;
-    }
-
- 	vec4 texColor = texture(tex, VertUV);
-
-    texColor *= appliedTintColor;
-    color = texColor;
+    fragmentColor = texColor * VertColor * appliedTintColor;
 }
 `

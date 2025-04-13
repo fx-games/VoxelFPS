@@ -11,7 +11,7 @@ import (
 
 type DrawPair struct {
     TextureIndex int
-    VertexData   *glhf.VertexSlice[glhf.GlFloat]
+    VertexData   *glhf.VertexArray[glhf.GlFloat]
 }
 
 type CompoundMesh struct {
@@ -150,7 +150,7 @@ func (m *MeshNode) ConvertVertexData(shader *glhf.Shader) {
     vertexFormatComponents := uint32(shader.VertexFormat().Size() / 4)
     if m.mesh != nil {
         for _, subMesh := range m.mesh.SubMeshes {
-            m.drawPairs = append(m.drawPairs, &DrawPair{TextureIndex: subMesh.TextureIndex, VertexData: subMesh.ToVertexSlice(shader)})
+            m.drawPairs = append(m.drawPairs, &DrawPair{TextureIndex: subMesh.TextureIndex, VertexData: subMesh.ToVertexArray(shader)})
             m.colliders = append(m.colliders, &MeshCollider{VertexData: subMesh.VertexData, VertexCount: subMesh.VertexCount, VertexIndices: subMesh.Indices, VertexFormatComponents: vertexFormatComponents, TransformFunc: m.GetTransformMatrix})
         }
         m.mesh = nil
@@ -671,19 +671,15 @@ type SubMesh struct {
     Indices      []uint32
 }
 
-func (m SubMesh) ToVertexSlice(shader *glhf.Shader) *glhf.VertexSlice[glhf.GlFloat] {
-    var slice *glhf.VertexSlice[glhf.GlFloat]
-    if len(m.Indices) > 0 {
-        slice = glhf.MakeIndexedVertexSlice(shader, m.VertexCount, m.VertexCount, m.Indices)
-    } else {
-        slice = glhf.MakeVertexSlice(shader, m.VertexCount, m.VertexCount)
-    }
-
+func (m SubMesh) ToVertexArray(shader *glhf.Shader) *glhf.VertexArray[glhf.GlFloat] {
+    slice := glhf.NewVertexArray[glhf.GlFloat](shader, false)
+    slice.DebugName = "SubMesh"
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(fmt.Sprintf("glhf.MakeVertexSlice failed with error %d", glErr))
     }
 
+    slice.SetIndices32(m.Indices)
     slice.Begin()
     slice.SetVertexData(m.VertexData)
     slice.End()

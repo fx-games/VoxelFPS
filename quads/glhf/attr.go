@@ -6,7 +6,7 @@ package glhf
 //   AttrFormat{{"position", Vec2}, {"color", Vec4}, {"texCoord": Vec2}}
 type AttrFormat []Attr
 
-// Size returns the total size of all attributes of the AttrFormat.
+// Size returns the total size in bytes of all attributes of the AttrFormat.
 func (af AttrFormat) Size() int {
     total := 0
     for _, attr := range af {
@@ -15,11 +15,20 @@ func (af AttrFormat) Size() int {
     return total
 }
 
+func (af AttrFormat) ElementsPerVertex() int {
+    total := 0
+    for _, attr := range af {
+        total += attr.Type.ArrayElements()
+    }
+    return total
+}
+
 // Attr represents an arbitrary OpenGL attribute, such as a vertex attribute or a shader
 // uniform attribute.
 type Attr struct {
-    Name string
-    Type AttrType
+    Name             string
+    Type             AttrType
+    IsInstancedArray bool // IsInstancedArray: if true, this attribute gets updated per instance
 }
 
 // AttrType represents the type of an OpenGL attribute.
@@ -32,6 +41,7 @@ const (
     Float
     Vec2
     IVec2
+    IVec4
     Vec3
     Vec4
     Mat2
@@ -58,6 +68,8 @@ func (at AttrType) Size() int {
         return 2 * 4
     case IVec2:
         return 2 * 4
+    case IVec4:
+        return 4 * 4
     case Vec3:
         return 3 * 4
     case Vec4:
@@ -85,6 +97,48 @@ func (at AttrType) Size() int {
     }
 }
 
+// ArrayElements returns the number of elements in an vertex array for this type.
+func (at AttrType) ArrayElements() int {
+    switch at {
+    case Int:
+        return 1
+    case UInt:
+        return 1
+    case Float:
+        return 1
+    case Vec2:
+        return 2
+    case IVec2:
+        return 2
+    case IVec4:
+        return 4
+    case Vec3:
+        return 3
+    case Vec4:
+        return 4
+    case Mat2:
+        return 2 * 2
+    case Mat23:
+        return 2 * 3
+    case Mat24:
+        return 2 * 4
+    case Mat3:
+        return 3 * 3
+    case Mat32:
+        return 3 * 2
+    case Mat34:
+        return 3 * 4
+    case Mat4:
+        return 4 * 4
+    case Mat42:
+        return 4 * 2
+    case Mat43:
+        return 4 * 3
+    default:
+        panic("size of vertex attribute type: invalid type")
+    }
+}
+
 func (at AttrType) Std140BaseAlignment() int {
     switch at {
     case Int:
@@ -97,6 +151,8 @@ func (at AttrType) Std140BaseAlignment() int {
         return 2 * 4
     case IVec2:
         return 2 * 4
+    case IVec4:
+        return 4 * 4
     case Vec3:
         return 4 * 4
     case Vec4:
@@ -136,6 +192,8 @@ func (at AttrType) GLSLName() string {
         return "vec2"
     case IVec2:
         return "ivec2"
+    case IVec4:
+        return "ivec4"
     case Vec3:
         return "vec3"
     case Vec4:

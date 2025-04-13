@@ -16,7 +16,7 @@ const (
 )
 
 type MeshBuffer struct {
-    drawableVertexData *glhf.VertexSlice[glhf.GlUInt]
+    drawableVertexData *glhf.VertexArray[glhf.GlUInt]
     flatVertexData     []glhf.GlUInt
     sortedVertexData   map[CubeSide][]glhf.GlUInt
     vertexCount        int
@@ -126,9 +126,11 @@ func (m *MeshBuffer) UploadMeshToGPU(shader *glhf.Shader) {
         return
     }
     if m.drawMode == Indexed {
-        m.drawableVertexData = glhf.MakeUIntVertexSlice(shader, m.vertexCount, m.vertexCount, m.indexBuffer)
+        vArray := glhf.NewVertexArray[glhf.GlUInt](shader, false)
+        vArray.SetIndices32(m.indexBuffer)
+        m.drawableVertexData = vArray
     } else {
-        m.drawableVertexData = glhf.MakeUIntVertexSlice(shader, m.vertexCount, m.vertexCount, nil)
+        m.drawableVertexData = glhf.NewVertexArray[glhf.GlUInt](shader, false)
     }
     m.drawableVertexData.Begin()
     if m.drawMode == Partial {
@@ -156,7 +158,7 @@ func (m *MeshBuffer) Draw(shaderId uint32) {
 
     m.drawableVertexData.Begin()
 
-    ShaderValidate(shaderId)
+    //ShaderValidate(shaderId)
 
     m.drawableVertexData.Draw()
 
@@ -176,16 +178,6 @@ func ShaderValidate(shaderId uint32) {
         gl.GetProgramInfoLog(shaderId, logLen, nil, &infoLog[0])
         shaderErr := fmt.Errorf(string(infoLog))
         panic(shaderErr)
-    }
-}
-func (m *MeshBuffer) PartialDraw(camDirection Int3) {
-    if m.drawableVertexData == nil {
-        return
-    }
-    if faceIndices, ok := m.faceMap[camDirection]; ok {
-        m.drawableVertexData.Begin()
-        m.drawableVertexData.MultiDraw(faceIndices.Start, faceIndices.Count)
-        m.drawableVertexData.End()
     }
 }
 
@@ -283,7 +275,7 @@ func NewMeshBuffer() *MeshBuffer {
     return &MeshBuffer{
         indexMap:         make(map[uint32]uint32),
         sortedVertexData: faceMap,
-        drawMode:         Flat,
+        drawMode:         Indexed,
         faceMap:          make(map[Int3]MultiDrawIndex),
     }
 }

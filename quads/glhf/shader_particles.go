@@ -59,7 +59,7 @@ func loadParticleShader(vertexFormat AttrFormat) *Shader {
     return particleShader
 }
 
-const transformFeedbackVertexShaderSource = `#version 330 core
+const transformFeedbackVertexShaderSource = `#version 400 core
 
 uniform float deltaTime;
 uniform float maxDistance;
@@ -112,7 +112,7 @@ void main() {
     vs_out.origin = origin;
 }`
 
-const quadParticleGeometryShaderSource = `#version 330 core
+const quadParticleGeometryShaderSource = `#version 400 core
 
 layout (points) in;
 layout (triangle_strip, max_vertices = 4) out;
@@ -185,7 +185,7 @@ void main() {
     EndPrimitive();
 }`
 
-const quadParticleVertexShaderSource = `#version 330 core
+const quadParticleVertexShaderSource = `#version 400 core
 
 in vec3 position;
 in float lifetimeLeft;
@@ -212,7 +212,7 @@ void main() {
     vs_out.colorBegin = colorBegin;
 }`
 
-const quadParticleFragmentShaderSource = `#version 330 core
+const quadParticleFragmentShaderSource = `#version 400 core
 
 out vec4 color;
 

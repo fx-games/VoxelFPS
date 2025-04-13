@@ -23,24 +23,20 @@ Buttons:
 
 type GuiTextureSlots struct {
     background *GuiBorder
-    uiShader   *glhf.Shader
-    uiTexture  *glhf.Texture
 
-    texSlots        []*glhf.VertexSlice[glhf.GlFloat]
     assignedIndices []int
     slotSize        int
     slotPositions   []mgl32.Vec2
     labels          []*BitmapFontMesh
-    shouldClouse    bool
+    shouldClose     bool
     closeCallback   func()
-    font            BitmapFont
 
-    screenWidth   int
-    screenHeight  int
-    atlasTexture  *glhf.Texture
-    selectionQuad TexturedQuad
-    hoveredIndex  int
-    labelTexts    []string
+    screenWidth  int
+    screenHeight int
+    atlasTexture glhf.TextureAtlas
+    hoveredIndex int
+    labelTexts   []string
+    uiContext    UIContext
 }
 
 func (g *GuiTextureSlots) HandleDrop(names []string, x float64, y float64) bool {
@@ -113,22 +109,20 @@ func (g *GuiTextureSlots) HandleScrollEvents(xoff float64, yoff float64) (consum
 }
 
 func (g *GuiTextureSlots) ShouldClose() bool {
-    return g.shouldClouse
+    return g.shouldClose
 }
 
 func (g *GuiTextureSlots) Close() {
-    g.shouldClouse = true
+    g.shouldClose = true
     if g.closeCallback != nil {
         g.closeCallback()
     }
 }
 
-func NewGuiTextureSlots(uiShader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont, atlasForDisplay *glhf.Texture, labels []string) *GuiTextureSlots {
+func NewGuiTextureSlots(uiContext UIContext, atlasForDisplay glhf.TextureAtlas, labels []string) *GuiTextureSlots {
     return &GuiTextureSlots{
-        uiShader:        uiShader,
-        uiTexture:       uiTexture,
-        shouldClouse:    false,
-        font:            font,
+        shouldClose:     false,
+        uiContext:       uiContext,
         atlasTexture:    atlasForDisplay,
         assignedIndices: make([]int, len(labels)),
         labelTexts:      labels,
@@ -138,14 +132,13 @@ func (g *GuiTextureSlots) SetCentered(screenWidth int, screenHeight int) {
 
     g.screenWidth = screenWidth
     g.screenHeight = screenHeight
-    g.texSlots = nil
     g.slotPositions = nil
     g.labels = nil
 
     backgWidth := 0.9 * float32(screenWidth)
     backgHeight := 0.3 * float32(screenHeight)
 
-    g.background = NewGuiBorderWithBounds(g.uiShader, g.uiTexture, mgl32.Vec2{float32(screenWidth) * 0.05, float32(screenHeight) * 0.05}, mgl32.Vec2{backgWidth, backgHeight})
+    g.background = NewGuiBorderWithBounds(g.uiContext, mgl32.Vec2{float32(screenWidth) * 0.05, float32(screenHeight) * 0.05}, mgl32.Vec2{backgWidth, backgHeight})
     g.background.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.8})
 
     topLeftX := float32(screenWidth) * 0.1
@@ -155,15 +148,13 @@ func (g *GuiTextureSlots) SetCentered(screenWidth int, screenHeight int) {
     tileHeight := tileWidth
     drawY := int(topLeftY)
 
-    g.selectionQuad = NewSelectionQuad(g.uiShader, tileWidth, tileHeight)
-
     g.slotSize = tileWidth
     for i := 0; i < len(g.labelTexts); i++ {
         drawX := int(topLeftX) + i*(tileWidth)
         slotPos := mgl32.Vec2{float32(drawX), float32(drawY)}
         g.slotPositions = append(g.slotPositions, slotPos)
 
-        label := NewBitmapFontMesh(g.uiShader, g.font)
+        label := NewBitmapFontMesh(g.uiContext.Shader, g.uiContext.Font, g.uiContext.ColorBatch)
         label.SetTintColor(mgl32.Vec4{1, 1, 1, 1})
         label.SetWidth(tileWidth)
         label.SetCenterOrigin(true)
@@ -172,47 +163,28 @@ func (g *GuiTextureSlots) SetCentered(screenWidth int, screenHeight int) {
         label.SetPosition(slotPos.Add(mgl32.Vec2{float32(tileWidth) * 0.5, float32(tileHeight) + (float32(labelH) * 0.5)}))
 
         g.labels = append(g.labels, label)
-
-        g.texSlots = append(g.texSlots, NewGUIQuadVertsFromSubImage(g.uiShader, g.atlasTexture, uint16(0), drawX, drawY, tileWidth, tileHeight))
     }
+
 }
 
 func (g *GuiTextureSlots) Draw() {
-    g.uiShader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-    g.uiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-    g.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    g.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
 
-    g.background.Draw()
-
-    g.uiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-
-    g.atlasTexture.Begin()
-    for slotIndex, texSlot := range g.texSlots {
+    for slotIndex, slotPos := range g.slotPositions {
         texIndex := g.assignedIndices[slotIndex]
+        drawCol := mgl32.Vec4{1, 1, 1, 1}
         if g.hoveredIndex == slotIndex {
-            g.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 0, 1})
-        } else {
-            g.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
+            drawCol = mgl32.Vec4{1, 1, 0.5, 1}
         }
-        if texIndex >= 0 {
-            u, v, _, _ := g.atlasTexture.GetUV(uint16(texIndex))
-            g.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{float32(u), float32(v)})
-            g.uiShader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-            texSlot.Begin()
-            texSlot.Draw()
-            texSlot.End()
-        } else {
-            slotPos := g.slotPositions[slotIndex]
-            g.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-            g.uiShader.SetUniformAttr(GuiShaderPosition, slotPos)
-            g.selectionQuad.Draw()
+        dstRect := mgl32.Vec4{slotPos.X(), slotPos.Y(), slotPos.X() + float32(g.slotSize), slotPos.Y() + float32(g.slotSize)}
+
+        if texIndex >= 0 { // valid
+            srcRect := g.atlasTexture.GetSourceRect(texIndex)
+            g.atlasTexture.GetSpriteBatch().DrawTextured(srcRect, dstRect, drawCol)
+        } else { // just draw the empty slot
+            g.uiContext.ColorBatch.DrawColoredOutline(dstRect, 1, drawCol)
         }
     }
-    g.atlasTexture.End()
 
-    g.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    g.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
     for _, label := range g.labels {
         label.Draw()
     }

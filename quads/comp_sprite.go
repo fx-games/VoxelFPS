@@ -11,7 +11,7 @@ type SpriteComponent struct {
     CameraFollowMode  SpriteMode
     SpriteOrigin      SpriteOrigin
     TextureIndices    []uint16
-    AtlasTexture      *glhf.Texture
+    AtlasTexture      *glhf.TextureAtlasFixed
     Tint              mgl32.Vec4
     currentFrame      int
     currentAnimation  int
@@ -27,7 +27,7 @@ func (s *SpriteComponent) Type() ComponentType {
     return ComponentTypeSprite
 }
 
-func NewSpriteFloor(texture *glhf.Texture, texIndex []uint16) *SpriteComponent {
+func NewSpriteFloor(texture *glhf.TextureAtlasFixed, texIndex []uint16) *SpriteComponent {
     return &SpriteComponent{
         CameraFollowMode: SpriteModeFollowHorizontal,
         SpriteOrigin:     SpriteOriginBottomCenter,
@@ -38,7 +38,7 @@ func NewSpriteFloor(texture *glhf.Texture, texIndex []uint16) *SpriteComponent {
     }
 }
 
-func NewSprite(texture *glhf.Texture, texIndex []uint16) *SpriteComponent {
+func NewSprite(texture *glhf.TextureAtlasFixed, texIndex []uint16) *SpriteComponent {
     return &SpriteComponent{
         CameraFollowMode: SpriteModeFollowHorizontalAndVertical,
         SpriteOrigin:     SpriteOriginCenter,
@@ -140,7 +140,7 @@ func (s *SpriteComponent) TextureIndexAnimated(frames []uint16, showTimes []floa
     textureIndexToShowThisFrame := frames[s.currentFrame]
     return textureIndexToShowThisFrame, true
 }
-func (s *SpriteComponent) Atlas() *glhf.Texture {
+func (s *SpriteComponent) Atlas() *glhf.TextureAtlasFixed {
     return s.AtlasTexture
 }
 

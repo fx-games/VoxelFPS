@@ -1,6 +1,7 @@
 package quads
 
 import (
+    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
 )
@@ -10,9 +11,27 @@ type Minimap struct {
     Pixels        []uint8
     Width, Height int
     GetColor      func(x, y int) [4]uint8
-    GuiQuad       *glhf.VertexSlice[glhf.GlFloat]
+    GuiQuad       *glhf.VertexArray[glhf.GlFloat]
     Scale         float32
     DrawPos       mgl32.Vec2
+    shader        *glhf.Shader
+}
+
+func NewMiniMap(shader *glhf.Shader, width int, height int, getColor func(x int, y int) [4]uint8) *Minimap {
+    scale := float32(4)
+    emptyMap := make([]uint8, width*height*4)
+    minimapTexture := glhf.NewTextureRGBA(width, height, false, emptyMap, gl.TEXTURE_2D)
+
+    minimap := &Minimap{
+        Width:    width,
+        Height:   height,
+        GetColor: getColor,
+        Texture:  minimapTexture,
+        Pixels:   emptyMap,
+        Scale:    scale,
+        shader:   shader,
+    }
+    return minimap
 }
 
 func (m *Minimap) Update() {
@@ -32,23 +51,20 @@ func (m *Minimap) Update() {
     m.Texture.End()
 }
 
-func (m *Minimap) Draw(guiShader *glhf.Shader) {
-    guiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    guiShader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-    guiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    guiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{m.Scale, m.Scale})
-    guiShader.SetUniformAttr(GuiShaderPosition, m.DrawPos)
-
-    m.GuiQuad.Begin()
+func (m *Minimap) Draw() {
     m.Texture.Begin()
 
+    m.GuiQuad.Begin()
     m.GuiQuad.Draw()
+    m.GuiQuad.End()
 
     m.Texture.End()
-    m.GuiQuad.End()
 }
 
 func (m *Minimap) Resize(windowWidth int, windowHeight int) {
     xPosRightBorder := float32(windowWidth) - float32(m.Width)*m.Scale
     m.DrawPos = mgl32.Vec2{xPosRightBorder, 0}
+    layer := float32(0.9)
+    m.GuiQuad = NewGUIQuadVerts(m.shader, layer, xPosRightBorder, 0, float32(m.Width), float32(m.Height), m.Scale)
+    m.GuiQuad.DebugName = "Minimap"
 }

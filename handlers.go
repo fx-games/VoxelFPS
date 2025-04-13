@@ -29,7 +29,7 @@ func (we WeaponEffect) IsHitscan() bool {
 }
 
 type Weapon struct {
-    Texture           *glhf.Texture
+    Texture           *glhf.TextureAtlasFixed
     Animation         int
     FireFrame         int
     WeaponEffect      WeaponEffect
@@ -38,7 +38,8 @@ type Weapon struct {
 }
 
 func (g *Game) loadSmallGun() *Weapon {
-    weaponAtlas := quads.LoadTextureAtlas("assets/smallgun_sheet.png", 64, 64)
+    weaponAtlas := g.LoadFixedGuiAtlasWithBatch("assets/smallgun_sheet.png", 64, 64, 2)
+
     anim := quads.SpriteAnimation{
         Frames:            [][]uint16{{0, 1, 2, 3, 4}},
         ShowTimeInSeconds: []float32{0.01, 0.01, 0.1, 0.1, 0.1},
@@ -47,7 +48,7 @@ func (g *Game) loadSmallGun() *Weapon {
     return NewWeapon(weaponAtlas, animIndex, 2, WeaponEffectHitscanVoxelDestruction, 0.1)
 }
 
-func NewWeapon(texture *glhf.Texture, animation int, fireFrame int, effect WeaponEffect, delayBetweenShots float64) *Weapon {
+func NewWeapon(texture *glhf.TextureAtlasFixed, animation int, fireFrame int, effect WeaponEffect, delayBetweenShots float64) *Weapon {
     return &Weapon{
         Texture:           texture,
         Animation:         animation,

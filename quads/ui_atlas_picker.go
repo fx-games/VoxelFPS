@@ -5,37 +5,46 @@ import (
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/geometry"
     "github.com/memmaker/goray/quads/glhf"
+    "github.com/memmaker/goray/tpack"
     "path/filepath"
     "strconv"
     "strings"
 )
 
 type GuiAtlasPicker struct {
-    atlas                 *glhf.Texture
+    atlas                 glhf.TextureAtlas
     border                *GuiBorder
-    uiTexture             *glhf.Texture
-    uiShader              *glhf.Shader
-    font                  BitmapFont
     fontHeight            int
     textColor             mgl32.Vec4
     textSelectColor       mgl32.Vec4
-    scale                 mgl32.Vec2
     screenSize            geometry.Point
-    atlasVerts            *glhf.VertexSlice[glhf.GlFloat]
     shouldClose           bool
     onClose               func()
     onIndexClicked        func(selection int)
     selectionTexture      *glhf.Texture
-    selectionVerts        *glhf.VertexSlice[glhf.GlFloat]
     currentSelectionIndex int
     atlasTopLeft          geometry.Point
-    tileSize              geometry.PointF
+    scaledTileSize        geometry.PointF
     atlasSize             geometry.Point
     screenScale           mgl32.Vec2
 
     verticalScrollOffset float32
     indexLabel           *BitmapFontMesh
     isDragging           bool
+    tileScaleFactor      float32
+    uiContext            UIContext
+}
+
+func NewGuiAtlasPicker(uiContext UIContext, atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
+    _, h := uiContext.Font.Texture.GetAtlasItemSize()
+    return &GuiAtlasPicker{
+        atlas:           atlasForSelection,
+        uiContext:       uiContext,
+        fontHeight:      h,
+        textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
+        textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
+        indexLabel:      NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
+    }
 }
 
 func (a *GuiAtlasPicker) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
@@ -53,13 +62,7 @@ func (a *GuiAtlasPicker) HandleKeyEvents(key glfw.Key, scancode int, action glfw
 
 func (a *GuiAtlasPicker) selectionPosition() mgl32.Vec2 {
     selectionIndex := a.currentSelectionIndex
-    tileSizeX, _ := a.atlas.GetAtlasItemSize()
-    itemsPerRow := a.atlas.Width() / tileSizeX
-    row := float32(selectionIndex / itemsPerRow)
-    col := float32(selectionIndex % itemsPerRow)
-    drawPosX := col * float32(a.tileSize.X)
-    drawPosY := row * float32(a.tileSize.Y)
-    return mgl32.Vec2{drawPosX, drawPosY + a.verticalScrollOffset}
+    return a.atlas.GetTopLeftInPxScaled(selectionIndex, a.tileScaleFactor).Add(a.atlasTopLeft.ToVec2()).Add(mgl32.Vec2{0, a.verticalScrollOffset})
 }
 
 func (a *GuiAtlasPicker) HandleMousePosEvents(xpos float64, ypos float64) (consumed bool) {
@@ -91,14 +94,7 @@ func (a *GuiAtlasPicker) indexFromScreenPos(xpos float64, ypos float64) int {
     relativeX := int(xpos) - a.atlasTopLeft.X
     relativeY := int(ypos) - a.atlasTopLeft.Y - int(a.verticalScrollOffset)
 
-    tileSizeX, _ := a.atlas.GetAtlasItemSize()
-    itemsPerRow := a.atlas.Width() / tileSizeX
-
-    col := int(float64(relativeX) / a.tileSize.X)
-    row := int(float64(relativeY) / a.tileSize.Y)
-
-    index := row*itemsPerRow + col
-    return index
+    return a.atlas.GetIndexFromPxPosScaled(relativeX, relativeY, a.tileScaleFactor)
 }
 
 func (a *GuiAtlasPicker) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
@@ -129,13 +125,13 @@ func (a *GuiAtlasPicker) HandleScrollEvents(xoff float64, yoff float64) (consume
         a.verticalScrollOffset = 0
         return true
     }
-    a.verticalScrollOffset += float32(yoff * 0.5 * float64(a.tileSize.Y))
-    if a.verticalScrollOffset > 0 {
+    a.verticalScrollOffset += float32(yoff * 0.5 * float64(a.scaledTileSize.Y))
+    if a.verticalScrollOffset < 0 {
         a.verticalScrollOffset = 0
     }
 
-    if a.verticalScrollOffset < float32(-scrollingContentHeight+scrollingSpace) {
-        a.verticalScrollOffset = float32(-scrollingContentHeight + scrollingSpace)
+    if a.verticalScrollOffset > float32(scrollingContentHeight+scrollingSpace) {
+        a.verticalScrollOffset = float32(scrollingContentHeight + scrollingSpace)
     }
     return true
 }
@@ -153,43 +149,37 @@ func (a *GuiAtlasPicker) HandleDrop(names []string, xpos float64, ypos float64) 
     }
 
     index := a.indexFromScreenPos(xpos, ypos)
-    if index < 0 || index+len(names) > a.atlas.LastValidIndex() {
+    if index < 0 || index+len(names)-1 > a.atlas.LastValidIndex() {
         return false
     }
-    tileWidth, tileHeight := a.atlas.GetAtlasItemSize()
-    var pixelsFromFiles = make([][]uint8, 0, len(names))
+    //tileWidth, tileHeight := a.atlas.GetAtlasItemSize()
+    var droppedImages = make([]tpack.NamedImage, 0, len(names))
     for _, name := range names {
         ext := filepath.Ext(name)
         if strings.ToLower(ext) == ".png" {
-            loadedImage := LoadImage(name)
-            if loadedImage.Bounds().Dx() != int(tileWidth) || loadedImage.Bounds().Dy() != int(tileHeight) {
+            loadedImage := tpack.NamedImage{
+                Image: LoadImage(name),
+                Name:  realBaseName(name),
+            }
+            // REMINDER: This won't allow arbitrary sizes
+
+            if !a.atlas.CanAppend(loadedImage) {
                 continue
             }
-            pixels := pixelsFromImage(loadedImage)
-            pixelsFromFiles = append(pixelsFromFiles, pixels)
+            //pixels := pixelsFromImage(loadedImage)
+            droppedImages = append(droppedImages, loadedImage)
         }
     }
-    if len(pixelsFromFiles) == 0 {
+    if len(droppedImages) == 0 {
         return false
     }
 
-    a.appendImages(index, pixelsFromFiles)
+    a.appendImages(index, droppedImages)
     return true
 }
 
-func NewGuiAtlasPicker(shader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont, atlasForSelection *glhf.Texture) *GuiAtlasPicker {
-    _, h := font.Texture.GetAtlasItemSize()
-    return &GuiAtlasPicker{
-        atlas:           atlasForSelection,
-        uiShader:        shader,
-        font:            font,
-        uiTexture:       uiTexture,
-        fontHeight:      h,
-        textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
-        textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
-        scale:           mgl32.Vec2{1, 1},
-        indexLabel:      NewBitmapFontMesh(shader, font),
-    }
+func realBaseName(name string) string {
+    return strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
 }
 
 func (a *GuiAtlasPicker) HandleResize(screenWidth int, screenHeight int, screenCoordScale mgl32.Vec2) {
@@ -198,32 +188,26 @@ func (a *GuiAtlasPicker) HandleResize(screenWidth int, screenHeight int, screenC
     borderSize := a.screenSize.Scaled(0.9, 0.4)
     borderDrawPos := a.screenSize.CenterInBottomHalf(borderSize)
 
-    a.border = NewGuiBorderWithBounds(a.uiShader, a.uiTexture, borderDrawPos.ToVec2(), borderSize.ToVec2())
+    a.border = NewGuiBorderWithBounds(a.uiContext, borderDrawPos.ToVec2(), borderSize.ToVec2())
     a.border.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.8})
 
     a.layoutAtlas(borderDrawPos, borderSize)
 }
 
 func (a *GuiAtlasPicker) layoutAtlas(borderDrawPos geometry.Point, borderSize geometry.Point) {
-    atlasWidth, atlasHeight := a.atlas.Width(), a.atlas.Height()
-    aspectRatio := float64(atlasWidth) / float64(atlasHeight)
+    atlasWidth, _ := a.atlas.Width(), a.atlas.Height()
 
     a.atlasTopLeft, a.atlasSize = borderDrawPos.CenterInParent(borderSize, geometry.PointF{X: 0.9, Y: 0.9})
-    atlasFullHeight := int(float64(a.atlasSize.X) / aspectRatio)
 
-    itemSizeX, itemSizeY := a.atlas.GetAtlasItemSize()
-    itemsPerRow := atlasWidth / itemSizeX
-    itemsPerCol := atlasHeight / itemSizeY
-    a.tileSize = geometry.PointF{X: float64(a.atlasSize.X) / float64(itemsPerRow), Y: float64(atlasFullHeight) / float64(itemsPerCol)}
+    minU, minV, maxU, maxV := a.atlas.GetUVInPx(0)
+    itemSizeX, itemSizeY := maxU-minU, maxV-minV
+    a.tileScaleFactor = float32(a.atlasSize.X) / float32(atlasWidth)
+    a.scaledTileSize = geometry.PointF{X: float64(itemSizeX) * float64(a.tileScaleFactor), Y: float64(itemSizeY) * float64(a.tileScaleFactor)}
 
-    a.atlasVerts = NewGUIQuadVerts(a.uiShader, float32(a.atlasTopLeft.X), float32(a.atlasTopLeft.Y), float32(a.atlasSize.X), float32(atlasFullHeight))
-    a.selectionVerts = NewGUIQuadVerts(a.uiShader, float32(a.atlasTopLeft.X), float32(a.atlasTopLeft.Y), float32(a.tileSize.X), float32(a.tileSize.Y))
-
-    a.selectionTexture = glhf.NewRectOutlineTexture(int(a.tileSize.X), int(a.tileSize.Y), 1)
+    a.selectionTexture = glhf.NewRectOutlineTexture(int(a.scaledTileSize.X), int(a.scaledTileSize.Y), 1)
 }
 
-func (a *GuiAtlasPicker) UpdateAtlas(newAtlas *glhf.Texture) {
-    a.atlas = newAtlas
+func (a *GuiAtlasPicker) UpdateAtlas() {
     pos := geometry.Point{X: int(a.border.position.X()), Y: int(a.border.position.Y())}
     size := geometry.Point{X: int(a.border.size.X()), Y: int(a.border.size.Y())}
     a.layoutAtlas(pos, size)
@@ -233,48 +217,42 @@ func (a *GuiAtlasPicker) atlasCutoff() glhf.IntVec2 {
 }
 
 func (a *GuiAtlasPicker) Draw() {
-    a.uiShader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, 0})
-    a.uiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-    a.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    a.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-
     a.border.Draw()
 
-    a.uiShader.SetUniformAttr(GuiShaderPosition, mgl32.Vec2{0, a.verticalScrollOffset})
-    a.uiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-    a.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    a.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-    a.uiShader.SetUniformAttr(GuiShaderVerticalCutoff, a.atlasCutoff())
+    batch := a.atlas.GetSpriteBatch()
+    batch.DrawTextured(a.atlasSrcRect(), a.atlasDstRect(), mgl32.Vec4{1, 1, 1, 1})
 
-    a.atlas.Begin()
-    a.atlasVerts.Begin()
-    a.atlasVerts.Draw()
-    a.atlasVerts.End()
-    a.atlas.End()
-
-    selectionPosition := a.selectionPosition()
-    a.uiShader.SetUniformAttr(GuiShaderPosition, selectionPosition)
-    a.uiShader.SetUniformAttr(GuiShaderScale, mgl32.Vec2{1, 1})
-    a.uiShader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{0.2, 1, 0.2, 1})
-    a.uiShader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
-
-    a.selectionTexture.Begin()
-    a.selectionVerts.Begin()
-    a.selectionVerts.Draw()
-    a.selectionVerts.End()
-    a.selectionTexture.End()
-
-    if a.isDragging {
-        a.uiShader.SetUniformAttr(GuiShaderVerticalCutoff, glhf.IntVec2{0, 8192})
-    } else {
-        a.indexLabel.SetPosition(selectionPosition.Add(a.atlasTopLeft.ToVec2()))
+    if a.isCurrentSelectionValid() {
+        selectionPosition := a.selectionPosition()
+        selectDest := mgl32.Vec4{selectionPosition.X(), selectionPosition.Y(), selectionPosition.X() + float32(a.scaledTileSize.X), selectionPosition.Y() + float32(a.scaledTileSize.Y)}
+        a.uiContext.ColorBatch.DrawColoredOutline(selectDest, 1, mgl32.Vec4{1, 1, 1, 1})
+        if !a.isDragging {
+            a.indexLabel.SetPosition(selectionPosition)
+            a.indexLabel.Draw()
+        }
     }
 
-    a.indexLabel.Draw()
-
-    a.uiShader.SetUniformAttr(GuiShaderVerticalCutoff, glhf.IntVec2{0, 8192})
+    if a.isDragging {
+        a.indexLabel.Draw()
+    }
 }
 
+func (a *GuiAtlasPicker) atlasDstRect() mgl32.Vec4 {
+    topLeft := a.atlasTopLeft.ToVec2()
+    atlasSize := a.atlasSize.ToVec2()
+    bottomRight := topLeft.Add(atlasSize)
+    return mgl32.Vec4{topLeft.X(), topLeft.Y(), bottomRight.X(), bottomRight.Y()}
+}
+
+func (a *GuiAtlasPicker) atlasSrcRect() mgl32.Vec4 {
+    width := float32(a.atlas.Width())
+    displayAspectRatio := float64(a.atlasSize.X) / float64(a.atlasSize.Y)
+    height := float32(a.atlas.Width()) / float32(displayAspectRatio)
+    xStart := float32(0)
+    yStart := a.verticalScrollOffset
+    rect := mgl32.Vec4{xStart, yStart, width, yStart + height}
+    return rect
+}
 func (a *GuiAtlasPicker) Close() {
     a.shouldClose = true
     if a.onClose != nil {
@@ -304,6 +282,10 @@ func (a *GuiAtlasPicker) EndDrag() {
     a.isDragging = false
 }
 
-func (a *GuiAtlasPicker) appendImages(index int, files [][]uint8) {
-    a.atlas.SetPixelsAtIndexMulti(index, files)
+func (a *GuiAtlasPicker) appendImages(index int, files []tpack.NamedImage) {
+    a.atlas.AppendImages(index, files)
+}
+
+func (a *GuiAtlasPicker) isCurrentSelectionValid() bool {
+    return a.atlas.HasIndex(a.currentSelectionIndex)
 }

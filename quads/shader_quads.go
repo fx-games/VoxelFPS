@@ -149,10 +149,6 @@ uniform sampler2D tex;
 out vec4 fragmentColor;
 
 void main() {
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
-
-    vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
 
     vec4 surfaceColor = texture(tex, vec2(VertUV.x, VertUV.y));
 
@@ -165,6 +161,11 @@ void main() {
     vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0);
 
     surfaceColor *= tintColor;
-    
+
+    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
+    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
+
+    //vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
+
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
 }`

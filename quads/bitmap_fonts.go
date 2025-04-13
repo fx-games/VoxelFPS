@@ -7,18 +7,12 @@ import (
     "fmt"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
-    "image"
-    "image/color"
     "io"
-    "math"
     "os"
-    "path"
     "strings"
 )
 
 type BitmapFontMesh struct {
-    backgroundVertices      *glhf.VertexSlice[glhf.GlFloat]
-    vertices                *glhf.VertexSlice[glhf.GlFloat]
     currentPos              mgl32.Vec2
     shader                  *glhf.Shader
     font                    BitmapFont
@@ -37,9 +31,14 @@ type BitmapFontMesh struct {
     lastText                 []string
     renderBackground         bool
     fieldWidth               int
+    colorBatch               *glhf.SpriteBatch
+    backgroundRect           mgl32.Vec4
+    layer                    float32
+    tWidth                   int
+    tHeight                  int
 }
 
-func NewBitmapFontMesh(shader *glhf.Shader, font BitmapFont) *BitmapFontMesh {
+func NewBitmapFontMesh(shader *glhf.Shader, font BitmapFont, colorBatch *glhf.SpriteBatch) *BitmapFontMesh {
     b := &BitmapFontMesh{
         shader:                  shader,
         font:                    font,
@@ -47,6 +46,8 @@ func NewBitmapFontMesh(shader *glhf.Shader, font BitmapFont) *BitmapFontMesh {
         scale:                   mgl32.Vec2{1, 1},
         paddingBetweenLines:     2,
         tintColor:               mgl32.Vec4{1, 1, 1, 1},
+        colorBatch:              colorBatch,
+        layer:                   0.2,
     }
     return b
 }
@@ -91,6 +92,10 @@ func getDimensions(text []string) (int, int) {
     return maxChars, len(text)
 }
 
+func (t *BitmapFontMesh) UpdateVertices() {
+    t.SetMultilineText(t.lastText)
+}
+
 // SetMultilineText sets the text to be displayed by the BitmapFontMesh.
 // NOTE: Will trigger a recalculation of the mesh vertices and their upload to the GPU.
 func (t *BitmapFontMesh) SetMultilineText(text []string) {
@@ -107,46 +112,22 @@ func (t *BitmapFontMesh) SetMultilineText(text []string) {
     }
     t.lastText = text
     t.isHidden = false
-    paddingBetweenCharacters := float32(t.paddingBetweenCharacters)
-    paddingBetweenLines := float32(t.paddingBetweenLines)
-
-    curDrawPos := mgl32.Vec2{0, 0}
-    cW, cH := t.font.Texture.GetAtlasItemSize()
-    charWidth := float32(cW) * t.scale.X()
-    charHeight := float32(cH) * t.scale.Y()
-    gWidth := glhf.GlFloat(charWidth)
-    gHeight := glhf.GlFloat(charHeight)
 
     tWidth, tHeight := t.CalculateSizeScaled(text)
+    t.tWidth = tWidth
+    t.tHeight = tHeight
 
-    backgroundDrawPos := curDrawPos
+    backgroundDrawPos := mgl32.Vec2{0, 0}
     if t.originIsCenter {
-        curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(-tWidth / 2), float32(-tHeight / 2)})
         backgroundDrawPos = backgroundDrawPos.Add(mgl32.Vec2{float32(-t.fieldWidth / 2), float32(-tHeight / 2)})
     }
 
     backgroundWidth := max(tWidth, t.fieldWidth)
-    var backgroundVertices []glhf.GlFloat
-    backgroundVertices = AppendGUIQuadVertices(backgroundVertices, t.font.Texture, 0, backgroundDrawPos, glhf.GlFloat(backgroundWidth), glhf.GlFloat(tHeight))
-    t.setBackgroundVertices(backgroundVertices)
+    t.backgroundRect = mgl32.Vec4{backgroundDrawPos.X(), backgroundDrawPos.Y(), backgroundDrawPos.X() + float32(backgroundWidth), backgroundDrawPos.Y() + float32(tHeight)}
+}
 
-    var rawVertices []glhf.GlFloat
-    for _, line := range text {
-        for _, character := range line {
-            if character == ' ' {
-                curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(charWidth + paddingBetweenCharacters), 0})
-                continue
-            }
-            textureIndex := t.characterToTextureIndex(character)
-
-            rawVertices = AppendGUIQuadVertices(rawVertices, t.font.Texture, textureIndex, curDrawPos, gWidth, gHeight)
-
-            curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(charWidth + paddingBetweenCharacters)})
-        }
-
-        curDrawPos = mgl32.Vec2{0, curDrawPos.Y() + float32(charHeight+paddingBetweenLines)}
-    }
-    t.setVertices(rawVertices)
+func (t *BitmapFontMesh) getBackgroundRect() mgl32.Vec4 {
+    return t.backgroundRect.Add(mgl32.Vec4{t.currentPos.X(), t.currentPos.Y(), t.currentPos.X(), t.currentPos.Y()})
 }
 
 func isSameText(text []string, text2 []string) bool {
@@ -173,60 +154,49 @@ func (t *BitmapFontMesh) CalculateSizeScaled(text []string) (int, int) {
     return t.font.MeasureString(text, t.scale, float32(t.paddingBetweenCharacters), float32(t.paddingBetweenLines))
 }
 func (t *BitmapFontMesh) Draw() {
-    if t.vertices == nil || t.isHidden {
+    if t.isHidden {
         return
     }
 
-    t.shader.SetUniformAttr(GuiShaderPosition, t.currentPos) // position offset
-
-    if t.renderBackground && t.backgroundVertices != nil {
-        t.shader.SetUniformAttr(GuiShaderTintColor, t.backgroundColor)
-        t.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{-1, -1})
-        t.backgroundVertices.Begin()
-        t.backgroundVertices.Draw()
-        t.backgroundVertices.End()
-        t.shader.SetUniformAttr(GuiShaderUVOffset, mgl32.Vec2{0, 0})
+    if t.renderBackground {
+        t.colorBatch.DrawColoredRect(t.getBackgroundRect(), t.backgroundColor)
     }
 
-    if t.useTintColor {
-        t.shader.SetUniformAttr(GuiShaderTintColor, t.tintColor) // tint
-    } else {
-        t.shader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
+    fontBatch := t.font.Texture.GetSpriteBatch()
+    curDrawPos := t.currentPos
+
+    if t.originIsCenter {
+        curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(-t.tWidth / 2), float32(-t.tHeight / 2)})
     }
-    /*
-       if t.useDiscardColor {
-           t.shader.SetUniformAttr(GuiShaderDiscardedColor, t.discardColor.Vec4(1.0)) // discard
-       } else {
-           t.shader.SetUniformAttr(GuiShaderDiscardedColor, mgl32.Vec4{0, 0, 0, 0})
-       }
-    */
-    t.font.Texture.Begin()
+    paddingBetweenCharacters := float32(t.paddingBetweenCharacters)
+    paddingBetweenLines := float32(t.paddingBetweenLines)
 
-    t.vertices.Begin()
-    t.vertices.Draw()
-    t.vertices.End()
+    cW, cH := t.font.Texture.GetAtlasItemSize()
+    charWidth := float32(cW) * t.scale.X()
+    charHeight := float32(cH) * t.scale.Y()
 
-    t.font.Texture.End()
-}
+    for _, line := range t.lastText {
+        for _, character := range line {
+            if character == ' ' {
+                curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(charWidth + paddingBetweenCharacters), 0})
+                continue
+            }
+            textureIndex := t.characterToTextureIndex(character)
 
-func (t *BitmapFontMesh) setVertices(rawVertices []glhf.GlFloat) {
-    vertices := glhf.MakeVertexSlice(t.shader, len(rawVertices)/4, len(rawVertices)/4)
-    vertices.Begin()
-    vertices.SetVertexData(rawVertices)
-    vertices.End()
-    t.vertices = vertices
-}
+            //rawVertices = AppendGUIQuadVertices(rawVertices, t.font.Texture, int(textureIndex), t.layer, curDrawPos, gWidth, gHeight, t.tintColor)
+            srcRect := t.font.Texture.GetSourceRect(int(textureIndex))
+            destRect := mgl32.Vec4{curDrawPos.X(), curDrawPos.Y(), curDrawPos.X() + float32(charWidth), curDrawPos.Y() + float32(charHeight)}
+            fontBatch.DrawTextured(srcRect, destRect, t.tintColor)
 
-func (t *BitmapFontMesh) setBackgroundVertices(rawVertices []glhf.GlFloat) {
-    vertices := glhf.MakeVertexSlice(t.shader, len(rawVertices)/4, len(rawVertices)/4)
-    vertices.Begin()
-    vertices.SetVertexData(rawVertices)
-    vertices.End()
-    t.backgroundVertices = vertices
+            curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(charWidth + paddingBetweenCharacters)})
+        }
+
+        curDrawPos = mgl32.Vec2{0, curDrawPos.Y() + float32(charHeight+paddingBetweenLines)}
+    }
 }
 
 func (t *BitmapFontMesh) Clear() {
-    t.vertices = nil
+    t.lastText = []string{}
 }
 
 func (t *BitmapFontMesh) SetPosition(pos mgl32.Vec2) {
@@ -254,7 +224,7 @@ func (t *BitmapFontMesh) SetWidth(width int) {
 }
 
 func (t *BitmapFontMesh) GetRect() (pos, size mgl32.Vec2) {
-    if t.vertices == nil {
+    if len(t.lastText) == 0 {
         return mgl32.Vec2{0, 0}, mgl32.Vec2{0, 0}
     }
     width, height := t.Size()
@@ -377,106 +347,6 @@ func NewIndexFromDescription(desc AtlasDescription) BitmapFontIndex {
     }
 
     return result
-}
-
-func CreateAtlasFromPBMs(directory string, glyphWidth, glyphHeight int) (*glhf.Texture, BitmapFontIndex) {
-    // 967 files
-    // 8x14 pixels
-
-    // 8*16 = 128
-    // 14*16 = 224
-    indices := map[rune]uint16{}
-    textureIndex := uint16(0)
-    entries, readError := os.ReadDir(directory)
-    if readError != nil {
-        println(fmt.Sprintf("[Atlas] Error reading directory %s", directory))
-        return nil, nil
-    }
-    fileCount := len(entries)
-    squareCount := math.Ceil(math.Sqrt(float64(fileCount)))
-
-    padding := int(0)
-
-    atlasWidth := int(math.Ceil(squareCount * float64(glyphWidth+padding)))
-    atlasHeight := int(math.Ceil(squareCount * float64(glyphHeight+padding)))
-
-    if atlasWidth%4 != 0 {
-        atlasWidth += 4 - (atlasWidth % 4)
-    }
-
-    if atlasHeight%4 != 0 {
-        atlasHeight += 4 - (atlasHeight % 4)
-    }
-
-    pixels := image.NewNRGBA(image.Rect(0, 0, atlasWidth, atlasHeight)) // iterate over the files in the directory
-    var drawColor color.Color
-    for _, dirEntry := range entries {
-        extension := strings.ToLower(path.Ext(dirEntry.Name()))
-        if extension != ".pbm" {
-            continue
-        }
-        nameWithoutExtension := strings.TrimSuffix(dirEntry.Name(), extension)
-        hexString := nameWithoutExtension
-
-        glyph := runeFromHexString(hexString)
-
-        texturePath := path.Join(directory, dirEntry.Name())
-        file, err := os.Open(texturePath)
-        if err != nil {
-            println(fmt.Sprintf("[Atlas] Error loading %s from %s", dirEntry, texturePath))
-            continue
-        }
-        img, _, err := image.Decode(file)
-        if err != nil {
-            continue
-        }
-        file.Close()
-        if glyphWidth != img.Bounds().Dx() {
-            println(fmt.Sprintf("[Atlas] Error loading %s from %s: width mismatch", dirEntry, texturePath))
-            continue
-        }
-        if glyphHeight != img.Bounds().Dy() {
-            println(fmt.Sprintf("[Atlas] Error loading %s from %s: height mismatch", dirEntry, texturePath))
-            continue
-        }
-
-        texturesPerRow := uint16(atlasWidth / glyphWidth) // 256 / 16 = 16
-        // copy the image into the atlas
-        tilePosX := textureIndex % texturesPerRow
-        tilePosY := textureIndex / texturesPerRow
-        offsetX := tilePosX * (uint16(glyphWidth) + uint16(padding))
-        offsetY := tilePosY * (uint16(glyphHeight) + uint16(padding))
-        for x := 0; x < glyphWidth; x++ {
-            for y := 0; y < glyphHeight; y++ {
-                r, _, _, _ := img.At(x, y).RGBA()
-
-                drawColor = color.Transparent
-                if r < 0x8000 { // black
-                    drawColor = color.White
-                }
-                pixels.Set(int(offsetX)+x, int(offsetY)+y, drawColor)
-            }
-        }
-        indices[glyph] = textureIndex
-        println(fmt.Sprintf("[Atlas] %U %d -> %s", glyph, textureIndex, dirEntry))
-        textureIndex++
-    }
-    /*
-    	// debug write the atlas to a file
-    	file, err := os.Create(path.Join(directory, "debug_atlas.png"))
-    	if err != nil {
-    		println("could not create debug_atlas.png")
-    	}
-    	err = png.Encode(file, pixels)
-    	if err != nil {
-    		println("could not encode debug_atlas.png")
-    	}
-    	file.Close()
-    */
-
-    texture := glhf.NewTextureRGBA(atlasWidth, atlasHeight, false, pixels.Pix)
-    texture.SetAtlasItemSize(glyphWidth, glyphHeight)
-    return texture, indices
 }
 
 func runeFromHexString(hexString string) rune {

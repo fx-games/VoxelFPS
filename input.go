@@ -143,6 +143,10 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
     }
 
+    if key == glfw.KeyF11 {
+        g.testPackedAtlasPicker()
+    }
+
     if key == glfw.KeyF {
         g.gravitationEnabled = !g.gravitationEnabled
     }
@@ -178,7 +182,7 @@ func (g *Game) spawnCurrentGameObject() {
         sprite.Tint = mgl32.Vec4{1, 1, 1, 1}
         g.Sprites.Add(sprite)
 
-        aabb := voxel.NewAABB(sprite.AtlasTexture.AABBFromOpaqueAtIndex(sprite.TextureIndices[0]))
+        aabb := voxel.NewAABB(sprite.AtlasTexture.AABBFromOpaqueAtIndex(int(sprite.TextureIndices[0])))
         physicsComponent := quads.NewPhysicsComponent(false, aabb)
         decoToSpawn.SetComponent(physicsComponent)
         g.physicsSystem.AddObject(physicsComponent)

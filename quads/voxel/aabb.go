@@ -26,7 +26,7 @@ func NewCollisionInfo(intersection bool, timeOfImpact float32, normalAtImpact mg
 type AABB struct {
     minCoords            mgl32.Vec3
     maxCoords            mgl32.Vec3
-    vertexesForDebugDraw *glhf.VertexSlice[glhf.GlFloat]
+    vertexesForDebugDraw *glhf.VertexArray[glhf.GlFloat]
     id                   int
 }
 
@@ -80,7 +80,7 @@ func (a AABB) MinkowskiDifference(other AABB) AABB {
 
 func (a AABB) Draw(shader *glhf.Shader) {
     if a.vertexesForDebugDraw == nil {
-        a.vertexesForDebugDraw = glhf.MakeVertexSlice(shader, 3*2*4, 3*2*4) // 2*4 verts for top and bottom, 2*4 verts for sides
+        a.vertexesForDebugDraw = glhf.NewVertexArray[glhf.GlFloat](shader, false) // 2*4 verts for top and bottom, 2*4 verts for sides
         a.vertexesForDebugDraw.SetPrimitiveType(gl.LINES)
         a.vertexesForDebugDraw.Begin()
         a.vertexesForDebugDraw.SetVertexData([]glhf.GlFloat{

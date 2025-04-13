@@ -105,7 +105,7 @@ func (t *Texture3D) SetPixels(x, y, z, w, h, d int, pixels []uint8) {
         int32(w),
         int32(h),
         int32(d),
-        gl.RED,
+        gl.RED_INTEGER,
         gl.UNSIGNED_BYTE,
         gl.Ptr(pixels),
     )
@@ -118,7 +118,7 @@ func (t *Texture3D) SetSmooth(smooth bool) {
         gl.TexParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
     } else {
-        gl.TexParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.TexParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
     }
 }

@@ -3,7 +3,6 @@ package quads
 import (
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
 )
 
 type GuiButton struct {
@@ -14,10 +13,10 @@ type GuiButton struct {
     Action          func()
 }
 
-func NewGuiButton(uiShader *glhf.Shader, uiTexture *glhf.Texture, font BitmapFont) *GuiButton {
+func NewGuiButton(uiContext UIContext) *GuiButton {
     g := &GuiButton{
-        border:          NewGuiBorder(uiShader, uiTexture),
-        label:           NewBitmapFontMesh(uiShader, font),
+        border:          NewGuiBorder(uiContext),
+        label:           NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
         colorForeground: mgl32.Vec4{1, 1, 1, 1},
         colorBackground: mgl32.Vec4{0, 0, 0, 0.8},
     }

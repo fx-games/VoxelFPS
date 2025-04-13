@@ -32,7 +32,7 @@ func LoadSkyboxShader(cam core.Camera) *glhf.Shader {
         panic(errorMsg)
     }
     shader.Begin()
-    shader.SetUniformAttr(0, cam.GetProjectionViewMatrix())
+    shader.SetUniformAttr(SkyboxShaderCamProjectionView, cam.GetProjectionViewMatrix())
     shader.End()
 
     glErr := gl.GetError()
@@ -43,7 +43,7 @@ func LoadSkyboxShader(cam core.Camera) *glhf.Shader {
     return shader
 }
 
-const skyboxVertexShaderSource = `#version 330 core
+const skyboxVertexShaderSource = `#version 400 core
 
 in vec3 position;
 
@@ -57,7 +57,7 @@ void main() {
     gl_Position = pos.xyww;
 }`
 
-const skyboxFragmentShaderSource = `#version 330 core
+const skyboxFragmentShaderSource = `#version 400 core
 
 layout (location = 0) out vec4 color;
 

@@ -8,10 +8,9 @@ import (
     "github.com/memmaker/goray/quads/glhf"
     "github.com/memmaker/goray/quads/voxel"
     "path/filepath"
-    "strings"
 )
 
-func (g *Game) spawnProjectileImpact(worldPos mgl32.Vec3, atlas *glhf.Texture, spriteAnimationIndex int) {
+func (g *Game) spawnProjectileImpact(worldPos mgl32.Vec3, atlas *glhf.TextureAtlasFixed, spriteAnimationIndex int) {
     firstFrameIndex := g.Sprites.GetFirstFrameIndex(spriteAnimationIndex, 0)
     sprite := quads.NewSprite(atlas, []uint16{firstFrameIndex})
     newProjectile := quads.NewGameObject("Impact")
@@ -40,32 +39,6 @@ func (g *Game) spawnPlayer(cam *core.FPSCamera, spawn mgl32.Vec3, dir mgl32.Vec2
     return player
 }
 
-func (g *Game) spawnDecorationFromFile(spawnPos mgl32.Vec3, filename string) *quads.GameObject {
-    lowerExt := strings.ToLower(filepath.Ext(filename))
-    name := filepath.Base(filename)[:len(filepath.Base(filename))-len(lowerExt)]
-
-    goDeco := quads.NewGameObject(name)
-    goDeco.Transform().SetPosition(spawnPos)
-
-    if lowerExt == ".png" {
-        spriteTexture := quads.LoadTexture(filename)
-        sprite := quads.NewSpriteFloor(spriteTexture, []uint16{0})
-        goDeco.SetComponent(sprite)
-        g.Sprites.Add(sprite)
-        physics := quads.NewPhysicsComponent(false, voxel.NewAABB(spriteTexture.AABBFromOpaque()))
-        goDeco.SetComponent(physics)
-        g.physicsSystem.AddObject(physics)
-    } else if lowerExt == ".glb" {
-        mesh, meshAABB := g.Meshes.NewMesh(filename)
-        goDeco.SetComponent(mesh)
-        g.Meshes.Add(mesh)
-        physics := quads.NewPhysicsComponent(false, meshAABB)
-        goDeco.SetComponent(physics)
-        g.physicsSystem.AddObject(physics)
-    }
-    return goDeco
-}
-
 func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.GameObject {
     goFromEntity := quads.NewGameObject(entity.Name)
     goFromEntity.Transform().SetPosition(spawnPos)
@@ -91,7 +64,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
             atlasFile := filepath.Join("assets", "sheets", entity.SpriteSheetName+".png") //"assets/scientist_sheet.png"
             tileWidth := entity.SpriteSheetTileSize.X
             tileHeight := entity.SpriteSheetTileSize.Y
-            atlas = quads.LoadTextureAtlas(atlasFile, tileWidth, tileHeight)
+            atlas = quads.LoadTextureAtlasFixed(atlasFile, tileWidth, tileHeight)
         }
         for i, index := range entity.TextureIndices {
             if int(index) > atlas.LastValidIndex() {
@@ -101,7 +74,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
         }
         sprite := quads.NewSpriteFloor(atlas, entity.TextureIndices)
 
-        aabb = voxel.NewAABB(atlas.AABBFromOpaqueAtIndex(entity.TextureIndices[0]))
+        aabb = voxel.NewAABB(atlas.AABBFromOpaqueAtIndex(int(entity.TextureIndices[0])))
 
         goFromEntity.SetComponent(sprite)
         if entity.IsTransparent {
@@ -118,7 +91,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
         sprite := goFromEntity.Sprite()
         atlas := sprite.AtlasTexture
         dyingAABB := voxel.NewAABB(
-            atlas.AABBFromOpaqueAtIndex(g.Sprites.GetLastFrameIndex(int(quads.AnimDying), 0)),
+            atlas.AABBFromOpaqueAtIndex(int(g.Sprites.GetLastFrameIndex(int(quads.AnimDying), 0))),
         )
 
         physics.SetAABBForAnimation(quads.AnimDying, dyingAABB)

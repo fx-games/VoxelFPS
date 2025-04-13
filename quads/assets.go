@@ -1,16 +1,19 @@
 package quads
 
 import (
+    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
+    "github.com/memmaker/goray/tpack"
     "image"
     _ "image/png"
+    "io"
     "os"
     "path"
 )
 
 type BitmapFont struct {
-    Texture *glhf.Texture
+    Texture *glhf.TextureAtlasFixed
     Index   BitmapFontIndex
     UIScale mgl32.Vec2
 }
@@ -32,35 +35,60 @@ func (t BitmapFont) MeasureString(text []string, scale mgl32.Vec2, padChar, padL
 func LoadBitmapFont(filename string, glyphWidth int, glyphHeight int, uiScale mgl32.Vec2) BitmapFont {
     extension := path.Ext(filename)
     withoutExtension := filename[:len(filename)-len(extension)]
-    fontTextureAtlas := LoadTexture(filename)
-    fontTextureAtlas.SetAtlasItemSize(glyphWidth, glyphHeight)
+    fontTextureAtlas := LoadTextureAtlasFixed(filename, glyphWidth, glyphHeight)
     atlasIndex := NewBitmapFontIndexFromFile(withoutExtension + ".idx")
     return BitmapFont{Texture: fontTextureAtlas, Index: atlasIndex, UIScale: uiScale}
 }
 
-func LoadBitmapFontWithoutIndex(filename string, glyphWidth int, glyphHeight int) *glhf.Texture {
-    fontTextureAtlas := LoadTexture(filename)
-    fontTextureAtlas.SetAtlasItemSize(glyphWidth, glyphHeight)
+func LoadBitmapFontWithoutIndex(filename string, glyphWidth int, glyphHeight int) *glhf.TextureAtlasFixed {
+    fontTextureAtlas := LoadTextureAtlasFixed(filename, glyphWidth, glyphHeight)
     return fontTextureAtlas
 }
-func LoadTextureAtlas(filename string, tileWidth int, tileHeight int) *glhf.Texture {
-    textureAtlas := LoadTexture(filename)
-    textureAtlas.SetAtlasItemSize(tileWidth, tileHeight)
-    textureAtlas.SourceFile = filename
-    return textureAtlas
+func LoadTextureAtlasFixed(filename string, tileWidth int, tileHeight int) *glhf.TextureAtlasFixed {
+    return glhf.NewTextureAtlasFixed(LoadTexture(filename), tileWidth, tileHeight, filename)
 }
+
+func NewOneWhitePixelTexture() *glhf.Texture {
+    img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+    img.Set(0, 0, image.White)
+    texture, err := glhf.NewTextureFromImage(img)
+    if err != nil {
+        panic(err)
+    }
+    return texture
+}
+
+func LoadTextureAtlasPacked(fileName string) *glhf.TextureAtlasPacked {
+    file, err := os.Open(fileName)
+    if err != nil {
+        panic(err)
+    }
+    defer file.Close()
+    return ReadTextureAtlasPacked(fileName, file)
+}
+
+func ReadTextureAtlasPacked(fileName string, file io.ReadSeeker) *glhf.TextureAtlasPacked {
+    atlasImage, atlasMeta, err := tpack.DecodeTrimmedAtlas(file)
+    if err != nil {
+        panic(err)
+    }
+    atlas, _ := glhf.NewTextureFromImage(atlasImage)
+    return glhf.NewTextureAtlasPacked(atlas, atlasMeta, fileName)
+}
+
 func LoadTexture(filePath string) *glhf.Texture {
+    return loadTextureWithTarget(filePath, gl.TEXTURE_2D)
+}
+func loadTextureWithTarget(filePath string, textureTarget uint32) *glhf.Texture {
     file, err := os.Open(filePath)
     if err != nil {
         panic(err)
     }
     defer file.Close()
-    texture, err := glhf.NewTextureFromReader(file)
+    texture, err := glhf.NewTextureFromReaderWithTarget(file, textureTarget)
     if err != nil {
         panic(err)
     }
-    texture.SetAtlasItemSize(texture.Width(), texture.Height())
-    texture.SourceFile = filePath
     return texture
 }
 

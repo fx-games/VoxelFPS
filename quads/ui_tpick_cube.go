@@ -106,10 +106,8 @@ func (g *GuiTexturePickerCube) HandleDrop(names []string, x float64, y float64) 
 }
 
 func NewGuiTexturePickerCube(
-    shader *glhf.Shader,
-    uiTexture *glhf.Texture,
-    font BitmapFont,
-    texAtlas *glhf.Texture,
+    uiContext UIContext,
+    texAtlas *glhf.TextureAtlasFixed,
     preselection map[voxel.CubeSide]uint16,
     toast func(string),
     onTextureSizeChanged func(),
@@ -118,7 +116,7 @@ func NewGuiTexturePickerCube(
     for i := voxel.CubeSide(0); i < 6; i++ {
         cubeSides = append(cubeSides, i.String())
     }
-    slots := NewGuiTextureSlots(shader, uiTexture, font, texAtlas, cubeSides)
+    slots := NewGuiTextureSlots(uiContext, texAtlas, cubeSides)
     for i := voxel.CubeSide(0); i < 6; i++ {
         preTex, hasPreselectedValue := preselection[i]
         if !hasPreselectedValue {
@@ -130,32 +128,33 @@ func NewGuiTexturePickerCube(
     g := &GuiTexturePickerCube{
         hoveredButton: -1,
         textures:      preselection,
-        atlasPicker:   NewGuiAtlasPicker(shader, uiTexture, font, texAtlas),
+        atlasPicker:   NewGuiAtlasPicker(uiContext, texAtlas),
         textureSlots:  slots,
         toast:         toast,
     }
 
-    saveTex := NewGuiButton(shader, uiTexture, font)
+    saveTex := NewGuiButton(uiContext)
     saveTex.SetText("Save")
     saveTex.Action = func() {
         atlasToSave := g.atlasPicker.atlas
-        if atlasToSave.SourceFile != "" {
-            errOnSave := atlasToSave.SaveAsPNG(atlasToSave.SourceFile)
+        if atlasToSave.SourceFile() != "" {
+            errOnSave := atlasToSave.SaveAsPNG(atlasToSave.SourceFile())
             if errOnSave != nil {
                 toast(fmt.Sprintf("FAIL: %v", errOnSave))
             } else {
-                toast(fmt.Sprintf("Saved to %s", atlasToSave.SourceFile))
+                toast(fmt.Sprintf("Saved to %s", atlasToSave.SourceFile()))
             }
         }
     }
 
-    addRow := NewGuiButton(shader, uiTexture, font)
+    addRow := NewGuiButton(uiContext)
     addRow.SetText("Expand")
     addRow.Action = func() {
-        g.atlasPicker.UpdateAtlas(g.atlasPicker.atlas.AddRow())
+        g.atlasPicker.atlas.Expand()
+        g.atlasPicker.UpdateAtlas()
         selected := g.textureSlots.assignedIndices
         sWidth, sHeight := g.textureSlots.screenWidth, g.textureSlots.screenHeight
-        g.textureSlots = NewGuiTextureSlots(shader, uiTexture, font, g.atlasPicker.atlas, cubeSides)
+        g.textureSlots = NewGuiTextureSlots(uiContext, g.atlasPicker.atlas, cubeSides)
         g.textureSlots.SetCentered(sWidth, sHeight)
         g.textureSlots.assignedIndices = selected
         onTextureSizeChanged()

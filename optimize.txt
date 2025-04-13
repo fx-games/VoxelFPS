@@ -35,3 +35,19 @@ Plan
  - Scenery Objects (Sprite & Mesh)
  - Actors & Paths & Dialogues
  - Pickups & Inventory & Tools
+
+
+// Buffer Streaming:
+
+Unsynchronized. The buffer is mapped with glMapBufferRange using
+the GL MAP WRITE BIT | GL MAP UNSYNCHRONIZED BIT flags and
+unmapped normally
+
+In the general case, we recommend using a standard worker thread and multiple
+buffers with the GL MAP UNSYCHRONIZED BIT flag. This might not be possible
+because of dependencies in the data, but this will usually be a simple yet effective
+way to improve the performance of an existing application.
+
+For all vendors, using a simple worker thread gets us the best performance, provided that synchronizations are done carefully. While the unsynchronized version is
+generally the fastest, we notice some exceptions: in particular, glBufferData can
+be very fast on AMD when the CPU can fill the buffer fast enough.
