@@ -14,7 +14,7 @@ type UniformBufferObject struct {
     std140Offsets []int
 }
 
-func NewUniformBufferObject(attributes []Attr) *UniformBufferObject {
+func NewUBOWithAttributes(attributes []Attr) *UniformBufferObject {
     var std140Offsets []int
     println("*** Main UBO ***")
     for i, attr := range attributes {
@@ -35,6 +35,15 @@ func NewUniformBufferObject(attributes []Attr) *UniformBufferObject {
         }
     }
     bufferSizeNeeded := std140Offsets[len(std140Offsets)-1] + attributes[len(attributes)-1].Type.Std140BaseAlignment()
+    u := NewUBO(bufferSizeNeeded)
+
+    u.attributes = attributes
+    u.std140Offsets = std140Offsets
+
+    return u
+}
+
+func NewUBO(bufferSizeNeeded int) *UniformBufferObject {
     u := &UniformBufferObject{
         ubo: binder{
             restoreLoc: gl.UNIFORM_BUFFER_BINDING,
@@ -42,13 +51,10 @@ func NewUniformBufferObject(attributes []Attr) *UniformBufferObject {
                 gl.BindBuffer(gl.UNIFORM_BUFFER, obj)
             },
         },
-        attributes:    attributes,
-        std140Offsets: std140Offsets,
     }
     u.generateBuffer(bufferSizeNeeded)
 
     runtime.SetFinalizer(u, (*UniformBufferObject).delete)
-
     return u
 }
 
@@ -65,7 +71,7 @@ func (u *UniformBufferObject) generateBuffer(bufferSizeInBytes int) {
     }
 
     u.ubo.bind()
-    gl.BufferData(gl.UNIFORM_BUFFER, bufferSizeInBytes, nil, gl.STATIC_DRAW)
+    gl.BufferData(gl.UNIFORM_BUFFER, bufferSizeInBytes, nil, gl.STREAM_DRAW)
 
     glErr = gl.GetError()
     if glErr != gl.NO_ERROR {
@@ -80,7 +86,7 @@ glUniformBlockBinding(shaderA.ID, lights_index, 2);
 */
 
 // BindUniformBlockTo binds the shader block with the given name to the binding index.
-func (u *UniformBufferObject) BindUniformBlockTo(shaderID uint32, blockName string, bindingIndex uint32) {
+func BindUniformBlockTo(shaderID uint32, blockName string, bindingIndex uint32) {
     blockIndex := gl.GetUniformBlockIndex(shaderID, gl.Str(blockName+"\x00"))
 
     glErr := gl.GetError()
@@ -108,7 +114,6 @@ func (u *UniformBufferObject) BindUBOTo(bindingIndex uint32) {
 // SetAttribute sets the value of the attribute with the given name.
 // NOTE: Requires Begin() and End() to be called before and after setting attributes.
 func (u *UniformBufferObject) SetAttribute(attrIndex int, value any) {
-
     offset := u.std140Offsets[attrIndex]
     size := u.attributes[attrIndex].Type.Std140BaseAlignment()
     var ptrToValue unsafe.Pointer
@@ -124,12 +129,16 @@ func (u *UniformBufferObject) SetAttribute(attrIndex int, value any) {
     default:
         ptrToValue = gl.Ptr(v)
     }
-    gl.BufferSubData(gl.UNIFORM_BUFFER, offset, size, ptrToValue)
+    u.SetData(offset, size, ptrToValue)
 
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(glErr)
     }
+}
+
+func (u *UniformBufferObject) SetData(offset int, size int, ptrToValue unsafe.Pointer) {
+    gl.BufferSubData(gl.UNIFORM_BUFFER, offset, size, ptrToValue)
 }
 
 func (u *UniformBufferObject) GetShaderBlockSource(blockName string) string {
@@ -146,6 +155,7 @@ func (u *UniformBufferObject) GetShaderBlockSource(blockName string) string {
            mat4 camProjectionView;
        };
     */
+
     var source string
     source += "layout (std140) uniform " + blockName + "\n{\n"
     for _, attr := range u.attributes {

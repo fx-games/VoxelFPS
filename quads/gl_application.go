@@ -58,6 +58,7 @@ type GlApplication struct {
     skybox        *glhf.VertexArray[glhf.GlFloat]
     skyboxCubeMap *glhf.Cubemap
     mainUbo       *glhf.UniformBufferObject
+    lightsUbo     *LightsUBO
     colorBatch    *glhf.SpriteBatch
 
     frameBuffer            *glhf.Frame
@@ -138,10 +139,16 @@ func (a *GlApplication) LoadFixedGuiAtlasWithBatch(filename string, tileW int, t
 }
 func (a *GlApplication) LoadPackedGuiAtlasWithBatch(filename string, maxSprites int) *glhf.TextureAtlasPacked {
     atlasFixed := LoadTextureAtlasPacked(filename)
-    atlasFixed.SetShader(a.guiShader)
+    atlasFixed.SetGuiShader(a.guiShader)
     atlasFixed.SetMaxSprites(maxSprites)
     a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
     return atlasFixed
+}
+
+func (a *GlApplication) SetupSpriteBatch(atlas glhf.TextureAtlas) {
+    atlas.SetGuiShader(a.guiShader)
+    atlas.SetMaxSprites(6)
+    a.spriteBatches = append(a.spriteBatches, atlas.GetSpriteBatch())
 }
 func (a *GlApplication) SetupSkybox(cubemap *glhf.Cubemap) {
     a.skyboxCubeMap = cubemap
@@ -675,9 +682,15 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         println(fmt.Sprintf("Max combined texture image units: %d", maxCombinedTexImageUnits))
 
         uboBlockName := "Main"
-        ubo := mainUBO()
+        mainUbo := mainUBO()
+        lightsUbo := NewLightsUBO()
+        lightsUbo.SetLights([]LightInfo{
+            {Position: mgl32.Vec4{13, 1.2, 2.2, 0}, Color: mgl32.Vec4{0, 0.7, 0, 1}},
+            {Position: mgl32.Vec4{13, 1.2, 13, 0}, Color: mgl32.Vec4{0.7, 0, 0, 1}},
+        })
 
-        shaderBlockSource := ubo.GetShaderBlockSource(uboBlockName)
+        injectedGLSL := mainUbo.GetShaderBlockSource(uboBlockName)
+        injectedGLSL += lightsGLSLBlock
 
         uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
 
@@ -719,9 +732,9 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             TimeFactor:      1.0,
             Camera:          fpsCamera,
             guiShader:       LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
-            quadShader:      LoadQuadShader(shaderBlockSource),
-            cubeShader:      LoadCubeShader(shaderBlockSource),
-            meshShader:      LoadMeshShader(shaderBlockSource),
+            quadShader:      LoadQuadShader(injectedGLSL),
+            cubeShader:      LoadCubeShader(injectedGLSL),
+            meshShader:      LoadMeshShader(injectedGLSL),
             lineShader:      LoadLineShader(fpsCamera),
             skyboxShader:    LoadSkyboxShader(fpsCamera),
             particleSystems: make(map[ParticleName]*glhf.ParticleSystem),
@@ -770,19 +783,31 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         skyboxVA.DebugName = "SkyBox"
         glApp.skybox = skyboxVA
 
-        ubo.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
-        ubo.BindUniformBlockTo(glApp.quadShader.ID(), uboBlockName, 0)
-        ubo.BindUniformBlockTo(glApp.meshShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.quadShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.meshShader.ID(), uboBlockName, 0)
 
-        ubo.Begin()
+        mainUbo.Begin()
 
-        ubo.BindUBOTo(0)
+        mainUbo.BindUBOTo(0)
 
         //ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
-        ubo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.5, 0.5, 0.5, 1})
-        ubo.End()
+        mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
+        mainUbo.End()
 
-        glApp.mainUbo = ubo
+        glApp.mainUbo = mainUbo
+
+        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), "Lights", 1)
+        glhf.BindUniformBlockTo(glApp.quadShader.ID(), "Lights", 1)
+        glhf.BindUniformBlockTo(glApp.meshShader.ID(), "Lights", 1)
+
+        lightsUbo.Begin()
+
+        lightsUbo.BindUBOTo(1)
+
+        lightsUbo.End()
+
+        glApp.lightsUbo = lightsUbo
 
         parentApp.Init(glApp, mapLoad)
 

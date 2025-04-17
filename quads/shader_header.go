@@ -24,8 +24,7 @@ const (
 )
 
 func mainUBO() *glhf.UniformBufferObject {
-
-    return glhf.NewUniformBufferObject([]glhf.Attr{
+    return glhf.NewUBOWithAttributes([]glhf.Attr{
         {Name: "fogRange", Type: glhf.Vec2},
         {Name: "camPosition", Type: glhf.Vec4},
         {Name: "camDirection", Type: glhf.Vec4},
@@ -121,7 +120,16 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal) {
     //vec3 litColor = floodLight * surfaceColor.rgb;
     //vec3 toneMappedColor = toneMapping(litColor, 1.2, 1.0);
     vec3 ambientLightColor = calculateAmbientLight();
-    vec3 pointLightColor = calculatePointLight(fragWorldNormal, fragWorldPos, camPosition.xyz, camLightColor.rgb);
+
+    
+    vec3 pointLightColor;
+    uint lightCount = uint(lightCounts.x);
+    for (uint i = 0; i < lightCount; i++) {
+        LightInfo curLight = lights[i];
+        vec3 lightPosition = vec3(curLight.position);
+        vec3 lightColor = vec3(curLight.color);
+        pointLightColor += calculatePointLight(fragWorldNormal, fragWorldPos, lightPosition, lightColor);
+    }
     
     // FLASHLIGHT HERE
     //vec3 spotLightColor = calculateSpotLight(fragWorldNormal, fragWorldPos, camPosition, light_color, camDirection, 0.98,  0.96);

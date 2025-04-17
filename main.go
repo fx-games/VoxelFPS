@@ -57,11 +57,6 @@ type Game struct {
 
     crossHair *quads.AnimatedSprite
 
-    uiRectSpriteTL *quads.AnimatedSprite
-    uiRectSpriteTR *quads.AnimatedSprite
-    uiRectSpriteBL *quads.AnimatedSprite
-    uiRectSpriteBR *quads.AnimatedSprite
-
     uiLabel *quads.BitmapFontMesh
     player  *quads.GameObject
 
@@ -119,7 +114,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.SetupUIFont(eassets.LoadEmbeddedFont(g.UIScale))
 
     //g.loadDoomWeapon("Charge_Pistol")
-    //g.loadDoomWeapon("Borstal_Shotgun")
+    g.loadDoomWeapon("Borstal_Shotgun")
     //g.loadDoomWeapon("Ol_Faithful")
 
     g.SetupUnitCubes()
@@ -137,7 +132,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.entityMenu = g.NewList()
     g.entityMenu.SetTextCentered(true)
     g.entityMenu.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
-        if key == glfw.KeyE {
+        if key == glfw.KeyEnter {
             switch selectedIndex {
             case 0:
                 hoveredObj := g.hoveredObj()
@@ -175,15 +170,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     // Setup HUD
 
     g.crossHair = g.Gui.Add(g.UIAtlas, 4, int(0), int(0))
-
-    g.uiRectSpriteTL = g.Gui.Add(g.UIAtlas, 0, 0, 0)
-    g.uiRectSpriteTR = g.Gui.Add(g.UIAtlas, 1, 0, 0)
-    g.uiRectSpriteBR = g.Gui.Add(g.UIAtlas, 2, 0, 0)
-    g.uiRectSpriteBL = g.Gui.Add(g.UIAtlas, 3, 0, 0)
-    g.uiRectSpriteTL.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
-    g.uiRectSpriteTR.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
-    g.uiRectSpriteBL.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
-    g.uiRectSpriteBR.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
 
     // Load Sprite Animations
     animations := getWolfCharAnimations()
@@ -226,7 +212,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     })
     events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
     events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
-
+    events.Subscribe(events.EventPlayerInteractWith, g.playerInteractWith)
     //smallGun := g.loadSmallGun()
 
     //g.weaponQuad = g.Gui.Add(smallGun.Texture, 0, 0, 0)
@@ -238,6 +224,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 func (g *Game) loadDoomWeapon(weaponName string) {
     atlas, zscript, err := zdwep.ReadDoomAtlasFromFile(filepath.Join("assets", weaponName+".png"))
+    g.SetupSpriteBatch(atlas)
     if err != nil {
         panic(err)
     }
@@ -454,16 +441,48 @@ func (g *Game) Draw(elapsed float64) {
     }
 }
 func (g *Game) DrawGui(elapsed float64) {
-    if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
-        g.textLabel.Draw()
+    hoveredObj := g.hoveredObj()
+    if hoveredObj != nil {
+        guiBatch := g.UIAtlas.GetSpriteBatch()
+
+        aabb, transform := g.getHoveredOBB(hoveredObj)
+
+        topLeft, topRight, bottomLeft, bottomRight := quads.HudCornersFromOBB(aabb, transform, g.Camera.ProjectWorldToScreenPixels)
+
+        borderColor := mgl32.Vec4{0.5, 1, 0.5, 0.8}
+
+        tlScr, tlDst := g.UIAtlas.GetSourceAndDestRects(0, mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1])}, mgl32.Vec2{0, 0}, mgl32.Vec2{1, 1})
+        guiBatch.DrawTextured(tlScr, tlDst, borderColor)
+
+        trScr, trDst := g.UIAtlas.GetSourceAndDestRects(1, mgl32.Vec2{float32(topRight[0]), float32(topRight[1])}, mgl32.Vec2{1, 0}, mgl32.Vec2{1, 1})
+        guiBatch.DrawTextured(trScr, trDst, borderColor)
+
+        brScr, brDst := g.UIAtlas.GetSourceAndDestRects(2, mgl32.Vec2{float32(bottomRight[0]), float32(bottomRight[1])}, mgl32.Vec2{1, 1}, mgl32.Vec2{1, 1})
+        guiBatch.DrawTextured(brScr, brDst, borderColor)
+
+        blScr, blDst := g.UIAtlas.GetSourceAndDestRects(3, mgl32.Vec2{float32(bottomLeft[0]), float32(bottomLeft[1])}, mgl32.Vec2{0, 1}, mgl32.Vec2{1, 1})
+        guiBatch.DrawTextured(blScr, blDst, borderColor)
+
+        if g.uiLabel != nil {
+            hitZone := "body"
+            if g.relativeHitPos.Y() > 0.6 && g.relativeHitPos.Y() < 0.8 {
+                hitZone = "head"
+            }
+            labelText := fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)
+            g.uiLabel.SetText(labelText)
+            _, fontH := g.uiLabel.Size()
+            g.uiLabel.SetPosition(mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1] - fontH)})
+
+            g.uiLabel.Draw()
+
+            if g.entityMenu != nil {
+                g.entityMenu.Draw()
+            }
+        }
     }
 
-    if g.uiLabel != nil && g.hoveredObj() != nil {
-        g.uiLabel.Draw()
-
-        if g.entityMenu != nil {
-            g.entityMenu.Draw()
-        }
+    if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
+        g.textLabel.Draw()
     }
 
     for _, widget := range g.widgetStack {
@@ -498,16 +517,25 @@ func (g *Game) hoveredObj() *quads.GameObject {
     return g.lastHitResult.HitObject
 }
 
+func (g *Game) isHoveringObject() bool {
+    if g.lastHitResult == nil {
+        return false
+    }
+    if g.lastHitResult.HitInfo.Distance > 10 {
+        return false
+    }
+    if g.lastHitResult.HitObject == nil {
+        return false
+    }
+    return true
+
+}
 func (g *Game) updateGUI(elapsed float64) {
     if g.widgetsAreBlockingMovement {
         return
     }
     g.lastHitResult = nil
 
-    g.uiRectSpriteTL.Hide()
-    g.uiRectSpriteTR.Hide()
-    g.uiRectSpriteBL.Hide()
-    g.uiRectSpriteBR.Hide()
     g.uiLabel.Hide()
     g.entityMenu.Hide()
 
@@ -534,14 +562,11 @@ func (g *Game) updateGUI(elapsed float64) {
         return
     }
 
-    g.uiRectSpriteTL.Show()
-    g.uiRectSpriteTR.Show()
-    g.uiRectSpriteBL.Show()
-    g.uiRectSpriteBR.Show()
     g.uiLabel.Show()
     g.entityMenu.Show()
+}
 
-    tileW, _ := g.UIAtlas.GetAtlasItemSize()
+func (g *Game) getHoveredOBB(hoveredObj *quads.GameObject) (voxel.AABB, mgl32.Mat4) {
     aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
     var transform mgl32.Mat4
     if hoveredObj.HasComponent(quads.ComponentTypeSprite) {
@@ -549,30 +574,7 @@ func (g *Game) updateGUI(elapsed float64) {
     } else if hoveredObj.HasComponent(quads.ComponentTypeMesh) {
         transform = hoveredObj.Transform().GetTransformMatrix()
     }
-
-    topLeft, topRight, bottomLeft, bottomRight := quads.HudCornersFromOBB(aabb, transform, g.Camera.ProjectWorldToScreenPixels)
-
-    topRight[0] -= tileW
-    bottomLeft[1] -= tileW
-
-    bottomRight[0] -= tileW
-    bottomRight[1] -= tileW
-
-    g.uiRectSpriteTL.SetDestRect(mgl32.Vec4{float32(topLeft[0]), float32(topLeft[1]), float32(topLeft[0] + tileW), float32(topLeft[1] + tileW)})
-    g.uiRectSpriteTR.SetDestRect(mgl32.Vec4{float32(topRight[0]), float32(topRight[1]), float32(topRight[0] + tileW), float32(topRight[1] + tileW)})
-    g.uiRectSpriteBL.SetDestRect(mgl32.Vec4{float32(bottomLeft[0]), float32(bottomLeft[1]), float32(bottomLeft[0] + tileW), float32(bottomLeft[1] + tileW)})
-    g.uiRectSpriteBR.SetDestRect(mgl32.Vec4{float32(bottomRight[0]), float32(bottomRight[1]), float32(bottomRight[0] + tileW), float32(bottomRight[1] + tileW)})
-
-    if g.uiLabel != nil {
-        hitZone := "body"
-        if g.relativeHitPos.Y() > 0.6 && g.relativeHitPos.Y() < 0.8 {
-            hitZone = "head"
-        }
-        labelText := fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)
-        g.uiLabel.SetText(labelText)
-        _, fontH := g.uiLabel.Size()
-        g.uiLabel.SetPosition(mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1] - fontH)})
-    }
+    return aabb, transform
 }
 
 type RaycastResult struct {

@@ -189,20 +189,20 @@ func (t *TextureAtlasPacked) expandToNewHeight(newHeight int) {
     t.textureHeight = newHeight
 }
 
-func (t *TextureAtlasPacked) GetTopLeftInPxScaled(index int, scaleFactor float32) mgl32.Vec2 {
+func (t *TextureAtlasPacked) GetSourceRectScaled(index int, scaleFactor float32) mgl32.Vec4 {
     x, y := t.packedInfo.UVPosition(index)
     drawPosX := float32(x) * scaleFactor
     drawPosY := float32(y) * scaleFactor
-    return mgl32.Vec2{drawPosX, drawPosY}
+    w, h := t.packedInfo.UVSize(index)
+    wScaled := float32(w) * scaleFactor
+    hScaled := float32(h) * scaleFactor
+    return mgl32.Vec4{drawPosX, drawPosY, drawPosX + wScaled, drawPosY + hScaled}
 }
 
 func (t *TextureAtlasPacked) GetIndexFromPxPosScaled(x int, y int, scaleFactor float32) int {
     for i := 0; i <= t.LastValidIndex(); i++ {
-        w, h := t.packedInfo.UVSize(i)
-        wScaled := int(float32(w) * scaleFactor)
-        hScaled := int(float32(h) * scaleFactor)
-        topLeftX, topLeftY := t.GetTopLeftInPxScaled(i, scaleFactor).Elem()
-        if x >= int(topLeftX) && x < int(topLeftX)+wScaled && y >= int(topLeftY) && y < int(topLeftY)+hScaled {
+        topLeftX, topLeftY, bottomRightX, bottomRightY := t.GetSourceRectScaled(i, scaleFactor).Elem()
+        if x >= int(topLeftX) && x <= int(bottomRightX) && y >= int(topLeftY) && y <= int(bottomRightY) {
             return i
         }
     }
@@ -225,7 +225,7 @@ func (t *TextureAtlasPacked) AABBFromOpaqueAtIndex(index int) (mgl32.Vec3, mgl32
     return aabbFromOpaquePixels(pixels, w, h)
 }
 
-func (t *TextureAtlasPacked) SetShader(shader *Shader) {
+func (t *TextureAtlasPacked) SetGuiShader(shader *Shader) {
     t.shader = shader
 }
 

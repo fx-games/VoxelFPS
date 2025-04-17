@@ -104,7 +104,7 @@ func dumpDoomWeapon(weapon DoomWeapon, pk3file string, outputDir string) {
     outFile.Close()
 }
 
-func ReadDoomAtlasFromFile(filename string) (atlas glhf.TextureAtlas, zscript string, err error) {
+func ReadDoomAtlasFromFile(filename string) (atlas *glhf.TextureAtlasPacked, zscript string, err error) {
     reader, err := os.Open(filename)
     defer reader.Close()
     if err != nil {
@@ -113,7 +113,7 @@ func ReadDoomAtlasFromFile(filename string) (atlas glhf.TextureAtlas, zscript st
     return readDoomAtlas(filename, reader)
 }
 
-func readDoomAtlas(filename string, atlasFile io.ReadSeeker) (atlas glhf.TextureAtlas, zscript string, err error) {
+func readDoomAtlas(filename string, atlasFile io.ReadSeeker) (atlas *glhf.TextureAtlasPacked, zscript string, err error) {
     atlas = quads.ReadTextureAtlasPacked(filename, atlasFile)
     atlasFile.Seek(0, io.SeekStart)
     zscript = png_chunks.ReadTextChunkFromPNG(atlasFile, "zscript")

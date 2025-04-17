@@ -168,6 +168,7 @@ func (g *GuiTextureSlots) SetCentered(screenWidth int, screenHeight int) {
 }
 
 func (g *GuiTextureSlots) Draw() {
+    g.background.Draw()
 
     for slotIndex, slotPos := range g.slotPositions {
         texIndex := g.assignedIndices[slotIndex]

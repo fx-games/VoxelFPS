@@ -118,7 +118,12 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, weaponEffect WeaponE
     g.physicsSystem.AddObject(physics)
     physics.SetVelocity(direction.Mul(10))
 }
-
+func (g *Game) playerInteractWith(id events.EventID, event events.Event) {
+    hoveredObj := event.(*quads.GameObject)
+    if hoveredObj != nil && hoveredObj.DisplayName == "Scientist" {
+        g.Toast("You interacted with a scientist!")
+    }
+}
 func (g *Game) physicsCollision(id events.EventID, event events.Event) {
     collisionEvent := event.(quads.CollisionEvent)
     mover := collisionEvent.ObjectA.GameObject()

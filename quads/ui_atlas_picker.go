@@ -37,13 +37,15 @@ type GuiAtlasPicker struct {
 
 func NewGuiAtlasPicker(uiContext UIContext, atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
     _, h := uiContext.Font.Texture.GetAtlasItemSize()
+    indexLabel := NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch)
+    indexLabel.SetTintColor(mgl32.Vec4{0.2, 1, 0.2, 1})
     return &GuiAtlasPicker{
         atlas:           atlasForSelection,
         uiContext:       uiContext,
         fontHeight:      h,
         textColor:       mgl32.Vec4{0.3, 1, 0.3, 1},
         textSelectColor: mgl32.Vec4{0.0, 0.2, 0, 1},
-        indexLabel:      NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
+        indexLabel:      indexLabel,
     }
 }
 
@@ -60,9 +62,10 @@ func (a *GuiAtlasPicker) HandleKeyEvents(key glfw.Key, scancode int, action glfw
     return false
 }
 
-func (a *GuiAtlasPicker) selectionPosition() mgl32.Vec2 {
+func (a *GuiAtlasPicker) selectionRect() mgl32.Vec4 {
     selectionIndex := a.currentSelectionIndex
-    return a.atlas.GetTopLeftInPxScaled(selectionIndex, a.tileScaleFactor).Add(a.atlasTopLeft.ToVec2()).Add(mgl32.Vec2{0, a.verticalScrollOffset})
+    tl := a.atlasTopLeft.ToVec2()
+    return a.atlas.GetSourceRectScaled(selectionIndex, a.tileScaleFactor).Add(mgl32.Vec4{tl.X(), tl.Y(), tl.X(), tl.Y()}).Sub(mgl32.Vec4{0, a.verticalScrollOffset * a.tileScaleFactor, 0, a.verticalScrollOffset * a.tileScaleFactor})
 }
 
 func (a *GuiAtlasPicker) HandleMousePosEvents(xpos float64, ypos float64) (consumed bool) {
@@ -92,7 +95,7 @@ func (a *GuiAtlasPicker) HandleMousePosEvents(xpos float64, ypos float64) (consu
 
 func (a *GuiAtlasPicker) indexFromScreenPos(xpos float64, ypos float64) int {
     relativeX := int(xpos) - a.atlasTopLeft.X
-    relativeY := int(ypos) - a.atlasTopLeft.Y - int(a.verticalScrollOffset)
+    relativeY := int(ypos) - a.atlasTopLeft.Y + int(a.verticalScrollOffset*a.tileScaleFactor)
 
     return a.atlas.GetIndexFromPxPosScaled(relativeX, relativeY, a.tileScaleFactor)
 }
@@ -114,24 +117,19 @@ func (a *GuiAtlasPicker) HandleMouseButtonEvents(xpos float64, ypos float64, but
 }
 
 func (a *GuiAtlasPicker) HandleScrollEvents(xoff float64, yoff float64) (consumed bool) {
-    atlasWidth, atlasHeight := a.atlas.Width(), a.atlas.Height()
-    aspectRatio := float64(atlasWidth) / float64(atlasHeight)
+    _, atlasHeight := a.atlas.Width(), a.atlas.Height()
 
-    scrollingContentHeight := int(float64(a.atlasSize.X) / aspectRatio)
+    scrollingSpace := int(float32(a.atlasSize.Y) / a.tileScaleFactor)
 
-    scrollingSpace := int(a.atlasSize.Y)
+    a.currentSelectionIndex = -1
 
-    if scrollingContentHeight <= scrollingSpace {
-        a.verticalScrollOffset = 0
-        return true
-    }
     a.verticalScrollOffset += float32(yoff * 0.5 * float64(a.scaledTileSize.Y))
     if a.verticalScrollOffset < 0 {
         a.verticalScrollOffset = 0
     }
 
-    if a.verticalScrollOffset > float32(scrollingContentHeight+scrollingSpace) {
-        a.verticalScrollOffset = float32(scrollingContentHeight + scrollingSpace)
+    if a.verticalScrollOffset > float32(atlasHeight-scrollingSpace) {
+        a.verticalScrollOffset = float32(atlasHeight - scrollingSpace)
     }
     return true
 }
@@ -223,11 +221,10 @@ func (a *GuiAtlasPicker) Draw() {
     batch.DrawTextured(a.atlasSrcRect(), a.atlasDstRect(), mgl32.Vec4{1, 1, 1, 1})
 
     if a.isCurrentSelectionValid() {
-        selectionPosition := a.selectionPosition()
-        selectDest := mgl32.Vec4{selectionPosition.X(), selectionPosition.Y(), selectionPosition.X() + float32(a.scaledTileSize.X), selectionPosition.Y() + float32(a.scaledTileSize.Y)}
-        a.uiContext.ColorBatch.DrawColoredOutline(selectDest, 1, mgl32.Vec4{1, 1, 1, 1})
+        selectionPosition := a.selectionRect()
+        a.uiContext.ColorBatch.DrawColoredOutline(selectionPosition, 1, mgl32.Vec4{0.6, 1, 0.6, 1})
         if !a.isDragging {
-            a.indexLabel.SetPosition(selectionPosition)
+            a.indexLabel.SetPosition(selectionPosition.Vec2())
             a.indexLabel.Draw()
         }
     }
@@ -287,5 +284,8 @@ func (a *GuiAtlasPicker) appendImages(index int, files []tpack.NamedImage) {
 }
 
 func (a *GuiAtlasPicker) isCurrentSelectionValid() bool {
+    if a.currentSelectionIndex < 0 {
+        return false
+    }
     return a.atlas.HasIndex(a.currentSelectionIndex)
 }

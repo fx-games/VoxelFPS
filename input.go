@@ -6,6 +6,7 @@ import (
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
+    "github.com/memmaker/goray/events"
     "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/voxel"
     "maps"
@@ -150,8 +151,10 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     if key == glfw.KeyF {
         g.gravitationEnabled = !g.gravitationEnabled
     }
-
-    if key == glfw.KeyE {
+    if key == glfw.KeyE && g.isHoveringObject() {
+        events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
+    }
+    if key == glfw.KeyV {
         g.spawnCurrentGameObject()
     }
 

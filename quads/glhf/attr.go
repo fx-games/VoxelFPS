@@ -26,9 +26,8 @@ func (af AttrFormat) ElementsPerVertex() int {
 // Attr represents an arbitrary OpenGL attribute, such as a vertex attribute or a shader
 // uniform attribute.
 type Attr struct {
-    Name             string
-    Type             AttrType
-    IsInstancedArray bool // IsInstancedArray: if true, this attribute gets updated per instance
+    Name string
+    Type AttrType
 }
 
 // AttrType represents the type of an OpenGL attribute.

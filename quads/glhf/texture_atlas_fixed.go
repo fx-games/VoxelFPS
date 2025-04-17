@@ -63,10 +63,9 @@ func (t *TextureAtlasFixed) GetSourceAndDestRects(index int, drawPosInPixels mgl
 
     width := float32(t.itemSizeX) * scale.X()
     height := float32(t.itemSizeY) * scale.Y()
-
-    originInPixels := mgl32.Vec2{float32(float32(width) * normalizedOrigin.X()), float32(float32(height) * normalizedOrigin.Y())}
-    topleftDrawPos := mgl32.Vec2{float32(drawPosInPixels.X()) - float32(originInPixels.X()), float32(drawPosInPixels.Y()) - float32(originInPixels.Y())}
-    destRect := mgl32.Vec4{float32(topleftDrawPos.X()), float32(topleftDrawPos.Y()), float32(topleftDrawPos.X() + float32(width)), float32(topleftDrawPos.Y() + float32(height))}
+    originInPixels := mgl32.Vec2{width * normalizedOrigin.X(), height * normalizedOrigin.Y()}
+    topleftDrawPos := drawPosInPixels.Sub(originInPixels)
+    destRect := mgl32.Vec4{topleftDrawPos.X(), topleftDrawPos.Y(), topleftDrawPos.X() + width, topleftDrawPos.Y() + height}
 
     return sourceRect, destRect
 }
@@ -273,14 +272,18 @@ func (t *TextureAtlasFixed) Expand() {
     t.textureHeight = newHeight
 }
 
-func (t *TextureAtlasFixed) GetTopLeftInPxScaled(index int, scaleFactor float32) mgl32.Vec2 {
+func (t *TextureAtlasFixed) GetSourceRectScaled(index int, scaleFactor float32) mgl32.Vec4 {
     tileSizeX, _ := t.GetAtlasItemSize()
     itemsPerRow := t.Width() / tileSizeX
     row := float32(index / itemsPerRow)
     col := float32(index % itemsPerRow)
     drawPosX := col * float32(t.itemSizeX) * scaleFactor
     drawPosY := row * float32(t.itemSizeY) * scaleFactor
-    return mgl32.Vec2{drawPosX, drawPosY}
+
+    w := float32(t.itemSizeX) * scaleFactor
+    h := float32(t.itemSizeY) * scaleFactor
+
+    return mgl32.Vec4{drawPosX, drawPosY, drawPosX + w, drawPosY + h}
 }
 
 func (t *TextureAtlasFixed) GetIndexFromPxPosScaled(x int, y int, scaleFactor float32) int {

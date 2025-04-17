@@ -11,7 +11,7 @@ type TextureAtlas interface {
     GetUVInPx(index int) (int, int, int, int)
     HasIndex(index int) bool
     LastValidIndex() int
-    GetTopLeftInPxScaled(index int, scaleFactor float32) mgl32.Vec2
+    GetSourceRectScaled(index int, scaleFactor float32) mgl32.Vec4
     GetIndexFromPxPosScaled(x int, y int, scaleFactor float32) int
     AABBFromOpaqueAtIndex(index int) (mgl32.Vec3, mgl32.Vec3)
     Width() int
@@ -28,4 +28,6 @@ type TextureAtlas interface {
     GetSourceRect(index int) mgl32.Vec4
     GetSourceRectWholeTexture() mgl32.Vec4
     GetSpriteBatch() *SpriteBatch
+    SetGuiShader(shader *Shader)
+    SetMaxSprites(maxSprites int)
 }
