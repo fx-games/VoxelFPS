@@ -148,6 +148,10 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         g.testPackedAtlasPicker()
     }
 
+    if key == glfw.KeyF12 {
+        g.SaveScreenshot("screenshot00.png")
+    }
+
     if key == glfw.KeyF {
         g.gravitationEnabled = !g.gravitationEnabled
     }

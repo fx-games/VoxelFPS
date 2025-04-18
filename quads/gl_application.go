@@ -55,6 +55,7 @@ type GlApplication struct {
     cubeShader    *glhf.Shader
     lineShader    *glhf.Shader
     skyboxShader  *glhf.Shader
+    postShader    *glhf.Shader
     skybox        *glhf.VertexArray[glhf.GlFloat]
     skyboxCubeMap *glhf.Cubemap
     mainUbo       *glhf.UniformBufferObject
@@ -62,6 +63,7 @@ type GlApplication struct {
     colorBatch    *glhf.SpriteBatch
 
     frameBuffer            *glhf.Frame
+    screenQuad             *glhf.VertexArray[glhf.GlFloat]
     UIScale                mgl32.Vec2
     ScreenCoordScale       mgl32.Vec2
     drawCallCountParticles int
@@ -368,10 +370,8 @@ func (a *GlApplication) StartEventLoop() {
 
             // Clear the window.
             //gl.ClearColor(0, 0, 0, 1)
-            gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
-            gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-            // Update
+            // Update BEGIN
             time = glfw.GetTime()
             elapsed := time - previousTime
             previousTime = time
@@ -389,20 +389,29 @@ func (a *GlApplication) StartEventLoop() {
 
             a.updateUBO()
 
+            // Update END
+
             // DRAW BEGIN
 
-            /* Framebuffer is not doing depth testing right now.. */
+            // prepare Framebuffer
             a.frameBuffer.Begin()
 
-            buffers := []uint32{gl.COLOR_ATTACHMENT0, gl.DEPTH_ATTACHMENT}
-            gl.DrawBuffers(1, &buffers[0])
+            // hmm, where should this go?
+            //buffers := []uint32{gl.COLOR_ATTACHMENT0, gl.DEPTH_ATTACHMENT}
+            //gl.DrawBuffers(1, &buffers[0])
 
+            gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
+            gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+            // Begin Draw 3D Scene
             a.DrawFunc(deltaTime)
 
             if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
                 a.drawSkybox(a.skyboxCubeMap)
             }
+            // End Draw 3D Scene
 
+            // Begin Draw 2D Scene
             gl.Clear(gl.DEPTH_BUFFER_BIT)
 
             a.guiShader.Begin()
@@ -427,14 +436,26 @@ func (a *GlApplication) StartEventLoop() {
                 batch.Render()
             }
             //gl.Enable(gl.DEPTH_TEST)
+
             a.guiShader.End()
+            // End Draw 2D Scene
 
-            a.frameBuffer.End()
+            // Finalize Framebuffer
+            a.frameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
 
-            a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+            a.postShader.Begin()
+
+            //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+            a.frameBuffer.Texture().Begin()
+
+            a.screenQuad.Begin()
+            a.screenQuad.Draw()
+            a.screenQuad.End()
+
+            a.frameBuffer.Texture().End()
+            a.postShader.End()
 
             // DRAW END
-
             a.FramesPerSecond = 1.0 / elapsed
             if a.Ticks%60 == 0 {
                 sixtyTicksAverage := a.FPSRunningAvg
@@ -464,6 +485,10 @@ func mat4ptr(mat mgl32.Mat4) unsafe.Pointer {
 
 func vec4ptr(vec mgl32.Vec4) unsafe.Pointer {
     return unsafe.Pointer(&vec[0])
+}
+
+func (a *GlApplication) SaveScreenshot(filename string) error {
+    return a.frameBuffer.Texture().SaveAsPNG(filename)
 }
 
 func (a *GlApplication) updateUBO() {
@@ -732,6 +757,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             TimeFactor:       1.0,
             Camera:           fpsCamera,
             guiShader:        LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
+            postShader:       LoadPostShader(),
             quadShader:       LoadQuadShader(injectedGLSL),
             cubeShader:       LoadCubeShader(injectedGLSL),
             meshShader:       LoadMeshShader(injectedGLSL),
@@ -775,6 +801,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.AtlasSprites.SetMaxSprites(10)
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
+
+        glApp.screenQuad = PostQuad(glApp.postShader)
 
         skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
         skyboxVA.Begin()

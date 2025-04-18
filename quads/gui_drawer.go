@@ -230,29 +230,27 @@ func AppendGUIQuadVertices(rawVertices []glhf.GlFloat, t glhf.TextureAtlas, text
     }...)
     return rawVertices
 }
-func NewGUIQuadVertsFromSize(shader *glhf.Shader, widthInPx, heightInPx int) *glhf.VertexArray[glhf.GlFloat] {
+func PostQuad(shader *glhf.Shader) *glhf.VertexArray[glhf.GlFloat] {
     var rawVertices []glhf.GlFloat
     var leftU, topV, rightU, bottomV glhf.GlFloat
     rightU = 1
     bottomV = 1
-    quadWidth := glhf.GlFloat(widthInPx)
-    quadHeight := glhf.GlFloat(heightInPx)
     rawVertices = append(rawVertices, []glhf.GlFloat{
         // first triangle
         // Top-left
-        glhf.GlFloat(0), glhf.GlFloat(0), leftU, topV,
+        glhf.GlFloat(-1), glhf.GlFloat(1), leftU, topV,
         // Bottom-left
-        glhf.GlFloat(0), glhf.GlFloat(0) + quadHeight, leftU, bottomV,
+        glhf.GlFloat(-1), glhf.GlFloat(-1), leftU, bottomV,
         // Bottom-right
-        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0) + quadHeight, rightU, bottomV,
+        glhf.GlFloat(1), glhf.GlFloat(-1), rightU, bottomV,
 
         // second triangle
         // Top-left
-        glhf.GlFloat(0), glhf.GlFloat(0), leftU, topV,
+        glhf.GlFloat(-1), glhf.GlFloat(1), leftU, topV,
         // Bottom-right
-        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0) + quadHeight, rightU, bottomV,
+        glhf.GlFloat(1), glhf.GlFloat(-1), rightU, bottomV,
         // Top-right
-        glhf.GlFloat(0) + quadWidth, glhf.GlFloat(0), rightU, topV,
+        glhf.GlFloat(1), glhf.GlFloat(1), rightU, topV,
     }...)
 
     vertices := glhf.NewVertexArray[glhf.GlFloat](shader, false)

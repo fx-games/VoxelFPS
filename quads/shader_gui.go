@@ -11,7 +11,6 @@ const (
     GuiShaderPositionOffset
     GuiShaderScaleFactor
     GuiShaderTintColor
-    GuiShaderVerticalCutoff
 )
 
 const (

@@ -10,7 +10,7 @@ import (
 type Frame struct {
     fb, rf, df      binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
     tex             *Texture
-    stencilAndDepth *Texture
+    stencilAndDepth *Texture // TODO: optimization would be a separate stencil and depth buffer
 }
 
 // NewFrame creates a new fully transparent Frame with given dimensions in pixels.
