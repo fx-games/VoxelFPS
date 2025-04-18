@@ -391,12 +391,11 @@ func (a *GlApplication) StartEventLoop() {
 
             // DRAW BEGIN
 
-            /* Framebuffer is not doing depth testing right now..
-               a.frameBuffer.Begin()
+            /* Framebuffer is not doing depth testing right now.. */
+            a.frameBuffer.Begin()
 
-               buffers := []uint32{gl.COLOR_ATTACHMENT0}
-               gl.DrawBuffers(1, &buffers[0])
-            */
+            buffers := []uint32{gl.COLOR_ATTACHMENT0, gl.DEPTH_ATTACHMENT}
+            gl.DrawBuffers(1, &buffers[0])
 
             a.DrawFunc(deltaTime)
 
@@ -430,11 +429,10 @@ func (a *GlApplication) StartEventLoop() {
             //gl.Enable(gl.DEPTH_TEST)
             a.guiShader.End()
 
-            /*
-               a.frameBuffer.End()
+            a.frameBuffer.End()
 
-               a.frameBuffer.Blit(nil, 0, 0, a.WindowWidth*2, a.WindowHeight*2, 0, 0, a.WindowWidth*2, a.WindowHeight*2)
-            */
+            a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+
             // DRAW END
 
             a.FramesPerSecond = 1.0 / elapsed
@@ -488,7 +486,9 @@ func (a *GlApplication) OnResize(width int, height int) {
     a.guiShader.Begin()
     a.guiShader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
     a.guiShader.End()
-
+    if a.frameBuffer != nil {
+        a.frameBuffer.Resize(int(float32(width)*a.UIScale.X()), int(float32(height)*a.UIScale.Y()))
+    }
     if a.minimap != nil {
         a.minimap.Resize(width, height)
     }
@@ -725,20 +725,20 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         }
 
         glApp := &GlApplication{
-            WindowWidth:     winSizeX,
-            WindowHeight:    winSizeY,
-            Window:          window,
-            TerminateFunc:   terminateFunc,
-            TimeFactor:      1.0,
-            Camera:          fpsCamera,
-            guiShader:       LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
-            quadShader:      LoadQuadShader(injectedGLSL),
-            cubeShader:      LoadCubeShader(injectedGLSL),
-            meshShader:      LoadMeshShader(injectedGLSL),
-            lineShader:      LoadLineShader(fpsCamera),
-            skyboxShader:    LoadSkyboxShader(fpsCamera),
-            particleSystems: make(map[ParticleName]*glhf.ParticleSystem),
-            //frameBuffer:      glhf.NewFrame(fbSizeX, fbSizeY, false),
+            WindowWidth:      winSizeX,
+            WindowHeight:     winSizeY,
+            Window:           window,
+            TerminateFunc:    terminateFunc,
+            TimeFactor:       1.0,
+            Camera:           fpsCamera,
+            guiShader:        LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
+            quadShader:       LoadQuadShader(injectedGLSL),
+            cubeShader:       LoadCubeShader(injectedGLSL),
+            meshShader:       LoadMeshShader(injectedGLSL),
+            lineShader:       LoadLineShader(fpsCamera),
+            skyboxShader:     LoadSkyboxShader(fpsCamera),
+            particleSystems:  make(map[ParticleName]*glhf.ParticleSystem),
+            frameBuffer:      glhf.NewFrame(fbSizeX, fbSizeY, false),
             UIScale:          uiScale,
             ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
             AtlasMap:         atlasMap,

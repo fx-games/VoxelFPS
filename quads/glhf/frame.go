@@ -8,8 +8,9 @@ import (
 
 // Frame is a fixed resolution texture that you can DrawWithOffset on.
 type Frame struct {
-    fb, rf, df binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
-    tex        *Texture
+    fb, rf, df      binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
+    tex             *Texture
+    stencilAndDepth *Texture
 }
 
 // NewFrame creates a new fully transparent Frame with given dimensions in pixels.
@@ -33,14 +34,10 @@ func NewFrame(width, height int, smooth bool) *Frame {
                 gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, obj)
             },
         },
-        tex: NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D),
     }
-
     gl.GenFramebuffers(1, &f.fb.obj)
 
-    f.fb.bind()
-    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.tex.tex.obj, 0)
-    f.fb.restore()
+    f.initTextures(width, height, smooth)
 
     runtime.SetFinalizer(f, (*Frame).delete)
 
@@ -104,4 +101,18 @@ func (f *Frame) Blit(dst *Frame, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1 int) {
 // Texture returns the Frame's underlying Texture that the Frame draws on.
 func (f *Frame) Texture() *Texture {
     return f.tex
+}
+
+func (f *Frame) Resize(width int, height int) {
+    f.initTextures(width, height, f.tex.smooth)
+}
+
+func (f *Frame) initTextures(width int, height int, smooth bool) {
+    f.tex = NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D)
+    f.stencilAndDepth = NewStencilDepthTexture(width, height)
+
+    f.fb.bind()
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.tex.tex.obj, 0)
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, f.stencilAndDepth.tex.obj, 0)
+    f.fb.restore()
 }
