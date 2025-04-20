@@ -116,3 +116,7 @@ func (f *Frame) initTextures(width int, height int, smooth bool) {
     gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, f.stencilAndDepth.tex.obj, 0)
     f.fb.restore()
 }
+
+func (f *Frame) DepthStencilTexture() *Texture {
+    return f.stencilAndDepth
+}

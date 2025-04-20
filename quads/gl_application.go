@@ -82,7 +82,9 @@ type GlApplication struct {
     UIAtlas *glhf.TextureAtlasFixed
     UIFont  BitmapFont
 
-    spriteBatches []*glhf.SpriteBatch
+    spriteBatches               []*glhf.SpriteBatch
+    locationPostColorTex        int32
+    locationPostDepthStencilTex int32
 }
 
 func (a *GlApplication) SetMouseCapture(isCaptured bool) {
@@ -367,93 +369,82 @@ func (a *GlApplication) StartEventLoop() {
             if a.Window.ShouldClose() {
                 shouldQuit = true
             }
-
-            // Clear the window.
-            //gl.ClearColor(0, 0, 0, 1)
-
-            // Update BEGIN
             time = glfw.GetTime()
             elapsed := time - previousTime
             previousTime = time
             deltaTime := elapsed * a.TimeFactor
 
-            a.updateToasts(deltaTime)
+            { // Update BEGIN
+                a.updateToasts(deltaTime)
 
-            if a.Pathfinder != nil {
-                a.Pathfinder.Update(elapsed)
-            }
-            if a.minimap != nil {
-                a.minimap.Update()
-            }
-            a.UpdateFunc(deltaTime)
+                if a.Pathfinder != nil {
+                    a.Pathfinder.Update(elapsed)
+                }
+                if a.minimap != nil {
+                    a.minimap.Update()
+                }
+                a.UpdateFunc(deltaTime)
 
-            a.updateUBO()
-
-            // Update END
+                a.updateUBO()
+            } // Update END
 
             // DRAW BEGIN
-
-            // prepare Framebuffer
             a.frameBuffer.Begin()
+            { // BEGIN RENDER 3D SCENE
+                gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
+                gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-            // hmm, where should this go?
-            //buffers := []uint32{gl.COLOR_ATTACHMENT0, gl.DEPTH_ATTACHMENT}
-            //gl.DrawBuffers(1, &buffers[0])
+                a.DrawFunc(deltaTime)
 
-            gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
-            gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-            // Begin Draw 3D Scene
-            a.DrawFunc(deltaTime)
-
-            if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
-                a.drawSkybox(a.skyboxCubeMap)
-            }
-            // End Draw 3D Scene
-
-            // Begin Draw 2D Scene
-            gl.Clear(gl.DEPTH_BUFFER_BIT)
-
-            a.guiShader.Begin()
-            //gl.Disable(gl.DEPTH_TEST)
-            glhf.PaintersOffset = 0.0001
-            for _, batch := range a.spriteBatches {
-                batch.Begin()
-            }
-
-            a.Gui.Draw(deltaTime)
-
-            a.DrawGuiFunc(deltaTime)
-
-            if a.minimap != nil && a.ShouldDrawMinimap {
-                a.minimap.Draw()
-            }
-
-            a.drawToasts()
-
-            for _, batch := range a.spriteBatches {
-                batch.End()
-                batch.Render()
-            }
-            //gl.Enable(gl.DEPTH_TEST)
-
-            a.guiShader.End()
-            // End Draw 2D Scene
-
-            // Finalize Framebuffer
+                if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
+                    a.drawSkybox(a.skyboxCubeMap)
+                }
+            } // End Render 3D Scene
             a.frameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
 
-            a.postShader.Begin()
+            { // DRAW FRAMEBUFFER TO SCREEN & POSTPROCESSING
+                a.postShader.Begin()
 
-            //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
-            a.frameBuffer.Texture().Begin()
+                //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+                a.frameBuffer.Texture().BeginOnUnit(gl.TEXTURE0)
+                a.frameBuffer.DepthStencilTexture().BeginOnUnit(gl.TEXTURE1)
 
-            a.screenQuad.Begin()
-            a.screenQuad.Draw()
-            a.screenQuad.End()
+                a.screenQuad.Begin()
+                a.screenQuad.Draw()
+                a.screenQuad.End()
 
-            a.frameBuffer.Texture().End()
-            a.postShader.End()
+                a.frameBuffer.DepthStencilTexture().End()
+                a.frameBuffer.Texture().End()
+
+                a.postShader.End()
+                gl.ActiveTexture(gl.TEXTURE0)
+            } // End Draw Framebuffer to Screen & Postprocessing
+
+            // DRAW UI ON TOP OF POSTPROCESSING
+            { // Begin Draw 2D Scene
+                gl.Clear(gl.DEPTH_BUFFER_BIT)
+                a.guiShader.Begin()
+                glhf.PaintersOffset = 0.0001
+                for _, batch := range a.spriteBatches {
+                    batch.Begin()
+                }
+
+                a.Gui.Draw(deltaTime)
+
+                a.DrawGuiFunc(deltaTime)
+
+                if a.minimap != nil && a.ShouldDrawMinimap {
+                    a.minimap.Draw()
+                }
+
+                a.drawToasts()
+
+                for _, batch := range a.spriteBatches {
+                    batch.End()
+                    batch.Render()
+                }
+                a.guiShader.End()
+            } // End Draw 2D Scene
 
             // DRAW END
             a.FramesPerSecond = 1.0 / elapsed
@@ -803,6 +794,13 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
 
         glApp.screenQuad = PostQuad(glApp.postShader)
+        glApp.locationPostColorTex = glApp.postShader.UniformLocation("tex")
+        glApp.locationPostDepthStencilTex = glApp.postShader.UniformLocation("depthStencil")
+
+        glApp.postShader.Begin()
+        glApp.postShader.SetTextureUnit(glApp.locationPostColorTex, gl.TEXTURE0)
+        glApp.postShader.SetTextureUnit(glApp.locationPostDepthStencilTex, gl.TEXTURE1)
+        glApp.postShader.End()
 
         skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
         skyboxVA.Begin()
