@@ -129,16 +129,13 @@ func (u *UniformBufferObject) SetAttribute(attrIndex int, value any) {
     default:
         ptrToValue = gl.Ptr(v)
     }
-    u.SetData(offset, size, ptrToValue)
+
+    gl.BufferSubData(gl.UNIFORM_BUFFER, offset, size, ptrToValue)
 
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(glErr)
     }
-}
-
-func (u *UniformBufferObject) SetData(offset int, size int, ptrToValue unsafe.Pointer) {
-    gl.BufferSubData(gl.UNIFORM_BUFFER, offset, size, ptrToValue)
 }
 
 func (u *UniformBufferObject) GetShaderBlockSource(blockName string) string {

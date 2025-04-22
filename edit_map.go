@@ -115,7 +115,7 @@ func (g *Game) openVoxelEditMenu() {
             g.popFromWidgetStack()
         }),
         quads.NewGuiOptionAction("Save Map", func() {
-            saveErr := g.cubeMap.SaveToDisk(filepath.Join("assets", "map.bin"))
+            saveErr := g.CubeMap.SaveToDisk(filepath.Join("assets", "map.bin"))
             if saveErr != nil {
                 g.Toast(saveErr.Error())
             } else {
@@ -124,15 +124,15 @@ func (g *Game) openVoxelEditMenu() {
             g.popFromWidgetStack()
         }),
         quads.NewGuiOptionAction("Load Map", func() {
-            g.cubeMap.LoadFromDisk(filepath.Join("assets", "map.bin"))
+            g.CubeMap.LoadFromDisk(filepath.Join("assets", "map.bin"))
 
             g.Toast("Map loaded")
 
             g.popFromWidgetStack()
         }),
         quads.NewGuiOptionAction("Clear Map", func() {
-            g.cubeMap.ClearAllChunks()
-            g.cubeMap.SetFloorAtHeight(0, g.voxelBlock)
+            g.CubeMap.ClearAllChunks()
+            g.CubeMap.SetFloorAtHeight(0, g.voxelBlock)
             g.popFromWidgetStack()
         }),
     }
@@ -184,11 +184,11 @@ func (g *Game) startVoxelEditing() {
 }
 
 func (g *Game) voxelPlaceBlock(pos []voxel.Int3) {
-    g.cubeMap.SetBlocks(pos, g.voxelBlock.Copy())
+    g.CubeMap.SetBlocks(pos, g.voxelBlock.Copy())
 }
 
 func (g *Game) voxelRemoveBlock(pos []voxel.Int3) {
-    g.cubeMap.SetAirBlocks(pos)
+    g.CubeMap.SetAirBlocks(pos)
 }
 
 type VoxelBrush interface {

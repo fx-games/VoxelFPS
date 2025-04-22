@@ -105,7 +105,7 @@ func (s *SpriteComponent) Origin() SpriteOrigin {
     return s.SpriteOrigin
 }
 
-func (s *SpriteComponent) TextureIndex(viewDirection int, elapsed float64) (uint16, bool) {
+func (s *SpriteComponent) TextureIndex(viewDirection int) (uint16, bool) {
     var texIndex uint16
     if len(s.TextureIndices) == 1 {
         texIndex = s.TextureIndices[0]
@@ -114,8 +114,7 @@ func (s *SpriteComponent) TextureIndex(viewDirection int, elapsed float64) (uint
     }
     return texIndex, true
 }
-
-func (s *SpriteComponent) TextureIndexAnimated(frames []uint16, showTimes []float32, elapsed float64) (uint16, bool) {
+func (s *SpriteComponent) Update(frames []uint16, showTimes []float32, elapsed float64) {
     s.currentFrameTime += float32(elapsed)
 
     if s.currentFrameTime >= showTimes[s.currentFrame] {
@@ -124,7 +123,6 @@ func (s *SpriteComponent) TextureIndexAnimated(frames []uint16, showTimes []floa
         if s.currentFrame >= len(frames) {
             if s.dieAfterLastFrame {
                 s.GameObject().Kill()
-                return 0, false
             } else if s.freezeLastFrame {
                 s.currentFrame = len(frames) - 1
             } else if s.loop {
@@ -137,6 +135,8 @@ func (s *SpriteComponent) TextureIndexAnimated(frames []uint16, showTimes []floa
             }
         }
     }
+}
+func (s *SpriteComponent) TextureIndexAnimated(frames []uint16) (uint16, bool) {
     textureIndexToShowThisFrame := frames[s.currentFrame]
     return textureIndexToShowThisFrame, true
 }

@@ -2,6 +2,7 @@ package voxel
 
 import (
     "fmt"
+    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
     "math"
@@ -464,6 +465,10 @@ func (c *Chunk) Draw(shader *glhf.Shader, modelUniformIndex int) {
     shader.SetUniformAttr(modelUniformIndex, c.GetMatrix())
 
     c.meshBuffer.Draw(shader.ID())
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
 }
 func (c *Chunk) getDiscreteCamDir(camDir mgl32.Vec3) Int3 {
     intPos := Int3{0, 0, 0}

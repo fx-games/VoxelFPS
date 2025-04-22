@@ -1,20 +1,32 @@
 package glhf
 
 import (
-    "runtime"
-
     "github.com/go-gl/gl/v3.3-core/gl"
+    "runtime"
 )
 
 // Frame is a fixed resolution texture that you can DrawWithOffset on.
 type Frame struct {
-    fb, rf, df      binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
-    tex             *Texture
-    stencilAndDepth *Texture // TODO: optimization would be a separate stencil and depth buffer
+    fb, rf, df binder // framebuffer, read framebuffer, DrawWithOffset framebuffer
+    color      *Texture
+    depth      *Texture // TODO: optimization would be a separate stencil and depth buffer
+    depthArray *TextureArray
 }
 
-// NewFrame creates a new fully transparent Frame with given dimensions in pixels.
-func NewFrame(width, height int, smooth bool) *Frame {
+// NewFrameBufferWithColorDepthStencil creates a new fully transparent Frame with given dimensions in pixels.
+func NewFrameBufferWithColorDepthStencil(width, height int, smooth bool) *Frame {
+    f := NewFrameBuffer()
+    f.initColorStencilDepth(width, height, smooth)
+    return f
+}
+
+func NewFrameBufferWithDepth(width, height int) *Frame {
+    f := NewFrameBuffer()
+    f.initDepthBuffer(width, height)
+    return f
+}
+
+func NewFrameBuffer() *Frame {
     f := &Frame{
         fb: binder{
             restoreLoc: gl.FRAMEBUFFER_BINDING,
@@ -37,8 +49,6 @@ func NewFrame(width, height int, smooth bool) *Frame {
     }
     gl.GenFramebuffers(1, &f.fb.obj)
 
-    f.initTextures(width, height, smooth)
-
     runtime.SetFinalizer(f, (*Frame).delete)
 
     return f
@@ -58,6 +68,18 @@ func (f *Frame) ID() uint32 {
 // Begin binds the Frame. All DrawWithOffset operations will target this Frame until End is called.
 func (f *Frame) Begin() {
     f.fb.bind()
+}
+
+func (f *Frame) SetDepthLayer(layer int) {
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+    gl.FramebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, f.depthArray.tex.obj, 0, int32(layer))
+    glErr = gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
 }
 
 // End unbinds the Frame. All DrawWithOffset operations will go to whatever was bound before this Frame.
@@ -84,7 +106,7 @@ func (f *Frame) Blit(dst *Frame, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1 int) {
     f.df.bind()
 
     filter := gl.NEAREST
-    if f.tex.smooth {
+    if f.color.smooth {
         filter = gl.LINEAR
     }
 
@@ -100,23 +122,40 @@ func (f *Frame) Blit(dst *Frame, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1 int) {
 
 // Texture returns the Frame's underlying Texture that the Frame draws on.
 func (f *Frame) Texture() *Texture {
-    return f.tex
+    return f.color
 }
 
 func (f *Frame) Resize(width int, height int) {
-    f.initTextures(width, height, f.tex.smooth)
+    if f.color == nil {
+        f.initDepthBuffer(width, height)
+    } else {
+        f.initColorStencilDepth(width, height, f.color.smooth)
+    }
 }
 
-func (f *Frame) initTextures(width int, height int, smooth bool) {
-    f.tex = NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D)
-    f.stencilAndDepth = NewStencilDepthTexture(width, height)
+func (f *Frame) initColorStencilDepth(width int, height int, smooth bool) {
+    f.color = NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D)
+    f.depth = NewStencilDepthTexture(width, height)
 
     f.fb.bind()
-    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.tex.tex.obj, 0)
-    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, f.stencilAndDepth.tex.obj, 0)
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.color.tex.obj, 0)
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, f.depth.tex.obj, 0)
     f.fb.restore()
 }
 
-func (f *Frame) DepthStencilTexture() *Texture {
-    return f.stencilAndDepth
+func (f *Frame) DepthTexture() *Texture {
+    return f.depth
+}
+
+func (f *Frame) initDepthBuffer(width int, height int) {
+    f.depthArray = NewDepthTextureArray(width, height, 64, false)
+    f.Begin()
+    // prevent OpenGL from drawing to the color buffer
+    gl.DrawBuffer(gl.NONE)
+    gl.ReadBuffer(gl.NONE)
+    f.End()
+}
+
+func (f *Frame) DepthTextureArray() *TextureArray {
+    return f.depthArray
 }

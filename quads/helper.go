@@ -69,3 +69,6 @@ func HudCornersFromOBB(aabb voxel.AABB, objectTransformationMatrix mgl32.Mat4, p
 
     return [2]int{minX, minY}, [2]int{maxX, minY}, [2]int{minX, maxY}, [2]int{maxX, maxY}
 }
+
+const emptyFragmentShaderSource = `#version 400 core
+void main() {}`

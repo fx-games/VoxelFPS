@@ -264,7 +264,10 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
         panic(fmt.Sprintf("Uniform attribute %d not found", uniform))
         return false
     }
-
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     switch s.uniformFmt[uniform].Type {
     case Int:
         value := value.(int32)
@@ -332,7 +335,7 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
     default:
         panic("set uniform attr: invalid attribute type")
     }
-    glErr := gl.GetError()
+    glErr = gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(glErr)
     }

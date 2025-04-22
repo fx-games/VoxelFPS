@@ -47,10 +47,6 @@ func (c *FPSCamera) GetPickingRayFromScreenPosition(x float64, y float64) (origi
     return GetRayFromCameraPlane(c, normalizedX, normalizedY)
 }
 
-func (c *FPSCamera) GetProjectionViewMatrix() mgl32.Mat4 {
-    return c.GetProjectionMatrix().Mul4(c.GetViewMatrix())
-}
-
 func (c *FPSCamera) GetTransform() Transform {
     return *c.Transform
 }
@@ -258,8 +254,8 @@ func (c *FPSCamera) GetFarPlaneDist() float32 {
     return c.farPlaneDist
 }
 
-func (c *FPSCamera) GetViewDirection(spritePosition mgl32.Vec3, spriteLookDir mgl32.Vec2) int { // must return 0-7
-    camPosition2d := mgl32.Vec2{c.GetPosition().X(), c.GetPosition().Z()}
+func GetViewDirection(viewerPos, spritePosition mgl32.Vec3, spriteLookDir mgl32.Vec2) int { // must return 0-7
+    camPosition2d := mgl32.Vec2{viewerPos.X(), viewerPos.Z()}
     spritePosition2d := mgl32.Vec2{spritePosition.X(), spritePosition.Z()}
 
     direction := spritePosition2d.Sub(camPosition2d).Normalize()

@@ -3,6 +3,7 @@ package glhf
 import (
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/core"
     "math"
     "math/rand"
 )
@@ -67,9 +68,6 @@ type ParticleSystem struct {
     primitiveType           uint32
     xfbo                    uint32
 
-    getProjection func() mgl32.Mat4
-
-    getView              func() mgl32.Mat4
     lastParticleLifetime float32
     flatData             []GlFloat
     totalTime            float32
@@ -80,15 +78,13 @@ type ParticleSystem struct {
 // We'll write from the transform vertex transformFeedbackShader to the first buffer, then read from the second buffer in the fragment transformFeedbackShader
 // Then we'll swap the buffers and repeat
 
-func NewParticleSystem(particleCount int, getView, getProj func() mgl32.Mat4) *ParticleSystem {
+func NewParticleSystem(particleCount int) *ParticleSystem {
     particleVertexFormat := getParticleVertexFormat()
     v := &ParticleSystem{ // TODO: specify DYNAMIC_READ instead of STATIC_DRAW during buffer creation
         maxVertexCount:          particleCount,
         transformFeedbackShader: loadTransformFeedbackShader(particleVertexFormat),
         particleShader:          loadParticleShader(particleVertexFormat),
-        getProjection:           getProj,
-        getView:                 getView,
-        frontIsSource:           true,
+        frontIsSource:           false,
         flatData:                make([]GlFloat, particleCount*(particleVertexFormat.Size()/SizeOfFloat32)),
     }
     v.initializeBuffers(particleCount)
@@ -124,18 +120,6 @@ func (v *ParticleSystem) initializeBuffers(particleCount int) {
     if glError != gl.NO_ERROR {
         println("failed to initializeBuffers:", glError)
     }
-}
-func (v *ParticleSystem) Draw(deltaTime float64) {
-    if v.lastParticleLifetime <= 0.00 && !v.isInfiteEmitter {
-        return
-    }
-    v.lastParticleLifetime -= float32(deltaTime)
-
-    // One DrawWithOffset Call here
-    v.doTransfer(v.currentBackBuffer(), v.currentFrontBuffer(), deltaTime)
-    // Another DrawWithOffset Call here
-    v.draw(deltaTime, v.currentFrontBuffer())
-    v.frontIsSource = !v.frontIsSource
 }
 
 func (v *ParticleSystem) currentBackBuffer() *VertexArray[GlFloat] {
@@ -174,7 +158,7 @@ func (v *ParticleSystem) doTransfer(src, dest *VertexArray[GlFloat], deltaTime f
     src.End()
     v.transformFeedbackShader.End()
 
-    gl.Disable(gl.RASTERIZER_DISCARD)
+    gl.Disable(gl.RASTERIZER_DISCARD) // TODO: CHECK IF THIS DOES WHAT I THINK IT DOES.. If so, why does gl.DrawBuffers(NONE) exist?
 
     //gl.Flush()
     /*
@@ -193,11 +177,25 @@ func (v *ParticleSystem) doTransfer(src, dest *VertexArray[GlFloat], deltaTime f
     */
 }
 
-func (v *ParticleSystem) draw(deltaTime float64, drawBuffer *VertexArray[GlFloat]) {
+func (v *ParticleSystem) Draw(cam core.Camera) {
+    // Another DrawWithOffset Call here
+    v.draw(cam, v.currentFrontBuffer())
+}
+func (v *ParticleSystem) Update(deltaTime float64) {
     v.totalTime += float32(deltaTime)
+    if v.lastParticleLifetime <= 0.00 && !v.isInfiteEmitter {
+        return
+    }
+    v.lastParticleLifetime -= float32(deltaTime)
 
-    view := v.getView()
-    proj := v.getProjection()
+    v.frontIsSource = !v.frontIsSource
+    // One DrawWithOffset Call here
+    v.doTransfer(v.currentBackBuffer(), v.currentFrontBuffer(), deltaTime)
+}
+
+func (v *ParticleSystem) draw(cam core.Camera, drawBuffer *VertexArray[GlFloat]) {
+    view := cam.GetViewMatrix()
+    proj := cam.GetProjectionMatrix()
 
     v.particleShader.Begin()
     v.particleShader.SetUniformAttr(0, proj)

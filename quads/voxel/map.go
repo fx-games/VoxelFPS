@@ -175,6 +175,11 @@ func (m *Map) bake3dTextureIndices() {
 }
 
 func (m *Map) Draw(cam core.Camera) {
+    chunkShader := m.chunkShader
+    m.DrawWithShader(cam, chunkShader)
+}
+
+func (m *Map) DrawWithShader(cam core.Camera, chunkShader *glhf.Shader) {
     if m.textureBufferIsDirty {
         m.textureBufferIsDirty = false
         m.bake3dTextureIndices()
@@ -182,20 +187,23 @@ func (m *Map) Draw(cam core.Camera) {
     if !m.verticesUploaded {
         m.ForceUpload()
     }
-
-    m.chunkShader.Begin()
-
-    if m.locationTex == -1 || m.locationVox == -1 {
-        m.locationTex = m.chunkShader.UniformLocation("tex")
-        m.locationVox = m.chunkShader.UniformLocation("voxelLookup")
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
     }
-
-    m.chunkShader.SetTextureUnit(m.locationTex, gl.TEXTURE0)
-    m.chunkShader.SetTextureUnit(m.locationVox, gl.TEXTURE1)
+    chunkShader.Begin()
 
     m.terrainTexture.BeginOnUnit(gl.TEXTURE0)
+    glErr = gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     m.lookupVoxels.BeginOnUnit(gl.TEXTURE1)
 
+    glErr = gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     m.trianglesDrawn = 0
     m.drawCallCount = 0
     for _, chunk := range m.chunks {
@@ -208,13 +216,15 @@ func (m *Map) Draw(cam core.Camera) {
         }
         m.trianglesDrawn += chunk.meshBuffer.TriangleCount()
         m.drawCallCount += 1
-        chunk.Draw(m.chunkShader, m.modelIndex)
+        chunk.Draw(chunkShader, m.modelIndex)
     }
 
     m.lookupVoxels.End()
     m.terrainTexture.End()
 
-    m.chunkShader.End()
+    chunkShader.End()
+
+    gl.ActiveTexture(gl.TEXTURE0)
 }
 
 func (m *Map) chunkIsVisible(cam core.Camera, chunk *Chunk) bool {

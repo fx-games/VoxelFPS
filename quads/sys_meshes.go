@@ -70,27 +70,34 @@ func (q *MeshDrawer) NewMesh(gltfFile string) (*MeshComponent, voxel.AABB) {
     return meshComponent, q.loadedAABBs[meshIndex]
 }
 
-func (q *MeshDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
-    q.shader.Begin()
-    q.drawCalls = 0
-    q.trianglesDrawn = 0
+func (q *MeshDrawer) Update(elapsed float64) {
     for _, meshes := range q.gameObjectsPerMesh {
         for mesh := range meshes {
             if mesh.IsDead(elapsed) {
                 q.Remove(mesh)
                 continue
             }
+        }
+    }
+}
+
+func (q *MeshDrawer) Draw(camera *core.FPSCamera, meshShader *glhf.Shader) {
+    meshShader.Begin()
+    q.drawCalls = 0
+    q.trianglesDrawn = 0
+    for _, meshes := range q.gameObjectsPerMesh {
+        for mesh := range meshes {
             if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(camera) {
                 continue
             }
             compoundMesh := q.loadedMeshes[mesh.MeshIndex]
             compoundMesh.RootNode.SetParent(mesh.GameObject().Transform())
-            compoundMesh.Draw(q.shader, MeshShaderModelTransform)
+            compoundMesh.Draw(meshShader, MeshShaderModelTransform)
             q.trianglesDrawn += compoundMesh.TriangleCount()
             q.drawCalls += compoundMesh.DrawCalls()
         }
     }
-    q.shader.End()
+    meshShader.End()
 }
 
 func (q *MeshDrawer) Add(mesh *MeshComponent) {

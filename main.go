@@ -3,7 +3,6 @@ package main
 import (
     "fmt"
     "github.com/fsnotify/fsnotify"
-    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/glfw/v3.3/glfw"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
@@ -36,7 +35,7 @@ func main() {
     })
 }
 func NewGame() *Game {
-    return &Game{shouldDrawSprites: true, shouldDrawMeshes: true, shouldDrawParticles: true, isMouseCursorCaptured: true, shouldUseVsync: true}
+    return &Game{isMouseCursorCaptured: true}
 }
 
 type Lifekeeper interface {
@@ -45,8 +44,6 @@ type Lifekeeper interface {
 
 type Game struct {
     *quads.GlApplication
-
-    cubeMap *voxel.Map
 
     physicsSystem *quads.PhysicsSystem
 
@@ -66,17 +63,6 @@ type Game struct {
     widgetStack                []InputReceiver
     widgetsAreBlockingMovement bool
     table                      *quads.GameObject
-
-    shouldDrawAABBs        bool
-    shouldDrawChunkAABBs   bool
-    shouldDrawOBBs         bool
-    shouldDrawPaths        bool
-    shouldDrawMeshes       bool
-    shouldDrawSprites      bool
-    shouldDrawParticles    bool
-    shouldDrawDebugInfo    bool
-    shouldRenderFullscreen bool
-    shouldUseVsync         bool
 
     fogStart               float32
     fogEnd                 float32
@@ -258,8 +244,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.Meshes.Clear()
 
     // Load Map
-    cubeMap, entitySpawns := g.ToVoxelMap(mapLoad)
-    g.cubeMap = cubeMap
+    entitySpawns := g.LoadVoxelMap(mapLoad)
+
     /*
        sphere := physics.NewSphericalHull(5)
        bulletSDK := bullet.BulletNewPhysicsSDK()
@@ -268,8 +254,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
        bullet.BulletStepSimulation(world, 0.1)
     */
     // Setup Collision Solver
-    g.physicsSystem = quads.NewCollisionSolver(g.Camera, cubeMap.IsSolidBlockAt)
-    g.SetupPathfinder(cubeMap.IsSolidBlockAt)
+    g.physicsSystem = quads.NewCollisionSolver(g.Camera, g.CubeMap.IsSolidBlockAt)
+    g.SetupPathfinder(g.CubeMap.IsSolidBlockAt)
 
     // Spawn Entities
     for spawnPos, entity := range entitySpawns {
@@ -335,7 +321,7 @@ func (g *Game) Update(elapsed float64) {
         }
     }
 
-    if true || g.shouldDrawDebugInfo {
+    if true || g.ShouldDrawDebugInfo {
         g.printDebugInfo()
     }
 
@@ -361,7 +347,7 @@ func (g *Game) printDebugInfo() {
         core.NewTableRow("Cam Pos", "", vec3String(pos)),
         core.NewTableRow("Ray Hit", "", rayCastPosString),
         core.NewTableRow("Coll. Pairs", "", fmt.Sprintf("%d", g.physicsSystem.PairsChecked())),
-        core.NewTableRow("Map", fmt.Sprintf("%d tris", g.cubeMap.TriangleDrawCount()), fmt.Sprintf("%d", g.cubeMap.DrawCalls())),
+        core.NewTableRow("Map", fmt.Sprintf("%d tris", g.CubeMap.TriangleDrawCount()), fmt.Sprintf("%d", g.CubeMap.DrawCalls())),
         core.NewTableRow("GUI", fmt.Sprintf("%d tris", guiTrisDrawn), fmt.Sprintf("%d", guiDrawCalls)),
         core.NewTableRow("Sprites", fmt.Sprintf("%d tris", spriteTrisDrawn), fmt.Sprintf("%d", spriteDrawCalls)),
         core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
@@ -408,38 +394,6 @@ func (g *Game) bringToFront(widget InputReceiver) {
     }
 }
 
-func (g *Game) Draw(elapsed float64) {
-    g.cubeMap.Draw(g.Camera)
-
-    gl.ActiveTexture(gl.TEXTURE0)
-
-    if g.UnitCube != nil {
-        g.UnitCube.DrawAllQueued()
-    }
-
-    if g.shouldDrawMeshes {
-        g.Meshes.Draw(g.Camera, elapsed)
-    }
-
-    if g.shouldDrawSprites {
-        g.Sprites.Draw(g.Camera, elapsed)
-    }
-    if g.shouldDrawParticles {
-        g.DrawParticles(elapsed)
-    }
-    if g.shouldDrawAABBs {
-        g.DrawAABBs()
-    }
-    if g.shouldDrawChunkAABBs {
-        g.DrawChunkAABBs(g.cubeMap)
-    }
-    if g.shouldDrawOBBs {
-        g.DrawOBBs()
-    }
-    if g.shouldDrawPaths {
-        g.DrawPaths()
-    }
-}
 func (g *Game) DrawGui(elapsed float64) {
     hoveredObj := g.hoveredObj()
     if hoveredObj != nil {
@@ -610,7 +564,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
     var worldPos mgl32.Vec3
     var relativePos mgl32.Vec3
     hitInfo = voxel.DDARaycast(origin, direction, func(x, y, z int32) (stopRay bool) {
-        if !g.cubeMap.Contains(int32(x), int32(y), int32(z)) {
+        if !g.CubeMap.Contains(int32(x), int32(y), int32(z)) {
             return true
         }
         for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
@@ -628,7 +582,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
             relativePos = relativeToObj
             return true
         }
-        return g.cubeMap.IsSolidBlockAt(x, y, z)
+        return g.CubeMap.IsSolidBlockAt(x, y, z)
     })
 
     return RaycastResult{
@@ -659,7 +613,7 @@ func (g *Game) openCubeTextureMapper() {
         return
     }
     g.ShouldDrawMinimap = false
-    g.shouldDrawDebugInfo = false
+    g.ShouldDrawDebugInfo = false
     g.SetMouseCapture(false)
 
     g.widgetsAreBlockingMovement = true
@@ -718,24 +672,24 @@ func (g *Game) openWizardMenu() {
         resolutionOptions = append(resolutionOptions, fmt.Sprintf("%dx%d", vMode.Width, vMode.Height))
     }
     options := []quads.GuiOption{
-        quads.NewGuiOptionBool("Show Debug Info", &g.shouldDrawDebugInfo),
+        quads.NewGuiOptionBool("Show Debug Info", &g.ShouldDrawDebugInfo),
         quads.NewGuiOptionAction("Generate MipMaps for Terrain", func() {
             //core.BigDebugSwitch = !core.BigDebugSwitch
-            g.cubeMap.GetTerrainTexture().GenerateMipMaps()
+            g.CubeMap.GetTerrainTexture().GenerateMipMaps()
         }),
         quads.NewGuiOptionAction("Fullscreen", g.toggleFullscreen),
         quads.NewGuiOptionAction("VSync", g.toggleVsync),
 
         quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowMode),
-        quads.NewGuiOptionBool("Show Chunk AABBs", &g.shouldDrawChunkAABBs),
-        quads.NewGuiOptionBool("Show AABBs", &g.shouldDrawAABBs),
-        quads.NewGuiOptionBool("Show OBBs", &g.shouldDrawOBBs),
-        quads.NewGuiOptionBool("Show Paths", &g.shouldDrawPaths),
-        quads.NewGuiOptionBool("Show Sprites", &g.shouldDrawSprites),
-        quads.NewGuiOptionBool("Show Meshes", &g.shouldDrawMeshes),
+        quads.NewGuiOptionBool("Show Chunk AABBs", &g.ShouldDrawChunkAABBs),
+        quads.NewGuiOptionBool("Show AABBs", &g.ShouldDrawAABBs),
+        quads.NewGuiOptionBool("Show OBBs", &g.ShouldDrawOBBs),
+        quads.NewGuiOptionBool("Show Paths", &g.ShouldDrawPaths),
+        quads.NewGuiOptionBool("Show Sprites", &g.ShouldDrawSprites),
+        quads.NewGuiOptionBool("Show Meshes", &g.ShouldDrawMeshes),
         quads.NewGuiOptionBool("Show Skybox", &g.ShouldDrawSkybox),
         quads.NewGuiOptionBool("Show Minimap", &g.ShouldDrawMinimap),
-        quads.NewGuiOptionBool("Show Particles", &g.shouldDrawParticles),
+        quads.NewGuiOptionBool("Show Particles", &g.ShouldDrawParticles),
         quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
         quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
     }
@@ -757,7 +711,7 @@ func (g *Game) openWizardMenu() {
     g.pushToWidgetStack(configMenu)
 }
 func (g *Game) setWindowMode(index int) {
-    g.shouldRenderFullscreen = false
+    g.ShouldRenderFullscreen = false
     vMode := g.GetVideoModes()[index]
     g.SetWindowSize(vMode)
 }
@@ -768,18 +722,18 @@ func (g *Game) updateFog() {
 }
 
 func (g *Game) toggleFullscreen() {
-    if g.shouldRenderFullscreen {
+    if g.ShouldRenderFullscreen {
         g.SetWindowSize(g.GetVideoModes()[g.currentResolutionIndex])
     } else {
         g.SetFullscreen()
     }
-    g.shouldRenderFullscreen = !g.shouldRenderFullscreen
+    g.ShouldRenderFullscreen = !g.ShouldRenderFullscreen
 }
 
 func (g *Game) toggleVsync() {
-    g.shouldUseVsync = !g.shouldUseVsync
-    g.SetVSync(g.shouldUseVsync)
-    g.Toast(fmt.Sprintf("VSync: %t", g.shouldUseVsync))
+    g.ShouldUseVsync = !g.ShouldUseVsync
+    g.SetVSync(g.ShouldUseVsync)
+    g.Toast(fmt.Sprintf("VSync: %t", g.ShouldUseVsync))
 }
 
 func (g *Game) toggleMouseCapture() {
@@ -862,7 +816,7 @@ func (g *Game) colorForMinimap(x int, y int) [4]uint8 {
     if x == playerX && y == playerY {
         return [4]uint8{80, 255, 255, 255}
     }
-    blockAt := g.cubeMap.GetGlobalBlock(int32(x), int32(playerHeight), int32(y))
+    blockAt := g.CubeMap.GetGlobalBlock(int32(x), int32(playerHeight), int32(y))
     if blockAt.IsSolid {
         return [4]uint8{100, 244, 100, 255}
     }

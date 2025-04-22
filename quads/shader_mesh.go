@@ -33,12 +33,54 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
         panic(errorMsg)
     }
 
+    shader.Begin()
+    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.End()
+
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(glErr)
     }
 
     return shader
+}
+func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
+    var (
+        vertexFormat = glhf.AttrFormat{
+            {Name: "position", Type: glhf.Vec3},
+            {Name: "texCoord", Type: glhf.Vec2},
+            {Name: "vertexColor", Type: glhf.Vec3}, // Take this out?
+            {Name: "normal", Type: glhf.Vec3},
+        }
+        uniformFormat = glhf.AttrFormat{
+            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+        }
+        shader *glhf.Shader
+    )
+    var err error
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+meshVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+
+    if err != nil {
+        panic(err)
+    }
+
+    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+        panic(errorMsg)
+    }
+
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+
+    return shader
+}
+
+func meshVertexShaderSourceDepthPass() string {
+    return prefixFilter(meshVertexShaderSource, []string{
+        "out vec",
+        "Vert",
+    })
 }
 
 const meshVertexShaderSource = `
@@ -56,11 +98,10 @@ out vec3 VertColor;
 
 void main() {
     gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
-    VertUV = texCoord;
-    VertNormal = normal;
-
 
     // pass-through for fragment shader
+    VertUV = texCoord;
+    VertNormal = normal;
     VertPos = position;
     VertColor = vertexColor;
 }`

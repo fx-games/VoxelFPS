@@ -72,11 +72,62 @@ func (q *SpriteDrawer) uploadQuad() {
    2 -> rightU, bottomV
    3 -> leftU, bottomV
 */
+func (q *SpriteDrawer) Update(elapsed float64) {
+    for _, sprites := range q.spritesPerTexture {
+        for sprite := range sprites {
+            if sprite.IsDead(elapsed) {
+                q.Remove(sprite)
+                continue
+            }
+            q.updateSprite(sprite, elapsed)
+        }
+    }
 
-func (q *SpriteDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
-    q.shader.Begin()
-    q.shader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
-    q.shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
+    for i := len(q.transparentSprites) - 1; i >= 0; i-- {
+        sprite := q.transparentSprites[i]
+        if sprite.IsDead(elapsed) {
+            // mark for reuse
+            q.transparentSprites = append(q.transparentSprites[:i], q.transparentSprites[i+1:]...)
+        }
+        q.updateSprite(sprite, elapsed)
+    }
+}
+func (q *SpriteDrawer) updateSprite(sprite *SpriteComponent, elapsed float64) {
+    currentAnimation := sprite.CurrentAnimation()
+    if currentAnimation < 0 || currentAnimation >= len(q.animations) {
+        return
+    }
+    var frames []uint16
+
+    showTimes := q.animations[currentAnimation].ShowTimeInSeconds
+    frames = q.animations[currentAnimation].Frames[0]
+    sprite.Update(frames, showTimes, elapsed)
+}
+
+// TODO: This should not change when drawing the sprites multiple times in the same frame
+func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) (uint16, bool) {
+    currentAnimation := sprite.CurrentAnimation()
+    if currentAnimation < 0 || currentAnimation >= len(q.animations) {
+        return sprite.TextureIndex(viewDirection)
+    }
+    var frames []uint16
+
+    if len(q.animations[currentAnimation].Frames) == 1 {
+        frames = q.animations[currentAnimation].Frames[0]
+    } else {
+        frames = q.animations[currentAnimation].Frames[viewDirection]
+    }
+    return sprite.TextureIndexAnimated(frames)
+}
+
+func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spriteShader *glhf.Shader) {
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+    spriteShader.Begin()
+    spriteShader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
+    //spriteShader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
 
     if q.quadVertices == nil {
         q.uploadQuad()
@@ -87,36 +138,43 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
 
     spritesDrawn := 0
     drawCalls := 0
-
+    glErr = gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     for currentAtlas, spriteList := range q.spritesPerTexture {
         if len(spriteList) == 0 {
             continue
         }
 
-        tileW, tileH := currentAtlas.GetAtlasItemSize()
-        q.shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
+        //tileW, tileH := currentAtlas.GetAtlasItemSize()
+        //spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 
         currentAtlas.Begin()
-
+        glErr = gl.GetError()
+        if glErr != gl.NO_ERROR {
+            panic(glErr)
+        }
         for sprite := range spriteList {
-            if sprite.IsDead(elapsed) {
-                // mark for reuse
-                q.Remove(sprite)
-                continue
-            }
-
             if !sprite.GameObject().IsInViewFrustum(camera) {
                 continue
             }
 
-            viewDirection := camera.GetViewDirection(sprite.Position(), sprite.LookDirection())
-
-            texIndex, shouldShow := q.TextureIndex(sprite, viewDirection, elapsed)
+            viewDirection := core.GetViewDirection(observerPos, sprite.Position(), sprite.LookDirection())
+            // TODO: This should not change when drawing the sprites multiple times in the same frame
+            texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
             if !shouldShow {
                 continue
             }
-
-            q.drawSprite(camera, sprite, texIndex)
+            glErr = gl.GetError()
+            if glErr != gl.NO_ERROR {
+                panic(glErr)
+            }
+            q.drawSprite(camera, spriteShader, sprite, texIndex)
+            glErr = gl.GetError()
+            if glErr != gl.NO_ERROR {
+                panic(glErr)
+            }
             spritesDrawn++
             drawCalls++
         }
@@ -137,21 +195,16 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
     for i := len(q.transparentSprites) - 1; i >= 0; i-- {
         sprite := q.transparentSprites[i]
         sprite.AtlasTexture.Begin() // THIS COULD BE SLOW..
-
-        if sprite.IsDead(elapsed) {
-            // mark for reuse
-            q.transparentSprites = append(q.transparentSprites[:i], q.transparentSprites[i+1:]...)
-            continue
-        }
         if !sprite.GameObject().IsInViewFrustum(camera) {
             continue
         }
-        viewDirection := camera.GetViewDirection(sprite.Position(), sprite.LookDirection())
-        texIndex, shouldShow := q.TextureIndex(sprite, viewDirection, elapsed)
+        viewDirection := core.GetViewDirection(observerPos, sprite.Position(), sprite.LookDirection())
+        // TODO: This should not change when drawing the sprites multiple times in the same frame
+        texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
         if !shouldShow {
             continue
         }
-        q.drawSprite(camera, sprite, texIndex)
+        q.drawSprite(camera, nil, sprite, texIndex)
         spritesDrawn++
         drawCalls++
 
@@ -160,23 +213,23 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, elapsed float64) {
 
     quad.End()
 
-    q.shader.End()
+    spriteShader.End()
     q.quadsDrawn = spritesDrawn
     q.drawCalls = drawCalls
 }
 
-func (q *SpriteDrawer) drawSprite(camera *core.FPSCamera, sprite *SpriteComponent, texIndex uint16) {
-    q.shader.SetUniformAttr(QuadShaderModelTransform, sprite.Transform(camera))
+func (q *SpriteDrawer) drawSprite(camera *core.FPSCamera, shader *glhf.Shader, sprite *SpriteComponent, texIndex uint16) {
+    shader.SetUniformAttr(QuadShaderModelTransform, sprite.Transform(camera))
     tintColor := sprite.TintColor()
 
-    q.shader.SetUniformAttr(QuadShaderTintColor, tintColor)
+    //q.shader.SetUniformAttr(QuadShaderTintColor, tintColor)
 
     originOffset := mgl32.Vec2{0, 0} // offset zero = center of sprite
     if sprite.Origin() == SpriteOriginBottomCenter {
         originOffset = mgl32.Vec2{0, 0.5}
     }
-    q.shader.SetUniformAttr(QuadShaderOriginOffset, originOffset)
-    q.shader.SetUniformAttr(QuadShaderTextureIndex, uint32(texIndex))
+    shader.SetUniformAttr(QuadShaderOriginOffset, originOffset)
+    //shader.SetUniformAttr(QuadShaderTextureIndex, uint32(texIndex))
 
     if sprite.DrawMode() == SpriteModeStatic {
         gl.Disable(gl.CULL_FACE)
@@ -210,22 +263,6 @@ func (q *SpriteDrawer) Add(sprite *SpriteComponent) {
 
 func (q *SpriteDrawer) Remove(sprite *SpriteComponent) {
     delete(q.spritesPerTexture[sprite.Atlas()], sprite)
-}
-
-func (q *SpriteDrawer) TextureIndex(sprite *SpriteComponent, viewDirection int, elapsed float64) (uint16, bool) {
-    currentAnimation := sprite.CurrentAnimation()
-    if currentAnimation < 0 || currentAnimation >= len(q.animations) {
-        return sprite.TextureIndex(viewDirection, elapsed)
-    }
-    var frames []uint16
-
-    showTimes := q.animations[currentAnimation].ShowTimeInSeconds
-    if len(q.animations[currentAnimation].Frames) == 1 {
-        frames = q.animations[currentAnimation].Frames[0]
-    } else {
-        frames = q.animations[currentAnimation].Frames[viewDirection]
-    }
-    return sprite.TextureIndexAnimated(frames, showTimes, elapsed)
 }
 
 func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {

@@ -25,6 +25,9 @@ func (c *PerspectiveTransform) SetUIProjectionScale(uiScale mgl32.Vec2) {
 func (c *PerspectiveTransform) GetProjectionMatrix() mgl32.Mat4 {
     return mgl32.Perspective(mgl32.DegToRad(c.fov), float32(c.windowWidth)/float32(c.windowHeight), c.nearPlaneDist, c.farPlaneDist)
 }
+func (c *PerspectiveTransform) GetProjectionViewMatrix() mgl32.Mat4 {
+    return c.GetProjectionMatrix().Mul4(c.GetViewMatrix())
+}
 
 /*
 func (c *PerspectiveTransform) GetFrustumPlanes() []mgl32.Vec4 {
@@ -235,6 +238,24 @@ func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
         windowWidth:   width,
         windowHeight:  height,
     }
+}
+
+func NewPerspectiveTransformForSpotlight(position, direction mgl32.Vec3, fov float32, farPlaneDist float32) *PerspectiveTransform {
+    p := &PerspectiveTransform{
+        Transform: &Transform{
+            translation: position,
+            rotation:    mgl32.QuatIdent(),
+            scale:       mgl32.Vec3{1, 1, 1},
+        },
+        fov:           fov,
+        defaultFOV:    fov,
+        nearPlaneDist: 0,
+        farPlaneDist:  farPlaneDist,
+        windowWidth:   256,
+        windowHeight:  256,
+    }
+    p.SetForward(direction)
+    return p
 }
 
 func (c *PerspectiveTransform) ProjectWorldToScreen(worldPos mgl32.Vec3) mgl32.Vec3 {

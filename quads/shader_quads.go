@@ -4,14 +4,15 @@ import (
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
+    "strings"
 )
 
 const (
     QuadShaderModelTransform int = iota
-    QuadShaderTintColor
+    QuadShaderOriginOffset
     QuadShaderTextureIndex
     QuadShaderAtlasItemSize
-    QuadShaderOriginOffset
+    QuadShaderTintColor
 )
 
 func LoadQuadShader(uboBlock string) *glhf.Shader {
@@ -21,10 +22,10 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
         }
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-            glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 1
+            glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
             glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
             glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
-            glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 4
+            glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 4
         }
         shader *glhf.Shader
     )
@@ -41,12 +42,43 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
 
     shader.Begin()
     shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-
-    //lightPos := mgl32.Vec3{1, 10, 0}
-    //shader.SetUniformAttr(ShaderLightPosition, lightPos)
-
     shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
+    shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
+    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.End()
 
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+    return shader
+}
+func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
+    var (
+        vertexFormat = glhf.AttrFormat{
+            {Name: "cornerIndex", Type: glhf.UInt}, // 0-3
+        }
+        uniformFormat = glhf.AttrFormat{
+            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+            glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
+            //            glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
+            //            glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
+        }
+        shader *glhf.Shader
+    )
+    var err error
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+
+    if err != nil {
+        panic(err)
+    }
+
+    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+        panic(errorMsg)
+    }
+
+    shader.Begin()
+    shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
     shader.End()
 
     glErr := gl.GetError()
@@ -56,17 +88,40 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
     return shader
 }
 
+func prefixFilter(input string, prefixes []string) string {
+    lines := strings.Split(input, "\n")
+    var filteredLines []string
+lineLoop:
+    for _, line := range lines {
+        for _, prefix := range prefixes {
+            if strings.HasPrefix(strings.TrimSpace(line), prefix) {
+                continue lineLoop
+            }
+        }
+        filteredLines = append(filteredLines, line)
+    }
+    return strings.Join(filteredLines, "\n")
+}
+
+func quadVertexShaderSourceDepthPass() string {
+    filteredSource := prefixFilter(quadVertexShaderSource, []string{
+        "out vec",
+        "Vert",
+    })
+    return filteredSource
+}
+
 const quadVertexShaderSource = `
+out vec3 VertPos;
+out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
+out vec3 VertNormal;
+
 in uint cornerIndex;
 
 uniform mat4 modelTransform;
 uniform uint textureIndex;
 uniform ivec2 atlasItemSize;
 uniform vec2 originOffset;
-
-out vec3 VertPos;
-out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
-out vec3 VertNormal;
 
 uniform sampler2D tex;
 

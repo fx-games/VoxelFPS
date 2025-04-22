@@ -125,6 +125,10 @@ func (m *MeshBuffer) UploadMeshToGPU(shader *glhf.Shader) {
     if shader == nil {
         return
     }
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
     if m.drawMode == Indexed {
         vArray := glhf.NewVertexArray[glhf.GlUInt](shader, false)
         vArray.SetIndices32(m.indexBuffer)
@@ -140,6 +144,10 @@ func (m *MeshBuffer) UploadMeshToGPU(shader *glhf.Shader) {
     }
 
     m.drawableVertexData.End()
+    glErr = gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
 }
 
 func (m *MeshBuffer) MergeBuffer(buffer *MeshBuffer) {
@@ -158,7 +166,7 @@ func (m *MeshBuffer) Draw(shaderId uint32) {
 
     m.drawableVertexData.Begin()
 
-    //ShaderValidate(shaderId)
+    ShaderValidate(shaderId)
 
     m.drawableVertexData.Draw()
 

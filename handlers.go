@@ -152,7 +152,7 @@ func (g *Game) applyHitscanEffect(effect WeaponEffect, result RaycastResult) {
     switch effect {
     case WeaponEffectHitscanVoxelDestruction:
         if hitObject == nil {
-            g.cubeMap.SetAir(result.HitInfo.CollisionGridPosition)
+            g.CubeMap.SetAir(result.HitInfo.CollisionGridPosition)
         } else if hitObject.DisplayName == "Scientist" {
             relativeHitPos := result.Relative
             sprite := hitObject.Sprite()
@@ -167,14 +167,14 @@ func (g *Game) applyHitscanEffect(effect WeaponEffect, result RaycastResult) {
             paintedIndex := g.currentPaintGunTextureIndex
             blockPos := result.HitInfo.CollisionGridPosition
             cubeSide := result.HitInfo.Side
-            g.cubeMap.SetBlockSide(blockPos, cubeSide, uint16(paintedIndex))
+            g.CubeMap.SetBlockSide(blockPos, cubeSide, uint16(paintedIndex))
         }
     case WeaponEffectHitscanVoxelPaintGunFill:
         if hitObject == nil {
             paintedIndex := g.currentPaintGunTextureIndex
             blockPos := result.HitInfo.CollisionGridPosition
             cubeSide := result.HitInfo.Side
-            g.cubeMap.SetBlockSideFill(blockPos, cubeSide, uint16(paintedIndex))
+            g.CubeMap.SetBlockSideFill(blockPos, cubeSide, uint16(paintedIndex))
         }
     }
 

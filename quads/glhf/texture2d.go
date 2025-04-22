@@ -121,6 +121,40 @@ func NewStencilDepthTexture(width, height int) *Texture {
 
     return tex
 }
+func NewDepthTexture(width, height int) *Texture {
+    tex := &Texture{
+        target: gl.TEXTURE_2D,
+        tex: binder{
+            restoreLoc: getRestoreLocOfTarget(gl.TEXTURE_2D),
+            bindFunc: func(obj uint32) {
+                gl.BindTexture(gl.TEXTURE_2D, obj)
+            },
+        },
+        textureWidth:  width,
+        textureHeight: height,
+    }
+
+    gl.GenTextures(1, &tex.tex.obj)
+
+    tex.Begin()
+    defer tex.End()
+
+    gl.TexImage2D(
+        gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, int32(width), int32(height), 0,
+        gl.DEPTH_COMPONENT, gl.FLOAT, nil,
+    )
+
+    borderColor := mgl32.Vec4{0, 0, 0, 0}
+    gl.TexParameterfv(tex.target, gl.TEXTURE_BORDER_COLOR, &borderColor[0])
+    gl.TexParameteri(tex.target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
+    gl.TexParameteri(tex.target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
+
+    tex.SetSmooth(false)
+
+    runtime.SetFinalizer(tex, (*Texture).delete)
+
+    return tex
+}
 
 // NewTextureRGBA creates a new texture with the specified width and height with some initial
 // pixel values. The pixels must be a sequence of RGBA values (one byte per component).

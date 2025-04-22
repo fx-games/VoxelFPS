@@ -37,6 +37,42 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
+    shader.SetTextureUnit(shader.UniformLocation("tex"), gl.TEXTURE0)
+    shader.SetTextureUnit(shader.UniformLocation("voxelLookup"), gl.TEXTURE1)
+    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.End()
+
+    glErr := gl.GetError()
+    if glErr != gl.NO_ERROR {
+        panic(glErr)
+    }
+
+    return shader
+}
+
+func LoadCubeShaderDepthPass(uboBlock string) *glhf.Shader {
+    var (
+        vertexFormat = glhf.AttrFormat{
+            {Name: "compressedValue", Type: glhf.UInt},
+        }
+        uniformFormat = glhf.AttrFormat{
+            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+        }
+        shader *glhf.Shader
+    )
+
+    var err error
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+chunkVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+
+    if err != nil {
+        panic(err)
+    }
+
+    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+        panic(errorMsg)
+    }
+    shader.Begin()
+    shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
     //shader.SetUniformAttr(CubeShaderDebugSwitch, float32(0.0))
     shader.End()
 
@@ -46,6 +82,15 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
     }
 
     return shader
+}
+
+func chunkVertexShaderSourceDepthPass() string {
+    return prefixFilter(chunkVertexShaderSource, []string{
+        "flat out uint Vert",
+        "out float Vert",
+        "out vec3 Vert",
+        "Vert",
+    })
 }
 
 const chunkVertexShaderSource = `
@@ -98,11 +143,11 @@ Total  // 20 bits used of 32
 12-14 bits left for animation/lighting information
 */
 
-in uint compressedValue;
-
 flat out uint VertNormalIndex;
 out float VertLightLevel;
 out vec3 VertPos;
+
+in uint compressedValue;
 
 // set uniform locations
 uniform mat4 modelTransform;
@@ -127,13 +172,16 @@ void decompressVertex(uint compressedValue, out vec3 position, out uint normalDi
 void main() {
     // decompress the vertex
     uint normalDir = uint(1);
+    vec3 position = vec3(0.0);
+    float lightLevel = 0.0;
 
-    decompressVertex(compressedValue, VertPos, normalDir, VertLightLevel);
+    decompressVertex(compressedValue, position, normalDir, lightLevel);
+    gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
 
     // pass-through for fragment shader
     VertNormalIndex = normalDir;
-
-    gl_Position = camProjectionView * modelTransform * vec4(VertPos, 1.0);
+    VertPos = position;
+    VertLightLevel = lightLevel; 
 }`
 
 const chunkFragmentShaderSource = `
@@ -159,7 +207,6 @@ uniform mat4 modelTransform;
 uniform float debugSwitch;
 
 uniform sampler2D tex;
-
 uniform usamplerBuffer voxelLookup;
 
 layout (location = 0) out vec4 fragmentColor;

@@ -94,21 +94,25 @@ void main() {
     float offsetY = 1.0 / float(textureSize2d.y);
 
     vec2 offsets[9] = vec2[](
-        vec2(-offsetX,  offsetY), // top-left
+        vec2(0.0f, 2*offsetY),   // up
         vec2( 0.0f,    offsetY), // top-center
-        vec2( offsetX,  offsetY), // top-right
+        vec2(-2*offsetX, 0.0f),   // left
         vec2(-offsetX,  0.0f),   // center-left
+        
         vec2( 0.0f,    0.0f),   // center-center
         vec2( offsetX,  0.0f),   // center-right
-        vec2(-offsetX, -offsetY), // bottom-left
+        vec2(2*offsetX, 0.0f),   // right
         vec2( 0.0f,   -offsetY), // bottom-center
-        vec2( offsetX, -offsetY)  // bottom-right    
+
+        vec2(0.0f, -2*offsetY)   // down
     );
 
     float kernel[9] = float[](
-        1.0/16.0, 1.0/8.0, 1.0/16.0, 
-        1.0/8.0, 1.0/4.0, 1.0/8.0, 
-        1.0/16.0, 1.0/8.0, 1.0/16.0
+                       2.0/9.0, 
+                       1.0/9.0, 
+     2.0/9.0, 1.0/9.0, 0.0/9.0, 1.0/9.0, 2.0/9.0,
+                       1.0/9.0,
+                       2.0/9.0
     );
     
     vec3 col = vec3(0.0); 
@@ -116,16 +120,15 @@ void main() {
         vec3 sampleTex = vec3(texture(tex, VertUV.st + offsets[i]));
         col += sampleTex * kernel[i];
     }
-    
-  	
+
     vec4 texColor = texture(tex, VertUV) * appliedTintColor;
     
 
     float depthValue = texture(depthStencil,VertUV).r;//access the 24 first bit, 
-    float depthStep = step(0.095, depthValue);
+    float depthStep = step(0.995, depthValue);
 
-    //fragmentColor = (1.0 - depthStep) * texColor + depthStep * vec4(col, 1.0);
-    fragmentColor = texColor;
+    fragmentColor = (1.0 - depthStep) * texColor + depthStep * vec4(col, 1.0);
+    fragmentColor = vec4(col, 1.0);
 }
 /*
 void main() {

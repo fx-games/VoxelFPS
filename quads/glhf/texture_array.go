@@ -14,9 +14,9 @@ type TextureArray struct {
     smooth                                     bool
 }
 
-// NewTextureArray creates a new array of 2D textures with the specified width, height, and layers,
+// NewDepthTextureArray creates a new array of 2D textures with the specified width, height, and layers,
 // along with initial pixel values. The pixels must be a sequence of Red values (16bits).
-func NewTextureArray(width, height, layers int, smooth bool, pixels []uint8) *TextureArray {
+func NewDepthTextureArray(width, height, layers int, smooth bool) *TextureArray {
     tex := &TextureArray{
         tex: binder{
             restoreLoc: gl.TEXTURE_BINDING_2D_ARRAY,
@@ -38,14 +38,14 @@ func NewTextureArray(width, height, layers int, smooth bool, pixels []uint8) *Te
     gl.TexImage3D(
         gl.TEXTURE_2D_ARRAY,
         0,
-        gl.RGBA8UI,
+        gl.DEPTH_COMPONENT,
         int32(width),
         int32(height),
         int32(layers),
         0,
-        gl.RGBA_INTEGER,
-        gl.UNSIGNED_BYTE,
-        gl.Ptr(pixels),
+        gl.DEPTH_COMPONENT,
+        gl.FLOAT,
+        gl.Ptr(nil),
     )
 
     glError := gl.GetError()

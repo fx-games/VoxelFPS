@@ -20,7 +20,6 @@ type GlApplication struct {
     Window             *glfw.Window
     TerminateFunc      func()
     UpdateFunc         func(elapsed float64)
-    DrawFunc           func(elapsed float64)
     DrawGuiFunc        func(elapsed float64)
     KeyHandler         func(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey)
     MousePosHandler    func(xpos float64, ypos float64)
@@ -36,6 +35,19 @@ type GlApplication struct {
     TimeFactor         float64
     CeilingColor       mgl32.Vec4
 
+    CubeMap *voxel.Map
+
+    ShouldDrawAABBs        bool
+    ShouldDrawChunkAABBs   bool
+    ShouldDrawOBBs         bool
+    ShouldDrawPaths        bool
+    ShouldDrawMeshes       bool
+    ShouldDrawSprites      bool
+    ShouldDrawParticles    bool
+    ShouldDrawDebugInfo    bool
+    ShouldRenderFullscreen bool
+    ShouldUseVsync         bool
+
     Camera       *core.FPSCamera
     WindowWidth  int
     WindowHeight int
@@ -49,20 +61,29 @@ type GlApplication struct {
 
     queuedToasts []*GuiToast
 
-    guiShader     *glhf.Shader
-    quadShader    *glhf.Shader
-    meshShader    *glhf.Shader
-    cubeShader    *glhf.Shader
-    lineShader    *glhf.Shader
-    skyboxShader  *glhf.Shader
-    postShader    *glhf.Shader
+    quadShader *glhf.Shader
+    meshShader *glhf.Shader
+    cubeShader *glhf.Shader
+
+    quadShaderDepth *glhf.Shader
+    cubeShaderDepth *glhf.Shader
+    meshShaderDepth *glhf.Shader
+
+    guiShader    *glhf.Shader
+    postShader   *glhf.Shader
+    lineShader   *glhf.Shader
+    skyboxShader *glhf.Shader
+
     skybox        *glhf.VertexArray[glhf.GlFloat]
     skyboxCubeMap *glhf.Cubemap
     mainUbo       *glhf.UniformBufferObject
     lightsUbo     *LightsUBO
-    colorBatch    *glhf.SpriteBatch
+    Lights        []LightInfo
 
-    frameBuffer            *glhf.Frame
+    colorBatch *glhf.SpriteBatch
+
+    shadowBuffer           *glhf.Frame
+    postFrameBuffer        *glhf.Frame
     screenQuad             *glhf.VertexArray[glhf.GlFloat]
     UIScale                mgl32.Vec2
     ScreenCoordScale       mgl32.Vec2
@@ -87,6 +108,387 @@ type GlApplication struct {
     locationPostDepthStencilTex int32
 }
 
+// Start starts the OpenGL application with the given parentApp and screen dimensions.
+// Will block until the window is closed.
+// Will call the parentApp's Init, Update, HandleKeyEvents, HandleMousePosEvents, HandleMouseButtonEvents, and HandleScrollEvents functions.
+func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
+    glAppUntyped := glhf.CallVal(func() any {
+        mouseSensitivity := float32(0.1)
+
+        window, terminateFunc := InitOpenGLWindow("fps", screenW, screenH, false)
+
+        primaryMonitor := glfw.GetPrimaryMonitor()
+        uiScaleX, uiScaleY := primaryMonitor.GetContentScale()
+        println(fmt.Sprintf("UI scale: %.2f, %.2f", uiScaleX, uiScaleY))
+
+        winSizeX, winSizeY := window.GetSize()
+        fbSizeX, fbSizeY := window.GetFramebufferSize()
+
+        screenCoordScaleX := float32(fbSizeX) / (float32(winSizeX) * uiScaleX)
+        screenCoordScaleY := float32(fbSizeY) / (float32(winSizeY) * uiScaleY)
+        println(fmt.Sprintf("Screen coord scale: %.2f, %.2f", screenCoordScaleX, screenCoordScaleY))
+
+        fpsCamera := core.NewFPSCamera(mgl32.Vec3{0, 0, 0}, winSizeX, winSizeY, mouseSensitivity)
+        fpsCamera.SetUIProjectionScale(mgl32.Vec2{uiScaleX, uiScaleY})
+        fpsCamera.SetMouseInvertedY(true)
+
+        maxTexSize := glQuery(gl.MAX_TEXTURE_SIZE)
+        println(fmt.Sprintf("Max texture size: %dx%d", maxTexSize, maxTexSize))
+
+        maxTexLayers := glQuery(gl.MAX_ARRAY_TEXTURE_LAYERS)
+        println(fmt.Sprintf("Max texture layers: %d", maxTexLayers))
+
+        // the number of textures that can be accessed by the fragment shader
+        maxTexImageUnits := glQuery(gl.MAX_TEXTURE_IMAGE_UNITS)
+        println(fmt.Sprintf("Max texture image units: %d", maxTexImageUnits))
+
+        // total number of textures that can be used
+        maxCombinedTexImageUnits := glQuery(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS)
+        println(fmt.Sprintf("Max combined texture image units: %d", maxCombinedTexImageUnits))
+
+        uboBlockName := "Main"
+        mainUbo := mainUBO()
+        lightsUbo := NewLightsUBO()
+
+        injectedGLSL := mainUbo.GetShaderBlockSource(uboBlockName)
+        injectedGLSL += lightsGLSLBlock
+
+        uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
+
+        // load the texture atlas
+        // map pattern map_64x64.png
+        mapAtlasRegex, _ := regexp.Compile("map_(\\d+)x(\\d+).png")
+        spriteAtlasRegex, _ := regexp.Compile("sprites_(\\d+)x(\\d+).png")
+        baseTexPath := filepath.Join("assets", "base")
+        entries, err := os.ReadDir(baseTexPath)
+        if err != nil {
+            panic(err)
+        }
+        var atlasMap *glhf.TextureAtlasFixed
+        var atlasSprites *glhf.TextureAtlasFixed
+        for _, entry := range entries {
+            if entry.IsDir() {
+                continue
+            }
+            var width, height int
+            if mapAtlasRegex.MatchString(entry.Name()) {
+                match := mapAtlasRegex.FindStringSubmatch(entry.Name())
+                width, _ = strconv.Atoi(match[1])
+                height, _ = strconv.Atoi(match[2])
+                atlasMap = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
+            } else if spriteAtlasRegex.MatchString(entry.Name()) {
+                match := spriteAtlasRegex.FindStringSubmatch(entry.Name())
+                width, _ = strconv.Atoi(match[1])
+                height, _ = strconv.Atoi(match[2])
+                atlasSprites = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
+            }
+
+        }
+
+        glApp := &GlApplication{
+            WindowWidth:   winSizeX,
+            WindowHeight:  winSizeY,
+            Window:        window,
+            TerminateFunc: terminateFunc,
+            TimeFactor:    1.0,
+            Camera:        fpsCamera,
+            guiShader:     LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
+            postShader:    LoadPostShader(),
+
+            quadShader: LoadQuadShader(injectedGLSL),
+            cubeShader: LoadCubeShader(injectedGLSL),
+            meshShader: LoadMeshShader(injectedGLSL),
+
+            quadShaderDepth: LoadQuadShaderDepthPass(injectedGLSL),
+            cubeShaderDepth: LoadCubeShaderDepthPass(injectedGLSL),
+            meshShaderDepth: LoadMeshShaderDepthPass(injectedGLSL),
+
+            shadowBuffer:    glhf.NewFrameBufferWithDepth(256, 256),
+            postFrameBuffer: glhf.NewFrameBufferWithColorDepthStencil(fbSizeX, fbSizeY, false),
+
+            lineShader:       LoadLineShader(fpsCamera),
+            skyboxShader:     LoadSkyboxShader(fpsCamera),
+            particleSystems:  make(map[ParticleName]*glhf.ParticleSystem),
+            UIScale:          uiScale,
+            ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
+            AtlasMap:         atlasMap,
+            AtlasSprites:     atlasSprites,
+
+            ShouldDrawSprites: true, ShouldDrawMeshes: true, ShouldDrawParticles: true, ShouldUseVsync: true,
+        }
+
+        window.SetKeyCallback(glApp.KeyCallback)
+        window.SetCursorPosCallback(glApp.MousePosCallback)
+
+        glApp.SetMouseCapture(true)
+
+        window.SetMouseButtonCallback(glApp.MouseButtonCallback)
+        window.SetScrollCallback(glApp.ScrollCallback)
+        window.SetDropCallback(glApp.DropCallback)
+
+        glApp.DrawGuiFunc = parentApp.DrawGui
+        glApp.UpdateFunc = parentApp.Update
+        glApp.KeyHandler = parentApp.HandleKeyEvents
+        glApp.MousePosHandler = parentApp.HandleMousePosEvents
+        glApp.MouseButtonHandler = parentApp.HandleMouseButtonEvents
+        glApp.ScrollHandler = parentApp.HandleScrollEvents
+        glApp.ResizeHandler = parentApp.HandleResize
+        glApp.DropHandler = parentApp.HandleDrop
+
+        glApp.Sprites = NewSpriteDrawer(glApp.quadShader)
+        glApp.Gui = NewGuiDrawer(glApp.guiShader)
+        glApp.Meshes = NewMeshDrawer(glApp.meshShader)
+        glApp.colorBatch = glhf.NewSpriteBatch(glApp.guiShader, NewOneWhitePixelTexture(), 10)
+        glApp.spriteBatches = []*glhf.SpriteBatch{glApp.colorBatch}
+        glApp.AtlasMap.SetGuiShader(glApp.guiShader)
+        glApp.AtlasMap.SetMaxSprites(10)
+        glApp.AtlasSprites.SetGuiShader(glApp.guiShader)
+        glApp.AtlasSprites.SetMaxSprites(10)
+        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
+        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
+
+        glApp.screenQuad = PostQuad(glApp.postShader)
+        glApp.locationPostColorTex = glApp.postShader.UniformLocation("tex")
+        glApp.locationPostDepthStencilTex = glApp.postShader.UniformLocation("depthStencil")
+
+        glApp.postShader.Begin()
+        glApp.postShader.SetTextureUnit(glApp.locationPostColorTex, gl.TEXTURE0)
+        glApp.postShader.SetTextureUnit(glApp.locationPostDepthStencilTex, gl.TEXTURE1)
+        glApp.postShader.End()
+
+        skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
+        skyboxVA.Begin()
+        skyboxVA.SetVertexData(skyboxVertices())
+        skyboxVA.End()
+        skyboxVA.DebugName = "SkyBox"
+        glApp.skybox = skyboxVA
+
+        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.quadShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.meshShader.ID(), uboBlockName, 0)
+
+        glhf.BindUniformBlockTo(glApp.cubeShaderDepth.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.quadShaderDepth.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.meshShaderDepth.ID(), uboBlockName, 0)
+
+        mainUbo.Begin()
+
+        mainUbo.BindUBOTo(0)
+
+        //ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
+        mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
+        mainUbo.End()
+
+        glApp.mainUbo = mainUbo
+
+        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), "Lights", 1)
+        glhf.BindUniformBlockTo(glApp.quadShader.ID(), "Lights", 1)
+        glhf.BindUniformBlockTo(glApp.meshShader.ID(), "Lights", 1)
+
+        lightsUbo.Begin()
+
+        lightsUbo.BindUBOTo(1)
+
+        lightsUbo.End()
+
+        glApp.lightsUbo = lightsUbo
+
+        glApp.SetLights([]LightInfo{
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 1.2, 2.2}, mgl32.Vec3{0, -1, 0}, 45, 50), Color: mgl32.Vec4{0, 0.7, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 1.2, 13}, mgl32.Vec3{0, -1, 0}, 45, 50), Color: mgl32.Vec4{0.7, 0, 0, 1}},
+        })
+
+        parentApp.Init(glApp, mapLoad)
+
+        return glApp
+    })
+    glApp := glAppUntyped.(*GlApplication)
+    glApp.StartEventLoop()
+}
+
+func (a *GlApplication) StartEventLoop() {
+    defer glhf.Call(a.TerminateFunc)
+    // Start Render Loop
+    shouldQuit := false
+
+    previousTime := glfw.GetTime()
+    time := glfw.GetTime()
+
+    for !shouldQuit {
+        glhf.Call(func() {
+            if a.Window.ShouldClose() {
+                shouldQuit = true
+            }
+            time = glfw.GetTime()
+            elapsed := time - previousTime
+            previousTime = time
+            deltaTime := elapsed * a.TimeFactor
+
+            { // Update BEGIN
+                a.updateToasts(deltaTime)
+
+                if a.Pathfinder != nil {
+                    a.Pathfinder.Update(elapsed)
+                }
+                if a.minimap != nil {
+                    a.minimap.Update()
+                }
+                a.UpdateFunc(deltaTime)
+
+                a.Sprites.Update(deltaTime)
+                a.Meshes.Update(deltaTime)
+                a.UpdateParticles(deltaTime)
+            } // Update END
+
+            // BEGIN SHADOW MAPPING
+
+            // ITERATE ALL LIGHTS
+            // DRAW 3D SCENE TO SHADOW MAP
+            //a.lightsUbo.SetLights(a.Lights) // this should make the light.ProjView matrix available in the shader
+            // a) switch to the shadow map framebuffer
+            a.shadowBuffer.Begin()
+            glhf.Bounds(0, 0, 256, 256)
+            for i := 0; i < len(a.Lights); i++ {
+
+                light := a.Lights[i]
+                // b) bind layer i of the depth texture array
+                a.shadowBuffer.SetDepthLayer(i)
+                gl.Clear(gl.DEPTH_BUFFER_BIT)
+
+                a.setMainUBOCam(light.GetPosition(), light.GetForward(), light.GetProjectionViewMatrix())
+                a.draw3dScene(light.GetPosition(), a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+            }
+            a.shadowBuffer.End()
+            // END SHADOW MAPPING
+
+            // DRAW BEGIN
+            a.updateMainUBO()
+
+            a.postFrameBuffer.Begin()
+            glhf.Bounds(0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()))
+            glErr := gl.GetError()
+            if glErr != gl.NO_ERROR {
+                panic(glErr)
+            }
+            a.shadowBuffer.DepthTextureArray().BeginOnUnit(gl.TEXTURE2)
+            { // BEGIN RENDER 3D SCENE
+                gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
+                gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+                a.draw3dScene(a.Camera.GetPosition(), a.cubeShader, a.meshShader, a.quadShader)
+
+                if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
+                    a.drawSkybox(a.skyboxCubeMap)
+                }
+
+                a.draw3dDebug()
+            } // End Render 3D Scene
+            a.shadowBuffer.DepthTextureArray().End()
+            gl.ActiveTexture(gl.TEXTURE0)
+
+            a.postFrameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
+
+            { // DRAW FRAMEBUFFER TO SCREEN & POSTPROCESSING
+                a.postShader.Begin()
+
+                //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+                a.postFrameBuffer.Texture().BeginOnUnit(gl.TEXTURE0)
+                a.postFrameBuffer.DepthTexture().BeginOnUnit(gl.TEXTURE1)
+
+                a.screenQuad.Begin()
+                a.screenQuad.Draw()
+                a.screenQuad.End()
+
+                a.postFrameBuffer.DepthTexture().End()
+                a.postFrameBuffer.Texture().End()
+
+                a.postShader.End()
+                gl.ActiveTexture(gl.TEXTURE0)
+            } // End Draw Framebuffer to Screen & Postprocessing
+
+            // DRAW UI ON TOP OF POSTPROCESSING
+            { // Begin Draw 2D Scene
+                gl.Clear(gl.DEPTH_BUFFER_BIT)
+                a.guiShader.Begin()
+                glhf.PaintersOffset = 0.0001
+                for _, batch := range a.spriteBatches {
+                    batch.Begin()
+                }
+
+                a.Gui.Draw(deltaTime)
+
+                a.DrawGuiFunc(deltaTime)
+
+                if a.minimap != nil && a.ShouldDrawMinimap {
+                    a.minimap.Draw()
+                }
+
+                a.drawToasts()
+
+                for _, batch := range a.spriteBatches {
+                    batch.End()
+                    batch.Render()
+                }
+                a.guiShader.End()
+            } // End Draw 2D Scene
+
+            // DRAW END
+            a.FramesPerSecond = 1.0 / elapsed
+            if a.Ticks%60 == 0 {
+                sixtyTicksAverage := a.FPSRunningAvg
+                a.Window.SetTitle(fmt.Sprintf("FPS: %.0f (Avg: %.0f, Min: %.0f, Max: %.0f) / Elapsed: %.3f", a.FramesPerSecond, sixtyTicksAverage, a.FPSMin, a.FPSMax, elapsed*1000))
+                a.FPSRunningAvg = 0 + a.FramesPerSecond*(1.0/60.0)
+                a.FPSMin = math.MaxFloat64
+                a.FPSMax = 0
+            } else {
+                a.FPSRunningAvg = a.FPSRunningAvg + a.FramesPerSecond*(1.0/60.0)
+                if a.FramesPerSecond < a.FPSMin {
+                    a.FPSMin = a.FramesPerSecond
+                }
+                if a.FramesPerSecond > a.FPSMax {
+                    a.FPSMax = a.FramesPerSecond
+                }
+            }
+
+            a.Window.SwapBuffers()
+            glfw.PollEvents()
+            a.Ticks++
+        })
+    }
+}
+
+func (a *GlApplication) draw3dScene(observerPos mgl32.Vec3, chunkShader, meshShader, spriteShader *glhf.Shader) {
+    a.CubeMap.DrawWithShader(a.Camera, chunkShader) // camera only used for frustum culling
+
+    if a.ShouldDrawMeshes {
+        a.Meshes.Draw(a.Camera, meshShader) // camera only used for frustum culling
+    }
+    if a.ShouldDrawSprites {
+        a.Sprites.Draw(a.Camera, observerPos, spriteShader) // this one actually changes viewdirection depending on the camera..
+    }
+    if a.ShouldDrawParticles {
+        //a.DrawParticles(cam)
+    }
+}
+
+func (a *GlApplication) draw3dDebug() {
+    if a.UnitCube != nil {
+        a.UnitCube.DrawAllQueued()
+    }
+
+    if a.ShouldDrawAABBs {
+        a.DrawAABBs()
+    }
+    if a.ShouldDrawChunkAABBs {
+        a.DrawChunkAABBs(a.CubeMap)
+    }
+    if a.ShouldDrawOBBs {
+        a.DrawOBBs()
+    }
+    if a.ShouldDrawPaths {
+        a.DrawPaths()
+    }
+}
 func (a *GlApplication) SetMouseCapture(isCaptured bool) {
     if isCaptured {
         a.Window.SetInputMode(glfw.CursorMode, glfw.CursorDisabled)
@@ -176,7 +578,7 @@ func (a *GlApplication) SetupUnitCubes() {
 }
 
 func (a *GlApplication) SetupParticleSystem(name ParticleName, count int) {
-    ps := glhf.NewParticleSystem(count, a.Camera.GetViewMatrix, a.Camera.GetProjectionMatrix)
+    ps := glhf.NewParticleSystem(count)
     a.particleSystems[name] = ps
 }
 func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
@@ -269,11 +671,15 @@ func (a *GlApplication) DrawPaths() {
     a.Pathfinder.DrawPathfindingDebug(a.lineShader)
     a.lineShader.End()
 }
-
-func (a *GlApplication) DrawParticles(elapsed float64) {
+func (a *GlApplication) UpdateParticles(deltaTime float64) {
+    for _, ps := range a.particleSystems {
+        ps.Update(deltaTime)
+    }
+}
+func (a *GlApplication) DrawParticles(cam core.Camera) {
     a.drawCallCountParticles = 0
     for _, ps := range a.particleSystems {
-        ps.Draw(elapsed)
+        ps.Draw(cam)
         a.drawCallCountParticles += 2
     }
 }
@@ -356,120 +762,6 @@ func (a *GlApplication) SetVSync(enabled bool) {
     }
 }
 
-func (a *GlApplication) StartEventLoop() {
-    defer glhf.Call(a.TerminateFunc)
-    // Start Render Loop
-    shouldQuit := false
-
-    previousTime := glfw.GetTime()
-    time := glfw.GetTime()
-
-    for !shouldQuit {
-        glhf.Call(func() {
-            if a.Window.ShouldClose() {
-                shouldQuit = true
-            }
-            time = glfw.GetTime()
-            elapsed := time - previousTime
-            previousTime = time
-            deltaTime := elapsed * a.TimeFactor
-
-            { // Update BEGIN
-                a.updateToasts(deltaTime)
-
-                if a.Pathfinder != nil {
-                    a.Pathfinder.Update(elapsed)
-                }
-                if a.minimap != nil {
-                    a.minimap.Update()
-                }
-                a.UpdateFunc(deltaTime)
-
-                a.updateUBO()
-            } // Update END
-
-            // DRAW BEGIN
-            a.frameBuffer.Begin()
-            { // BEGIN RENDER 3D SCENE
-                gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
-                gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-                a.DrawFunc(deltaTime)
-
-                if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
-                    a.drawSkybox(a.skyboxCubeMap)
-                }
-            } // End Render 3D Scene
-            a.frameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
-
-            { // DRAW FRAMEBUFFER TO SCREEN & POSTPROCESSING
-                a.postShader.Begin()
-
-                //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
-                a.frameBuffer.Texture().BeginOnUnit(gl.TEXTURE0)
-                a.frameBuffer.DepthStencilTexture().BeginOnUnit(gl.TEXTURE1)
-
-                a.screenQuad.Begin()
-                a.screenQuad.Draw()
-                a.screenQuad.End()
-
-                a.frameBuffer.DepthStencilTexture().End()
-                a.frameBuffer.Texture().End()
-
-                a.postShader.End()
-                gl.ActiveTexture(gl.TEXTURE0)
-            } // End Draw Framebuffer to Screen & Postprocessing
-
-            // DRAW UI ON TOP OF POSTPROCESSING
-            { // Begin Draw 2D Scene
-                gl.Clear(gl.DEPTH_BUFFER_BIT)
-                a.guiShader.Begin()
-                glhf.PaintersOffset = 0.0001
-                for _, batch := range a.spriteBatches {
-                    batch.Begin()
-                }
-
-                a.Gui.Draw(deltaTime)
-
-                a.DrawGuiFunc(deltaTime)
-
-                if a.minimap != nil && a.ShouldDrawMinimap {
-                    a.minimap.Draw()
-                }
-
-                a.drawToasts()
-
-                for _, batch := range a.spriteBatches {
-                    batch.End()
-                    batch.Render()
-                }
-                a.guiShader.End()
-            } // End Draw 2D Scene
-
-            // DRAW END
-            a.FramesPerSecond = 1.0 / elapsed
-            if a.Ticks%60 == 0 {
-                sixtyTicksAverage := a.FPSRunningAvg
-                a.Window.SetTitle(fmt.Sprintf("FPS: %.0f (Avg: %.0f, Min: %.0f, Max: %.0f) / Elapsed: %.3f", a.FramesPerSecond, sixtyTicksAverage, a.FPSMin, a.FPSMax, elapsed*1000))
-                a.FPSRunningAvg = 0 + a.FramesPerSecond*(1.0/60.0)
-                a.FPSMin = math.MaxFloat64
-                a.FPSMax = 0
-            } else {
-                a.FPSRunningAvg = a.FPSRunningAvg + a.FramesPerSecond*(1.0/60.0)
-                if a.FramesPerSecond < a.FPSMin {
-                    a.FPSMin = a.FramesPerSecond
-                }
-                if a.FramesPerSecond > a.FPSMax {
-                    a.FPSMax = a.FramesPerSecond
-                }
-            }
-
-            a.Window.SwapBuffers()
-            glfw.PollEvents()
-            a.Ticks++
-        })
-    }
-}
 func mat4ptr(mat mgl32.Mat4) unsafe.Pointer {
     return unsafe.Pointer(&mat[0])
 }
@@ -479,20 +771,25 @@ func vec4ptr(vec mgl32.Vec4) unsafe.Pointer {
 }
 
 func (a *GlApplication) SaveScreenshot(filename string) error {
-    return a.frameBuffer.Texture().SaveAsPNG(filename)
+    return a.postFrameBuffer.Texture().SaveAsPNG(filename)
 }
 
-func (a *GlApplication) updateUBO() {
+func (a *GlApplication) updateMainUBO() {
+    a.setMainUBOCam(a.Camera.GetPosition(), a.Camera.GetForward(), a.Camera.GetProjectionViewMatrix())
+}
 
+func (a *GlApplication) setMainUBOCam(pos, dir mgl32.Vec3, projectionView mgl32.Mat4) {
     a.mainUbo.Begin()
-    a.mainUbo.SetAttribute(UboCamPosition, a.Camera.GetPosition().Vec4(1))
-    a.mainUbo.SetAttribute(UboCamDirection, a.Camera.GetForward().Vec4(0))
-    a.mainUbo.SetAttribute(UboCamProjectionView, a.Camera.GetProjectionViewMatrix())
+    a.mainUbo.SetAttribute(UboCamDirection, dir.Vec4(0))
+    a.mainUbo.SetAttribute(UboCamPosition, pos.Vec4(1))
+    a.mainUbo.SetAttribute(UboCamProjectionView, projectionView)
     a.mainUbo.End()
 }
 
-func (a *GlApplication) ToVoxelMap(loadResult core.MapLoadResult) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
-    return toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
+func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) map[mgl32.Vec3]core.MapEntity {
+    cubeMap, entitySpawns := toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
+    a.CubeMap = cubeMap
+    return entitySpawns
 }
 func (a *GlApplication) OnResize(width int, height int) {
     a.WindowWidth = width
@@ -502,8 +799,8 @@ func (a *GlApplication) OnResize(width int, height int) {
     a.guiShader.Begin()
     a.guiShader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
     a.guiShader.End()
-    if a.frameBuffer != nil {
-        a.frameBuffer.Resize(int(float32(width)*a.UIScale.X()), int(float32(height)*a.UIScale.Y()))
+    if a.postFrameBuffer != nil {
+        a.postFrameBuffer.Resize(int(float32(width)*a.UIScale.X()), int(float32(height)*a.UIScale.Y()))
     }
     if a.minimap != nil {
         a.minimap.Resize(width, height)
@@ -547,6 +844,11 @@ func (a *GlApplication) UiContext() UIContext {
     }
 }
 
+func (a *GlApplication) SetLights(infos []LightInfo) {
+    a.Lights = infos
+    a.lightsUbo.SetLights(infos)
+}
+
 type UIContext struct {
     Shader     *glhf.Shader
     Atlas      *glhf.TextureAtlasFixed
@@ -586,8 +888,7 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
         panic(err)
     }
     win.SetFramebufferSizeCallback(func(w *glfw.Window, width int, height int) {
-        gl.Viewport(0, 0, int32(width), int32(height))
-        gl.Scissor(0, 0, int32(width), int32(height))
+        glhf.Bounds(0, 0, width, height)
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
     })
     win.MakeContextCurrent()
@@ -648,8 +949,6 @@ func Get2DPixelCoordOrthographicProjectionMatrix(width, height int) mgl32.Mat4 {
 
 type GlGame interface {
     Init(app *GlApplication, mapLoad core.MapLoadResult)
-    Draw(elapsed float64)
-    DrawGui(elapsed float64)
     Update(elapsed float64)
     HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey)
     HandleMousePosEvents(xpos float64, ypos float64)
@@ -657,190 +956,7 @@ type GlGame interface {
     HandleScrollEvents(xoff float64, yoff float64)
     HandleResize(width int, height int)
     HandleDrop(names []string, x, y float64)
-}
-
-// Start starts the OpenGL application with the given parentApp and screen dimensions.
-// Will block until the window is closed.
-// Will call the parentApp's Init, DrawWithOffset, DrawGui, Update, HandleKeyEvents, HandleMousePosEvents, HandleMouseButtonEvents, and HandleScrollEvents functions.
-func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
-    glAppUntyped := glhf.CallVal(func() any {
-        mouseSensitivity := float32(0.1)
-
-        window, terminateFunc := InitOpenGLWindow("fps", screenW, screenH, false)
-
-        primaryMonitor := glfw.GetPrimaryMonitor()
-        uiScaleX, uiScaleY := primaryMonitor.GetContentScale()
-        println(fmt.Sprintf("UI scale: %.2f, %.2f", uiScaleX, uiScaleY))
-
-        winSizeX, winSizeY := window.GetSize()
-        fbSizeX, fbSizeY := window.GetFramebufferSize()
-
-        screenCoordScaleX := float32(fbSizeX) / (float32(winSizeX) * uiScaleX)
-        screenCoordScaleY := float32(fbSizeY) / (float32(winSizeY) * uiScaleY)
-        println(fmt.Sprintf("Screen coord scale: %.2f, %.2f", screenCoordScaleX, screenCoordScaleY))
-
-        fpsCamera := core.NewFPSCamera(mgl32.Vec3{0, 0, 0}, winSizeX, winSizeY, mouseSensitivity)
-        fpsCamera.SetUIProjectionScale(mgl32.Vec2{uiScaleX, uiScaleY})
-        fpsCamera.SetMouseInvertedY(true)
-
-        maxTexSize := glQuery(gl.MAX_TEXTURE_SIZE)
-        println(fmt.Sprintf("Max texture size: %dx%d", maxTexSize, maxTexSize))
-
-        maxTexLayers := glQuery(gl.MAX_ARRAY_TEXTURE_LAYERS)
-        println(fmt.Sprintf("Max texture layers: %d", maxTexLayers))
-
-        // the number of textures that can be accessed by the fragment shader
-        maxTexImageUnits := glQuery(gl.MAX_TEXTURE_IMAGE_UNITS)
-        println(fmt.Sprintf("Max texture image units: %d", maxTexImageUnits))
-
-        // total number of textures that can be used
-        maxCombinedTexImageUnits := glQuery(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS)
-        println(fmt.Sprintf("Max combined texture image units: %d", maxCombinedTexImageUnits))
-
-        uboBlockName := "Main"
-        mainUbo := mainUBO()
-        lightsUbo := NewLightsUBO()
-        lightsUbo.SetLights([]LightInfo{
-            {Position: mgl32.Vec4{13, 1.2, 2.2, 0}, Color: mgl32.Vec4{0, 0.7, 0, 1}},
-            {Position: mgl32.Vec4{13, 1.2, 13, 0}, Color: mgl32.Vec4{0.7, 0, 0, 1}},
-        })
-
-        injectedGLSL := mainUbo.GetShaderBlockSource(uboBlockName)
-        injectedGLSL += lightsGLSLBlock
-
-        uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
-
-        // load the texture atlas
-        // map pattern map_64x64.png
-        mapAtlasRegex, _ := regexp.Compile("map_(\\d+)x(\\d+).png")
-        spriteAtlasRegex, _ := regexp.Compile("sprites_(\\d+)x(\\d+).png")
-        baseTexPath := filepath.Join("assets", "base")
-        entries, err := os.ReadDir(baseTexPath)
-        if err != nil {
-            panic(err)
-        }
-        var atlasMap *glhf.TextureAtlasFixed
-        var atlasSprites *glhf.TextureAtlasFixed
-        for _, entry := range entries {
-            if entry.IsDir() {
-                continue
-            }
-            var width, height int
-            if mapAtlasRegex.MatchString(entry.Name()) {
-                match := mapAtlasRegex.FindStringSubmatch(entry.Name())
-                width, _ = strconv.Atoi(match[1])
-                height, _ = strconv.Atoi(match[2])
-                atlasMap = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
-            } else if spriteAtlasRegex.MatchString(entry.Name()) {
-                match := spriteAtlasRegex.FindStringSubmatch(entry.Name())
-                width, _ = strconv.Atoi(match[1])
-                height, _ = strconv.Atoi(match[2])
-                atlasSprites = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
-            }
-
-        }
-
-        glApp := &GlApplication{
-            WindowWidth:      winSizeX,
-            WindowHeight:     winSizeY,
-            Window:           window,
-            TerminateFunc:    terminateFunc,
-            TimeFactor:       1.0,
-            Camera:           fpsCamera,
-            guiShader:        LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
-            postShader:       LoadPostShader(),
-            quadShader:       LoadQuadShader(injectedGLSL),
-            cubeShader:       LoadCubeShader(injectedGLSL),
-            meshShader:       LoadMeshShader(injectedGLSL),
-            lineShader:       LoadLineShader(fpsCamera),
-            skyboxShader:     LoadSkyboxShader(fpsCamera),
-            particleSystems:  make(map[ParticleName]*glhf.ParticleSystem),
-            frameBuffer:      glhf.NewFrame(fbSizeX, fbSizeY, false),
-            UIScale:          uiScale,
-            ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
-            AtlasMap:         atlasMap,
-            AtlasSprites:     atlasSprites,
-        }
-
-        window.SetKeyCallback(glApp.KeyCallback)
-        window.SetCursorPosCallback(glApp.MousePosCallback)
-
-        glApp.SetMouseCapture(true)
-
-        window.SetMouseButtonCallback(glApp.MouseButtonCallback)
-        window.SetScrollCallback(glApp.ScrollCallback)
-        window.SetDropCallback(glApp.DropCallback)
-
-        glApp.DrawFunc = parentApp.Draw
-        glApp.DrawGuiFunc = parentApp.DrawGui
-        glApp.UpdateFunc = parentApp.Update
-        glApp.KeyHandler = parentApp.HandleKeyEvents
-        glApp.MousePosHandler = parentApp.HandleMousePosEvents
-        glApp.MouseButtonHandler = parentApp.HandleMouseButtonEvents
-        glApp.ScrollHandler = parentApp.HandleScrollEvents
-        glApp.ResizeHandler = parentApp.HandleResize
-        glApp.DropHandler = parentApp.HandleDrop
-
-        glApp.Sprites = NewSpriteDrawer(glApp.quadShader)
-        glApp.Gui = NewGuiDrawer(glApp.guiShader)
-        glApp.Meshes = NewMeshDrawer(glApp.meshShader)
-        glApp.colorBatch = glhf.NewSpriteBatch(glApp.guiShader, NewOneWhitePixelTexture(), 10)
-        glApp.spriteBatches = []*glhf.SpriteBatch{glApp.colorBatch}
-        glApp.AtlasMap.SetGuiShader(glApp.guiShader)
-        glApp.AtlasMap.SetMaxSprites(10)
-        glApp.AtlasSprites.SetGuiShader(glApp.guiShader)
-        glApp.AtlasSprites.SetMaxSprites(10)
-        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
-        glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
-
-        glApp.screenQuad = PostQuad(glApp.postShader)
-        glApp.locationPostColorTex = glApp.postShader.UniformLocation("tex")
-        glApp.locationPostDepthStencilTex = glApp.postShader.UniformLocation("depthStencil")
-
-        glApp.postShader.Begin()
-        glApp.postShader.SetTextureUnit(glApp.locationPostColorTex, gl.TEXTURE0)
-        glApp.postShader.SetTextureUnit(glApp.locationPostDepthStencilTex, gl.TEXTURE1)
-        glApp.postShader.End()
-
-        skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
-        skyboxVA.Begin()
-        skyboxVA.SetVertexData(skyboxVertices())
-        skyboxVA.End()
-        skyboxVA.DebugName = "SkyBox"
-        glApp.skybox = skyboxVA
-
-        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.quadShader.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.meshShader.ID(), uboBlockName, 0)
-
-        mainUbo.Begin()
-
-        mainUbo.BindUBOTo(0)
-
-        //ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
-        mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
-        mainUbo.End()
-
-        glApp.mainUbo = mainUbo
-
-        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), "Lights", 1)
-        glhf.BindUniformBlockTo(glApp.quadShader.ID(), "Lights", 1)
-        glhf.BindUniformBlockTo(glApp.meshShader.ID(), "Lights", 1)
-
-        lightsUbo.Begin()
-
-        lightsUbo.BindUBOTo(1)
-
-        lightsUbo.End()
-
-        glApp.lightsUbo = lightsUbo
-
-        parentApp.Init(glApp, mapLoad)
-
-        return glApp
-    })
-    glApp := glAppUntyped.(*GlApplication)
-    glApp.StartEventLoop()
+    DrawGui(elapsed float64)
 }
 
 func glQuery(value uint32) int32 {

@@ -36,6 +36,9 @@ func mainUBO() *glhf.UniformBufferObject {
 }
 
 const fragmentShaderSharedFunctions = `
+
+uniform sampler2DArray shadowMap;
+
 vec3 toneMapping(vec3 hdrColor, float gamma, float exposure) {
     vec3 mapped = vec3(1.0) - exp(-hdrColor * exposure);
     // gamma correction
@@ -58,6 +61,21 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
     return outputColor;
 }
 
+float ShadowCalculation(uint lightIndex, vec4 fragPosLightSpace) {
+    // perform perspective divide
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    // transform to [0,1] range
+    projCoords = projCoords * 0.5 + 0.5;
+    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
+    float closestDepth = texture(shadowMap, vec3(projCoords.xy, lightIndex)).r; 
+    // get depth of current fragment from light's perspective
+    float currentDepth = projCoords.z;
+    // check whether current frag pos is in shadow
+    float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
+
+    return shadow;
+}
+
 vec3 calculateAmbientLight() {
     // ambient light
     float ambientStrength = globalLightColor.a;
@@ -68,7 +86,7 @@ vec3 calculateAmbientLight() {
     return ambient;
 }
 
-vec3 calculatePointLight(vec3 normal, vec3 fragPos, vec3 lightPosition, vec3 lightColor) {
+vec3 calculatePointLight(uint lightIndex, vec3 normal, vec3 fragPos, vec4 fragPosLightSpace, vec3 lightPosition, vec3 lightColor) {
     float constant = 1.0;
     float linear = 0.09;
     float quadratic = 0.032;
@@ -98,11 +116,13 @@ vec3 calculatePointLight(vec3 normal, vec3 fragPos, vec3 lightPosition, vec3 lig
     // apply light model
     //vec3 finalColor = (diffuse + specular) * surfaceColor;
     
-    return (diffuse + specular);
+    float shadow = ShadowCalculation(lightIndex, fragPosLightSpace);       
+
+    return (1.0 - shadow) * (diffuse + specular);
 }
 
 
-vec3 calculateSpotLight(vec3 normal, vec3 fragPos, vec3 lightPosition, vec3 lightColor, vec3 lightDirection, float innerCutoff, float outerCutoff) {    
+vec3 calculateSpotLight(uint lightIndex, vec3 normal, vec3 fragPos, vec4 fragPosLightSpace, vec3 lightPosition, vec3 lightColor, vec3 lightDirection, float innerCutoff, float outerCutoff) {    
     // LightDir: the vector pointing from the fragment to the light source.    
     vec3 lightDir = normalize(lightPosition - fragPos);
     // SpotDir: the direction the spotlight is aiming at.
@@ -112,7 +132,29 @@ vec3 calculateSpotLight(vec3 normal, vec3 fragPos, vec3 lightPosition, vec3 ligh
     float epsilon   = innerCutoff - outerCutoff;
     float intensity = clamp((theta - outerCutoff) / epsilon, 0.0, 1.0); 
 
-    return calculatePointLight(normal, fragPos, lightPosition, lightColor) * intensity;
+    return calculatePointLight(lightIndex, normal, fragPos, fragPosLightSpace, lightPosition, lightColor) * intensity;
+}
+
+vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection, vec3 lightColor, vec3 fragWorldPos, vec4 fragPosLightSpace, vec3 fragWorldNormal) {           
+    vec3 normal = normalize(fragWorldNormal);
+    // diffuse
+    vec3 lightDir = normalize(lightPos - fragWorldPos);
+    float theta = dot(lightDir, normalize(-lightDirection));
+    if (theta > 0.96) {
+        return vec3(0.0);
+    }
+    float diff = max(dot(lightDir, normal), 0.0);
+    vec3 diffuse = diff * lightColor;
+    // specular
+    vec3 viewDir = normalize(viewPos - fragWorldPos);
+    float spec = 0.1;
+    vec3 halfwayDir = normalize(lightDir + viewDir);  
+    spec = pow(max(dot(normal, halfwayDir), 0.0), 64.0);
+    vec3 specular = spec * lightColor;    
+    // calculate shadow
+    float shadow = ShadowCalculation(lightIndex, fragPosLightSpace);       
+    vec3 lighting = (1.0 - shadow) * (diffuse + specular);    
+    return lighting;
 }
 
 vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal) {
@@ -121,22 +163,26 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal) {
     //vec3 toneMappedColor = toneMapping(litColor, 1.2, 1.0);
     vec3 ambientLightColor = calculateAmbientLight();
 
-    
-    vec3 pointLightColor;
+    vec3 spotLightColor;
     uint lightCount = uint(lightCounts.x);
     for (uint i = 0; i < lightCount; i++) {
         LightInfo curLight = lights[i];
         vec3 lightPosition = vec3(curLight.position);
         vec3 lightColor = vec3(curLight.color);
-        pointLightColor += calculatePointLight(fragWorldNormal, fragWorldPos, lightPosition, lightColor);
+        vec3 lightDirection = vec3(curLight.direction);
+        vec4 fragPosLightSpace = curLight.projView * vec4(fragWorldPos, 1.0);
+        //spotLightColor += calculateSpotLight(i, fragWorldNormal, fragWorldPos, fragPosLightSpace, lightPosition, lightColor, lightDirection, 1.98,  0.96);
+        spotLightColor += calcLight(i, camPosition.xyz, lightPosition, lightDirection, lightColor, fragWorldPos, fragPosLightSpace, fragWorldNormal);
     }
     
     // FLASHLIGHT HERE
     //vec3 spotLightColor = calculateSpotLight(fragWorldNormal, fragWorldPos, camPosition, light_color, camDirection, 0.98,  0.96);
     //vec3 litColor = (ambientLightColor + pointLightColor + spotLightColor) * surfaceColor.rgb;
 
-    vec3 litColor = (ambientLightColor + pointLightColor) * surfaceColor.rgb;
+    vec3 litColor = (ambientLightColor + spotLightColor) * surfaceColor.rgb;
+
     vec4 foggedColor = applyFog(fragWorldPos, vec4(litColor, surfaceColor.a));
     
     return foggedColor;
-}`
+}
+`

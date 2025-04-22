@@ -84,7 +84,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 
     if key == glfw.KeyTab && g.voxelBlock != nil {
         rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
-        hitBlock := g.cubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
+        hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
         g.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
         g.Toast(fmt.Sprintf("Block textures copied from %v", rayHitBlock))
     }
