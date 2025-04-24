@@ -101,6 +101,7 @@ func (t *Transform) UnmarshalJSON(data []byte) error {
 }
 
 // GetTransformMatrix uses the translation, rotation, and scale to create a matrix that represents the transformation of the object.
+// The Transformation Matrix will transform coordinates from local space to world space.
 func (t *Transform) GetTransformMatrix() mgl32.Mat4 {
     local := t.GetLocalTransform()
     if t.parent != nil {
@@ -118,6 +119,7 @@ func (t *Transform) GetLocalTransform() mgl32.Mat4 {
 }
 
 // GetViewMatrix returns the inverse of the transform matrix. Use this for cameras.
+// The View Matrix will transform coordinates from world space to local space.
 func (t *Transform) GetViewMatrix() mgl32.Mat4 {
     transformMatrix := t.GetTransformMatrix()
     return transformMatrix.Inv()
@@ -236,16 +238,11 @@ func (t *Transform) SetTopdownRotation(viewingAngle, rotationAngle float32) {
     t.rotation = mgl32.AnglesToQuat(mgl32.DegToRad(viewingAngle), mgl32.DegToRad(rotationAngle), 0, mgl32.XYZ)
 }
 func (t *Transform) SetLookAt(target, up mgl32.Vec3) {
-    t.rotation = t.getLookAt(target, up)
+    t.rotation = mgl32.QuatLookAtV(t.translation, target, up).Inverse()
 }
 
 func (t *Transform) SetLookAt2D(target mgl32.Vec3) {
-    t.rotation = t.getLookAt(target, mgl32.Vec3{0, 1, 0})
-}
-
-func (t *Transform) getLookAt(target, up mgl32.Vec3) mgl32.Quat {
-    lookAtMatrix := mgl32.QuatLookAtV(t.translation, target, up)
-    return lookAtMatrix.Inverse()
+    t.rotation = mgl32.QuatLookAtV(t.translation, target, mgl32.Vec3{0, 1, 0}).Inverse()
 }
 
 func (t *Transform) SetScale(scale mgl32.Vec3) {

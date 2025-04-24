@@ -20,7 +20,6 @@ type FPSCamera struct {
     LookSensitivity  float32
     invertedY        bool
     parent           Transformer
-    lookTarget       mgl32.Vec3
 }
 
 func (c *FPSCamera) GetUp() mgl32.Vec3 {
@@ -170,20 +169,10 @@ func (c *FPSCamera) UpDown(delta float32) mgl32.Vec3 {
     return mgl32.Vec3{0, 1, 0}.Mul(delta)
 }
 
-func (c *FPSCamera) SetLookTarget(position mgl32.Vec3) {
-    c.lookTarget = position
-    c.updateMouseOffset()
-    c.updateTransform()
-}
-
 func (c *FPSCamera) updateMouseOffset() {
     front := c.GetForward()
     c.rotatex = mgl32.RadToDeg(float32(math.Atan2(float64(front.Z()), float64(front.X()))))
     c.rotatey = mgl32.RadToDeg(float32(math.Asin(float64(front.Y()))))
-}
-
-func (c *FPSCamera) GetLookTarget() mgl32.Vec3 {
-    return c.lookTarget
 }
 
 func (c *FPSCamera) GetRotation() (float32, float32) {
@@ -254,6 +243,10 @@ func (c *FPSCamera) GetFarPlaneDist() float32 {
     return c.farPlaneDist
 }
 
+func (c *FPSCamera) GetNearAndFar() (near float32, far float32) {
+    return c.nearPlaneDist, c.farPlaneDist
+}
+
 func GetViewDirection(viewerPos, spritePosition mgl32.Vec3, spriteLookDir mgl32.Vec2) int { // must return 0-7
     camPosition2d := mgl32.Vec2{viewerPos.X(), viewerPos.Z()}
     spritePosition2d := mgl32.Vec2{spritePosition.X(), spritePosition.Z()}
@@ -288,8 +281,6 @@ type Camera interface {
     GetPickingRayFromScreenPosition(x, y float64) (mgl32.Vec3, mgl32.Vec3)
     RotateRight(deltaTime float64)
     RotateLeft(deltaTime float64)
-    GetLookTarget() mgl32.Vec3
-    SetLookTarget(target mgl32.Vec3)
     GetUp() mgl32.Vec3
     GetFarPlaneDist() float32
     GetAspectRatio() float32
@@ -321,6 +312,6 @@ func GetRayFromCameraPlane(cam Camera, normalizedX float32, normalizedY float32)
     return rayStart, dir
 }
 
-func ExtractRotation(viewMatrix mgl32.Mat4) mgl32.Quat {
-    return mgl32.Mat4ToQuat(viewMatrix.Mat3().Mat4())
+func ExtractRotation(transformationMatrix mgl32.Mat4) mgl32.Quat {
+    return mgl32.Mat4ToQuat(transformationMatrix.Mat3().Mat4())
 }

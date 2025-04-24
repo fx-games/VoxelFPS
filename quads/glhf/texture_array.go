@@ -1,6 +1,8 @@
 package glhf
 
 import (
+    "fmt"
+    "path/filepath"
     "runtime"
 
     "github.com/go-gl/gl/v3.3-core/gl"
@@ -38,7 +40,7 @@ func NewDepthTextureArray(width, height, layers int, smooth bool) *TextureArray 
     gl.TexImage3D(
         gl.TEXTURE_2D_ARRAY,
         0,
-        gl.DEPTH_COMPONENT,
+        gl.DEPTH_COMPONENT32F,
         int32(width),
         int32(height),
         int32(layers),
@@ -52,7 +54,7 @@ func NewDepthTextureArray(width, height, layers int, smooth bool) *TextureArray 
     if glError != gl.NO_ERROR {
         panic(glError)
     }
-    borderColor := mgl32.Vec4{0, 0, 0, 0}
+    borderColor := mgl32.Vec4{1, 1, 1, 1}
     gl.TexParameterfv(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_BORDER_COLOR, &borderColor[0])
     gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
     gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
@@ -91,8 +93,8 @@ func (t *TextureArray) Depth() int {
     return t.textureLayers
 }
 
-// SetPixels sets the content of a sub-region of the Texture3D. Pixels must be an RGBA byte sequence.
-func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint8) {
+// SetPixelsU8 sets the content of a sub-region of the Texture3D. Pixels must be an RGBA byte sequence.
+func (t *TextureArray) SetPixelsU8(x, y, w, h, layer int, pixels []uint8) {
     d := 1
     if len(pixels) != w*h*d {
         panic("set pixels: wrong number of pixels")
@@ -110,6 +112,54 @@ func (t *TextureArray) SetPixels(x, y, w, h, layer int, pixels []uint8) {
         gl.UNSIGNED_BYTE,
         gl.Ptr(pixels),
     )
+}
+
+// Pixels returns the content of a sub-region of the Texture as an RGBA byte sequence.
+func (t *TextureArray) Pixels(near, far float32) [][]uint8 {
+    pixels := make([]float32, t.textureWidth*t.textureHeight*t.textureLayers)
+    gl.GetTexImage(
+        gl.TEXTURE_2D_ARRAY,
+        0,
+        gl.DEPTH_COMPONENT,
+        gl.FLOAT,
+        gl.Ptr(pixels),
+    )
+    bytesPerLayer := t.textureWidth * t.textureHeight * 4
+    floatsPerLayer := t.textureWidth * t.textureHeight
+    var out [][]uint8
+    for i := 0; i < t.textureLayers; i++ {
+        layer := pixels[i*floatsPerLayer : (i+1)*floatsPerLayer]
+        subPixels := make([]uint8, bytesPerLayer)
+        for j := 0; j < len(layer); j++ {
+            rawDepthValue := layer[j]
+
+            depth := (2.0 * near) / (far + near - rawDepthValue*(far-near))
+            eyeZ := near * far / ((depth * (far - near)) - far)
+            val := (eyeZ - (-near)) / (-far - (-near))
+
+            subPixels[j*4] = uint8(val * 255)
+            subPixels[j*4+1] = uint8(val * 255)
+            subPixels[j*4+2] = uint8(val * 255)
+            subPixels[j*4+3] = uint8(255)
+        }
+        out = append(out, subPixels)
+    }
+
+    return out
+}
+
+func (t *TextureArray) SaveAsPNGs(near, far float32, directory string) error {
+    t.Begin()
+    allPixels := t.Pixels(near, far)
+    t.End()
+    for i, pixels := range allPixels {
+        filename := filepath.Join(directory, fmt.Sprintf("layer_%d.png", i))
+        writeErr := WritePixelsToPNG(filename, pixels, t.textureWidth, t.textureHeight)
+        if writeErr != nil {
+            return writeErr
+        }
+    }
+    return nil
 }
 
 // SetSmooth sets whether the Texture3D should be drawn "smoothly" or "pixely".

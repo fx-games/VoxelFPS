@@ -129,7 +129,6 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         println(fmt.Sprintf("Screen coord scale: %.2f, %.2f", screenCoordScaleX, screenCoordScaleY))
 
         fpsCamera := core.NewFPSCamera(mgl32.Vec3{0, 0, 0}, winSizeX, winSizeY, mouseSensitivity)
-        fpsCamera.SetUIProjectionScale(mgl32.Vec2{uiScaleX, uiScaleY})
         fpsCamera.SetMouseInvertedY(true)
 
         maxTexSize := glQuery(gl.MAX_TEXTURE_SIZE)
@@ -294,8 +293,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.lightsUbo = lightsUbo
 
         glApp.SetLights([]LightInfo{
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 1.2, 2.2}, mgl32.Vec3{0, -1, 0}, 45, 50), Color: mgl32.Vec4{0, 0.7, 0, 1}},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 1.2, 13}, mgl32.Vec3{0, -1, 0}, 45, 50), Color: mgl32.Vec4{0.7, 0, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15), Color: mgl32.Vec4{0, 0.7, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15), Color: mgl32.Vec4{0.7, 0, 0, 1}},
         })
 
         parentApp.Init(glApp, mapLoad)
@@ -347,7 +346,7 @@ func (a *GlApplication) StartEventLoop() {
             //a.lightsUbo.SetLights(a.Lights) // this should make the light.ProjView matrix available in the shader
             // a) switch to the shadow map framebuffer
             a.shadowBuffer.Begin()
-            glhf.Bounds(0, 0, 256, 256)
+            gl.Viewport(0, 0, 256, 256)
             for i := 0; i < len(a.Lights); i++ {
 
                 light := a.Lights[i]
@@ -365,7 +364,7 @@ func (a *GlApplication) StartEventLoop() {
             a.updateMainUBO()
 
             a.postFrameBuffer.Begin()
-            glhf.Bounds(0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()))
+            gl.Viewport(0, 0, int32(float32(a.WindowWidth)*a.UIScale.X()), int32(float32(a.WindowHeight)*a.UIScale.Y()))
             glErr := gl.GetError()
             if glErr != gl.NO_ERROR {
                 panic(glErr)
@@ -772,6 +771,10 @@ func vec4ptr(vec mgl32.Vec4) unsafe.Pointer {
 
 func (a *GlApplication) SaveScreenshot(filename string) error {
     return a.postFrameBuffer.Texture().SaveAsPNG(filename)
+}
+func (a *GlApplication) SaveShadowMaps(filename string) error {
+    //near, far := a.Camera.GetNearAndFar()
+    return a.shadowBuffer.DepthTextureArray().SaveAsPNGs(0.15, 15, filename)
 }
 
 func (a *GlApplication) updateMainUBO() {

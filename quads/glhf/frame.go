@@ -140,7 +140,9 @@ func (f *Frame) initColorStencilDepth(width int, height int, smooth bool) {
     f.fb.bind()
     gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, f.color.tex.obj, 0)
     gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, f.depth.tex.obj, 0)
+
     f.fb.restore()
+
 }
 
 func (f *Frame) DepthTexture() *Texture {
@@ -153,7 +155,9 @@ func (f *Frame) initDepthBuffer(width int, height int) {
     // prevent OpenGL from drawing to the color buffer
     gl.DrawBuffer(gl.NONE)
     gl.ReadBuffer(gl.NONE)
+
     f.End()
+
 }
 
 func (f *Frame) DepthTextureArray() *TextureArray {

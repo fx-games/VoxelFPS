@@ -140,7 +140,7 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection
     // diffuse
     vec3 lightDir = normalize(lightPos - fragWorldPos);
     float theta = dot(lightDir, normalize(-lightDirection));
-    if (theta > 0.96) {
+    if (theta < 0.96) {
         return vec3(0.0);
     }
     float diff = max(dot(lightDir, normal), 0.0);
@@ -153,7 +153,9 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection
     vec3 specular = spec * lightColor;    
     // calculate shadow
     float shadow = ShadowCalculation(lightIndex, fragPosLightSpace);       
+    
     vec3 lighting = (1.0 - shadow) * (diffuse + specular);    
+    //vec3 lighting = (diffuse + specular);
     return lighting;
 }
 

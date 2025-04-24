@@ -335,17 +335,21 @@ func (g *Game) printDebugInfo() {
     forward := g.Camera.GetForward()
     pos := g.Camera.GetPosition()
     rayCastPosString := "nil"
+    lengthOfRay := "n/a"
     if g.lastHitResult != nil {
         rayCastPosString = vec3String(g.lastHitResult.WorldPosition())
+        lengthOfRay = fmt.Sprintf("%.2f", g.lastHitResult.HitInfo.Distance)
     }
 
     spriteTrisDrawn, spriteDrawCalls := g.Sprites.DrawnLastFrame()
     guiTrisDrawn, guiDrawCalls := g.Gui.DrawnLastFrame()
     meshTriangles, meshDrawCalls := g.Meshes.DrawnLastFrame()
+
     rows := []core.TableRow{
         core.NewTableRow("Cam Fwd", "", vec3String(forward)),
         core.NewTableRow("Cam Pos", "", vec3String(pos)),
         core.NewTableRow("Ray Hit", "", rayCastPosString),
+        core.NewTableRow("Ray Len", "", lengthOfRay),
         core.NewTableRow("Coll. Pairs", "", fmt.Sprintf("%d", g.physicsSystem.PairsChecked())),
         core.NewTableRow("Map", fmt.Sprintf("%d tris", g.CubeMap.TriangleDrawCount()), fmt.Sprintf("%d", g.CubeMap.DrawCalls())),
         core.NewTableRow("GUI", fmt.Sprintf("%d tris", guiTrisDrawn), fmt.Sprintf("%d", guiDrawCalls)),

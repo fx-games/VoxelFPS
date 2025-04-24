@@ -13,15 +13,43 @@ type PerspectiveTransform struct {
     windowHeight  int
     nearPlaneDist float32
     farPlaneDist  float32
-    UIScale       mgl32.Vec2
 }
 
-func (c *PerspectiveTransform) SetUIProjectionScale(uiScale mgl32.Vec2) {
-    c.UIScale = uiScale
+func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
+    return &PerspectiveTransform{
+        Transform: &Transform{
+            translation: mgl32.Vec3{0, 0, 0},
+            rotation:    mgl32.QuatIdent(),
+            scale:       mgl32.Vec3{1, 1, 1},
+        },
+        fov:           float32(45.0),
+        defaultFOV:    float32(45.0),
+        nearPlaneDist: 0.15,
+        farPlaneDist:  100.0,
+        windowWidth:   width,
+        windowHeight:  height,
+    }
+}
+
+func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fov float32, farPlaneDist float32) *PerspectiveTransform {
+    p := &PerspectiveTransform{
+        Transform: &Transform{
+            translation: position,
+            rotation:    rot,
+            scale:       mgl32.Vec3{1, 1, 1},
+        },
+        fov:           fov,
+        defaultFOV:    fov,
+        nearPlaneDist: 0.15,
+        farPlaneDist:  farPlaneDist,
+        windowWidth:   256,
+        windowHeight:  256,
+    }
+    return p
 }
 
 // GetProjectionMatrix returns the projection matrix for the camera.
-// A projection matrix will transform a point from camera space to screen space. (3D -> 2D)
+// A projection matrix will transform a point from local camera space to screen space. (3D -> 2D)
 func (c *PerspectiveTransform) GetProjectionMatrix() mgl32.Mat4 {
     return mgl32.Perspective(mgl32.DegToRad(c.fov), float32(c.windowWidth)/float32(c.windowHeight), c.nearPlaneDist, c.farPlaneDist)
 }
@@ -224,40 +252,6 @@ func (c *PerspectiveTransform) ChangeFOV(change int, minimum uint) {
 func (c *PerspectiveTransform) ResetFOV() {
     c.fov = c.defaultFOV
 }
-func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
-    return &PerspectiveTransform{
-        Transform: &Transform{
-            translation: mgl32.Vec3{0, 0, 0},
-            rotation:    mgl32.QuatIdent(),
-            scale:       mgl32.Vec3{1, 1, 1},
-        },
-        fov:           float32(45.0),
-        defaultFOV:    float32(45.0),
-        nearPlaneDist: 0.15,
-        farPlaneDist:  100.0,
-        windowWidth:   width,
-        windowHeight:  height,
-    }
-}
-
-func NewPerspectiveTransformForSpotlight(position, direction mgl32.Vec3, fov float32, farPlaneDist float32) *PerspectiveTransform {
-    p := &PerspectiveTransform{
-        Transform: &Transform{
-            translation: position,
-            rotation:    mgl32.QuatIdent(),
-            scale:       mgl32.Vec3{1, 1, 1},
-        },
-        fov:           fov,
-        defaultFOV:    fov,
-        nearPlaneDist: 0,
-        farPlaneDist:  farPlaneDist,
-        windowWidth:   256,
-        windowHeight:  256,
-    }
-    p.SetForward(direction)
-    return p
-}
-
 func (c *PerspectiveTransform) ProjectWorldToScreen(worldPos mgl32.Vec3) mgl32.Vec3 {
     viewMatrix := c.GetViewMatrix()
     projectionMatrix := c.GetProjectionMatrix()

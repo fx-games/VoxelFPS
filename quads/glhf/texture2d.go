@@ -2,7 +2,6 @@ package glhf
 
 import (
     "image"
-    "image/color"
     "image/draw"
     "image/png"
     "io"
@@ -308,17 +307,12 @@ func (t *Texture) SaveAsPNG(filename string) error {
     pixels := t.Pixels(0, 0, t.textureWidth, t.textureHeight)
     t.tex.restore()
 
-    outImage := image.NewNRGBA(image.Rect(0, 0, t.textureWidth, t.textureHeight))
-    for y := 0; y < t.textureHeight; y++ {
-        for x := 0; x < t.textureWidth; x++ {
-            outImage.Set(x, y, color.NRGBA{
-                R: pixels[(y*t.textureWidth+x)*4],
-                G: pixels[(y*t.textureWidth+x)*4+1],
-                B: pixels[(y*t.textureWidth+x)*4+2],
-                A: pixels[(y*t.textureWidth+x)*4+3],
-            })
-        }
-    }
+    return WritePixelsToPNG(filename, pixels, t.textureWidth, t.textureHeight)
+}
+
+func WritePixelsToPNG(filename string, pixels []uint8, width, height int) error {
+    outImage := image.NewNRGBA(image.Rect(0, 0, width, height))
+    outImage.Pix = pixels
 
     file, err := os.Create(filename)
     if err != nil {
