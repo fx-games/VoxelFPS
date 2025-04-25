@@ -120,7 +120,7 @@ func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) 
     return sprite.TextureIndexAnimated(frames)
 }
 
-func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spriteShader *glhf.Shader) {
+func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, spriteShader *glhf.Shader) {
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
         panic(glErr)
@@ -147,10 +147,10 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spri
             continue
         }
 
-        //tileW, tileH := currentAtlas.GetAtlasItemSize()
-        //spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
+        tileW, tileH := currentAtlas.GetAtlasItemSize()
+        spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 
-        currentAtlas.Begin()
+        currentAtlas.BeginOnUnit(gl.TEXTURE0)
         glErr = gl.GetError()
         if glErr != gl.NO_ERROR {
             panic(glErr)
@@ -160,7 +160,7 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spri
                 continue
             }
 
-            viewDirection := core.GetViewDirection(observerPos, sprite.Position(), sprite.LookDirection())
+            viewDirection := core.GetViewDirection(observer.GetPosition(), sprite.Position(), sprite.LookDirection())
             // TODO: This should not change when drawing the sprites multiple times in the same frame
             texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
             if !shouldShow {
@@ -170,7 +170,7 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spri
             if glErr != gl.NO_ERROR {
                 panic(glErr)
             }
-            q.drawSprite(camera, spriteShader, sprite, texIndex)
+            q.drawSprite(observer, spriteShader, sprite, texIndex)
             glErr = gl.GetError()
             if glErr != gl.NO_ERROR {
                 panic(glErr)
@@ -198,13 +198,13 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spri
         if !sprite.GameObject().IsInViewFrustum(camera) {
             continue
         }
-        viewDirection := core.GetViewDirection(observerPos, sprite.Position(), sprite.LookDirection())
+        viewDirection := core.GetViewDirection(observer.GetPosition(), sprite.Position(), sprite.LookDirection())
         // TODO: This should not change when drawing the sprites multiple times in the same frame
         texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
         if !shouldShow {
             continue
         }
-        q.drawSprite(camera, nil, sprite, texIndex)
+        q.drawSprite(observer, spriteShader, sprite, texIndex)
         spritesDrawn++
         drawCalls++
 
@@ -218,10 +218,8 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observerPos mgl32.Vec3, spri
     q.drawCalls = drawCalls
 }
 
-func (q *SpriteDrawer) drawSprite(camera *core.FPSCamera, shader *glhf.Shader, sprite *SpriteComponent, texIndex uint16) {
-    shader.SetUniformAttr(QuadShaderModelTransform, sprite.Transform(camera))
-    tintColor := sprite.TintColor()
-
+func (q *SpriteDrawer) drawSprite(observer core.Transformer, shader *glhf.Shader, sprite *SpriteComponent, texIndex uint16) {
+    shader.SetUniformAttr(QuadShaderModelTransform, sprite.Transform(observer))
     //q.shader.SetUniformAttr(QuadShaderTintColor, tintColor)
 
     originOffset := mgl32.Vec2{0, 0} // offset zero = center of sprite
@@ -229,18 +227,12 @@ func (q *SpriteDrawer) drawSprite(camera *core.FPSCamera, shader *glhf.Shader, s
         originOffset = mgl32.Vec2{0, 0.5}
     }
     shader.SetUniformAttr(QuadShaderOriginOffset, originOffset)
-    //shader.SetUniformAttr(QuadShaderTextureIndex, uint32(texIndex))
+    shader.SetUniformAttr(QuadShaderTextureIndex, uint32(texIndex))
 
     if sprite.DrawMode() == SpriteModeStatic {
         gl.Disable(gl.CULL_FACE)
     }
-    if tintColor.W() < 1 {
-        //gl.DepthMask(false)
-    }
     q.quadVertices.Draw()
-    if tintColor.W() < 1 {
-        //gl.DepthMask(true)
-    }
     if sprite.DrawMode() == SpriteModeStatic {
         gl.Enable(gl.CULL_FACE)
     }

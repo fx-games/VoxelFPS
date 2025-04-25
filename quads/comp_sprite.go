@@ -82,16 +82,16 @@ func (s *SpriteComponent) Position() mgl32.Vec3 {
     return s.resolver.Transform().GetPosition()
 }
 
-func (s *SpriteComponent) Transform(cam *core.FPSCamera) mgl32.Mat4 {
+func (s *SpriteComponent) Transform(observer core.Transformer) mgl32.Mat4 {
     transformMatrix := mgl32.Translate3D(s.Position().X(), s.Position().Y(), s.Position().Z())
     switch s.DrawMode() {
     case SpriteModeFollowHorizontal:
-        lookAngle := s.Position().Sub(cam.GetPosition()).Normalize()
+        lookAngle := s.Position().Sub(observer.GetPosition()).Normalize()
         lookAngle = mgl32.Vec3{lookAngle.X(), 0, lookAngle.Z()}
         rotation := mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, lookAngle)
         transformMatrix = transformMatrix.Mul4(rotation.Mat4())
     case SpriteModeFollowHorizontalAndVertical:
-        rotation := cam.GetRotationMatrix()
+        rotation := observer.GetRotationMatrix()
         transformMatrix = transformMatrix.Mul4(rotation)
     }
 

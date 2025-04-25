@@ -198,8 +198,6 @@ func (m *MeshNode) Draw(shader *glhf.Shader, modelTransformUniformIndex int, tex
 func (m *MeshNode) GetTransformMatrix() mgl32.Mat4 {
     if m.temporaryParent != nil { // currently only used by the fps camera for attaching the arms
         externalParent := m.temporaryParent.GetTransformMatrix()
-        offset := mgl32.Translate3D(0.2, -0.7, 0) // TODO: make this a parameter?
-        externalParent = externalParent.Mul4(offset)
         return externalParent.Mul4(m.GetLocalMatrix())
     }
     if m.parent == nil {

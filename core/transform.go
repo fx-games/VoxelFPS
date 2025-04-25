@@ -8,6 +8,8 @@ import (
 
 type Transformer interface {
     GetTransformMatrix() mgl32.Mat4
+    GetPosition() mgl32.Vec3
+    GetRotationMatrix() mgl32.Mat4
 }
 
 type Transform struct {

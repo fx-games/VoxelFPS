@@ -346,6 +346,8 @@ func (a *GlApplication) StartEventLoop() {
             //a.lightsUbo.SetLights(a.Lights) // this should make the light.ProjView matrix available in the shader
             // a) switch to the shadow map framebuffer
             a.shadowBuffer.Begin()
+            //gl.DepthFunc(gl.ALWAYS)
+
             gl.Viewport(0, 0, 256, 256)
             for i := 0; i < len(a.Lights); i++ {
 
@@ -355,8 +357,10 @@ func (a *GlApplication) StartEventLoop() {
                 gl.Clear(gl.DEPTH_BUFFER_BIT)
 
                 a.setMainUBOCam(light.GetPosition(), light.GetForward(), light.GetProjectionViewMatrix())
-                a.draw3dScene(light.GetPosition(), a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+                a.draw3dScene(light, a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+
             }
+            //gl.DepthFunc(gl.LEQUAL)
             a.shadowBuffer.End()
             // END SHADOW MAPPING
 
@@ -374,7 +378,7 @@ func (a *GlApplication) StartEventLoop() {
                 gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
                 gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-                a.draw3dScene(a.Camera.GetPosition(), a.cubeShader, a.meshShader, a.quadShader)
+                a.draw3dScene(a.Camera, a.cubeShader, a.meshShader, a.quadShader)
 
                 if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
                     a.drawSkybox(a.skyboxCubeMap)
@@ -456,14 +460,14 @@ func (a *GlApplication) StartEventLoop() {
     }
 }
 
-func (a *GlApplication) draw3dScene(observerPos mgl32.Vec3, chunkShader, meshShader, spriteShader *glhf.Shader) {
+func (a *GlApplication) draw3dScene(observer core.Transformer, chunkShader, meshShader, spriteShader *glhf.Shader) {
     a.CubeMap.DrawWithShader(a.Camera, chunkShader) // camera only used for frustum culling
 
     if a.ShouldDrawMeshes {
         a.Meshes.Draw(a.Camera, meshShader) // camera only used for frustum culling
     }
     if a.ShouldDrawSprites {
-        a.Sprites.Draw(a.Camera, observerPos, spriteShader) // this one actually changes viewdirection depending on the camera..
+        a.Sprites.Draw(a.Camera, observer, spriteShader) // this one actually changes viewdirection depending on the camera..
     }
     if a.ShouldDrawParticles {
         //a.DrawParticles(cam)

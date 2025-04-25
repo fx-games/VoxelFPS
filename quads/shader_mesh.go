@@ -14,7 +14,7 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
         vertexFormat = glhf.AttrFormat{
             {Name: "position", Type: glhf.Vec3},
             {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertexColor", Type: glhf.Vec3}, // Take this out?
+            {Name: "vertexColor", Type: glhf.Vec3},
             {Name: "normal", Type: glhf.Vec3},
         }
         uniformFormat = glhf.AttrFormat{
@@ -49,7 +49,7 @@ func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
         vertexFormat = glhf.AttrFormat{
             {Name: "position", Type: glhf.Vec3},
             {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertexColor", Type: glhf.Vec3}, // Take this out?
+            {Name: "vertexColor", Type: glhf.Vec3},
             {Name: "normal", Type: glhf.Vec3},
         }
         uniformFormat = glhf.AttrFormat{
@@ -119,7 +119,7 @@ uniform sampler2D tex;
 out vec4 fragmentColor;
 
 void main() {
-    vec4 surfaceColor = texture(tex, vec2(VertUV.x, VertUV.y));
+    vec4 surfaceColor = texture(tex, VertUV);
     
     if (surfaceColor.a == 0) {
         discard;

@@ -61,13 +61,13 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
             glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
-            //            glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
-            //            glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
+            glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
+            glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
         }
         shader *glhf.Shader
     )
     var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSourceDepthPass(), quadFragmentShaderSourceDepth)
 
     if err != nil {
         panic(err)
@@ -105,8 +105,9 @@ lineLoop:
 
 func quadVertexShaderSourceDepthPass() string {
     filteredSource := prefixFilter(quadVertexShaderSource, []string{
-        "out vec",
-        "Vert",
+        "out vec3",
+        "VertNormal",
+        "VertPos",
     })
     return filteredSource
 }
@@ -204,23 +205,41 @@ uniform sampler2D tex;
 out vec4 fragmentColor;
 
 void main() {
-
-    vec4 surfaceColor = texture(tex, vec2(VertUV.x, VertUV.y));
+    vec4 surfaceColor = texture(tex, VertUV);
 
     if (surfaceColor.a == 0) {
         discard;
-    }
+    } else {
+        // apply tint
+        float VertLightLevel = 12;
+        vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0);
     
-    // apply tint
-    float VertLightLevel = 12;
-    vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0);
+        surfaceColor *= tintColor;
+    
+        vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
+        vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
+    
+        //vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
+    
+        fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+    }
+}`
 
-    surfaceColor *= tintColor;
+const quadFragmentShaderSourceDepth = `
+#version 400 core
 
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
+in vec2 VertUV;
 
-    //vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
+uniform sampler2D tex;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+void main() {
+    vec4 surfaceColor = texture(tex, VertUV); 
+    
+    float[2] depthValues = float[2](
+        1.0,
+        gl_FragCoord.z
+    );
+    
+    int isOpaque = int(step(0.5, surfaceColor.a));
+    gl_FragDepth = depthValues[isOpaque];
 }`
