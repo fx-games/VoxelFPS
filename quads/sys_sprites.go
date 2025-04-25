@@ -299,5 +299,4 @@ func (q *SpriteDrawer) GetLastFrameIndex(anim int, viewDirection int) uint16 {
 
 func (q *SpriteDrawer) AddTransparent(sprite *SpriteComponent) {
     q.transparentSprites = append(q.transparentSprites, sprite)
-
 }

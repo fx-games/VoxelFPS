@@ -34,7 +34,7 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
     }
 
     shader.Begin()
-    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
     shader.End()
 
     glErr := gl.GetError()
@@ -84,10 +84,10 @@ func meshVertexShaderSourceDepthPass() string {
 }
 
 const meshVertexShaderSource = `
-in vec3 position;
-in vec2 texCoord;
-in vec3 vertexColor;
-in vec3 normal;
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texCoord;
+layout(location = 2) in vec3 vertexColor;
+layout(location = 3) in vec3 normal;
 
 uniform mat4 modelTransform;
 

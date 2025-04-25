@@ -31,7 +31,7 @@ func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
     }
 }
 
-func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fov float32, farPlaneDist float32) *PerspectiveTransform {
+func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fov float32, farPlaneDist float32, shadowResolution int) *PerspectiveTransform {
     p := &PerspectiveTransform{
         Transform: &Transform{
             translation: position,
@@ -42,8 +42,8 @@ func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fo
         defaultFOV:    fov,
         nearPlaneDist: 0.15,
         farPlaneDist:  farPlaneDist,
-        windowWidth:   256,
-        windowHeight:  256,
+        windowWidth:   shadowResolution,
+        windowHeight:  shadowResolution,
     }
     return p
 }

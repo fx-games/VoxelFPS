@@ -44,7 +44,7 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
     shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
     shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
     shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
-    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
     shader.End()
 
     glErr := gl.GetError()
@@ -117,7 +117,7 @@ out vec3 VertPos;
 out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
 out vec3 VertNormal;
 
-in uint cornerIndex;
+layout(location = 0) in uint cornerIndex;
 
 uniform mat4 modelTransform;
 uniform uint textureIndex;

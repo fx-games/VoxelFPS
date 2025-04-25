@@ -24,11 +24,11 @@ type GlUInt uint32
 type GlFloat float32
 
 type VertexArray[V any] struct {
-    vao, vbo                binder
-    format                  AttrFormat
-    vertexSizeInBytes       int
-    attrOffsets             []int
-    shader                  *Shader
+    vao, vbo          binder
+    format            AttrFormat
+    vertexSizeInBytes int
+    attrOffsets       []int
+
     ibo                     binder
     primitiveType           uint32
     arrayElementSizeInBytes int
@@ -77,7 +77,6 @@ func NewVertexArray[V any](shader *Shader, isDynamic bool) *VertexArray[V] {
         vertexSizeInBytes:       shader.VertexFormat().Size(),
         arrayElementSizeInBytes: int(unsafe.Sizeof(dummy)),
         attrOffsets:             make([]int, len(shader.VertexFormat())),
-        shader:                  shader,
         use:                     usageHint,
     }
 
@@ -108,7 +107,7 @@ func NewVertexArray[V any](shader *Shader, isDynamic bool) *VertexArray[V] {
     if glError != gl.NO_ERROR {
         println("BufferData:", glError)
     }
-    va.setAttributesForArray()
+    va.setAttributesForArray(shader)
 
     glError = gl.GetError()
     if glError != gl.NO_ERROR {
@@ -190,9 +189,9 @@ func (va *VertexArray[V]) SetIndices32(indices []uint32) {
         va.indexCount = len(indices)
     }
 }
-func (va *VertexArray[V]) setAttributesForArray() {
+func (va *VertexArray[V]) setAttributesForArray(shader *Shader) {
     for i, attr := range va.format {
-        loc := gl.GetAttribLocation(va.shader.program.obj, gl.Str(attr.Name+"\x00")) // get variable location index from shader
+        loc := gl.GetAttribLocation(shader.program.obj, gl.Str(attr.Name+"\x00")) // get variable location index from shader
 
         var size int32
         glType := uint32(gl.FLOAT)

@@ -103,9 +103,8 @@ type GlApplication struct {
     UIAtlas *glhf.TextureAtlasFixed
     UIFont  BitmapFont
 
-    spriteBatches               []*glhf.SpriteBatch
-    locationPostColorTex        int32
-    locationPostDepthStencilTex int32
+    spriteBatches    []*glhf.SpriteBatch
+    shadowResolution int
 }
 
 // Start starts the OpenGL application with the given parentApp and screen dimensions.
@@ -145,11 +144,11 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         maxCombinedTexImageUnits := glQuery(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS)
         println(fmt.Sprintf("Max combined texture image units: %d", maxCombinedTexImageUnits))
 
-        uboBlockName := "Main"
+        mainUboBlockName := "Main"
         mainUbo := mainUBO()
         lightsUbo := NewLightsUBO()
 
-        injectedGLSL := mainUbo.GetShaderBlockSource(uboBlockName)
+        injectedGLSL := mainUbo.GetShaderBlockSource(mainUboBlockName)
         injectedGLSL += lightsGLSLBlock
 
         uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
@@ -184,15 +183,17 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         }
 
+        shadowResolution := 512
         glApp := &GlApplication{
-            WindowWidth:   winSizeX,
-            WindowHeight:  winSizeY,
-            Window:        window,
-            TerminateFunc: terminateFunc,
-            TimeFactor:    1.0,
-            Camera:        fpsCamera,
-            guiShader:     LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
-            postShader:    LoadPostShader(),
+            WindowWidth:      winSizeX,
+            WindowHeight:     winSizeY,
+            Window:           window,
+            TerminateFunc:    terminateFunc,
+            TimeFactor:       1.0,
+            shadowResolution: shadowResolution,
+            Camera:           fpsCamera,
+            guiShader:        LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
+            postShader:       LoadPostShader(),
 
             quadShader: LoadQuadShader(injectedGLSL),
             cubeShader: LoadCubeShader(injectedGLSL),
@@ -202,7 +203,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             cubeShaderDepth: LoadCubeShaderDepthPass(injectedGLSL),
             meshShaderDepth: LoadMeshShaderDepthPass(injectedGLSL),
 
-            shadowBuffer:    glhf.NewFrameBufferWithDepth(256, 256),
+            shadowBuffer:    glhf.NewFrameBufferWithDepth(shadowResolution, shadowResolution),
             postFrameBuffer: glhf.NewFrameBufferWithColorDepthStencil(fbSizeX, fbSizeY, false),
 
             lineShader:       LoadLineShader(fpsCamera),
@@ -246,14 +247,13 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
 
-        glApp.screenQuad = PostQuad(glApp.postShader)
-        glApp.locationPostColorTex = glApp.postShader.UniformLocation("tex")
-        glApp.locationPostDepthStencilTex = glApp.postShader.UniformLocation("depthStencil")
+        postShader := glApp.postShader
+        glApp.screenQuad = PostQuad(postShader)
 
-        glApp.postShader.Begin()
-        glApp.postShader.SetTextureUnit(glApp.locationPostColorTex, gl.TEXTURE0)
-        glApp.postShader.SetTextureUnit(glApp.locationPostDepthStencilTex, gl.TEXTURE1)
-        glApp.postShader.End()
+        postShader.Begin()
+        postShader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
+        //postShader.BindSamplerNameToTextureUnit("depthStencil", gl.TEXTURE1)
+        postShader.End()
 
         skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
         skyboxVA.Begin()
@@ -262,13 +262,13 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         skyboxVA.DebugName = "SkyBox"
         glApp.skybox = skyboxVA
 
-        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.quadShader.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.meshShader.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.cubeShader.ID(), mainUboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.quadShader.ID(), mainUboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.meshShader.ID(), mainUboBlockName, 0)
 
-        glhf.BindUniformBlockTo(glApp.cubeShaderDepth.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.quadShaderDepth.ID(), uboBlockName, 0)
-        glhf.BindUniformBlockTo(glApp.meshShaderDepth.ID(), uboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.cubeShaderDepth.ID(), mainUboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.quadShaderDepth.ID(), mainUboBlockName, 0)
+        glhf.BindUniformBlockTo(glApp.meshShaderDepth.ID(), mainUboBlockName, 0)
 
         mainUbo.Begin()
 
@@ -293,8 +293,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.lightsUbo = lightsUbo
 
         glApp.SetLights([]LightInfo{
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15), Color: mgl32.Vec4{0, 0.7, 0, 1}},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15), Color: mgl32.Vec4{0.7, 0, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 1}},
         })
 
         parentApp.Init(glApp, mapLoad)
@@ -339,45 +339,27 @@ func (a *GlApplication) StartEventLoop() {
                 a.UpdateParticles(deltaTime)
             } // Update END
 
-            // BEGIN SHADOW MAPPING
+            gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
 
-            // ITERATE ALL LIGHTS
-            // DRAW 3D SCENE TO SHADOW MAP
-            //a.lightsUbo.SetLights(a.Lights) // this should make the light.ProjView matrix available in the shader
-            // a) switch to the shadow map framebuffer
-            a.shadowBuffer.Begin()
-            //gl.DepthFunc(gl.ALWAYS)
+            { // BEGIN SHADOW MAPPING
+                gl.Viewport(0, 0, int32(a.shadowResolution), int32(a.shadowResolution))
+                a.shadowBuffer.Begin()
 
-            gl.Viewport(0, 0, 256, 256)
-            for i := 0; i < len(a.Lights); i++ {
+                for i := 0; i < len(a.Lights); i++ { // ITERATE ALL LIGHTS
+                    a.shadowBuffer.SetDepthLayer(i)
+                    gl.Clear(gl.DEPTH_BUFFER_BIT)
+                    a.draw3dScene(a.Lights[i], a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+                }
 
-                light := a.Lights[i]
-                // b) bind layer i of the depth texture array
-                a.shadowBuffer.SetDepthLayer(i)
-                gl.Clear(gl.DEPTH_BUFFER_BIT)
+                a.shadowBuffer.End()
+                gl.Viewport(0, 0, int32(float32(a.WindowWidth)*a.UIScale.X()), int32(float32(a.WindowHeight)*a.UIScale.Y()))
+            } // END SHADOW MAPPING
 
-                a.setMainUBOCam(light.GetPosition(), light.GetForward(), light.GetProjectionViewMatrix())
-                a.draw3dScene(light, a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
-
-            }
-            //gl.DepthFunc(gl.LEQUAL)
-            a.shadowBuffer.End()
-            // END SHADOW MAPPING
-
-            // DRAW BEGIN
-            a.updateMainUBO()
-
-            a.postFrameBuffer.Begin()
-            gl.Viewport(0, 0, int32(float32(a.WindowWidth)*a.UIScale.X()), int32(float32(a.WindowHeight)*a.UIScale.Y()))
-            glErr := gl.GetError()
-            if glErr != gl.NO_ERROR {
-                panic(glErr)
-            }
-            a.shadowBuffer.DepthTextureArray().BeginOnUnit(gl.TEXTURE2)
             { // BEGIN RENDER 3D SCENE
-                gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
-                gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+                a.postFrameBuffer.Begin()
+                a.shadowBuffer.DepthTextureArray().BeginOnUnit(gl.TEXTURE2)
 
+                gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
                 a.draw3dScene(a.Camera, a.cubeShader, a.meshShader, a.quadShader)
 
                 if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
@@ -385,11 +367,10 @@ func (a *GlApplication) StartEventLoop() {
                 }
 
                 a.draw3dDebug()
-            } // End Render 3D Scene
-            a.shadowBuffer.DepthTextureArray().End()
-            gl.ActiveTexture(gl.TEXTURE0)
 
-            a.postFrameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
+                a.shadowBuffer.DepthTextureArray().End()
+                a.postFrameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
+            } // End Render 3D Scene
 
             { // DRAW FRAMEBUFFER TO SCREEN & POSTPROCESSING
                 a.postShader.Begin()
@@ -435,7 +416,6 @@ func (a *GlApplication) StartEventLoop() {
                 a.guiShader.End()
             } // End Draw 2D Scene
 
-            // DRAW END
             a.FramesPerSecond = 1.0 / elapsed
             if a.Ticks%60 == 0 {
                 sixtyTicksAverage := a.FPSRunningAvg
@@ -460,7 +440,9 @@ func (a *GlApplication) StartEventLoop() {
     }
 }
 
-func (a *GlApplication) draw3dScene(observer core.Transformer, chunkShader, meshShader, spriteShader *glhf.Shader) {
+func (a *GlApplication) draw3dScene(observer core.Projector, chunkShader, meshShader, spriteShader *glhf.Shader) {
+    a.setMainUBOCam(observer.GetPosition(), observer.GetForward(), observer.GetProjectionViewMatrix())
+
     a.CubeMap.DrawWithShader(a.Camera, chunkShader) // camera only used for frustum culling
 
     if a.ShouldDrawMeshes {
@@ -687,20 +669,21 @@ func (a *GlApplication) DrawParticles(cam core.Camera) {
     }
 }
 func (a *GlApplication) drawSkybox(cubemap *glhf.Cubemap) {
-    gl.DepthMask(false)
-    a.skyboxShader.Begin()
-
     projection := a.Camera.GetProjectionMatrix()
     view := a.Camera.GetViewMatrix().Mat3().Mat4() // remove translation
     projView := projection.Mul4(view)
 
+    gl.DepthMask(false)
+
+    a.skyboxShader.Begin()
     a.skyboxShader.SetUniformAttr(SkyboxShaderCamProjectionView, projView)
-    a.skybox.Begin()
     cubemap.Begin()
+    a.skybox.Begin()
     a.skybox.Draw()
-    cubemap.End()
     a.skybox.End()
+    cubemap.End()
     a.skyboxShader.End()
+
     gl.DepthMask(true)
 }
 

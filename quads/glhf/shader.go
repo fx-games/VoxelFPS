@@ -361,15 +361,27 @@ func (s *Shader) IsUniformsValid() (string, bool) {
     return "", true
 }
 
-func (s *Shader) SetTextureUnit(uniformLocation int32, glTextureUnit int) {
+func (s *Shader) setTextureUnit(uniformLocation int32, glTextureUnit int) {
     textunit := int32(glTextureUnit - gl.TEXTURE0)
     gl.Uniform1i(uniformLocation, textunit)
 }
 
-func (s *Shader) UniformLocation(variableNameInGlsl string) int32 {
+func (s *Shader) uniformLocation(variableNameInGlsl string) int32 {
     uniformLocation := gl.GetUniformLocation(s.ID(), gl.Str(variableNameInGlsl+"\x00"))
     return uniformLocation
 }
+
+// BindSamplerNameToTextureUnit binds a sampler name to a texture unit.
+// NOTE: This is not performant, don't call this every frame. Set this on shader creation.
+// Requires the shader to be bound.
+func (s *Shader) BindSamplerNameToTextureUnit(samplerName string, glTextureUnit int) {
+    uniformLocation := s.uniformLocation(samplerName)
+    if uniformLocation < 0 {
+        panic(fmt.Sprintf("Uniform attribute %s not found", samplerName))
+    }
+    s.setTextureUnit(uniformLocation, glTextureUnit)
+}
+
 func (s *Shader) SetTextureUnitArray(uniformLocation int32, glTextureUnitCount int) {
     // gl.Uniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0)
     textunits := make([]int32, glTextureUnitCount)

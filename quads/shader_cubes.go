@@ -37,9 +37,9 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
-    shader.SetTextureUnit(shader.UniformLocation("tex"), gl.TEXTURE0)
-    shader.SetTextureUnit(shader.UniformLocation("voxelLookup"), gl.TEXTURE1)
-    shader.SetTextureUnit(shader.UniformLocation("shadowMap"), gl.TEXTURE2)
+    shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
+    shader.BindSamplerNameToTextureUnit("voxelLookup", gl.TEXTURE1)
+    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
     shader.End()
 
     glErr := gl.GetError()
@@ -147,9 +147,8 @@ flat out uint VertNormalIndex;
 out float VertLightLevel;
 out vec3 VertPos;
 
-in uint compressedValue;
+layout(location = 0) in uint compressedValue;
 
-// set uniform locations
 uniform mat4 modelTransform;
 
 void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir, out float lightLevel)

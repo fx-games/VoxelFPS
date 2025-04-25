@@ -10,6 +10,12 @@ type Transformer interface {
     GetTransformMatrix() mgl32.Mat4
     GetPosition() mgl32.Vec3
     GetRotationMatrix() mgl32.Mat4
+    GetForward() mgl32.Vec3
+}
+
+type Projector interface {
+    Transformer
+    GetProjectionViewMatrix() mgl32.Mat4
 }
 
 type Transform struct {
