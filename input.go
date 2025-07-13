@@ -149,8 +149,8 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
     }
 
     if key == glfw.KeyF12 {
-        //g.SaveScreenshot("screenshot00.png")
-        g.SaveShadowMaps("./temp")
+        g.SaveScreenshot("screenshot00.png")
+        //g.SaveShadowMaps("./temp")
     }
 
     if key == glfw.KeyF {

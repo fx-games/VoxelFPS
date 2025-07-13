@@ -47,6 +47,21 @@ func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fo
     }
     return p
 }
+func NewPerspectiveTransformForSpotlightFromParent(parent Transformer, fov float32, farPlaneDist float32, shadowResolution int) *PerspectiveTransform {
+    t := NewDefaultTransform()
+    t.SetPosition(mgl32.Vec3{0, -0.1, 0})
+    t.SetParent(parent)
+    p := &PerspectiveTransform{
+        Transform:     t,
+        fov:           fov,
+        defaultFOV:    fov,
+        nearPlaneDist: 0.15,
+        farPlaneDist:  farPlaneDist,
+        windowWidth:   shadowResolution,
+        windowHeight:  shadowResolution,
+    }
+    return p
+}
 
 // GetProjectionMatrix returns the projection matrix for the camera.
 // A projection matrix will transform a point from local camera space to screen space. (3D -> 2D)

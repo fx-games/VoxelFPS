@@ -163,6 +163,10 @@ func (t *Transform) SetRotation(rotation mgl32.Quat) {
 }
 
 func (t *Transform) GetForward() mgl32.Vec3 {
+    if t.parent != nil { // apply both parent and local rotation
+        rotated := t.parent.GetRotationMatrix().Mul4x1(mgl32.Vec4{0, 0, -1, 0})
+        return t.rotation.Rotate(rotated.Vec3()).Normalize()
+    }
     return t.rotation.Rotate(mgl32.Vec3{0, 0, -1})
 }
 

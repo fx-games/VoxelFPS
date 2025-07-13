@@ -78,7 +78,6 @@ type GlApplication struct {
     skyboxCubeMap *glhf.Cubemap
     mainUbo       *glhf.UniformBufferObject
     lightsUbo     *LightsUBO
-    Lights        []LightInfo
 
     colorBatch *glhf.SpriteBatch
 
@@ -292,7 +291,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         glApp.lightsUbo = lightsUbo
 
-        glApp.SetLights([]LightInfo{
+        glApp.lightsUbo.SetLights([]LightInfo{
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0.7, 0.7, 1}},
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 1}},
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 1}},
         })
@@ -337,6 +337,7 @@ func (a *GlApplication) StartEventLoop() {
                 a.Sprites.Update(deltaTime)
                 a.Meshes.Update(deltaTime)
                 a.UpdateParticles(deltaTime)
+                a.lightsUbo.updateLightAt(0)
             } // Update END
 
             gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
@@ -345,10 +346,10 @@ func (a *GlApplication) StartEventLoop() {
                 gl.Viewport(0, 0, int32(a.shadowResolution), int32(a.shadowResolution))
                 a.shadowBuffer.Begin()
 
-                for i := 0; i < len(a.Lights); i++ { // ITERATE ALL LIGHTS
+                for i := 0; i < len(a.lightsUbo.lights); i++ { // ITERATE ALL LIGHTS
                     a.shadowBuffer.SetDepthLayer(i)
                     gl.Clear(gl.DEPTH_BUFFER_BIT)
-                    a.draw3dScene(a.Lights[i], a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+                    a.draw3dScene(a.lightsUbo.lights[i], a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
                 }
 
                 a.shadowBuffer.End()
@@ -835,8 +836,7 @@ func (a *GlApplication) UiContext() UIContext {
 }
 
 func (a *GlApplication) SetLights(infos []LightInfo) {
-    a.Lights = infos
-    a.lightsUbo.SetLights(infos)
+
 }
 
 type UIContext struct {
