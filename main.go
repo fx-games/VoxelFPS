@@ -84,10 +84,9 @@ type Game struct {
     voxelSelectionEmpty  bool // if voxelSelectionEmpty is set to true, the selection will select the empty grid position right before the collision grid position
     voxelSelectionAction func(pos []voxel.Int3)
 
-    currentWeapon               *Weapon
-    weaponQuad                  *quads.AnimatedSprite
+    weapons                     []*DoomWeapon
+    currentWeaponIndex          int
     currentPaintGunTextureIndex int
-    doomWeapon                  *DoomWeapon
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
@@ -98,9 +97,12 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
     g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
 
-    //g.loadDoomWeapon("Charge_Pistol")
-    g.loadDoomWeapon("Borstal_Shotgun")
-    //g.loadDoomWeapon("Ol_Faithful")
+    // 1, 2, 3 switch between these.
+    g.weapons = []*DoomWeapon{
+        g.loadDoomWeapon("Ol_Faithful", WeaponEffectKillingProjectile, 0.4),
+        g.loadDoomWeapon("Borstal_Shotgun", WeaponEffectHitscanVoxelDestruction, 0.8),
+        g.loadDoomWeapon("Charge_Pistol", WeaponEffectHitscanVoxelPaintGun, 0.2),
+    }
 
     g.SetupUnitCubes()
     //g.SetCursor("assets/cursor.png", 7, 7)
@@ -193,49 +195,43 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     events.Subscribe(events.EventPlayerWeaponFired, func(id events.EventID, event events.Event) {
         origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
-        g.fireWeapon(origin, direction, g.currentWeapon.WeaponEffect)
+        g.fireWeapon(origin, direction, event.(WeaponEffect))
     })
     events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
     events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
     events.Subscribe(events.EventPlayerInteractWith, g.playerInteractWith)
-    //smallGun := g.loadSmallGun()
-
-    //g.weaponQuad = g.Gui.Add(smallGun.Texture, 0, 0, 0)
-
-    //g.switchWeapon(smallGun)
 
     g.HandleResize(g.WindowWidth, g.WindowHeight)
 }
 
-func (g *Game) loadDoomWeapon(weaponName string) {
+// loadDoomWeapon reads a Doom weapon sprite atlas plus the ZDoom script that is
+// stored alongside it in the PNG, and hands back a weapon that fires with the
+// given effect.
+func (g *Game) loadDoomWeapon(weaponName string, effect WeaponEffect, delayBetweenShots float64) *DoomWeapon {
     atlas, zscript, err := zdwep.ReadDoomAtlasFromFile(filepath.Join("assets", weaponName+".png"))
+    if err != nil {
+        panic(err)
+    }
     g.SetupSpriteBatch(atlas)
+
+    script, err := zdwep.ParseActorScript(zscript)
     if err != nil {
         panic(err)
     }
-    doomWeapon, err := zdwep.ParseActorScript(zscript)
-    if err != nil {
-        panic(err)
-    }
-    labelMap := make(map[string]int)
-    for i, label := range doomWeapon.ParsedScript {
-        labelMap[label.Label] = i
-    }
+
+    weapon := newDoomWeapon(weaponName, script.ParsedScript)
+    weapon.Atlas = atlas
+    weapon.Scale = g.UIScale
+    weapon.Effect = effect
+    weapon.DelayBetweenShots = delayBetweenShots
+
     spriteMap := make(map[string]int)
     for i := 0; i <= atlas.LastValidIndex(); i++ {
-        spriteName := atlas.NameOfFrame(i)
-        spriteMap[spriteName] = i
+        spriteMap[atlas.NameOfFrame(i)] = i
     }
-    d := &DoomWeapon{
-        Name:          weaponName,
-        Atlas:         atlas,
-        WeaponScript:  doomWeapon.ParsedScript,
-        labelToIndex:  labelMap,
-        spriteToIndex: spriteMap,
-        Scale:         g.UIScale,
-    }
-    d.SetState("Ready")
-    g.doomWeapon = d
+    weapon.spriteToIndex = spriteMap
+
+    return weapon
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
@@ -438,6 +434,11 @@ func (g *Game) DrawGui(elapsed float64) {
         }
     }
 
+    if weapon := g.currentWeapon(); weapon != nil {
+        src, dst := weapon.DrawRects(elapsed, int32(g.WindowWidth), int32(g.WindowHeight))
+        weapon.Atlas.GetSpriteBatch().DrawTextured(src, dst, mgl32.Vec4{1, 1, 1, 1})
+    }
+
     if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
         g.textLabel.Draw()
     }
@@ -448,18 +449,11 @@ func (g *Game) DrawGui(elapsed float64) {
 }
 
 func (g *Game) startWeaponFireAnimation() {
-    /*
-       now := glfw.GetTime()
-
-       if g.currentWeapon.DelayBetweenShots > 0 && now-g.currentWeapon.LastShotTime < g.currentWeapon.DelayBetweenShots {
-           return
-       }
-       g.weaponQuad.PlayAnimation(g.currentWeapon.Animation)
-       g.currentWeapon.LastShotTime = now
-
-    */
-    //g.doomWeapon.SetState("Fire")
-
+    weapon := g.currentWeapon()
+    if weapon == nil || !weapon.Fire(glfw.GetTime()) {
+        return
+    }
+    events.Publish(events.EventPlayerWeaponFired, weapon.Effect)
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {

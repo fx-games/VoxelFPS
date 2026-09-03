@@ -122,6 +122,9 @@ func (s *SpriteComponent) Update(frames []uint16, showTimes []float32, elapsed f
         s.currentFrame += 1
         if s.currentFrame >= len(frames) {
             if s.dieAfterLastFrame {
+                // Stay on the last frame: the sprite can still be drawn in the
+                // frame it dies in.
+                s.currentFrame = len(frames) - 1
                 s.GameObject().Kill()
             } else if s.freezeLastFrame {
                 s.currentFrame = len(frames) - 1
@@ -158,4 +161,8 @@ func (s *SpriteComponent) LookDirection() mgl32.Vec2 {
 
 func (s *SpriteComponent) IsDirectional() bool {
     return len(s.TextureIndices) > 1
+}
+
+func (s *SpriteComponent) CurrentFrame() int {
+    return s.currentFrame
 }

@@ -82,10 +82,10 @@ func (g *Game) openVoxelEditMenu() {
         quads.NewGuiOptionAction("Choose Brush", g.openVoxelBrushMenu),
         quads.NewGuiOptionAction("Block Textures", g.openCubeTextureMapper),
         quads.NewGuiOptionAction("Paint Gun", func() {
-            g.currentWeapon.WeaponEffect = WeaponEffectHitscanVoxelPaintGun
+            g.setWeaponEffect(WeaponEffectHitscanVoxelPaintGun)
         }),
         quads.NewGuiOptionAction("Fill Gun", func() {
-            g.currentWeapon.WeaponEffect = WeaponEffectHitscanVoxelPaintGunFill
+            g.setWeaponEffect(WeaponEffectHitscanVoxelPaintGunFill)
         }),
         quads.NewGuiOptionAction("Choose Paint Texture", func() {
             g.pickTexture(g.AtlasMap, func(selectedIndex int) {
@@ -150,7 +150,11 @@ func (g *Game) changeDecorationTexture() {
     })
 }
 func (g *Game) testPackedAtlasPicker() {
-    g.pickTexture(g.doomWeapon.Atlas, func(selectedIndex int) {
+    weapon := g.currentWeapon()
+    if weapon == nil {
+        return
+    }
+    g.pickTexture(weapon.Atlas, func(selectedIndex int) {
         println("Selected index", selectedIndex)
     })
 }

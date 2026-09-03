@@ -108,13 +108,26 @@ func (v *ParticleSystem) initializeBuffers(particleCount int) {
     //neededBufferSizeInBytes := vertexSize * particleCount
     //floatCount := neededBufferSizeInBytes / SizeOfFloat32
 
+    v.primitiveType = primitiveType
+
     v.backBuffer = NewVertexArray[GlFloat](v.transformFeedbackShader, true)
     v.backBuffer.SetPrimitiveType(primitiveType)
     v.backBuffer.DebugName = "Particle_BackBuffer"
-    // pre-fill the front buffer
+
     v.frontBuffer = NewVertexArray[GlFloat](v.transformFeedbackShader, true)
     v.frontBuffer.SetPrimitiveType(primitiveType)
     v.frontBuffer.DebugName = "Particle_FrontBuffer"
+
+    // Both buffers have to hold every particle from the start: the transform
+    // feedback pass always reads maxVertexCount vertices, and a buffer sized to
+    // whatever was emitted first would be read past its end. Zeroed particles
+    // have no lifetime left, so they are discarded in the geometry shader.
+    emptyParticles := make([]GlFloat, particleCount*(v.transformFeedbackShader.VertexFormat().Size()/SizeOfFloat32))
+    for _, buffer := range []*VertexArray[GlFloat]{v.backBuffer, v.frontBuffer} {
+        buffer.Begin()
+        buffer.SetVertexData(emptyParticles)
+        buffer.End()
+    }
 
     glError = gl.GetError()
     if glError != gl.NO_ERROR {

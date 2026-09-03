@@ -1,11 +1,12 @@
 package main
 
 import (
+    "fmt"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/events"
     "github.com/memmaker/goray/quads"
-    "github.com/memmaker/goray/quads/glhf"
     "github.com/memmaker/goray/quads/voxel"
+    "strings"
 )
 
 // WeaponEffect defines:
@@ -22,46 +23,50 @@ const (
     WeaponEffectKillingProjectile
 )
 
+func (we WeaponEffect) String() string {
+    switch we {
+    case WeaponEffectHitscanVoxelDestruction:
+        return "digger"
+    case WeaponEffectHitscanVoxelPaintGun:
+        return "paint gun"
+    case WeaponEffectHitscanVoxelPaintGunFill:
+        return "fill gun"
+    case WeaponEffectKillingProjectile:
+        return "projectiles"
+    }
+    return "nothing"
+}
+
 func (we WeaponEffect) IsHitscan() bool {
     return we == WeaponEffectHitscanVoxelDestruction ||
         we == WeaponEffectHitscanVoxelPaintGun ||
         we == WeaponEffectHitscanVoxelPaintGunFill
 }
 
-type Weapon struct {
-    Texture           *glhf.TextureAtlasFixed
-    Animation         int
-    FireFrame         int
-    WeaponEffect      WeaponEffect
-    DelayBetweenShots float64
-    LastShotTime      float64
-}
-
-func (g *Game) loadSmallGun() *Weapon {
-    weaponAtlas := g.LoadFixedGuiAtlasWithBatch("assets/smallgun_sheet.png", 64, 64, 2)
-
-    anim := quads.SpriteAnimation{
-        Frames:            [][]uint16{{0, 1, 2, 3, 4}},
-        ShowTimeInSeconds: []float32{0.01, 0.01, 0.1, 0.1, 0.1},
+// selectWeapon puts weapon number index (0 based) in the player's hands.
+func (g *Game) selectWeapon(index int) {
+    if index < 0 || index >= len(g.weapons) || index == g.currentWeaponIndex {
+        return
     }
-    animIndex := g.Gui.AddAnimation(anim)
-    return NewWeapon(weaponAtlas, animIndex, 2, WeaponEffectHitscanVoxelDestruction, 0.1)
+    g.currentWeaponIndex = index
+    weapon := g.currentWeapon()
+    weapon.SetState("Ready")
+    g.Toast(fmt.Sprintf("%s (%s)", strings.ReplaceAll(weapon.Name, "_", " "), weapon.Effect))
 }
 
-func NewWeapon(texture *glhf.TextureAtlasFixed, animation int, fireFrame int, effect WeaponEffect, delayBetweenShots float64) *Weapon {
-    return &Weapon{
-        Texture:           texture,
-        Animation:         animation,
-        FireFrame:         fireFrame,
-        WeaponEffect:      effect,
-        DelayBetweenShots: delayBetweenShots,
+// setWeaponEffect changes what the weapon in hand does, used by the editor to
+// turn a gun into a paint gun.
+func (g *Game) setWeaponEffect(effect WeaponEffect) {
+    if weapon := g.currentWeapon(); weapon != nil {
+        weapon.Effect = effect
     }
 }
 
-func (g *Game) switchWeapon(newWeapon *Weapon) {
-    g.currentWeapon = newWeapon
-    g.weaponQuad.ClearEvents()
-    g.weaponQuad.PublishEventOnFrame(g.currentWeapon.FireFrame, events.EventPlayerWeaponFired)
+func (g *Game) currentWeapon() *DoomWeapon {
+    if len(g.weapons) == 0 {
+        return nil
+    }
+    return g.weapons[g.currentWeaponIndex]
 }
 
 func (g *Game) fireWeapon(origin, direction mgl32.Vec3, effect WeaponEffect) {

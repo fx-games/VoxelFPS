@@ -20,6 +20,17 @@ reports one event for the surface that was actually hit (see Physics below).
   `../doom_likes/`, which is gitignored, so it can never pass in CI. `go vet ./...` fails
   because of it.
 
+## Weapons
+
+- The ZDoom scripts stored in the weapon PNGs are interpreted just far enough for the sprites:
+  `A_JumpIfInventory` always jumps, everything else is logged once and ignored. Weapons
+  therefore hold their ready frame while idle instead of running their script, and a firing
+  animation is cut off after `maxFireAnimationSeconds` - the Borstal shotgun would otherwise
+  reload forever, since it counts shells we do not have.
+- `WeaponEffectHitscanVoxelPaintGunFill` has no weapon of its own, it is reachable through the
+  F1 wizard menu (Fill Gun), which changes the effect of the weapon in hand.
+- Firing has no ammo, no recoil and no sound.
+
 ## Robustness
 
 - 115 `panic(` calls in non-test code. Asset and shader load failures kill the process; a
@@ -44,6 +55,8 @@ reports one event for the surface that was actually hit (see Physics below).
 - `quads/glhf/texture3d.go`, `quads/glhf/texture_array.go` (~340 lines) — no constructor call
   outside the package. Kept for the planned texture-array voxel rendering in `optimize.txt`.
 - `quads/voxel/map.go` and `geometry/` still carry commented-out alternative implementations.
+- `assets/smallgun_sheet.png` and the `quads.AnimatedSprite` HUD weapon path it belonged to are
+  unused now that weapons draw from their Doom atlas.
 
 ## Physics notes
 
