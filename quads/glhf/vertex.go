@@ -174,14 +174,16 @@ func (va *VertexArray[V]) setIndices8(indices []uint8) {
 func (va *VertexArray[V]) SetIndices32(indices []uint32) {
     if len(indices) > 0 {
         va.indexType = gl.UNSIGNED_INT
-        gl.GenBuffers(1, &va.ibo.obj) // create buffer and get the name
-        glError := gl.GetError()
-        if glError != gl.NO_ERROR {
-            println("failed to create vertex array: failed to generate index buffer:", glError)
+        if va.ibo.obj == 0 { // reuse the buffer when the indices are replaced, eg. when a batch grows
+            gl.GenBuffers(1, &va.ibo.obj) // create buffer and get the name
+            glError := gl.GetError()
+            if glError != gl.NO_ERROR {
+                println("failed to create vertex array: failed to generate index buffer:", glError)
+            }
         }
         va.ibo.bind()
         gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW) // set the index buffer data
-        glError = gl.GetError()
+        glError := gl.GetError()
         if glError != gl.NO_ERROR {
             println("failed to create vertex array: failed to set index buffer data:", glError)
         }

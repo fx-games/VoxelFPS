@@ -172,12 +172,12 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
                 match := mapAtlasRegex.FindStringSubmatch(entry.Name())
                 width, _ = strconv.Atoi(match[1])
                 height, _ = strconv.Atoi(match[2])
-                atlasMap = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
+                atlasMap = Disk.TextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
             } else if spriteAtlasRegex.MatchString(entry.Name()) {
                 match := spriteAtlasRegex.FindStringSubmatch(entry.Name())
                 width, _ = strconv.Atoi(match[1])
                 height, _ = strconv.Atoi(match[2])
-                atlasSprites = LoadTextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
+                atlasSprites = Disk.TextureAtlasFixed(filepath.Join(baseTexPath, entry.Name()), width, height)
             }
 
         }
@@ -523,14 +523,14 @@ func (a *GlApplication) ScrollCallback(w *glfw.Window, xoff float64, yoff float6
 }
 
 func (a *GlApplication) LoadFixedGuiAtlasWithBatch(filename string, tileW int, tileH int, maxSprites int) *glhf.TextureAtlasFixed {
-    atlasFixed := LoadTextureAtlasFixed(filename, tileW, tileH)
+    atlasFixed := Disk.TextureAtlasFixed(filename, tileW, tileH)
     atlasFixed.SetGuiShader(a.guiShader)
     atlasFixed.SetMaxSprites(maxSprites)
     a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
     return atlasFixed
 }
 func (a *GlApplication) LoadPackedGuiAtlasWithBatch(filename string, maxSprites int) *glhf.TextureAtlasPacked {
-    atlasFixed := LoadTextureAtlasPacked(filename)
+    atlasFixed := Disk.TextureAtlasPacked(filename)
     atlasFixed.SetGuiShader(a.guiShader)
     atlasFixed.SetMaxSprites(maxSprites)
     a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
@@ -800,7 +800,7 @@ func (a *GlApplication) OnResize(width int, height int) {
 }
 
 func (a *GlApplication) SetCursor(cursorImageFile string, hotX, hotY int) {
-    img := LoadImage(cursorImageFile)
+    img := Disk.Image(cursorImageFile)
     if img != nil {
         a.Window.SetCursor(glfw.CreateCursor(img, hotX, hotY))
     }

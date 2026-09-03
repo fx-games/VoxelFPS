@@ -3,10 +3,11 @@ package glhf
 import (
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
-    "slices"
 )
 
 var PaintersOffset = 0.0001
+
+const verticesPerQuad = 4
 
 type SpriteBatch struct {
     twoDeeShader    *Shader
@@ -16,16 +17,17 @@ type SpriteBatch struct {
     vertexElementCounter int
     atlas                BeginEnder
     elementsPerVertex    int
+    // quadCapacity is the number of quads the index buffer can draw. The CPU
+    // vertex buffer always holds exactly this many quads.
+    quadCapacity int
 }
 
 func NewSpriteBatch(shader *Shader, atlas BeginEnder, quadCount int) *SpriteBatch {
     gpuVertexBuffer := NewVertexArray[GlFloat](shader, true)
     gpuVertexBuffer.DebugName = "SpriteBatch"
     gpuVertexBuffer.CreateQuadIndexBuffer(quadCount)
-    vertexSize := shader.VertexFormat().Size()
     elementsPerVertex := shader.VertexFormat().ElementsPerVertex()
-    vertexBufferSize := quadCount * 4 * vertexSize
-    cpuVertexBuffer := make([]GlFloat, vertexBufferSize)
+    cpuVertexBuffer := make([]GlFloat, quadCount*verticesPerQuad*elementsPerVertex)
 
     glErr := gl.GetError()
     if glErr != gl.NO_ERROR {
@@ -37,6 +39,7 @@ func NewSpriteBatch(shader *Shader, atlas BeginEnder, quadCount int) *SpriteBatc
         cpuVertexBuffer:   cpuVertexBuffer,
         atlas:             atlas,
         elementsPerVertex: elementsPerVertex,
+        quadCapacity:      quadCount,
     }
 }
 
@@ -145,15 +148,12 @@ func (a *SpriteBatch) DrawTextured(sourceRect mgl32.Vec4, destRect mgl32.Vec4, t
     // But that also means, it would make more sense to have one batch per texture.
     // hmm, have spritebatches as lazy initialized singletons on a texture object?
 
-    vertsPerQuad := 4
-    if a.bufferIsFull() { // TODO: THIS IS MISSING THE INDEX BUFFER EXPANSION
-        bufferIncreaseBy := 2 * vertsPerQuad * a.elementsPerVertex
-        a.cpuVertexBuffer = slices.Grow(a.cpuVertexBuffer, bufferIncreaseBy)
-        a.cpuVertexBuffer = a.cpuVertexBuffer[:cap(a.cpuVertexBuffer)]
+    if a.bufferIsFull() {
+        a.grow()
     }
     layer := float32(0.5) - float32(PaintersOffset)
     InsertQuad(a.cpuVertexBuffer, a.vertexElementCounter, layer, sourceRect, destRect, tintColor)
-    a.vertexElementCounter += a.elementsPerVertex * vertsPerQuad
+    a.vertexElementCounter += a.elementsPerVertex * verticesPerQuad
     PaintersOffset += 0.0001
 }
 
@@ -211,5 +211,16 @@ func InsertQuad(vertices []GlFloat, atIndex int, layer float32, srcRect, dstRect
     vertices[atIndex+35] = GlFloat(color.W())
 }
 func (a *SpriteBatch) bufferIsFull() bool {
-    return a.vertexElementCounter+(a.elementsPerVertex*4) > len(a.cpuVertexBuffer)
+    return a.vertexElementCounter+(a.elementsPerVertex*verticesPerQuad) > len(a.cpuVertexBuffer)
+}
+
+// grow doubles the vertex buffer and the index buffer with it. Growing only the
+// vertex buffer would make Render draw past the end of the index buffer.
+func (a *SpriteBatch) grow() {
+    if a.quadCapacity == 0 {
+        a.quadCapacity = 1
+    }
+    a.quadCapacity *= 2
+    a.cpuVertexBuffer = append(a.cpuVertexBuffer, make([]GlFloat, (a.quadCapacity*verticesPerQuad*a.elementsPerVertex)-len(a.cpuVertexBuffer))...)
+    a.gpuVertexBuffer.CreateQuadIndexBuffer(a.quadCapacity)
 }

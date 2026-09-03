@@ -64,7 +64,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
             atlasFile := filepath.Join("assets", "sheets", entity.SpriteSheetName+".png") //"assets/scientist_sheet.png"
             tileWidth := entity.SpriteSheetTileSize.X
             tileHeight := entity.SpriteSheetTileSize.Y
-            atlas = quads.LoadTextureAtlasFixed(atlasFile, tileWidth, tileHeight)
+            atlas = quads.Disk.TextureAtlasFixed(atlasFile, tileWidth, tileHeight)
         }
         for i, index := range entity.TextureIndices {
             if int(index) > atlas.LastValidIndex() {

@@ -156,7 +156,7 @@ func (a *GuiAtlasPicker) HandleDrop(names []string, xpos float64, ypos float64) 
         ext := filepath.Ext(name)
         if strings.ToLower(ext) == ".png" {
             loadedImage := tpack.NamedImage{
-                Image: LoadImage(name),
+                Image: Disk.Image(name),
                 Name:  realBaseName(name),
             }
             // REMINDER: This won't allow arbitrary sizes

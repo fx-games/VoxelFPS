@@ -161,6 +161,9 @@ func (g *Game) toggleSpawnMode() {
         g.gameObjectForSpawning = nil
         return
     }
+    if g.lastHitResult == nil {
+        return
+    }
     spawnPos, hitGround := g.lastHitResult.GroundPosition()
     if !hitGround {
         return

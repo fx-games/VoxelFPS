@@ -82,7 +82,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         return
     }
 
-    if key == glfw.KeyTab && g.voxelBlock != nil {
+    if key == glfw.KeyTab && g.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
         rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
         hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
         g.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
@@ -281,62 +281,51 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
     }
 }
 
-func (g *Game) HandleMouseMove(x float64, y float64) {
-    if g.voxelBrush != nil {
-        result := g.rayCastFromScreenPos(x, y)
-        var blockHit voxel.Int3
-        if g.voxelSelectionEmpty {
-            blockHit = result.HitInfo.PreviousGridPosition
-        } else {
-            blockHit = result.HitInfo.CollisionGridPosition
-        }
+// brushTarget is the voxel the brush is pointing at: the solid one under the
+// cursor, or the empty one in front of it when placing. Reports false when the
+// ray hit nothing, so the brush does not act on a bogus grid position.
+func (g *Game) brushTarget(x, y float64) (voxel.Int3, bool) {
+    if g.voxelBrush == nil {
+        return voxel.Int3{}, false
+    }
+    result := g.rayCastFromScreenPos(x, y)
+    if !result.HitInfo.Hit {
+        return voxel.Int3{}, false
+    }
+    if g.voxelSelectionEmpty {
+        return result.HitInfo.PreviousGridPosition, true
+    }
+    return result.HitInfo.CollisionGridPosition, true
+}
 
+func (g *Game) HandleMouseMove(x float64, y float64) {
+    if blockHit, hit := g.brushTarget(x, y); hit {
         g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
     }
 }
 
 func (g *Game) HandleDragStart(x float64, y float64) {
-    if g.voxelBrush != nil {
-        result := g.rayCastFromScreenPos(x, y)
-        var blockHit voxel.Int3
-        if g.voxelSelectionEmpty {
-            blockHit = result.HitInfo.PreviousGridPosition
-        } else {
-            blockHit = result.HitInfo.CollisionGridPosition
-        }
-
+    if blockHit, hit := g.brushTarget(x, y); hit {
         g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
     }
 }
 
 func (g *Game) HandleDragMove(x float64, y float64) {
-    if g.voxelBrush != nil {
-        result := g.rayCastFromScreenPos(x, y)
-        var blockHit voxel.Int3
-        if g.voxelSelectionEmpty {
-            blockHit = result.HitInfo.PreviousGridPosition
-        } else {
-            blockHit = result.HitInfo.CollisionGridPosition
-        }
-
+    if blockHit, hit := g.brushTarget(x, y); hit {
         g.voxelSelection = g.voxelBrush.Drag(blockHit)
     }
 }
 
 func (g *Game) HandleDragStop(x float64, y float64) {
-    if g.voxelBrush != nil {
-        result := g.rayCastFromScreenPos(x, y)
-        var blockHit voxel.Int3
-        if g.voxelSelectionEmpty {
-            blockHit = result.HitInfo.PreviousGridPosition
-        } else {
-            blockHit = result.HitInfo.CollisionGridPosition
-        }
-
+    if g.voxelBrush == nil {
+        return
+    }
+    // A drag that ends off the map keeps the selection it had, but still commits.
+    if blockHit, hit := g.brushTarget(x, y); hit {
         g.voxelSelection = g.voxelBrush.Drag(blockHit)
-        if g.voxelSelectionAction != nil {
-            g.voxelSelectionAction(g.voxelSelection)
-        }
+    }
+    if g.voxelSelectionAction != nil {
+        g.voxelSelectionAction(g.voxelSelection)
     }
 }
 

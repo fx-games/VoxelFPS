@@ -277,17 +277,6 @@ func (i BitmapFontIndex) GetMapper() func(character rune) uint16 {
         return i[character]
     }
 }
-func NewBitmapFontIndexFromFile(filename string) BitmapFontIndex {
-    index := map[rune]uint16{}
-    file, err := os.Open(filename)
-    if err != nil {
-        println("could not open atlas index file")
-        return index
-    }
-    defer file.Close()
-    return NewBitmapFontIndexFromReader(file)
-}
-
 func NewBitmapFontIndexFromReader(file io.ReadCloser) BitmapFontIndex {
     index := map[rune]uint16{}
     var k rune

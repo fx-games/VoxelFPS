@@ -29,7 +29,6 @@ func main() {
 
     mapLoad := loadLDTK("assets/raymap.ldtk")
     //mapLoad := loadText(strings.Split(stringMapData, "\n"))
-    //readWad()
     glhf.Run(func() {
         quads.Start(NewGame(), mapLoad, 640, 480)
     })
@@ -96,8 +95,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.currentPaintGunTextureIndex = -1
     g.GlApplication = app
 
-    g.SetupUIAtlas(eassets.LoadEmbeddedUIAtlas())
-    g.SetupUIFont(eassets.LoadEmbeddedFont(g.UIScale))
+    g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
+    g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
 
     //g.loadDoomWeapon("Charge_Pistol")
     g.loadDoomWeapon("Borstal_Shotgun")
@@ -143,7 +142,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     // Skybox
     skyboxDir := "blink"
-    skybox := quads.LoadCubemap([6]string{
+    skybox := quads.Disk.Cubemap([6]string{
         filepath.Join("assets", "skybox", skyboxDir, "right.png"),
         filepath.Join("assets", "skybox", skyboxDir, "left.png"),
         filepath.Join("assets", "skybox", skyboxDir, "top.png"),
@@ -468,7 +467,7 @@ func (g *Game) hoveredObj() *quads.GameObject {
         return nil
     }
 
-    if g.lastHitResult.HitInfo.Distance > 10 || g.lastHitResult.HitObject == nil {
+    if !g.lastHitResult.HitInfo.Hit || g.lastHitResult.HitInfo.Distance > 10 || g.lastHitResult.HitObject == nil {
         return nil
     }
 
@@ -479,7 +478,7 @@ func (g *Game) isHoveringObject() bool {
     if g.lastHitResult == nil {
         return false
     }
-    if g.lastHitResult.HitInfo.Distance > 10 {
+    if !g.lastHitResult.HitInfo.Hit || g.lastHitResult.HitInfo.Distance > 10 {
         return false
     }
     if g.lastHitResult.HitObject == nil {
@@ -543,13 +542,16 @@ type RaycastResult struct {
 }
 
 func (r RaycastResult) WorldPosition() mgl32.Vec3 {
+    if !r.HitInfo.Hit {
+        return mgl32.Vec3{}
+    }
     if r.HitObject == nil {
         return r.HitInfo.CollisionWorldPosition
     }
     return r.WorldPos
 }
 func (r RaycastResult) GroundPosition() (mgl32.Vec3, bool) {
-    if r.HitObject != nil {
+    if !r.HitInfo.Hit || r.HitObject != nil {
         return mgl32.Vec3{}, false
     }
     cwp := r.HitInfo.CollisionWorldPosition
@@ -562,14 +564,17 @@ func (g *Game) rayCastFromScreenPos(screenPosX, screenPosY float64) RaycastResul
     origin, dir := g.Camera.GetPickingRayFromScreenPosition(normalizedX, normalizedY)
     return g.rayCast(origin, dir)
 }
+// rayCastRange is how far picking rays reach, in world units.
+const rayCastRange = 100.0
+
 func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
     var hitInfo voxel.HitInfo3D
     var hitObject *quads.GameObject
     var worldPos mgl32.Vec3
     var relativePos mgl32.Vec3
-    hitInfo = voxel.DDARaycast(origin, direction, func(x, y, z int32) (stopRay bool) {
+    hitInfo = voxel.DDARaycast(origin, direction, rayCastRange, func(x, y, z int32) (stopRay bool) {
         if !g.CubeMap.Contains(int32(x), int32(y), int32(z)) {
-            return true
+            return false // outside the map there is nothing to hit, keep going until the ray runs out
         }
         for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
             if gObj.GameObject() == g.player || gObj.GameObject() == g.gameObjectForSpawning {
@@ -765,7 +770,7 @@ func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
        for _, name := range names {
            ext := filepath.Ext(name)
            if strings.ToLower(ext) == ".png" {
-               loadedText := quads.LoadTexture(name)
+               loadedText := quads.Disk.Texture(name)
                drawX += rectSize + padding
                if drawX > g.WindowWidth-rectSize {
                    drawX = 30

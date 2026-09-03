@@ -30,8 +30,6 @@ github.com/sinshu/go-meltysynth v0.0.0-20230205031334-05d311382fc4 h1:VgeknFh4pc
 github.com/sinshu/go-meltysynth v0.0.0-20230205031334-05d311382fc4/go.mod h1:Afi/YpLztHvWSbiLFi6RgtxLLwmIiRmd/q7f3Ymed2g=
 github.com/solarlune/routine v0.0.0-20240401160545-0fca8842c80e h1:cn/Jj38lI6ZgL6/A8814sscqNLNVpyisc43Ea2YzqLE=
 github.com/solarlune/routine v0.0.0-20240401160545-0fca8842c80e/go.mod h1:rH8QkyJvQgylDP/Hj0WmzChx43JW806utXCxs4tN6cg=
-github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
-github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 golang.org/x/sys v0.31.0 h1:ioabZlmFYtWhL+TRYpcnNlLwhyxaM9kWTDEmfnprqik=

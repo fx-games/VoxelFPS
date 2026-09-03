@@ -211,7 +211,11 @@ func (d HitInfo3D) WithDistance(newDist float64) HitInfo3D {
     return d
 }
 
-func DDARaycast(rayStart, rayDir mgl32.Vec3, stopRay func(x, y, z int32) bool) HitInfo3D {
+// DDARaycast walks the voxel grid along the ray until stopRay reports a solid
+// voxel or maxDistance is exceeded. maxDistance is measured in rayDir lengths,
+// so pass a normalized direction to get world units. A ray that reaches
+// maxDistance without a hit returns HitInfo3D{Hit: false}.
+func DDARaycast(rayStart, rayDir mgl32.Vec3, maxDistance float64, stopRay func(x, y, z int32) bool) HitInfo3D {
     // adapted from: https://github.com/fenomas/fast-voxel-raycast/blob/master/index.js
     t := 0.0
     ix := int32(math.Floor(float64(rayStart.X())))
@@ -263,7 +267,7 @@ func DDARaycast(rayStart, rayDir mgl32.Vec3, stopRay func(x, y, z int32) bool) H
 
     steppedIndex := -1
 
-    for {
+    for t <= maxDistance {
         if stopRay(ix, iy, iz) {
             var previousGridPosition Int3
             var side CubeSide

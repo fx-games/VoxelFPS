@@ -10,3 +10,5 @@ blake_stone/
 *.exe
 *.pk3
 temp/
+/goray
+/go-fps
