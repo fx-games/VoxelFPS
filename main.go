@@ -84,7 +84,7 @@ type Game struct {
     voxelSelectionEmpty  bool // if voxelSelectionEmpty is set to true, the selection will select the empty grid position right before the collision grid position
     voxelSelectionAction func(pos []voxel.Int3)
 
-    weapons                     []*DoomWeapon
+    weapons                     []Weapon
     currentWeaponIndex          int
     currentPaintGunTextureIndex int
 }
@@ -97,12 +97,15 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
     g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
 
-    // 1, 2, 3 switch between these.
-    g.weapons = []*DoomWeapon{
+    // 1, 2, 3, 4 switch between these.
+    g.weapons = []Weapon{
         g.loadDoomWeapon("Ol_Faithful", WeaponEffectKillingProjectile, 0.4),
         g.loadDoomWeapon("Borstal_Shotgun", WeaponEffectHitscanVoxelDestruction, 0.8),
         g.loadDoomWeapon("Charge_Pistol", WeaponEffectHitscanVoxelPaintGun, 0.2),
+        g.loadSheetWeapon("Small Gun", "assets/smallgun_sheet.png", 64, 64,
+            []uint16{0, 1, 2, 3, 4}, 0.06, WeaponEffectHitscanVoxelDestruction, 0.3),
     }
+    g.currentWeapon().Equip()
 
     g.SetupUnitCubes()
     //g.SetCursor("assets/cursor.png", 7, 7)
@@ -197,6 +200,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
         origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
         g.fireWeapon(origin, direction, event.(WeaponEffect))
     })
+
     events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
     events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
     events.Subscribe(events.EventPlayerInteractWith, g.playerInteractWith)
@@ -435,8 +439,7 @@ func (g *Game) DrawGui(elapsed float64) {
     }
 
     if weapon := g.currentWeapon(); weapon != nil {
-        src, dst := weapon.DrawRects(elapsed, int32(g.WindowWidth), int32(g.WindowHeight))
-        weapon.Atlas.GetSpriteBatch().DrawTextured(src, dst, mgl32.Vec4{1, 1, 1, 1})
+        weapon.Draw(elapsed, int32(g.WindowWidth), int32(g.WindowHeight))
     }
 
     if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
@@ -453,7 +456,7 @@ func (g *Game) startWeaponFireAnimation() {
     if weapon == nil || !weapon.Fire(glfw.GetTime()) {
         return
     }
-    events.Publish(events.EventPlayerWeaponFired, weapon.Effect)
+    events.Publish(events.EventPlayerWeaponFired, weapon.FireEffect())
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {

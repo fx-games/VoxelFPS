@@ -30,6 +30,12 @@ reports one event for the surface that was actually hit (see Physics below).
 - `WeaponEffectHitscanVoxelPaintGunFill` has no weapon of its own, it is reachable through the
   F1 wizard menu (Fill Gun), which changes the effect of the weapon in hand.
 - Firing has no ammo, no recoil and no sound.
+- The sprite atlas (`assets/base/sprites_64x64.png`) is the full Blake Stone sheet, so its
+  first rows are wall textures that no sprite refers to. The map data indexes into it directly
+  (barrel 136, sink 140, desk 148, projectile 179-181, impact 182-184), so the layout has to
+  stay as it is.
+- Spawn mode (`F3`) spawns its barrel with texture index 157, which is a wall panel in that
+  sheet; the barrel is 136.
 
 ## Robustness
 
@@ -55,8 +61,6 @@ reports one event for the surface that was actually hit (see Physics below).
 - `quads/glhf/texture3d.go`, `quads/glhf/texture_array.go` (~340 lines) — no constructor call
   outside the package. Kept for the planned texture-array voxel rendering in `optimize.txt`.
 - `quads/voxel/map.go` and `geometry/` still carry commented-out alternative implementations.
-- `assets/smallgun_sheet.png` and the `quads.AnimatedSprite` HUD weapon path it belonged to are
-  unused now that weapons draw from their Doom atlas.
 
 ## Physics notes
 

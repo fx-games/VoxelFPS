@@ -6,7 +6,6 @@ import (
     "github.com/memmaker/goray/events"
     "github.com/memmaker/goray/quads"
     "github.com/memmaker/goray/quads/voxel"
-    "strings"
 )
 
 // WeaponEffect defines:
@@ -48,21 +47,22 @@ func (g *Game) selectWeapon(index int) {
     if index < 0 || index >= len(g.weapons) || index == g.currentWeaponIndex {
         return
     }
+    g.currentWeapon().Unequip()
     g.currentWeaponIndex = index
     weapon := g.currentWeapon()
-    weapon.SetState("Ready")
-    g.Toast(fmt.Sprintf("%s (%s)", strings.ReplaceAll(weapon.Name, "_", " "), weapon.Effect))
+    weapon.Equip()
+    g.Toast(fmt.Sprintf("%s (%s)", weapon.DisplayName(), weapon.FireEffect()))
 }
 
 // setWeaponEffect changes what the weapon in hand does, used by the editor to
 // turn a gun into a paint gun.
 func (g *Game) setWeaponEffect(effect WeaponEffect) {
     if weapon := g.currentWeapon(); weapon != nil {
-        weapon.Effect = effect
+        weapon.SetFireEffect(effect)
     }
 }
 
-func (g *Game) currentWeapon() *DoomWeapon {
+func (g *Game) currentWeapon() Weapon {
     if len(g.weapons) == 0 {
         return nil
     }

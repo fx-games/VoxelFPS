@@ -150,8 +150,9 @@ func (g *Game) changeDecorationTexture() {
     })
 }
 func (g *Game) testPackedAtlasPicker() {
-    weapon := g.currentWeapon()
-    if weapon == nil {
+    weapon, isDoomWeapon := g.currentWeapon().(*DoomWeapon)
+    if !isDoomWeapon {
+        g.Toast("No packed atlas to pick from")
         return
     }
     g.pickTexture(weapon.Atlas, func(selectedIndex int) {

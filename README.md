@@ -24,9 +24,9 @@ optional gravity, projectiles, particles, animated sprites, paths and pathfindin
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
 
 **Doom asset import** — ZDoom-style weapon definitions (`zdwep/`) so Doom sprite weapons
-load and animate (`doom_weapon.go`). Three of them are in the player's hands, on `1`, `2`
-and `3`; the scripts are interpreted far enough to play a firing animation, the effect of a
-shot is ours (`handlers.go`).
+load and animate (`doom_weapon.go`). Three of them are in the player's hands, on `1`, `2` and
+`3`; the scripts are interpreted far enough to play a firing animation, the effect of a shot
+is ours (`handlers.go`). `4` is a plain sprite sheet weapon (`weapon.go`), no script involved.
 
 **In-game editor** (`edit_map.go`, `quads/ui_*.go`) — voxel painting and selection,
 per-face texture mapping, entity spawning, atlas pickers, minimap, toasts, lists and
@@ -55,7 +55,7 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 |---|---|
 | `WASD` / `Space` / `C` | move / jump or up / down |
 | `Left mouse` | fire |
-| `1` `2` `3` | Ol' Faithful (projectiles) / Borstal Shotgun (digs voxels) / Charge Pistol (paints voxels) |
+| `1` `2` `3` `4` | Ol' Faithful (projectiles) / Borstal Shotgun (digs voxels) / Charge Pistol (paints voxels) / Small Gun (digs voxels) |
 | `F` | toggle gravity |
 | `E` | interact with hovered object |
 | `V` | spawn current object |

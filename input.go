@@ -94,7 +94,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         g.Toast(fmt.Sprintf("Block textures copied from %v", rayHitBlock))
     }
 
-    if key >= glfw.Key1 && key <= glfw.Key3 {
+    if key >= glfw.Key1 && key <= glfw.Key9 {
         g.selectWeapon(int(key - glfw.Key1))
     }
 
