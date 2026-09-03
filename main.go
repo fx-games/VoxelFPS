@@ -65,7 +65,7 @@ type Game struct {
 
     fogStart               float32
     fogEnd                 float32
-    skyFogWidth            float32
+    skyHorizonFade         float32
     currentResolutionIndex int
 
     watchFileChanges      bool
@@ -270,7 +270,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.CeilingColor = mapLoad.CeilingColorVec4()
     g.fogStart = 4
     g.fogEnd = 22
-    g.skyFogWidth = 0.4
+    g.skyHorizonFade = 7
     g.updateFog()
     g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
@@ -700,7 +700,7 @@ func (g *Game) openWizardMenu() {
         quads.NewGuiOptionBool("Show Particles", &g.ShouldDrawParticles),
         quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
         quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
-        quads.NewGuiOptionFloat("Sky Fog", &g.skyFogWidth).StepSize(0.05).ActivateFunc(g.updateFog),
+        quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
     }
 
     if !g.watchFileChanges {
@@ -725,10 +725,10 @@ func (g *Game) setWindowMode(index int) {
     g.SetWindowSize(vMode)
 }
 func (g *Game) updateFog() {
-    toastMessage := fmt.Sprintf("Fog: %.0f - %.0f, sky %.2f", g.fogStart, g.fogEnd, g.skyFogWidth)
+    toastMessage := fmt.Sprintf("Fog: %.0f - %.0f, horizon %.0f deg", g.fogStart, g.fogEnd, g.skyHorizonFade)
     g.Toast(toastMessage)
     g.SetFog(g.CeilingColor.Vec3(), g.fogStart, g.fogEnd)
-    g.SetSkyFog(g.skyFogWidth)
+    g.SetSkyFog(g.skyHorizonFade)
 }
 
 func (g *Game) toggleFullscreen() {

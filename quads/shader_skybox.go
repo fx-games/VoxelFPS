@@ -9,7 +9,7 @@ import (
 
 const (
     SkyboxShaderCamProjectionView int = iota
-    SkyboxShaderFogWidth
+    SkyboxShaderHorizonFade
 )
 
 func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
@@ -19,7 +19,7 @@ func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
         }
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "camProjectionView", Type: glhf.Mat4},
-            glhf.Attr{Name: "fogWidth", Type: glhf.Float},
+            glhf.Attr{Name: "horizonFadeDegrees", Type: glhf.Float},
             //glhf.Attr{Name: "drawColor", Type: glhf.Vec3},
         }
         shader *glhf.Shader
@@ -36,7 +36,7 @@ func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(SkyboxShaderCamProjectionView, cam.GetProjectionViewMatrix())
-    shader.SetUniformAttr(SkyboxShaderFogWidth, float32(0.4))
+    shader.SetUniformAttr(SkyboxShaderHorizonFade, float32(7))
     shader.End()
 
     glErr := gl.GetError()
@@ -69,13 +69,15 @@ layout (location = 0) out vec4 color;
 in vec3 TexCoords;
 
 uniform samplerCube skybox;
-uniform float fogWidth;
+uniform float horizonFadeDegrees;
 
 void main() {
-    // the sky is further away than any fog distance, so it is solid fog towards the horizon
-    // and thins out overhead, which hides the seam where the geometry ends
-    float openness = abs(normalize(TexCoords).y);
-    float fogAmount = 1.0 - smoothstep(0.0, fogWidth, openness);
-    color = mix(texture(skybox, TexCoords), fogColor, fogAmount);
+    // The sky meets the fog at the horizon: everything below it is solid fog colour, and the
+    // sky fades in over a narrow band above it (Minecraft uses 7 degrees). The clear colour is
+    // the fog colour, so the geometry, the fog and the sky all end up the same colour there.
+    float pitch = asin(clamp(normalize(TexCoords).y, -1.0, 1.0));
+    float fadeWindow = max(radians(horizonFadeDegrees), 0.0001);
+    float skyAmount = smoothstep(0.0, 1.0, clamp(pitch / fadeWindow, 0.0, 1.0));
+    color = vec4(mix(fogColor.rgb, texture(skybox, TexCoords).rgb, skyAmount), 1.0);
 }`, uboBlock)
 }

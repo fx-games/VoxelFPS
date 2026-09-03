@@ -752,10 +752,10 @@ func (a *GlApplication) ToggleFlashlight() bool {
     return a.FlashlightOn
 }
 
-// SetSkyFog sets how far up from the horizon the sky fades into the fog colour, 0 disables it.
-func (a *GlApplication) SetSkyFog(width float32) {
+// SetSkyFog sets how many degrees above the horizon the sky fades in over, 0 for a hard horizon.
+func (a *GlApplication) SetSkyFog(degrees float32) {
     a.skyboxShader.Begin()
-    a.skyboxShader.SetUniformAttr(SkyboxShaderFogWidth, width)
+    a.skyboxShader.SetUniformAttr(SkyboxShaderHorizonFade, degrees)
     a.skyboxShader.End()
 }
 

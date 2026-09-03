@@ -51,8 +51,9 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
     float fog_maxdist = fogRange.y;
     float fog_mindist = fogRange.x;
     
-    // Calculate fog
-    float dist = length(camPosition.xyz - transformedFragPos.xyz);
+    // Calculate fog. The distance is measured on the horizontal plane only, the way Minecraft
+    // does it, so tilting the head does not shift the fog across the world.
+    float dist = length(camPosition.xz - transformedFragPos.xz);
     float fog_factor = 1.0 - smoothstep(fog_mindist, fog_maxdist, dist);
     
     vec4 outputColor = mix(fogColor, inColor, fog_factor);
