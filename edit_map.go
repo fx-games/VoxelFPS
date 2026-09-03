@@ -175,7 +175,7 @@ func (g *Game) toggleSpawnMode() {
     }
     entityDesc := core.MapEntity{
         Name:           "Barrel",
-        TextureIndices: []uint16{157},
+        TextureIndices: []uint16{136},
         CreateCollider: false,
         IsTransparent:  true,
     }

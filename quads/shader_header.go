@@ -53,9 +53,7 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
     
     // Calculate fog
     float dist = length(camPosition.xyz - transformedFragPos.xyz);
-    float fog_factor = (fog_maxdist - dist) /
-                      (fog_maxdist - fog_mindist);
-    fog_factor = clamp(fog_factor, 0.0, 1.0);
+    float fog_factor = 1.0 - smoothstep(fog_mindist, fog_maxdist, dist);
     
     vec4 outputColor = mix(fogColor, inColor, fog_factor);
     return outputColor;
@@ -66,6 +64,10 @@ float ShadowCalculation(uint lightIndex, vec4 fragPosLightSpace, vec3 normal, ve
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     // transform to [0,1] range
     projCoords = projCoords * 0.5 + 0.5;
+    // outside the light's frustum there is no depth information, so nothing is shadowed
+    if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0 || projCoords.z > 1.0) {
+        return 0.0;
+    }
     // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
     float closestDepth = texture(shadowMap, vec3(projCoords.xy, lightIndex)).r; 
     // get depth of current fragment from light's perspective
@@ -92,8 +94,19 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection
     vec3 normal = normalize(fragWorldNormal);
     // diffuse
     vec3 lightDir = normalize(lightPos - fragWorldPos);
-    float theta = dot(lightDir, normalize(-lightDirection));
-    if (theta < 0.96) {
+    // light 0 is the player's own light, it glows in every direction, so that what is lit
+    // depends on where the player stands and not on where the player looks
+    float cone = 1.0;
+    if (lightIndex > uint(0)) {
+        float theta = dot(lightDir, normalize(-lightDirection));
+        cone = smoothstep(0.94, 0.98, theta);
+        if (cone <= 0.0) {
+            return vec3(0.0);
+        }
+    }
+    // fade out over the same range as the fog, so both edges agree
+    float falloff = 1.0 - smoothstep(fogRange.x, fogRange.y, length(lightPos - fragWorldPos));
+    if (falloff <= 0.0) {
         return vec3(0.0);
     }
     float diff = max(dot(lightDir, normal), 0.0);
@@ -107,7 +120,7 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection
     // calculate shadow
     float shadow = ShadowCalculation(lightIndex, fragPosLightSpace, normal, lightDir);
     
-    vec3 lighting = (1.0 - shadow) * (diffuse + specular);    
+    vec3 lighting = (1.0 - shadow) * (diffuse + specular) * cone * falloff;    
     //vec3 lighting = (diffuse + specular);
     return lighting;
 }

@@ -267,8 +267,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     }
     // Setup Ceiling & Fog
     g.CeilingColor = mapLoad.CeilingColorVec4()
-    g.fogStart = 90
-    g.fogEnd = 98
+    g.fogStart = 4
+    g.fogEnd = 22
     g.updateFog()
     g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
