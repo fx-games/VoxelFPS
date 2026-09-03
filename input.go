@@ -167,6 +167,9 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         g.physicsSystem.SetGravityEnabled(g.gravitationEnabled)
         g.Toast(fmt.Sprintf("Gravity %s", map[bool]string{true: "on", false: "off"}[g.gravitationEnabled]))
     }
+    if key == glfw.KeyT {
+        g.Toast(fmt.Sprintf("Flashlight %s", map[bool]string{true: "on", false: "off"}[g.ToggleFlashlight()]))
+    }
     if key == glfw.KeyE && g.isHoveringObject() {
         events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
     }

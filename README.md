@@ -57,6 +57,7 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 | `Left mouse` | fire |
 | `1` `2` `3` `4` | Ol' Faithful (projectiles) / Borstal Shotgun (digs voxels) / Charge Pistol (paints voxels) / Small Gun (digs voxels) |
 | `F` | toggle gravity |
+| `T` | toggle flashlight (off by default) |
 | `E` | interact with hovered object |
 | `V` | spawn current object |
 | `Esc` / `F1` | escape menu / wizard menu |

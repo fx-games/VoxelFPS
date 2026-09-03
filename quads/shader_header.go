@@ -94,15 +94,10 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, vec3 lightPos, vec3 lightDirection
     vec3 normal = normalize(fragWorldNormal);
     // diffuse
     vec3 lightDir = normalize(lightPos - fragWorldPos);
-    // light 0 is the player's own light, it glows in every direction, so that what is lit
-    // depends on where the player stands and not on where the player looks
-    float cone = 1.0;
-    if (lightIndex > uint(0)) {
-        float theta = dot(lightDir, normalize(-lightDirection));
-        cone = smoothstep(0.94, 0.98, theta);
-        if (cone <= 0.0) {
-            return vec3(0.0);
-        }
+    float theta = dot(lightDir, normalize(-lightDirection));
+    float cone = smoothstep(0.94, 0.98, theta);
+    if (cone <= 0.0) {
+        return vec3(0.0);
     }
     // fade out over the same range as the fog, so both edges agree
     float falloff = 1.0 - smoothstep(fogRange.x, fogRange.y, length(lightPos - fragWorldPos));

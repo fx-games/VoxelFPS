@@ -95,6 +95,7 @@ type GlApplication struct {
     minimap *Minimap
 
     ShouldDrawSkybox  bool
+    FlashlightOn      bool
     ShouldDrawMinimap bool
     AtlasMap          *glhf.TextureAtlasFixed
     AtlasSprites      *glhf.TextureAtlasFixed
@@ -292,7 +293,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.lightsUbo = lightsUbo
 
         glApp.lightsUbo.SetLights([]LightInfo{
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0.7, 0.7, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: flashlightOffColor},
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 1}},
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 1}},
         })
@@ -733,6 +734,21 @@ func (a *GlApplication) SetFog(colour mgl32.Vec3, near, far float32) {
     a.mainUbo.SetAttribute(UboFogColor, colour.Vec4(1))
     a.mainUbo.SetAttribute(UboFogRange, mgl32.Vec2{near, far})
     a.mainUbo.End()
+}
+
+// light 0 is the flashlight, parented to the camera. Off means black, the shadow pass still
+// runs for it, which costs a little but keeps the light indices stable.
+var flashlightColor = mgl32.Vec4{0.7, 0.7, 0.7, 1}
+var flashlightOffColor = mgl32.Vec4{0, 0, 0, 1}
+
+func (a *GlApplication) ToggleFlashlight() bool {
+    a.FlashlightOn = !a.FlashlightOn
+    if a.FlashlightOn {
+        a.lightsUbo.lights[0].Color = flashlightColor
+    } else {
+        a.lightsUbo.lights[0].Color = flashlightOffColor
+    }
+    return a.FlashlightOn
 }
 
 func (a *GlApplication) SetLight(pos, colour mgl32.Vec3) {
