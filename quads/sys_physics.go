@@ -14,14 +14,14 @@ type PhysicsSystem struct {
     objectsOnGrid           map[core.Int3]map[*PhysicsComponent]bool
     accelerationFromGravity mgl32.Vec3
     isSolid                 func(x int32, y int32, z int32) bool
-    camera                  *core.FPSCamera
+    isInsideMap             func(pos mgl32.Vec3) bool
     collisionPairsChecked   int
 }
 
-func NewCollisionSolver(camera *core.FPSCamera, isSolid func(x int32, y int32, z int32) bool) *PhysicsSystem {
+func NewCollisionSolver(isSolid func(x int32, y int32, z int32) bool, isInsideMap func(pos mgl32.Vec3) bool) *PhysicsSystem {
     return &PhysicsSystem{
         isSolid:                 isSolid,
-        camera:                  camera,
+        isInsideMap:             isInsideMap,
         objectsOnGrid:           make(map[core.Int3]map[*PhysicsComponent]bool),
         accelerationFromGravity: mgl32.Vec3{0, -9.8, 0},
     }
@@ -77,6 +77,14 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
             continue
         }
 
+        // Anything that made it out of the map is gone: it can only fall
+        // forever, and the collision grid has nothing to stop it with.
+        if !c.isInsideMap(obj.Position()) {
+            obj.GameObject().Kill()
+            c.remove(id, obj)
+            continue
+        }
+
         if !obj.IsMovable() {
             continue
         }
@@ -127,7 +135,7 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
         }
 
         //projectile := obj.IsProjectile()
-        correctedPos, pairsChecked, _ := CheckForCollisions(obj, newPos, c.camera, getCollidersAt)
+        correctedPos, pairsChecked, _ := CheckForCollisions(obj, newPos, getCollidersAt)
 
         c.collisionPairsChecked += pairsChecked
 
@@ -653,16 +661,23 @@ func IntersectCapsuleCapsule(capsule1, capsule2 Capsule, velocity1, velocity2 mg
     return true, timeOfImpact, normal
 }
 
+// maxCollisionPasses is how often a single move may be redirected by a surface
+// before the rest of it is dropped.
+const maxCollisionPasses = 8
+
 // CheckForCollisions returns the correction vector and whether or not a collision occurred.
 // CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS
-func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, camera *core.FPSCamera, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, int, bool) {
+func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, int, bool) {
     pairsChecked := 0
     hitSomething := false
     // adapted from: https://luisreis.net/blog/aabb_collision_handling/
     prevPos := movingEntity.Position()
     boxFromPos := movingEntity.AABBAt
 
-    for {
+    // Each pass slides the rest of the movement along the surface that was hit.
+    // A corner can keep producing new surfaces, so the passes are capped
+    // instead of trusting the movement to run out.
+    for pass := 0; pass < maxCollisionPasses; pass++ {
         velocity := newPos.Sub(prevPos)
 
         if velocity == zeroVec3 {
@@ -698,12 +713,10 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, camer
                             continue
                         }
                         var c voxel.CollisionInfo
-                        if true || collider.GameObject == nil {
-                            a := prevBox
-                            b := collider.AABB
-                            c = voxel.SweepAABB(a, b, velocity)
-                        } else { // TODO: THIS DOES NOT WORK
-                            c = voxel.CheckAABBVsOBB(prevBox, collider.GameObject.OBB(camera), velocity)
+                        if collider.GameObject != nil && collider.GameObject.HasOrientedCollider() {
+                            c = voxel.CheckAABBVsOBB(prevBox, collider.GameObject.WorldOBB(), velocity)
+                        } else {
+                            c = voxel.SweepAABB(prevBox, collider.AABB, velocity)
                         }
                         if c.TimeOfImpact < 1 {
                             events.Publish(events.EventPhysicsCollision, CollisionEvent{

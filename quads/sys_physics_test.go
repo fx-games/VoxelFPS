@@ -1,0 +1,165 @@
+package quads
+
+import (
+    "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/quads/voxel"
+    "math"
+    "testing"
+)
+
+// mover is a half unit cube that starts at the given position.
+func mover(t *testing.T, position mgl32.Vec3) *PhysicsComponent {
+    t.Helper()
+    object := NewGameObject("Mover")
+    object.Transform().SetPosition(position)
+    physics := NewPhysicsComponent(false, voxel.NewAABB(
+        mgl32.Vec3{-0.25, -0.25, -0.25},
+        mgl32.Vec3{0.25, 0.25, 0.25},
+    ))
+    object.SetComponent(physics)
+    return physics
+}
+
+// wall makes every voxel with x >= wallX solid.
+func wall(wallX int32) func(x, y, z int32) []LinkedAABB {
+    return func(x, y, z int32) []LinkedAABB {
+        if x < wallX {
+            return nil
+        }
+        return []LinkedAABB{{
+            AABB: voxel.NewAABBFromMin(mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1}),
+        }}
+    }
+}
+
+func TestCheckForCollisionsStopsAtWall(t *testing.T) {
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+
+    corrected, _, hit := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 0.5}, wall(2))
+
+    if !hit {
+        t.Fatal("expected a collision with the wall")
+    }
+    // The box is 0.25 wide, so its center stops just short of x = 2.
+    if corrected.X() > 1.75 {
+        t.Errorf("moved into the wall: x = %f, want <= 1.75", corrected.X())
+    }
+    if corrected.X() < 1.7 {
+        t.Errorf("stopped too early: x = %f, want close to 1.75", corrected.X())
+    }
+}
+
+// Movement into a wall at an angle keeps the part that runs along it.
+func TestCheckForCollisionsSlidesAlongWall(t *testing.T) {
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+
+    corrected, _, hit := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 3.5}, wall(2))
+
+    if !hit {
+        t.Fatal("expected a collision with the wall")
+    }
+    if corrected.X() > 1.75 {
+        t.Errorf("moved into the wall: x = %f", corrected.X())
+    }
+    if corrected.Z() < 1 {
+        t.Errorf("did not slide along the wall: z = %f, want most of the 3 units of z movement", corrected.Z())
+    }
+}
+
+// A move into a corner is redirected by both surfaces and still terminates.
+func TestCheckForCollisionsInCornerTerminates(t *testing.T) {
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    corner := func(x, y, z int32) []LinkedAABB {
+        if x < 2 && z < 2 {
+            return nil
+        }
+        return []LinkedAABB{{
+            AABB: voxel.NewAABBFromMin(mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1}),
+        }}
+    }
+
+    corrected, _, _ := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 5}, corner)
+
+    if corrected.X() > 1.75 || corrected.Z() > 1.75 {
+        t.Errorf("moved into the corner: %v", corrected)
+    }
+    if math.IsNaN(float64(corrected.X())) || math.IsNaN(float64(corrected.Z())) {
+        t.Errorf("corrected position is not a number: %v", corrected)
+    }
+}
+
+// A collider that carries its own rotation is swept as an oriented box, so a
+// plank turned sideways only blocks the space it actually occupies.
+func TestCheckForCollisionsAgainstRotatedObject(t *testing.T) {
+    plank := func(rotation mgl32.Quat) func(x, y, z int32) []LinkedAABB {
+        object := NewGameObject("Plank")
+        object.Transform().SetPosition(mgl32.Vec3{3, 0.5, 0.5})
+        object.Transform().SetRotation(rotation)
+        physics := NewPhysicsComponent(false, voxel.NewAABB(
+            mgl32.Vec3{-1, -0.5, -0.1},
+            mgl32.Vec3{1, 0.5, 0.1},
+        ))
+        object.SetComponent(physics)
+        return func(x, y, z int32) []LinkedAABB {
+            return []LinkedAABB{{AABB: physics.AABB(), GameObject: physics}}
+        }
+    }
+
+    across := stoppedAtX(t, plank(mgl32.QuatIdent()))
+    if math.Abs(float64(across-1.75)) > 0.05 {
+        t.Errorf("stopped at x = %f, want the plank to block at 1.75", across)
+    }
+
+    edgeOn := stoppedAtX(t, plank(mgl32.QuatRotate(mgl32.DegToRad(90), mgl32.Vec3{0, 1, 0})))
+    if math.Abs(float64(edgeOn-2.65)) > 0.05 {
+        t.Errorf("stopped at x = %f, want the turned plank to block at 2.65", edgeOn)
+    }
+}
+
+// stoppedAtX moves a box from x = 0.5 towards x = 5 and reports where it ended up.
+func stoppedAtX(t *testing.T, collidersAt func(x, y, z int32) []LinkedAABB) float32 {
+    t.Helper()
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    corrected, _, _ := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 0.5}, collidersAt)
+    return corrected.X()
+}
+
+// Nothing in the way means the move goes through unchanged.
+func TestCheckForCollisionsWithoutColliders(t *testing.T) {
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    empty := func(x, y, z int32) []LinkedAABB { return nil }
+
+    target := mgl32.Vec3{3, 0.5, 0.5}
+    corrected, _, hit := CheckForCollisions(moving, target, empty)
+
+    if hit {
+        t.Error("expected no collision")
+    }
+    if corrected != target {
+        t.Errorf("position = %v, want %v", corrected, target)
+    }
+}
+
+// Objects that leave the map are dropped instead of falling forever.
+func TestUpdateRemovesObjectsThatLeaveTheMap(t *testing.T) {
+    noSolids := func(x, y, z int32) bool { return false }
+    insideMap := func(pos mgl32.Vec3) bool { return pos.X() >= 0 && pos.X() < 10 }
+    system := NewCollisionSolver(noSolids, insideMap)
+
+    escaping := mover(t, mgl32.Vec3{9, 0.5, 0.5})
+    escaping.SetVelocity(mgl32.Vec3{10, 0, 0})
+    system.AddObject(escaping)
+
+    system.Update(1) // moves it to x = 19, outside the map
+    if len(system.movingObjects) != 1 {
+        t.Fatalf("object should still be tracked right after the move, have %d", len(system.movingObjects))
+    }
+
+    system.Update(1) // now it is noticed as gone
+    if len(system.movingObjects) != 0 {
+        t.Errorf("expected the escaped object to be removed, %d left", len(system.movingObjects))
+    }
+    if escaping.GameObject().IsAlive() {
+        t.Error("expected the escaped object to be dead")
+    }
+}

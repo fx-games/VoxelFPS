@@ -95,6 +95,24 @@ func (g *PhysicsComponent) SetAABBForAnimation(dying AnimIndex, aabb voxel.AABB)
     g.aabbPerAnim[dying] = aabb
 }
 
+// OBB is the collider as it is drawn, ie. sprites face the camera. Use it for
+// picking, not for physics.
 func (g *PhysicsComponent) OBB(camera *core.FPSCamera) voxel.OBB {
     return voxel.OBB{AABB: g.AABBAt(mgl32.Vec3{}), Transform: g.Transform(camera)}
+}
+
+// HasOrientedCollider reports whether the object carries a rotation of its own.
+// Sprites do not: they are billboards that turn towards the camera, and letting
+// physics use that transform would make collisions depend on where the player
+// is looking.
+func (g *PhysicsComponent) HasOrientedCollider() bool {
+    return !g.resolver.HasComponent(ComponentTypeSprite)
+}
+
+// WorldOBB is the collider in world space, independent of the camera.
+func (g *PhysicsComponent) WorldOBB() voxel.OBB {
+    return voxel.OBB{
+        AABB:      g.AABBAt(mgl32.Vec3{}),
+        Transform: g.GameObject().Transform().GetTransformMatrix(),
+    }
 }

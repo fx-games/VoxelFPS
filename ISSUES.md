@@ -4,27 +4,31 @@ State after the September 2026 cleanup pass (removed `physics/` + Bullet binding
 `geometry/fov.go`, `geometry/camera.go`, `quads/voxel/mpr.go`; merged the disk and embedded
 asset loaders into `quads.Assets`; added DDA raycast tests).
 
-Fixed since: `SpriteBatch` now grows its index buffer along with its vertex buffer, and
-`DDARaycast` takes a `maxDistance` and reports real misses.
+Fixed since: `SpriteBatch` now grows its index buffer along with its vertex buffer,
+`DDARaycast` takes a `maxDistance` and reports real misses, and the collision code sweeps
+oriented colliders for real (see Physics below).
 
 ## Bugs
 
 - **`quads/voxel/map.go:230`** — `chunkIsVisible` returns after a sphere-vs-frustum test; the
   AABB path below is unreachable and marked `// TODO: THIS DOES NOT WORK`. Culling is therefore
   sphere-only and over-inclusive. This is the "do better frustum culling" item in `optimize.txt`.
-- **`quads/sys_physics.go:705`** — collision branch disabled with `if true ||`; the
-  `CheckAABBVsOBB` path is dead and marked as not working. Moving objects only ever collide as
-  AABBs, so rotated colliders are wrong.
-- **`quads/voxel/obb_test.go:TestCheckOBBVsOBB` fails** (pre-existing): expects time of impact
-  0.5 and normal `{1,0,0}`, gets `0.365406` and `{0,1,0}`. Either `CheckOBBVsOBB` is wrong or
-  the expectation is; needs a decision before the OBB path above is re-enabled.
 - **`zdwep/weapon_test.go` does not compile** (pre-existing): calls
   `readDoomAtlas(pngFile)` but the function is now `readDoomAtlas(filename string, atlasFile
   io.ReadSeeker) (*glhf.TextureAtlasPacked, string, error)`. It also reads from
   `../doom_likes/`, which is gitignored, so it can never pass in CI. `go vet ./...` fails
   because of it.
-- **`quads/sys_physics.go:51`** — "can lead to stuff leaving the map and going to infinity".
-  No clamp to world bounds on moving objects.
+- **Tunneling** — `CheckForCollisions` gathers colliders from the grid cells the move touches
+  and is documented as "CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS". A fast projectile still
+  passes through thin geometry. Needs the swept bounds to drive the cell walk, or a raycast
+  pass for projectiles.
+- **Collision events fire per pair, per pass** — `CheckForCollisions` publishes
+  `EventPhysicsCollision` for every collider with `TimeOfImpact < 1`, not only the one that was
+  actually hit, and again for each slide pass. Consumers see duplicates.
+- **Gravity is never applied** — `PhysicsComponent.ApplyGravity` and
+  `PhysicsSystem.accelerationFromGravity` exist, but the code that would use them in `Update`
+  is commented out. `F` toggles a flag in `Game` that does nothing to the simulation. This is
+  the "Physics: Jumping, Gravity, Throwing" item in `optimize.txt`.
 
 ## Robustness
 
@@ -50,6 +54,19 @@ Fixed since: `SpriteBatch` now grows its index buffer along with its vertex buff
 - `quads/glhf/texture3d.go`, `quads/glhf/texture_array.go` (~340 lines) — no constructor call
   outside the package. Kept for the planned texture-array voxel rendering in `optimize.txt`.
 - `quads/voxel/map.go` and `geometry/` still carry commented-out alternative implementations.
+
+## Physics notes
+
+- Sprites are billboards: their transform turns towards the camera, so physics deliberately
+  treats them as axis aligned boxes (`PhysicsComponent.HasOrientedCollider`). Only objects with
+  a transform of their own are swept as oriented boxes. `PhysicsComponent.OBB(camera)` stays
+  the camera-facing box, and is for picking only.
+- `CheckAABBVsOBB` inflates the oriented box by the reach of the moving box along each of its
+  axes and ray casts. The exact Minkowski sum of two boxes has bevelled edges, so a glancing
+  hit near an edge of a rotated box reports slightly early. Marked with a `ponytail:` comment.
+- `CheckOBBVsOBB` was removed: it composed the two transforms in the wrong order, had no
+  callers, and its test asserted a time of impact that only holds when the two centers meet.
+  Nothing in the engine sweeps a rotated box against another; the moving side is always an AABB.
 
 ## Structure
 

@@ -12,7 +12,8 @@ type CollisionInfo struct {
     TimeOfImpact float32
     // SurfaceNormal is the normal of the surface that was hit.
     SurfaceNormal mgl32.Vec3
-    IsCollision   bool
+    // IsCollision reports whether the sweep touched anything, ie. TimeOfImpact < 1.
+    IsCollision bool
 }
 
 func NewCollisionInfo(intersection bool, timeOfImpact float32, normalAtImpact mgl32.Vec3) CollisionInfo {
@@ -213,7 +214,6 @@ func SweepAABB(a, b AABB, vel mgl32.Vec3) CollisionInfo {
 
 func SweepAABBFromMinkowski(m AABB, vel mgl32.Vec3) CollisionInfo {
     // adapted from: https://luisreis.net/blog/aabb_collision_handling/
-    containsOrigin := m.Contains(mgl32.Vec3{})
     h := float32(1.0)
     nx := 0
     ny := 0
@@ -278,7 +278,7 @@ func SweepAABBFromMinkowski(m AABB, vel mgl32.Vec3) CollisionInfo {
     return CollisionInfo{
         TimeOfImpact:  h,
         SurfaceNormal: mgl32.Vec3{float32(nx), float32(ny), float32(nz)},
-        IsCollision:   containsOrigin,
+        IsCollision:   h < 1,
     }
 }
 

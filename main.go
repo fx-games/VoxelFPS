@@ -253,7 +253,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
        bullet.BulletStepSimulation(world, 0.1)
     */
     // Setup Collision Solver
-    g.physicsSystem = quads.NewCollisionSolver(g.Camera, g.CubeMap.IsSolidBlockAt)
+    g.physicsSystem = quads.NewCollisionSolver(g.CubeMap.IsSolidBlockAt, g.CubeMap.ContainsVec)
     g.SetupPathfinder(g.CubeMap.IsSolidBlockAt)
 
     // Spawn Entities
