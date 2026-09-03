@@ -312,7 +312,12 @@ func (t *Texture) SaveAsPNG(filename string) error {
 
 func WritePixelsToPNG(filename string, pixels []uint8, width, height int) error {
     outImage := image.NewNRGBA(image.Rect(0, 0, width, height))
-    outImage.Pix = pixels
+    // OpenGL hands back the rows bottom up, an image file expects them top down
+    stride := width * 4
+    for row := 0; row < height; row++ {
+        source := pixels[row*stride : (row+1)*stride]
+        copy(outImage.Pix[(height-1-row)*stride:], source)
+    }
 
     file, err := os.Create(filename)
     if err != nil {
