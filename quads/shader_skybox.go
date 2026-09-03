@@ -9,6 +9,7 @@ import (
 
 const (
     SkyboxShaderCamProjectionView int = iota
+    SkyboxShaderFogWidth
 )
 
 func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
@@ -18,6 +19,7 @@ func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
         }
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "camProjectionView", Type: glhf.Mat4},
+            glhf.Attr{Name: "fogWidth", Type: glhf.Float},
             //glhf.Attr{Name: "drawColor", Type: glhf.Vec3},
         }
         shader *glhf.Shader
@@ -34,6 +36,7 @@ func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(SkyboxShaderCamProjectionView, cam.GetProjectionViewMatrix())
+    shader.SetUniformAttr(SkyboxShaderFogWidth, float32(0.4))
     shader.End()
 
     glErr := gl.GetError()
@@ -66,12 +69,13 @@ layout (location = 0) out vec4 color;
 in vec3 TexCoords;
 
 uniform samplerCube skybox;
+uniform float fogWidth;
 
 void main() {
     // the sky is further away than any fog distance, so it is solid fog towards the horizon
     // and thins out overhead, which hides the seam where the geometry ends
     float openness = abs(normalize(TexCoords).y);
-    float fogAmount = 1.0 - smoothstep(0.0, 0.4, openness);
+    float fogAmount = 1.0 - smoothstep(0.0, fogWidth, openness);
     color = mix(texture(skybox, TexCoords), fogColor, fogAmount);
 }`, uboBlock)
 }

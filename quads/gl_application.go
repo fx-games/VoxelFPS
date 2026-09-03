@@ -752,6 +752,13 @@ func (a *GlApplication) ToggleFlashlight() bool {
     return a.FlashlightOn
 }
 
+// SetSkyFog sets how far up from the horizon the sky fades into the fog colour, 0 disables it.
+func (a *GlApplication) SetSkyFog(width float32) {
+    a.skyboxShader.Begin()
+    a.skyboxShader.SetUniformAttr(SkyboxShaderFogWidth, width)
+    a.skyboxShader.End()
+}
+
 func (a *GlApplication) SetLight(pos, colour mgl32.Vec3) {
     a.mainUbo.Begin()
     a.mainUbo.SetAttribute(UboCamLightColor, colour.Vec4(1))
