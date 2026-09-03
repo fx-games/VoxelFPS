@@ -148,8 +148,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         mainUbo := mainUBO()
         lightsUbo := NewLightsUBO()
 
-        injectedGLSL := mainUbo.GetShaderBlockSource(mainUboBlockName)
-        injectedGLSL += lightsGLSLBlock
+        mainUboGLSL := mainUbo.GetShaderBlockSource(mainUboBlockName)
+        injectedGLSL := mainUboGLSL + lightsGLSLBlock
 
         uiScale := mgl32.Vec2{uiScaleX, uiScaleY}
 
@@ -207,7 +207,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             postFrameBuffer: glhf.NewFrameBufferWithColorDepthStencil(fbSizeX, fbSizeY, false),
 
             lineShader:       LoadLineShader(fpsCamera),
-            skyboxShader:     LoadSkyboxShader(fpsCamera),
+            skyboxShader:     LoadSkyboxShader(fpsCamera, mainUboGLSL),
             particleSystems:  make(map[ParticleName]*glhf.ParticleSystem),
             UIScale:          uiScale,
             ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
@@ -262,6 +262,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         skyboxVA.DebugName = "SkyBox"
         glApp.skybox = skyboxVA
 
+        glhf.BindUniformBlockTo(glApp.skyboxShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.cubeShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.quadShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.meshShader.ID(), mainUboBlockName, 0)

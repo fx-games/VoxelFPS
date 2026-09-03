@@ -1,6 +1,7 @@
 package quads
 
 import (
+    "fmt"
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/memmaker/goray/core"
     "github.com/memmaker/goray/quads/glhf"
@@ -10,7 +11,7 @@ const (
     SkyboxShaderCamProjectionView int = iota
 )
 
-func LoadSkyboxShader(cam core.Camera) *glhf.Shader {
+func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
     var (
         vertexFormat = glhf.AttrFormat{
             {Name: "position", Type: glhf.Vec3},
@@ -22,7 +23,7 @@ func LoadSkyboxShader(cam core.Camera) *glhf.Shader {
         shader *glhf.Shader
     )
     var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, skyboxVertexShaderSource, skyboxFragmentShaderSource)
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, skyboxVertexShaderSource, skyboxFragmentShaderSource(uboBlock))
 
     if err != nil {
         panic(err)
@@ -57,8 +58,9 @@ void main() {
     gl_Position = pos.xyww;
 }`
 
-const skyboxFragmentShaderSource = `#version 400 core
-
+func skyboxFragmentShaderSource(uboBlock string) string {
+    return fmt.Sprintf(`#version 400 core
+%s
 layout (location = 0) out vec4 color;
 
 in vec3 TexCoords;
@@ -66,5 +68,10 @@ in vec3 TexCoords;
 uniform samplerCube skybox;
 
 void main() {
-    color = texture(skybox, TexCoords);
-}`
+    // the sky is further away than any fog distance, so it is solid fog towards the horizon
+    // and thins out overhead, which hides the seam where the geometry ends
+    float openness = abs(normalize(TexCoords).y);
+    float fogAmount = 1.0 - smoothstep(0.0, 0.4, openness);
+    color = mix(texture(skybox, TexCoords), fogColor, fogAmount);
+}`, uboBlock)
+}
