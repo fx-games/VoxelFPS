@@ -2,6 +2,7 @@ package quads
 
 import (
     "github.com/go-gl/mathgl/mgl32"
+    "github.com/memmaker/goray/events"
     "github.com/memmaker/goray/quads/voxel"
     "math"
     "testing"
@@ -35,9 +36,9 @@ func wall(wallX int32) func(x, y, z int32) []LinkedAABB {
 func TestCheckForCollisionsStopsAtWall(t *testing.T) {
     moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
 
-    corrected, _, hit := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 0.5}, wall(2))
+    corrected, _, hitNormals := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 0.5}, wall(2))
 
-    if !hit {
+    if len(hitNormals) == 0 {
         t.Fatal("expected a collision with the wall")
     }
     // The box is 0.25 wide, so its center stops just short of x = 2.
@@ -53,9 +54,9 @@ func TestCheckForCollisionsStopsAtWall(t *testing.T) {
 func TestCheckForCollisionsSlidesAlongWall(t *testing.T) {
     moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
 
-    corrected, _, hit := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 3.5}, wall(2))
+    corrected, _, hitNormals := CheckForCollisions(moving, mgl32.Vec3{5, 0.5, 3.5}, wall(2))
 
-    if !hit {
+    if len(hitNormals) == 0 {
         t.Fatal("expected a collision with the wall")
     }
     if corrected.X() > 1.75 {
@@ -130,9 +131,9 @@ func TestCheckForCollisionsWithoutColliders(t *testing.T) {
     empty := func(x, y, z int32) []LinkedAABB { return nil }
 
     target := mgl32.Vec3{3, 0.5, 0.5}
-    corrected, _, hit := CheckForCollisions(moving, target, empty)
+    corrected, _, hitNormals := CheckForCollisions(moving, target, empty)
 
-    if hit {
+    if len(hitNormals) > 0 {
         t.Error("expected no collision")
     }
     if corrected != target {
@@ -161,5 +162,128 @@ func TestUpdateRemovesObjectsThatLeaveTheMap(t *testing.T) {
     }
     if escaping.GameObject().IsAlive() {
         t.Error("expected the escaped object to be dead")
+    }
+}
+
+// floorAt makes every voxel below the given height solid.
+func floorAt(height int32) func(x, y, z int32) bool {
+    return func(x, y, z int32) bool { return y < height }
+}
+
+func alwaysInsideMap(pos mgl32.Vec3) bool { return true }
+
+// A falling object accelerates, lands on the floor and stays there.
+func TestUpdateGravityFallsAndLands(t *testing.T) {
+    system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+    system.SetGravityEnabled(true)
+
+    falling := mover(t, mgl32.Vec3{0.5, 4, 0.5})
+    falling.ApplyGravity = true
+    system.AddObject(falling)
+
+    const frame = 1.0 / 60.0
+    system.Update(frame)
+    if falling.Velocity().Y() >= 0 {
+        t.Fatalf("expected a downwards velocity after one frame, got %v", falling.Velocity())
+    }
+    if falling.IsGrounded() {
+        t.Error("expected the object to still be in the air")
+    }
+
+    for i := 0; i < 120; i++ {
+        system.Update(frame)
+    }
+
+    // The box is 0.25 high, so its center comes to rest just above y = 1.
+    if math.Abs(float64(falling.Position().Y()-1.25)) > 0.05 {
+        t.Errorf("came to rest at y = %f, want 1.25", falling.Position().Y())
+    }
+    if !falling.IsGrounded() {
+        t.Error("expected the object to be grounded")
+    }
+    if math.Abs(float64(falling.Velocity().Y())) > 1 {
+        t.Errorf("velocity into the floor should be spent, got %v", falling.Velocity())
+    }
+}
+
+// Without gravity nothing falls.
+func TestUpdateWithoutGravity(t *testing.T) {
+    system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+
+    floating := mover(t, mgl32.Vec3{0.5, 4, 0.5})
+    floating.ApplyGravity = true
+    system.AddObject(floating)
+
+    system.Update(1)
+
+    if floating.Position().Y() != 4 {
+        t.Errorf("position = %v, want it to stay at y = 4", floating.Position())
+    }
+}
+
+// A fast object is moved in steps, so it neither passes through a wall nor
+// walks the grid cells of the whole path at once.
+func TestUpdateFastObjectStopsAtWall(t *testing.T) {
+    system := NewCollisionSolver(func(x, y, z int32) bool { return x == 10 }, alwaysInsideMap)
+
+    fast := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    fast.SetVelocity(mgl32.Vec3{600, 0, 0})
+    system.AddObject(fast)
+
+    system.Update(1) // 600 units in one frame
+
+    if fast.Position().X() > 9.75 {
+        t.Errorf("tunneled through the wall to x = %f", fast.Position().X())
+    }
+    if fast.Position().X() < 9.7 {
+        t.Errorf("stopped short of the wall at x = %f", fast.Position().X())
+    }
+    if fast.Velocity().X() != 0 {
+        t.Errorf("velocity into the wall should be spent, got %v", fast.Velocity())
+    }
+}
+
+// blocker is a static collider of its own, sitting at the given position.
+func blocker(name string, position mgl32.Vec3) *PhysicsComponent {
+    object := NewGameObject(name)
+    object.Transform().SetPosition(position)
+    physics := NewPhysicsComponent(false, voxel.NewAABB(
+        mgl32.Vec3{-0.5, -0.5, -0.5},
+        mgl32.Vec3{0.5, 0.5, 0.5},
+    ))
+    object.SetComponent(physics)
+    return physics
+}
+
+// Only the surface that was actually hit is reported, once, even though
+// several colliders lie on the path.
+func TestCheckForCollisionsPublishesOneEvent(t *testing.T) {
+    var collisions []CollisionEvent
+    events.Subscribe(events.EventPhysicsCollision, func(id events.EventID, event events.Event) {
+        collisions = append(collisions, event.(CollisionEvent))
+    })
+
+    near := blocker("Near", mgl32.Vec3{3, 0.5, 0.5})
+    far := blocker("Far", mgl32.Vec3{5, 0.5, 0.5})
+    both := func(x, y, z int32) []LinkedAABB {
+        return []LinkedAABB{
+            {AABB: near.AABB(), GameObject: near},
+            {AABB: far.AABB(), GameObject: far},
+        }
+    }
+
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    collisions = nil
+    CheckForCollisions(moving, mgl32.Vec3{8, 0.5, 0.5}, both)
+
+    if len(collisions) != 1 {
+        t.Fatalf("expected one collision event, got %d: %+v", len(collisions), collisions)
+    }
+    if collisions[0].ObjectB != near {
+        t.Errorf("reported the wrong object: %s", collisions[0].ObjectB.GameObject().DisplayName)
+    }
+    // The mover is 0.25 wide and the near blocker starts at x = 2.5.
+    if math.Abs(float64(collisions[0].WorldPos.X()-2.25)) > 0.01 {
+        t.Errorf("collision position = %v, want the mover touching the first blocker", collisions[0].WorldPos)
     }
 }

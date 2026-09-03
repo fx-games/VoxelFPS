@@ -48,25 +48,30 @@ func (g *Game) pollInput(elapsed float64) {
         upDown = 1
     }
 
-    var velocityChange = mgl32.Vec3{0, -9, 0}
-    if !g.gravitationEnabled {
-        velocityChange = mgl32.Vec3{0, 0, 0}
-    }
-    if upDown > 0 {
-        jumpVelocity := mgl32.Vec3{0, 1, 0}.Mul(14)
-        velocityChange = velocityChange.Add(jumpVelocity)
+    const moveSpeed = 7.0
+    const jumpSpeed = 8.0
+
+    var walkVelocity mgl32.Vec3
+    if moveDir[0] != 0 || moveDir[1] != 0 {
+        desiredPos := g.Camera.GetDesiredPosition(moveSpeed, moveDir)
+        walkVelocity = desiredPos.Sub(g.Camera.GetPosition()).Normalize().Mul(moveSpeed)
     }
 
-    if moveDir[0] != 0 || moveDir[1] != 0 {
-        moveSpeed := 7.0
-        //f.player.SetVelocity(mgl32.Vec3{float32(float32(elapsed) * float32(-moveDir[0]) * float32(moveSpeed)), 0, float32(float32(elapsed) * float32(moveDir[1]) * float32(moveSpeed))})
-        newPos := g.Camera.GetDesiredPosition(float32(moveSpeed), moveDir)
-        moveVelocity := newPos.Sub(g.Camera.GetPosition()).Normalize().Mul(float32(moveSpeed))
-        velocityChange = velocityChange.Add(moveVelocity)
-        //newPosWithCorrection := quads.CollideWithMap(mgl32.Vec2{newPos.X(), newPos.Z()}, 0.2, f.IsWallAt)
-        //f.camera.SetPosition(mgl32.Vec3{newPosWithCorrection.X(), newPos.Y(), newPosWithCorrection.Y()})
+    physics := g.player.Physics()
+    if !g.gravitationEnabled {
+        // Free flight: space and C move straight up and down.
+        g.player.Physics().SetGrounded(false)
+        physics.SetVelocity(walkVelocity.Add(mgl32.Vec3{0, float32(upDown) * moveSpeed, 0}))
+        return
     }
-    g.player.Physics().SetVelocity(velocityChange)
+
+    // Gravity does the vertical part, so only the horizontal velocity is
+    // replaced. Jumping needs something to push off from.
+    fallVelocity := physics.Velocity().Y()
+    if upDown > 0 && physics.IsGrounded() {
+        fallVelocity = jumpSpeed
+    }
+    physics.SetVelocity(mgl32.Vec3{walkVelocity.X(), fallVelocity, walkVelocity.Z()})
 }
 
 func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
@@ -155,6 +160,8 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 
     if key == glfw.KeyF {
         g.gravitationEnabled = !g.gravitationEnabled
+        g.physicsSystem.SetGravityEnabled(g.gravitationEnabled)
+        g.Toast(fmt.Sprintf("Gravity %s", map[bool]string{true: "on", false: "off"}[g.gravitationEnabled]))
     }
     if key == glfw.KeyE && g.isHoveringObject() {
         events.Publish(events.EventPlayerInteractWith, g.hoveredObj())

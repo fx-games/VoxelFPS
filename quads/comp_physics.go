@@ -14,6 +14,17 @@ type PhysicsComponent struct {
     ApplyGravity bool
     aabb         voxel.AABB
     aabbPerAnim  map[AnimIndex]voxel.AABB
+    isGrounded   bool
+}
+
+// IsGrounded reports whether the last move ended on top of something. Jumping
+// off thin air is not a thing.
+func (g *PhysicsComponent) IsGrounded() bool {
+    return g.isGrounded
+}
+
+func (g *PhysicsComponent) SetGrounded(grounded bool) {
+    g.isGrounded = grounded
 }
 
 func (g *PhysicsComponent) Position() mgl32.Vec3 {

@@ -16,6 +16,17 @@ type PhysicsSystem struct {
     isSolid                 func(x int32, y int32, z int32) bool
     isInsideMap             func(pos mgl32.Vec3) bool
     collisionPairsChecked   int
+    gravityEnabled          bool
+}
+
+// SetGravityEnabled turns gravity on or off for every object that is affected
+// by it. With gravity off, objects keep whatever velocity they are given.
+func (c *PhysicsSystem) SetGravityEnabled(enabled bool) {
+    c.gravityEnabled = enabled
+}
+
+func (c *PhysicsSystem) GravityEnabled() bool {
+    return c.gravityEnabled
 }
 
 func NewCollisionSolver(isSolid func(x int32, y int32, z int32) bool, isInsideMap func(pos mgl32.Vec3) bool) *PhysicsSystem {
@@ -33,6 +44,17 @@ func (c *PhysicsSystem) moveObjectOnGrid(obj *PhysicsComponent, oldPos mgl32.Vec
 }
 
 const epsilon = 0.001
+
+// maxStepDistance is how far an object may move in one collision test.
+const maxStepDistance = 1.0
+
+// terminalVelocity caps how fast gravity can pull something down, so a long
+// fall cannot outrun the collision test.
+const terminalVelocity = 50.0
+
+// groundNormalThreshold is how upwards a surface normal has to point to count
+// as standing on it, roughly 45 degrees.
+const groundNormalThreshold = 0.7
 
 type LinkedAABB struct {
     voxel.AABB
@@ -89,26 +111,18 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
             continue
         }
 
-        currentPosition := obj.Position()
-        //acceleration := obj.Acceleration()
         velocity := obj.Velocity()
+        if c.gravityEnabled && obj.AffectedByGravity() {
+            velocity = velocity.Add(c.accelerationFromGravity.Mul(float32(deltaTime)))
+            if velocity.Y() < -terminalVelocity {
+                velocity = mgl32.Vec3{velocity.X(), -terminalVelocity, velocity.Z()}
+            }
+            obj.SetVelocity(velocity)
+        }
 
         if velocity == zeroVec3 {
             continue
         }
-        newPos := currentPosition.Add(velocity.Mul(float32(deltaTime)))
-        //newVelocity := velocity
-        /*
-           if obj.AffectedByGravity() {
-               newVelocity = newVelocity.Add(c.accelerationFromGravity)
-           }
-
-        */
-
-        //newPos := kinematic(acceleration, velocity, currentPosition, deltaTime)
-        //newPos := obj.Position().Add(appliedVelocity)
-        //obj.SetPosition(newPos)
-        //c.moveObjectOnGrid(obj, previousPos, newPos)
 
         getCollidersAt := func(x, y, z int32) []LinkedAABB {
             if c.isSolid(x, y, z) {
@@ -134,18 +148,44 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
             return result
         }
 
-        //projectile := obj.IsProjectile()
-        correctedPos, pairsChecked, _ := CheckForCollisions(obj, newPos, getCollidersAt)
-
-        c.collisionPairsChecked += pairsChecked
-
-        if obj.IsDead(0) {
-
-            return
+        // The collision test walks every grid cell in the bounding box of the
+        // move, so a long move is split up: one box per step instead of one
+        // box spanning the whole path.
+        movement := velocity.Mul(float32(deltaTime))
+        steps := 1
+        if length := movement.Len(); length > maxStepDistance {
+            steps = int(math.Ceil(float64(length / maxStepDistance)))
         }
-        oldPos := obj.Position()
-        obj.SetPosition(correctedPos)
-        c.moveObjectOnGrid(obj, oldPos, correctedPos)
+        stepMovement := movement.Mul(1 / float32(steps))
+
+        grounded := false
+        for step := 0; step < steps; step++ {
+            oldPos := obj.Position()
+            correctedPos, pairsChecked, hitNormals := CheckForCollisions(obj, oldPos.Add(stepMovement), getCollidersAt)
+            c.collisionPairsChecked += pairsChecked
+
+            obj.SetPosition(correctedPos)
+            c.moveObjectOnGrid(obj, oldPos, correctedPos)
+
+            if obj.IsDead(0) {
+                break
+            }
+
+            // Movement into a surface is spent, the rest of it keeps going.
+            for _, normal := range hitNormals {
+                if into := velocity.Dot(normal); into < 0 {
+                    velocity = velocity.Sub(normal.Mul(into))
+                }
+                if normal.Y() > groundNormalThreshold {
+                    grounded = true
+                }
+            }
+            if len(hitNormals) > 0 {
+                obj.SetVelocity(velocity)
+                stepMovement = velocity.Mul(float32(deltaTime) / float32(steps))
+            }
+        }
+        obj.SetGrounded(grounded)
     }
 
     //c.updateProjectiles(deltaTime)
@@ -665,11 +705,17 @@ func IntersectCapsuleCapsule(capsule1, capsule2 Capsule, velocity1, velocity2 mg
 // before the rest of it is dropped.
 const maxCollisionPasses = 8
 
-// CheckForCollisions returns the correction vector and whether or not a collision occurred.
-// CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS
-func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, int, bool) {
+// CheckForCollisions moves the entity towards newPos, stopping at and sliding
+// along whatever is in the way. It returns the corrected position, how many
+// pairs were tested, and the surface normal of every distinct surface that was
+// hit, so the caller can take the movement into them out of its velocity.
+//
+// The cells to test are taken from the bounding box of the whole move, so the
+// work grows with the cube of the distance: keep single calls short, see
+// PhysicsSystem.Update.
+func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, int, []mgl32.Vec3) {
     pairsChecked := 0
-    hitSomething := false
+    var hitNormals []mgl32.Vec3
     // adapted from: https://luisreis.net/blog/aabb_collision_handling/
     prevPos := movingEntity.Position()
     boxFromPos := movingEntity.AABBAt
@@ -699,6 +745,7 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
             TimeOfImpact:  1,
             SurfaceNormal: mgl32.Vec3{0, 0, 0},
         }
+        var earliestCollider *PhysicsComponent
 
         for yi := minY; yi <= maxY; yi++ {
             for zi := minZ; zi <= maxZ; zi++ {
@@ -718,20 +765,10 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
                         } else {
                             c = voxel.SweepAABB(prevBox, collider.AABB, velocity)
                         }
-                        if c.TimeOfImpact < 1 {
-                            events.Publish(events.EventPhysicsCollision, CollisionEvent{
-                                ObjectA:       movingEntity,
-                                ObjectB:       collider.GameObject,
-                                WorldPos:      movingEntity.Position().Add(velocity.Mul(c.TimeOfImpact)),
-                                SurfaceNormal: c.SurfaceNormal,
-                            })
-                            if !movingEntity.GameObject().IsAlive() {
-                                return newPos, pairsChecked, hitSomething
-                            }
-                        }
                         pairsChecked++
                         if c.TimeOfImpact < earliestCollision.TimeOfImpact {
                             earliestCollision = c
+                            earliestCollider = collider.GameObject
                         }
                     }
 
@@ -744,7 +781,19 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
         if earliestCollision.TimeOfImpact == 1 {
             break
         }
-        hitSomething = true
+
+        // One event for the surface that was actually hit, not for every
+        // collider that happened to be in the way.
+        events.Publish(events.EventPhysicsCollision, CollisionEvent{
+            ObjectA:       movingEntity,
+            ObjectB:       earliestCollider,
+            WorldPos:      prevPos.Add(velocity.Mul(earliestCollision.TimeOfImpact)),
+            SurfaceNormal: earliestCollision.SurfaceNormal,
+        })
+        if !movingEntity.GameObject().IsAlive() {
+            return newPos, pairsChecked, hitNormals
+        }
+        hitNormals = append(hitNormals, earliestCollision.SurfaceNormal)
 
         BdotB := earliestCollision.SurfaceNormal.Dot(earliestCollision.SurfaceNormal)
 
@@ -757,5 +806,5 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
 
     }
 
-    return newPos, pairsChecked, hitSomething
+    return newPos, pairsChecked, hitNormals
 }

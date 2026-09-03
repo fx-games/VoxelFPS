@@ -5,8 +5,9 @@ State after the September 2026 cleanup pass (removed `physics/` + Bullet binding
 asset loaders into `quads.Assets`; added DDA raycast tests).
 
 Fixed since: `SpriteBatch` now grows its index buffer along with its vertex buffer,
-`DDARaycast` takes a `maxDistance` and reports real misses, and the collision code sweeps
-oriented colliders for real (see Physics below).
+`DDARaycast` takes a `maxDistance` and reports real misses, the collision code sweeps oriented
+colliders for real, gravity and jumping work, long moves are split into steps, and a collision
+reports one event for the surface that was actually hit (see Physics below).
 
 ## Bugs
 
@@ -18,17 +19,6 @@ oriented colliders for real (see Physics below).
   io.ReadSeeker) (*glhf.TextureAtlasPacked, string, error)`. It also reads from
   `../doom_likes/`, which is gitignored, so it can never pass in CI. `go vet ./...` fails
   because of it.
-- **Tunneling** — `CheckForCollisions` gathers colliders from the grid cells the move touches
-  and is documented as "CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS". A fast projectile still
-  passes through thin geometry. Needs the swept bounds to drive the cell walk, or a raycast
-  pass for projectiles.
-- **Collision events fire per pair, per pass** — `CheckForCollisions` publishes
-  `EventPhysicsCollision` for every collider with `TimeOfImpact < 1`, not only the one that was
-  actually hit, and again for each slide pass. Consumers see duplicates.
-- **Gravity is never applied** — `PhysicsComponent.ApplyGravity` and
-  `PhysicsSystem.accelerationFromGravity` exist, but the code that would use them in `Update`
-  is commented out. `F` toggles a flag in `Game` that does nothing to the simulation. This is
-  the "Physics: Jumping, Gravity, Throwing" item in `optimize.txt`.
 
 ## Robustness
 
@@ -56,6 +46,18 @@ oriented colliders for real (see Physics below).
 - `quads/voxel/map.go` and `geometry/` still carry commented-out alternative implementations.
 
 ## Physics notes
+
+- Objects never tunneled through voxels: the cell walk already covered the swept bounding box.
+  What the "CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS" comment was really about is cost - that
+  bounding box grows with the cube of the distance, so a 173 unit diagonal move cost 2.8ms in an
+  empty world. `Update` now splits a move into steps of at most one unit, which makes it linear
+  (the same move costs 0.5ms, a 1039 unit one 3ms).
+- Gravity is off by default, as it was before; `F` toggles it and now also tells the physics
+  system. With gravity on, the player keeps its vertical velocity between frames, jumps only
+  when `IsGrounded`, and falls no faster than `terminalVelocity`. With gravity off, space and C
+  fly straight up and down.
+- Velocity into a surface is removed on impact, so an object resting on the floor does not
+  build up speed, and sliding along a wall keeps the part of the movement that runs along it.
 
 - Sprites are billboards: their transform turns towards the camera, so physics deliberately
   treats them as axis aligned boxes (`PhysicsComponent.HasOrientedCollider`). Only objects with
