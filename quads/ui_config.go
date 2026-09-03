@@ -143,12 +143,16 @@ func (o *GuiOptionFloat) String() string {
     return fmt.Sprintf("%s: %.2f", o.name, *o.value)
 }
 
+// More and Less apply right away, a number that only takes effect on a separate
+// keypress reads as a slider that does nothing
 func (o *GuiOptionFloat) More() {
     *o.value += o.stepSize
+    o.Activate()
 }
 
 func (o *GuiOptionFloat) Less() {
     *o.value -= o.stepSize
+    o.Activate()
 }
 
 func (o *GuiOptionFloat) Activate() {
