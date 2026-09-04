@@ -262,11 +262,6 @@ func (s *Shader) UniformFormat() AttrFormat {
 func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
     if s.uniformLoc[uniform] < 0 {
         panic(fmt.Sprintf("Uniform attribute %d not found", uniform))
-        return false
-    }
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
     }
     switch s.uniformFmt[uniform].Type {
     case Int:
@@ -334,10 +329,6 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
         gl.UniformMatrix4x3fv(s.uniformLoc[uniform], 1, false, &value[0])
     default:
         panic("set uniform attr: invalid attribute type")
-    }
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
     }
     return true
 }

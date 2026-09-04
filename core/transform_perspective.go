@@ -13,6 +13,23 @@ type PerspectiveTransform struct {
     windowHeight  int
     nearPlaneDist float32
     farPlaneDist  float32
+
+    // Caches keyed on their own inputs, so nothing has to remember to invalidate
+    // them: the projection is rebuilt when a lens parameter changes, the frustum
+    // planes when the projection-view matrix does.
+    cachedProjection    mgl32.Mat4
+    cachedProjectionKey lensParams
+    cachedPlanes        [6]mgl32.Vec4
+    cachedPlanesKey     mgl32.Mat4
+}
+
+// lensParams is every input to mgl32.Perspective, comparable so it can key a cache.
+type lensParams struct {
+    fov    float32
+    width  int
+    height int
+    near   float32
+    far    float32
 }
 
 func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
@@ -66,7 +83,12 @@ func NewPerspectiveTransformForSpotlightFromParent(parent Transformer, fov float
 // GetProjectionMatrix returns the projection matrix for the camera.
 // A projection matrix will transform a point from local camera space to screen space. (3D -> 2D)
 func (c *PerspectiveTransform) GetProjectionMatrix() mgl32.Mat4 {
-    return mgl32.Perspective(mgl32.DegToRad(c.fov), float32(c.windowWidth)/float32(c.windowHeight), c.nearPlaneDist, c.farPlaneDist)
+    key := lensParams{c.fov, c.windowWidth, c.windowHeight, c.nearPlaneDist, c.farPlaneDist}
+    if key != c.cachedProjectionKey {
+        c.cachedProjection = mgl32.Perspective(mgl32.DegToRad(c.fov), float32(c.windowWidth)/float32(c.windowHeight), c.nearPlaneDist, c.farPlaneDist)
+        c.cachedProjectionKey = key
+    }
+    return c.cachedProjection
 }
 func (c *PerspectiveTransform) GetProjectionViewMatrix() mgl32.Mat4 {
     return c.GetProjectionMatrix().Mul4(c.GetViewMatrix())
@@ -113,119 +135,79 @@ public Hit IsPointInFrustum(Vector3 point)
     }
 */
 
+// FrustumPlanes extracts the six clip planes from the projection-view matrix
+// (Gribb-Hartmann). Each plane is (a, b, c, d) of ax+by+cz+d=0, normalised and
+// pointing inwards, so plane.Dot(vec4(p, 1)) is the signed distance from p to
+// the plane and a point is inside the frustum when all six are >= 0.
+func (c *PerspectiveTransform) FrustumPlanes() [6]mgl32.Vec4 {
+    projView := c.GetProjectionViewMatrix()
+    if projView == c.cachedPlanesKey {
+        return c.cachedPlanes
+    }
+    r0, r1, r2, r3 := projView.Rows()
+    planes := [6]mgl32.Vec4{
+        r3.Add(r0), // left
+        r3.Sub(r0), // right
+        r3.Add(r1), // bottom
+        r3.Sub(r1), // top
+        r3.Add(r2), // near
+        r3.Sub(r2), // far
+    }
+    for i, p := range planes {
+        length := (mgl32.Vec3{p.X(), p.Y(), p.Z()}).Len()
+        if length > 0 {
+            planes[i] = p.Mul(1 / length)
+        }
+    }
+    c.cachedPlanes = planes
+    c.cachedPlanesKey = projView
+    return planes
+}
+
 func (c *PerspectiveTransform) IsInViewFrustum(point mgl32.Vec3) bool {
-    // Compute vector from camera position to p
-    v := point.Sub(c.GetPosition())
-
-    // compute and test the Z coordinate
-    pcz := v.Dot(c.GetForward())
-    if pcz > c.farPlaneDist || pcz < c.nearPlaneDist {
-        return false
+    for _, plane := range c.FrustumPlanes() {
+        if plane.Dot(point.Vec4(1)) < 0 {
+            return false
+        }
     }
-
-    // Compute and test the Y coordinate
-    pcy := v.Dot(c.GetUp())
-    vAux := pcz * c.tanG()
-    if pcy > vAux || pcy < -vAux {
-        return false
-    }
-
-    pcx := v.Dot(c.GetRight())
-    hAux := vAux * c.GetAspectRatio()
-    return pcx <= hAux && pcx >= -hAux
+    return true
 }
 
+// IsCubeInViewFrustum tests an axis aligned box against the frustum with the
+// positive-vertex test: for each plane only the box corner furthest along the
+// plane normal has to be checked. The old version tested whether any corner was
+// inside, which culled every box that straddled the frustum without putting a
+// corner in it - the common case for a chunk right in front of the camera.
+//
+// ponytail: plane-vs-AABB is conservative at the frustum corners, so a box just
+// outside a corner can survive. Add a corner-vs-box pass if the false positives
+// ever show up in the chunk counts.
 func (c *PerspectiveTransform) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool {
-    // test 8 corners of the cube
-
-    center := minVals.Add(maxVals).Mul(0.5)
-
-    if c.IsInViewFrustum(center) {
-        return true
+    for _, plane := range c.FrustumPlanes() {
+        positive := mgl32.Vec3{minVals.X(), minVals.Y(), minVals.Z()}
+        if plane.X() >= 0 {
+            positive[0] = maxVals.X()
+        }
+        if plane.Y() >= 0 {
+            positive[1] = maxVals.Y()
+        }
+        if plane.Z() >= 0 {
+            positive[2] = maxVals.Z()
+        }
+        if plane.Dot(positive.Vec4(1)) < 0 {
+            return false // the whole box is behind this plane
+        }
     }
-
-    if c.IsInViewFrustum(mgl32.Vec3{minVals.X(), minVals.Y(), minVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{minVals.X(), minVals.Y(), maxVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{minVals.X(), maxVals.Y(), minVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{minVals.X(), maxVals.Y(), maxVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{maxVals.X(), minVals.Y(), minVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{maxVals.X(), minVals.Y(), maxVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{maxVals.X(), maxVals.Y(), minVals.Z()}) {
-        return true
-    }
-
-    if c.IsInViewFrustum(mgl32.Vec3{maxVals.X(), maxVals.Y(), maxVals.Z()}) {
-        return true
-    }
-
-    return false
-}
-
-func (c *PerspectiveTransform) sphereFactor() mgl32.Vec2 {
-    _sphereFactorY := 1.0 / math.Cos(c.halfFovAngle())
-
-    // if the Aspect ratio is not 1/1 the sphereFactor of X needs to be adjusted for the coordinate system.
-    // This makes "Sphere" intersections work by representing the spheres as ovals
-    var angleX = math.Atan(float64(c.tanG() * c.GetAspectRatio()))
-    _sphereFactorX := 1.0 / math.Cos(angleX)
-    return mgl32.Vec2{float32(_sphereFactorX), float32(_sphereFactorY)}
+    return true
 }
 
 func (c *PerspectiveTransform) IsSphereInViewFrustum(centerWorldSpace mgl32.Vec3, radiusWorldSpace float32) bool {
-    center := centerWorldSpace
-    radius := radiusWorldSpace
-
-    sphereFactor := c.sphereFactor()
-
-    v := center.Sub(c.GetPosition())
-
-    az := v.Dot(c.GetForward())
-    if az > c.farPlaneDist+radius || az < c.nearPlaneDist-radius {
-        return false
+    for _, plane := range c.FrustumPlanes() {
+        if plane.Dot(centerWorldSpace.Vec4(1)) < -radiusWorldSpace {
+            return false
+        }
     }
-
-    ax := v.Dot(c.GetRight())
-    azX := az * c.tanG() * c.GetAspectRatio()
-    radiusX := sphereFactor.X() * radius
-
-    if ax > azX+radiusX || ax < -azX-radiusX {
-        return false
-    }
-
-    ay := v.Dot(c.GetUp())
-    azY := az * c.tanG()
-    radiusY := sphereFactor.Y() * radius
-    if ay > azY+radiusY || ay < -azY-radiusY {
-        return false
-    }
-
-    if az > c.farPlaneDist-radius || az < c.nearPlaneDist+radius {
-        return true
-    }
-
-    if ay > azY-radiusY || ay < -azY+radiusY {
-        return true
-    }
-
-    return ax <= azX+radiusX && ax >= -azX-radiusX
+    return true
 }
 
 func (c *PerspectiveTransform) tanG() float32 {
@@ -237,6 +219,17 @@ func (c *PerspectiveTransform) halfFovAngle() float64 {
 }
 func (c *PerspectiveTransform) GetNearPlaneDist() float32 {
     return c.nearPlaneDist
+}
+
+func (c *PerspectiveTransform) GetFarPlaneDist() float32 {
+    return c.farPlaneDist
+}
+
+// ConeCosine is the cosine of the half FOV: the widest angle off the forward axis
+// that a spotlight can light and still have depth information for it in its own
+// shadow map.
+func (c *PerspectiveTransform) ConeCosine() float32 {
+    return float32(math.Cos(c.halfFovAngle()))
 }
 
 func (c *PerspectiveTransform) GetAspectRatio() float32 {

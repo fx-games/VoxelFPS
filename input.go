@@ -87,6 +87,13 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
         return
     }
 
+    if key == glfw.KeyG && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
+        hit := g.lastHitResult.HitInfo
+        if textureIndex, nowGlowing, ok := g.ToggleEmissiveTextureAt(hit.CollisionGridPosition, hit.Side); ok {
+            g.Toast(fmt.Sprintf("Texture %d %s", textureIndex, map[bool]string{true: "glowing", false: "back to normal"}[nowGlowing]))
+        }
+    }
+
     if key == glfw.KeyTab && g.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
         rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
         hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
@@ -225,7 +232,9 @@ func (g *Game) quitGame() {
 
 func (g *Game) HandleMousePosEvents(xpos float64, ypos float64) {
     if len(g.widgetStack) > 0 {
-        if g.focusedWidget().HandleMousePosEvents(xpos, ypos) || g.widgetsAreBlockingMovement {
+        // Widgets are laid out in GUI coordinates, so hit testing has to be too.
+        guiX, guiY := g.GuiCoords(xpos, ypos)
+        if g.focusedWidget().HandleMousePosEvents(guiX, guiY) || g.widgetsAreBlockingMovement {
             return
         }
     }
@@ -262,7 +271,8 @@ func (g *Game) HandleScrollEvents(xoff float64, yoff float64) {
 }
 func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) {
     if len(g.widgetStack) > 0 {
-        if g.focusedWidget().HandleMouseButtonEvents(xpos, ypos, button, action, mods) || g.widgetsAreBlockingMovement {
+        guiX, guiY := g.GuiCoords(xpos, ypos)
+        if g.focusedWidget().HandleMouseButtonEvents(guiX, guiY, button, action, mods) || g.widgetsAreBlockingMovement {
             return
         }
     }

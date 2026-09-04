@@ -171,5 +171,4 @@ func ReadChunksFromPNG(infile io.ReadSeeker, visitor ChunkVisitor) error {
             return nil
         }
     }
-    return nil
 }

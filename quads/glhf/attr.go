@@ -138,45 +138,55 @@ func (at AttrType) ArrayElements() int {
     }
 }
 
-func (at AttrType) Std140BaseAlignment() int {
+// Std140Alignment returns the base alignment of a type inside a std140 uniform
+// block. Scalars align to 4, vec2 to 8, everything else - vec3, vec4 and every
+// matrix, which std140 treats as an array of column vectors - to 16.
+func (at AttrType) Std140Alignment() int {
     switch at {
-    case Int:
+    case Int, UInt, Float:
         return 4
-    case UInt:
-        return 4
-    case Float:
-        return 4
-    case Vec2:
-        return 2 * 4
-    case IVec2:
-        return 2 * 4
-    case IVec4:
-        return 4 * 4
-    case Vec3:
-        return 4 * 4
-    case Vec4:
-        return 4 * 4
-    case Mat2:
-        return 2 * 2 * 4
-    case Mat23:
-        return 2 * 4 * 4
-    case Mat24:
-        return 2 * 4 * 4
-    case Mat3:
-        return 4 * 4 * 4
-    case Mat32:
-        return 4 * 4 * 4
-    case Mat34:
-        return 4 * 4 * 4
-    case Mat4:
-        return 4 * 4 * 4
-    case Mat42:
-        return 4 * 4 * 4
-    case Mat43:
-        return 4 * 4 * 4
+    case Vec2, IVec2:
+        return 8
+    case Vec3, Vec4, IVec4:
+        return 16
+    case Mat2, Mat23, Mat24, Mat3, Mat32, Mat34, Mat4, Mat42, Mat43:
+        return 16
     default:
-        panic("size of vertex attribute type: invalid type")
+        panic("std140 alignment of attribute type: invalid type")
     }
+}
+
+// Std140Size returns the number of bytes a type occupies inside a std140 uniform
+// block. This is NOT the same as its alignment: a vec3 aligns to 16 but occupies
+// 12, and a mat3 aligns to 16 but occupies 48 (three columns padded to vec4).
+// Conflating the two writes past the end of the Go value and over the member that
+// follows it.
+func (at AttrType) Std140Size() int {
+    switch at {
+    case Int, UInt, Float:
+        return 4
+    case Vec2, IVec2:
+        return 8
+    case Vec3:
+        return 12
+    case Vec4, IVec4:
+        return 16
+    case Mat2, Mat23, Mat24:
+        return 2 * 16
+    case Mat3, Mat32, Mat34:
+        return 3 * 16
+    case Mat4, Mat42, Mat43:
+        return 4 * 16
+    default:
+        panic("std140 size of attribute type: invalid type")
+    }
+}
+
+// Std140MatchesGoLayout reports whether a Go value of this type can be uploaded to
+// a std140 block as one tightly packed block of bytes. False for the small matrix
+// types, whose columns are padded to vec4 in the block but not in mgl32.
+func (at AttrType) Std140MatchesGoLayout() bool {
+    return at.Std140Size() == at.ArrayElements()*4
 }
 
 func (at AttrType) GLSLName() string {

@@ -18,6 +18,22 @@ type Projector interface {
     GetProjectionViewMatrix() mgl32.Mat4
 }
 
+// Culler answers what a frustum can see. Both FPSCamera and PerspectiveTransform
+// implement it, so a light can cull its own shadow pass instead of borrowing the
+// camera's frustum.
+type Culler interface {
+    IsInViewFrustum(point mgl32.Vec3) bool
+    IsSphereInViewFrustum(centerWorldSpace mgl32.Vec3, radiusWorldSpace float32) bool
+    IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool
+}
+
+// Observer is whatever the scene can be drawn from: the camera for the main pass,
+// a light for a shadow pass.
+type Observer interface {
+    Projector
+    Culler
+}
+
 type Transform struct {
     parent      Transformer
     translation mgl32.Vec3

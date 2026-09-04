@@ -11,6 +11,8 @@ type Frame struct {
     color      *Texture
     depth      *Texture // TODO: optimization would be a separate stencil and depth buffer
     depthArray *TextureArray
+    depthLayers int
+    hdr         bool // colour attachment is RGBA16F rather than RGBA8
 }
 
 // NewFrameBufferWithColorDepthStencil creates a new fully transparent Frame with given dimensions in pixels.
@@ -20,8 +22,18 @@ func NewFrameBufferWithColorDepthStencil(width, height int, smooth bool) *Frame 
     return f
 }
 
-func NewFrameBufferWithDepth(width, height int) *Frame {
+// NewFrameBufferHDR is the same, with a half-float colour attachment so the scene can
+// be rendered in linear HDR and tone mapped once at the end.
+func NewFrameBufferHDR(width, height int, smooth bool) *Frame {
     f := NewFrameBuffer()
+    f.hdr = true
+    f.initColorStencilDepth(width, height, smooth)
+    return f
+}
+
+func NewFrameBufferWithDepth(width, height, layers int) *Frame {
+    f := NewFrameBuffer()
+    f.depthLayers = layers
     f.initDepthBuffer(width, height)
     return f
 }
@@ -71,15 +83,8 @@ func (f *Frame) Begin() {
 }
 
 func (f *Frame) SetDepthLayer(layer int) {
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     gl.FramebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, f.depthArray.tex.obj, 0, int32(layer))
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+    CheckGLError("Frame.SetDepthLayer")
 }
 
 // End unbinds the Frame. All DrawWithOffset operations will go to whatever was bound before this Frame.
@@ -134,7 +139,11 @@ func (f *Frame) Resize(width int, height int) {
 }
 
 func (f *Frame) initColorStencilDepth(width int, height int, smooth bool) {
-    f.color = NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D)
+    if f.hdr {
+        f.color = NewTextureHDR(width, height, smooth, gl.TEXTURE_2D)
+    } else {
+        f.color = NewTextureRGBA(width, height, smooth, make([]uint8, width*height*4), gl.TEXTURE_2D)
+    }
     f.depth = NewStencilDepthTexture(width, height)
 
     f.fb.bind()
@@ -150,7 +159,7 @@ func (f *Frame) DepthTexture() *Texture {
 }
 
 func (f *Frame) initDepthBuffer(width int, height int) {
-    f.depthArray = NewDepthTextureArray(width, height, 64, false)
+    f.depthArray = NewDepthTextureArray(width, height, f.depthLayers, false)
     f.Begin()
     // prevent OpenGL from drawing to the color buffer
     gl.DrawBuffer(gl.NONE)

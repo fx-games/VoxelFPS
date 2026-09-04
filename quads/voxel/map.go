@@ -14,6 +14,7 @@ import (
 )
 
 type Map struct {
+    meshGeneration uint64
     ChunkSizeHorizontal int32
     ChunkSizeHeight     int32
     ChunkSizeCube       int32
@@ -35,6 +36,7 @@ type Map struct {
     drawCallCount         int
     lookupVoxels          *glhf.TextureBuffer
     textureBufferIsDirty  bool
+    emissiveTextures      map[uint16]bool
     locationTex           int32
     locationVox           int32
 }
@@ -71,6 +73,13 @@ func NewMapWithEmptyChunks(width, height, depth, chunkSizeHorizontal, chunkSizeH
         }
     }
     return m
+}
+
+// VoxelDimensions returns the chunk-aligned size of the voxel grid. The lookup
+// buffer's stride, getBlockIndex and the cube shader's mapSize uniform all have to
+// agree on these numbers, so they come from here and nowhere else.
+func (m *Map) VoxelDimensions() (int32, int32, int32) {
+    return m.width * m.ChunkSizeHorizontal, m.height * m.ChunkSizeHeight, m.depth * m.ChunkSizeHorizontal
 }
 
 func (m *Map) SetLogger(mapLogger func(string), gameErrorLogger func(string)) {
@@ -132,17 +141,13 @@ func (m *Map) ForceUpload() {
     }
     m.bake3dTextureIndices()
     m.verticesUploaded = true
-    mapSizeX := m.width * m.ChunkSizeHorizontal
-    mapSizeY := m.height * m.ChunkSizeHeight
-    mapSizeZ := m.depth * m.ChunkSizeHorizontal
+    mapSizeX, mapSizeY, mapSizeZ := m.VoxelDimensions()
     println(fmt.Sprintf("[Greedy] Map with %d cubes volume (%d, %d, %d) meshed into %d triangles", mapSizeX*mapSizeY*mapSizeZ, mapSizeX, mapSizeY, mapSizeZ, m.TriangleCount()))
 
 }
 
 func (m *Map) bake3dTextureIndices() {
-    mapSizeX := m.width * m.ChunkSizeHorizontal
-    mapSizeY := m.height * m.ChunkSizeHeight
-    mapSizeZ := m.depth * m.ChunkSizeHorizontal
+    mapSizeX, mapSizeY, mapSizeZ := m.VoxelDimensions()
 
     texSize := mapSizeX * mapSizeY * mapSizeZ * 6
     lookupTable := make([]uint16, texSize)
@@ -156,14 +161,14 @@ func (m *Map) bake3dTextureIndices() {
                     continue
                 }
 
-                lookupTable[blockWallsStartIndex+0] = block.ZYTextureIndexPos()
-                lookupTable[blockWallsStartIndex+1] = block.ZYTextureIndexNeg()
+                lookupTable[blockWallsStartIndex+0] = m.withEmissiveBit(block.ZYTextureIndexPos())
+                lookupTable[blockWallsStartIndex+1] = m.withEmissiveBit(block.ZYTextureIndexNeg())
 
-                lookupTable[blockWallsStartIndex+2] = block.XZTextureIndexPos()
-                lookupTable[blockWallsStartIndex+3] = block.XZTextureIndexNeg()
+                lookupTable[blockWallsStartIndex+2] = m.withEmissiveBit(block.XZTextureIndexPos())
+                lookupTable[blockWallsStartIndex+3] = m.withEmissiveBit(block.XZTextureIndexNeg())
 
-                lookupTable[blockWallsStartIndex+4] = block.XYTextureIndexPos()
-                lookupTable[blockWallsStartIndex+5] = block.XYTextureIndexNeg()
+                lookupTable[blockWallsStartIndex+4] = m.withEmissiveBit(block.XYTextureIndexPos())
+                lookupTable[blockWallsStartIndex+5] = m.withEmissiveBit(block.XYTextureIndexNeg())
             }
         }
     }
@@ -174,12 +179,84 @@ func (m *Map) bake3dTextureIndices() {
     }
 }
 
+// EmissiveTextureBit rides in the top bit of each entry in the voxel lookup buffer.
+// Texture indices are a few hundred at most and the entries are uint16, so the bit was
+// free - no new buffer, no vertex format change, and emissive stays per face, which is
+// the resolution greedy meshing left us with anyway.
+const EmissiveTextureBit = uint16(0x8000)
+
+// EmissiveTextureMask is what is left for the texture index itself.
+const EmissiveTextureMask = uint16(0x7FFF)
+
+func (m *Map) withEmissiveBit(textureIndex uint16) uint16 {
+    if m.emissiveTextures[textureIndex] {
+        return textureIndex | EmissiveTextureBit
+    }
+    return textureIndex
+}
+
+// ToggleEmissiveTexture makes every face using this texture glow, or stops it. Returns
+// the new state. Keyed on the texture rather than on the block, so marking one screen
+// panel lights every screen panel in the level - which is usually what you want, and is
+// what makes it a one-keypress way to see the bloom threshold working.
+func (m *Map) ToggleEmissiveTexture(textureIndex uint16) bool {
+    if m.emissiveTextures == nil {
+        m.emissiveTextures = make(map[uint16]bool)
+    }
+    nowEmissive := !m.emissiveTextures[textureIndex]
+    if nowEmissive {
+        m.emissiveTextures[textureIndex] = true
+    } else {
+        delete(m.emissiveTextures, textureIndex)
+    }
+    m.textureBufferIsDirty = true
+    return nowEmissive
+}
+
+// SetEmissiveTextures replaces the whole set, for a map loader to call.
+func (m *Map) SetEmissiveTextures(textureIndices []uint16) {
+    m.emissiveTextures = make(map[uint16]bool, len(textureIndices))
+    for _, index := range textureIndices {
+        m.emissiveTextures[index] = true
+    }
+    m.textureBufferIsDirty = true
+}
+
+func (m *Map) EmissiveTextureCount() int {
+    return len(m.emissiveTextures)
+}
+
 func (m *Map) Draw(cam core.Camera) {
     chunkShader := m.chunkShader
     m.DrawWithShader(cam, chunkShader)
 }
 
-func (m *Map) DrawWithShader(cam core.Camera, chunkShader *glhf.Shader) {
+// remeshDirtyChunks brings dirty chunks back up to date, on the main thread,
+// before anything is drawn. GreedyMeshing reads chunk.data and the chunk's shared
+// chunkHelper, so meshing on a goroutine raced with the editor writing blocks -
+// and one goroutine per dirty chunk per frame was spawned until the upload landed.
+//
+// ponytail: synchronous, a couple of chunks per frame. If painting large areas
+// hitches, the fix is meshing from a copy of chunk.data, not a goroutine on the
+// live one.
+const remeshBudgetPerFrame = 2
+
+func (m *Map) remeshDirtyChunks() {
+    budget := remeshBudgetPerFrame
+    for _, chunk := range m.chunks {
+        if budget == 0 {
+            return
+        }
+        if chunk == nil || !chunk.isDirty {
+            continue
+        }
+        chunk.GenerateAndUpload()
+        budget--
+    }
+}
+
+func (m *Map) DrawWithShader(frustum core.Culler, chunkShader *glhf.Shader) {
+    m.remeshDirtyChunks()
     if m.textureBufferIsDirty {
         m.textureBufferIsDirty = false
         m.bake3dTextureIndices()
@@ -187,32 +264,16 @@ func (m *Map) DrawWithShader(cam core.Camera, chunkShader *glhf.Shader) {
     if !m.verticesUploaded {
         m.ForceUpload()
     }
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     chunkShader.Begin()
 
     m.terrainTexture.BeginOnUnit(gl.TEXTURE0)
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     m.lookupVoxels.BeginOnUnit(gl.TEXTURE1)
 
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     m.trianglesDrawn = 0
     m.drawCallCount = 0
     for _, chunk := range m.chunks {
-        if chunk == nil || !m.chunkIsVisible(cam, chunk) || chunk.chunkPosY > m.maxChunkHeightForDraw {
+        if chunk == nil || !m.chunkIsVisible(frustum, chunk) || chunk.chunkPosY > m.maxChunkHeightForDraw {
             continue
-        }
-        if chunk.isDirty {
-            chunk.isDirty = false
-            go chunk.GreedyMeshOnOtherThread()
         }
         m.trianglesDrawn += chunk.meshBuffer.TriangleCount()
         m.drawCallCount += 1
@@ -227,14 +288,14 @@ func (m *Map) DrawWithShader(cam core.Camera, chunkShader *glhf.Shader) {
     gl.ActiveTexture(gl.TEXTURE0)
 }
 
-func (m *Map) chunkIsVisible(cam core.Camera, chunk *Chunk) bool {
-    if chunk.ContainsWorldPosition(cam.GetPosition()) {
-        return true
-    }
-    // TODO: THIS is very INACCURATE
-    return cam.IsSphereInViewFrustum(chunk.AsSphere())
-    // TODO: THIS DOES NOT WORK
-    return cam.IsCubeInViewFrustum(chunk.AsAABB())
+// MeshGeneration counts chunk mesh uploads. It only has to change when the world
+// changes, so it is enough to tell a cached shadow map that it is stale.
+func (m *Map) MeshGeneration() uint64 {
+    return m.meshGeneration
+}
+
+func (m *Map) chunkIsVisible(frustum core.Culler, chunk *Chunk) bool {
+    return frustum.IsCubeInViewFrustum(chunk.AsAABB())
 }
 
 /*
@@ -858,8 +919,7 @@ func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index uint16) {
 }
 
 func (m *Map) getBlockIndex(x, y, z int32) int32 {
-    mapSizeX := m.width * m.ChunkSizeHorizontal
-    mapSizeY := m.height * m.ChunkSizeHeight
+    mapSizeX, mapSizeY, _ := m.VoxelDimensions()
     return x + y*mapSizeX + z*mapSizeX*mapSizeY
 }
 

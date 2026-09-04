@@ -17,6 +17,8 @@ type PhysicsSystem struct {
     isInsideMap             func(pos mgl32.Vec3) bool
     collisionPairsChecked   int
     gravityEnabled          bool
+    colliderScratch         []LinkedAABB
+    stepAccumulator         float64
 }
 
 // SetGravityEnabled turns gravity on or off for every object that is affected
@@ -70,8 +72,31 @@ type CollisionEvent struct {
 
 var zeroVec3 = mgl32.Vec3{0, 0, 0}
 
-// can lead to stuff leaving the map and goign to infinity
+// fixedTimeStep is the interval the simulation actually advances by. Raw frame
+// time made jump height and fall speed depend on the framerate.
+const fixedTimeStep = 1.0 / 60.0
+
+// maxFrameTime caps how much simulation one frame may ask for. Without it a long
+// stall (a breakpoint, a window drag) queues up steps that take longer to run than
+// the time they simulate, and the accumulator never drains.
+const maxFrameTime = 0.25
+
+// Update advances the simulation in fixed steps, consuming deltaTime. Leftover time
+// carries into the next frame.
 func (c *PhysicsSystem) Update(deltaTime float64) {
+    if deltaTime > maxFrameTime {
+        deltaTime = maxFrameTime
+    }
+    c.stepAccumulator += deltaTime
+    c.collisionPairsChecked = 0
+    for c.stepAccumulator >= fixedTimeStep {
+        c.step(fixedTimeStep)
+        c.stepAccumulator -= fixedTimeStep
+    }
+}
+
+// can lead to stuff leaving the map and goign to infinity
+func (c *PhysicsSystem) step(deltaTime float64) {
     /*
        The plan:
        Collide all moving objects with the world & static objects and themselves
@@ -90,7 +115,29 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
 
     // finalPos := (0.5 * accel * deltaTime^2) + (vel * deltaTime) + pos
 
-    c.collisionPairsChecked = 0
+    // One closure and one scratch slice per step instead of per object: the
+    // collision test consumes the returned colliders before asking for the next
+    // cell, so a single reused buffer is enough.
+    getCollidersAt := func(x, y, z int32) []LinkedAABB {
+        c.colliderScratch = c.colliderScratch[:0]
+        if c.isSolid(x, y, z) {
+            c.colliderScratch = append(c.colliderScratch, LinkedAABB{
+                AABB: voxel.NewAABBFromMin(mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1}),
+            })
+            return c.colliderScratch
+        }
+        for collider := range c.objectsOnGrid[core.Int3{X: x, Y: y, Z: z}] {
+            if !collider.GameObject().IsAlive() {
+                continue
+            }
+            c.colliderScratch = append(c.colliderScratch, LinkedAABB{
+                AABB:       collider.AABB(),
+                GameObject: collider,
+            })
+        }
+        return c.colliderScratch
+    }
+
     for id := len(c.movingObjects) - 1; id >= 0; id-- {
         obj := c.movingObjects[id]
 
@@ -124,29 +171,6 @@ func (c *PhysicsSystem) Update(deltaTime float64) {
             continue
         }
 
-        getCollidersAt := func(x, y, z int32) []LinkedAABB {
-            if c.isSolid(x, y, z) {
-                return []LinkedAABB{{
-                    AABB: voxel.NewAABBFromMin(mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1}),
-                }}
-            }
-            mapPos := core.Int3{X: x, Y: y, Z: z}
-            colliders, exists := c.objectsOnGrid[mapPos]
-            if !exists {
-                return nil
-            }
-            result := make([]LinkedAABB, 0, len(colliders))
-            for collider := range colliders {
-                if !collider.GameObject().IsAlive() {
-                    continue
-                }
-                result = append(result, LinkedAABB{
-                    AABB:       collider.AABB(),
-                    GameObject: collider,
-                })
-            }
-            return result
-        }
 
         // The collision test walks every grid cell in the bounding box of the
         // move, so a long move is split up: one box per step instead of one

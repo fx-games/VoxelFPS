@@ -84,8 +84,16 @@ func NewGuiOptionAction(name string, action func()) *GuiOptionAction {
 }
 
 type GuiOptionBool struct {
-    name  string
-    value *bool
+    name     string
+    value    *bool
+    activate func()
+}
+
+// ActivateFunc runs after the value flips, for options that have to be applied
+// rather than just read. Same shape as GuiOptionFloat's.
+func (o *GuiOptionBool) ActivateFunc(activate func()) *GuiOptionBool {
+    o.activate = activate
+    return o
 }
 
 func NewGuiOptionBool(name string, value *bool) *GuiOptionBool {
@@ -104,14 +112,23 @@ func (o *GuiOptionBool) String() string {
 
 func (o *GuiOptionBool) More() {
     *o.value = true
+    o.applied()
 }
 
 func (o *GuiOptionBool) Less() {
     *o.value = false
+    o.applied()
 }
 
 func (o *GuiOptionBool) Activate() {
     *o.value = !*o.value
+    o.applied()
+}
+
+func (o *GuiOptionBool) applied() {
+    if o.activate != nil {
+        o.activate()
+    }
 }
 
 type GuiOptionFloat struct {

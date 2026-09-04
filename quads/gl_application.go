@@ -46,6 +46,17 @@ type GlApplication struct {
     ShouldDrawParticles    bool
     ShouldDrawDebugInfo    bool
     ShouldRenderFullscreen bool
+
+    // ConstrainToWorkArea keeps a borderless window inside the desktop's work area,
+    // leaving the macOS menu bar and Dock visible on top of it. Off by default:
+    // borderless covers the whole screen.
+    ConstrainToWorkArea bool
+
+    // Where the window sat before it went fullscreen. GLFW does not keep this:
+    // leaving fullscreen means handing SetMonitor a position and a size, and
+    // without the real ones there is nothing to go back to.
+    windowedX, windowedY          int
+    windowedWidth, windowedHeight int
     ShouldUseVsync         bool
 
     Camera       *core.FPSCamera
@@ -83,9 +94,29 @@ type GlApplication struct {
 
     shadowBuffer           *glhf.Frame
     postFrameBuffer        *glhf.Frame
+    bloomBuffers           [2]*glhf.Frame
+    bloomShader            *glhf.Shader
+    bloomQuad              *glhf.VertexArray[glhf.GlFloat]
+    bloomStrength          float32
+    bloomThreshold         float32
+    emissiveStrength       float32
+    emissiveCutoff         float32
+    emissiveSaturation     float32
+    exposure               float32
+    gamma                  float32
+    ShouldDrawBloom        bool
     screenQuad             *glhf.VertexArray[glhf.GlFloat]
     UIScale                mgl32.Vec2
     ScreenCoordScale       mgl32.Vec2
+
+    // Multiplies the size of everything drawn in the 2D GUI pass. 1 is the size the
+    // GUI has always been drawn at, which is already one window pixel per GUI unit.
+    guiScale float32
+
+    // The drawable size in pixels, which is not the window size in screen
+    // coordinates on a hidpi display. Only GLFW knows the ratio between them, so
+    // it is asked rather than derived from the monitor's content scale.
+    FramebufferWidth, FramebufferHeight int
     drawCallCountParticles int
     drawCallCountMeshes    int
     drawCallCountSprites   int
@@ -105,6 +136,7 @@ type GlApplication struct {
 
     spriteBatches    []*glhf.SpriteBatch
     shadowResolution int
+    shadowPassCount  int
 }
 
 // Start starts the OpenGL application with the given parentApp and screen dimensions.
@@ -185,15 +217,24 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         shadowResolution := 512
         glApp := &GlApplication{
-            WindowWidth:      winSizeX,
-            WindowHeight:     winSizeY,
-            Window:           window,
-            TerminateFunc:    terminateFunc,
-            TimeFactor:       1.0,
-            shadowResolution: shadowResolution,
-            Camera:           fpsCamera,
-            guiShader:        LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
-            postShader:       LoadPostShader(),
+            WindowWidth:        winSizeX,
+            WindowHeight:       winSizeY,
+            Window:             window,
+            TerminateFunc:      terminateFunc,
+            TimeFactor:         1.0,
+            shadowResolution:   shadowResolution,
+            Camera:             fpsCamera,
+            guiShader:          LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
+            postShader:         LoadPostShader(mainUboGLSL),
+            bloomShader:        LoadBloomShader(),
+            bloomStrength:      DefaultBloomStrength,
+            bloomThreshold:     DefaultBloomThreshold,
+            emissiveStrength:   DefaultEmissiveStrength,
+            emissiveCutoff:     DefaultEmissiveCutoff,
+            emissiveSaturation: DefaultEmissiveSaturation,
+            exposure:           DefaultExposure,
+            gamma:              DefaultGamma,
+            ShouldDrawBloom:    true,
 
             quadShader: LoadQuadShader(injectedGLSL),
             cubeShader: LoadCubeShader(injectedGLSL),
@@ -203,19 +244,29 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             cubeShaderDepth: LoadCubeShaderDepthPass(injectedGLSL),
             meshShaderDepth: LoadMeshShaderDepthPass(injectedGLSL),
 
-            shadowBuffer:    glhf.NewFrameBufferWithDepth(shadowResolution, shadowResolution),
-            postFrameBuffer: glhf.NewFrameBufferWithColorDepthStencil(fbSizeX, fbSizeY, false),
+            shadowBuffer: glhf.NewFrameBufferWithDepth(shadowResolution, shadowResolution, MaxLights),
+            // HDR: the scene keeps values past 1.0 all the way to the post pass, which
+            // is what lets the bloom threshold tell a blown-out highlight from a merely
+            // bright texel, and what lets tone mapping happen once instead of per shader.
+            postFrameBuffer: glhf.NewFrameBufferHDR(fbSizeX, fbSizeY, false),
 
             lineShader:       LoadLineShader(fpsCamera),
             skyboxShader:     LoadSkyboxShader(fpsCamera, mainUboGLSL),
             particleSystems:  make(map[ParticleName]*glhf.ParticleSystem),
-            UIScale:          uiScale,
-            ScreenCoordScale: mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
+            UIScale:           uiScale,
+            ScreenCoordScale:  mgl32.Vec2{screenCoordScaleX, screenCoordScaleY},
+            FramebufferWidth:  fbSizeX,
+            FramebufferHeight: fbSizeY,
+            guiScale:          1,
             AtlasMap:         atlasMap,
             AtlasSprites:     atlasSprites,
 
             ShouldDrawSprites: true, ShouldDrawMeshes: true, ShouldDrawParticles: true, ShouldUseVsync: true,
         }
+
+        // Baseline for the fullscreen toggle, in case the first thing that happens
+        // is a switch to fullscreen.
+        glApp.rememberWindowedBounds()
 
         window.SetKeyCallback(glApp.KeyCallback)
         window.SetCursorPosCallback(glApp.MousePosCallback)
@@ -247,13 +298,11 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
         glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
 
-        postShader := glApp.postShader
-        glApp.screenQuad = PostQuad(postShader)
-
-        postShader.Begin()
-        postShader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
-        //postShader.BindSamplerNameToTextureUnit("depthStencil", gl.TEXTURE1)
-        postShader.End()
+        glApp.screenQuad = PostQuad(glApp.postShader)
+        // The bloom shader needs its own vertex array: glhf resolves attribute
+        // locations against the shader the array was built for.
+        glApp.bloomQuad = PostQuad(glApp.bloomShader)
+        glApp.initBloomBuffers(fbSizeX, fbSizeY)
 
         skyboxVA := glhf.NewVertexArray[glhf.GlFloat](glApp.skyboxShader, false)
         skyboxVA.Begin()
@@ -262,6 +311,9 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         skyboxVA.DebugName = "SkyBox"
         glApp.skybox = skyboxVA
 
+        // The post shader tone maps, so it reads exposure and gamma from the same UBO
+        // the scene shaders use.
+        glhf.BindUniformBlockTo(glApp.postShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.skyboxShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.cubeShader.ID(), mainUboBlockName, 0)
         glhf.BindUniformBlockTo(glApp.quadShader.ID(), mainUboBlockName, 0)
@@ -277,6 +329,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         //ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
         mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
+        mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{DefaultExposure, DefaultGamma})
         mainUbo.End()
 
         glApp.mainUbo = mainUbo
@@ -295,8 +348,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         glApp.lightsUbo.SetLights([]LightInfo{
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: flashlightOffColor},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 1}},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 1}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 6}},
+            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 6}},
         })
 
         parentApp.Init(glApp, mapLoad)
@@ -306,6 +359,11 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
     glApp := glAppUntyped.(*GlApplication)
     glApp.StartEventLoop()
 }
+
+// maxFrameDelta caps the timestep handed to update and physics. Long frames are
+// reported as this instead, so a stalled frame slows the world down rather than
+// teleporting everything in it.
+const maxFrameDelta = 0.1
 
 func (a *GlApplication) StartEventLoop() {
     defer glhf.Call(a.TerminateFunc)
@@ -323,6 +381,10 @@ func (a *GlApplication) StartEventLoop() {
             time = glfw.GetTime()
             elapsed := time - previousTime
             previousTime = time
+            // A stall - dragging the window, a breakpoint, alt-tab - otherwise hands
+            // the next frame a delta of several seconds, and physics integrates
+            // straight through the level in one step.
+            elapsed = math.Min(elapsed, maxFrameDelta)
             deltaTime := elapsed * a.TimeFactor
 
             { // Update BEGIN
@@ -342,20 +404,42 @@ func (a *GlApplication) StartEventLoop() {
                 a.lightsUbo.updateLightAt(0)
             } // Update END
 
-            gl.ClearColor(a.CeilingColor.X(), a.CeilingColor.Y(), a.CeilingColor.Z(), a.CeilingColor.W())
+            // The scene buffer is linear HDR, so the authored ceiling colour is lifted to
+            // the value that tone maps back to itself. Clearing with the raw colour would
+            // come out darker on screen.
+            gl.ClearColor(
+                HDRFromDisplay(a.CeilingColor.X(), a.exposure, a.gamma),
+                HDRFromDisplay(a.CeilingColor.Y(), a.exposure, a.gamma),
+                HDRFromDisplay(a.CeilingColor.Z(), a.exposure, a.gamma),
+                a.CeilingColor.W(),
+            )
 
             { // BEGIN SHADOW MAPPING
                 gl.Viewport(0, 0, int32(a.shadowResolution), int32(a.shadowResolution))
                 a.shadowBuffer.Begin()
+                // ponytail: no front-face culling in the depth pass. It is the usual
+                // cure for shadow acne, but billboard sprites are single quads, so
+                // culling their front faces would drop them out of the shadow map
+                // entirely. The slope-scaled bias in ShadowCalculation covers it.
 
-                for i := 0; i < len(a.lightsUbo.lights); i++ { // ITERATE ALL LIGHTS
+                sceneSignature := a.shadowSceneSignature()
+                a.shadowPassCount = 0
+                for i := range a.lightsUbo.lights {
+                    light := &a.lightsUbo.lights[i]
+                    // A light that is off contributes nothing, and a light whose frustum
+                    // and scene are unchanged still has a valid depth map from last frame.
+                    if light.IsOff() || !light.NeedsShadowUpdate(sceneSignature) {
+                        continue
+                    }
                     a.shadowBuffer.SetDepthLayer(i)
                     gl.Clear(gl.DEPTH_BUFFER_BIT)
-                    a.draw3dScene(a.lightsUbo.lights[i], a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth)
+                    a.draw3dScene(light, a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth, nil)
+                    light.MarkShadowRendered(sceneSignature)
+                    a.shadowPassCount++
                 }
 
                 a.shadowBuffer.End()
-                gl.Viewport(0, 0, int32(float32(a.WindowWidth)*a.UIScale.X()), int32(float32(a.WindowHeight)*a.UIScale.Y()))
+                gl.Viewport(0, 0, int32(a.FramebufferWidth), int32(a.FramebufferHeight))
             } // END SHADOW MAPPING
 
             { // BEGIN RENDER 3D SCENE
@@ -363,11 +447,11 @@ func (a *GlApplication) StartEventLoop() {
                 a.shadowBuffer.DepthTextureArray().BeginOnUnit(gl.TEXTURE2)
 
                 gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-                a.draw3dScene(a.Camera, a.cubeShader, a.meshShader, a.quadShader)
-
-                if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
-                    a.drawSkybox(a.skyboxCubeMap)
-                }
+                a.draw3dScene(a.Camera, a.cubeShader, a.meshShader, a.quadShader, func() {
+                    if a.skyboxCubeMap != nil && a.ShouldDrawSkybox {
+                        a.drawSkybox(a.skyboxCubeMap)
+                    }
+                })
 
                 a.draw3dDebug()
 
@@ -375,27 +459,31 @@ func (a *GlApplication) StartEventLoop() {
                 a.postFrameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
             } // End Render 3D Scene
 
-            { // DRAW FRAMEBUFFER TO SCREEN & POSTPROCESSING
-                a.postShader.Begin()
+            { // BLOOM, TONE MAPPING, THEN THE SCENE TO THE SCREEN
+                bloomResult := a.renderBloom()
 
-                //a.frameBuffer.Blit(nil, 0, 0, int(float32(a.WindowWidth)*a.UIScale.X()), int(float32(a.WindowHeight)*a.UIScale.Y()), 0, 0, a.WindowWidth*2, a.WindowHeight*2)
+                gl.Viewport(0, 0, int32(a.FramebufferWidth), int32(a.FramebufferHeight))
+                a.postShader.Begin()
+                a.postShader.SetUniformAttr(PostShaderBloomStrength, a.bloomStrengthInUse())
+
                 a.postFrameBuffer.Texture().BeginOnUnit(gl.TEXTURE0)
-                a.postFrameBuffer.DepthTexture().BeginOnUnit(gl.TEXTURE1)
+                bloomResult.Texture().BeginOnUnit(gl.TEXTURE1)
 
                 a.screenQuad.Begin()
                 a.screenQuad.Draw()
                 a.screenQuad.End()
 
-                a.postFrameBuffer.DepthTexture().End()
+                bloomResult.Texture().End()
                 a.postFrameBuffer.Texture().End()
 
                 a.postShader.End()
                 gl.ActiveTexture(gl.TEXTURE0)
-            } // End Draw Framebuffer to Screen & Postprocessing
+            } // End bloom, tone mapping and the scene to the screen
 
             // DRAW UI ON TOP OF POSTPROCESSING
             { // Begin Draw 2D Scene
                 gl.Clear(gl.DEPTH_BUFFER_BIT)
+                gl.Enable(gl.BLEND)
                 a.guiShader.Begin()
                 glhf.PaintersOffset = 0.0001
                 for _, batch := range a.spriteBatches {
@@ -417,6 +505,7 @@ func (a *GlApplication) StartEventLoop() {
                     batch.Render()
                 }
                 a.guiShader.End()
+                gl.Disable(gl.BLEND)
             } // End Draw 2D Scene
 
             a.FramesPerSecond = 1.0 / elapsed
@@ -436,6 +525,8 @@ func (a *GlApplication) StartEventLoop() {
                 }
             }
 
+            glhf.CheckGLError("end of frame") // no-op unless built with -tags debugGL
+
             a.Window.SwapBuffers()
             glfw.PollEvents()
             a.Ticks++
@@ -443,16 +534,56 @@ func (a *GlApplication) StartEventLoop() {
     }
 }
 
-func (a *GlApplication) draw3dScene(observer core.Projector, chunkShader, meshShader, spriteShader *glhf.Shader) {
+// shadowSceneSignature hashes everything a depth map depends on: the world mesh
+// generation plus the position of every caster. Hashing a few hundred positions
+// costs far less than the full scene redraw it lets an unchanged light skip.
+// Per-object hashes are summed rather than chained, because the drawers iterate
+// maps and the order changes from frame to frame.
+func (a *GlApplication) shadowSceneSignature() uint64 {
+    signature := a.CubeMap.MeshGeneration() * 0x9E3779B97F4A7C15
+    hashPos := func(pos mgl32.Vec3) {
+        h := uint64(14695981039346656037)
+        for _, f := range [3]float32{pos.X(), pos.Y(), pos.Z()} {
+            h = (h ^ uint64(math.Float32bits(f))) * 1099511628211
+        }
+        signature += h
+    }
+    a.Sprites.ForEachCaster(hashPos)
+    a.Meshes.ForEachCaster(hashPos)
+    return signature
+}
+
+// draw3dScene draws the world from the observer's point of view. betweenPasses, if
+// given, runs after the opaque geometry and before the alpha-blended sprites - that
+// is where the skybox goes, so translucent sprites blend against the sky instead of
+// the clear colour. The shadow pass passes nil: it has no sky and writes depth only.
+func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshShader, spriteShader *glhf.Shader, betweenPasses func()) {
     a.setMainUBOCam(observer.GetPosition(), observer.GetForward(), observer.GetProjectionViewMatrix())
 
-    a.CubeMap.DrawWithShader(a.Camera, chunkShader) // camera only used for frustum culling
+    // Cull against the observer, not the camera: a shadow pass has to include every
+    // caster inside the light's frustum, including the ones behind the player.
+    a.CubeMap.DrawWithShader(observer, chunkShader)
 
     if a.ShouldDrawMeshes {
-        a.Meshes.Draw(a.Camera, meshShader) // camera only used for frustum culling
+        a.Meshes.Draw(observer, meshShader)
     }
+    // Sprites keep blending: the atlases have soft edges and the shader only
+    // discards fully transparent texels. Chunks and meshes are opaque and no
+    // longer pay for the blend unit.
     if a.ShouldDrawSprites {
-        a.Sprites.Draw(a.Camera, observer, spriteShader) // this one actually changes viewdirection depending on the camera..
+        gl.Enable(gl.BLEND)
+        a.Sprites.Draw(observer, spriteShader)
+        gl.Disable(gl.BLEND)
+    }
+
+    if betweenPasses != nil {
+        betweenPasses()
+    }
+
+    if a.ShouldDrawSprites {
+        gl.Enable(gl.BLEND)
+        a.Sprites.DrawTransparent(observer, spriteShader)
+        gl.Disable(gl.BLEND)
     }
     if a.ShouldDrawParticles {
         //a.DrawParticles(cam)
@@ -574,7 +705,7 @@ func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
 }
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
     a.minimap = NewMiniMap(a.guiShader, width, height, getColor)
-    a.minimap.Resize(a.WindowWidth, a.WindowHeight)
+    a.minimap.Resize(a.GuiSize())
     a.ShouldDrawMinimap = true
 }
 
@@ -600,26 +731,144 @@ func (a *GlApplication) GetVideoModes() []*glfw.VidMode {
     return monitor.GetVideoModes()
 }
 
-func (a *GlApplication) SetWindowSize(vMode *glfw.VidMode) {
-    a.Window.SetMonitor(nil, 0, 0, vMode.Width, vMode.Height, vMode.RefreshRate)
-    a.OnResize(a.Window.GetSize())
-}
+// WindowMode is how the window covers the screen.
+type WindowMode int
 
-func (a *GlApplication) SetFullscreen() {
-    monitor := glfw.GetPrimaryMonitor()
-    videoMode := monitor.GetVideoMode()
-    a.Window.SetMonitor(monitor, 0, 0, videoMode.Width, videoMode.Height, videoMode.RefreshRate)
-    a.OnResize(a.Window.GetSize())
-}
+const (
+    WindowModeWindowed WindowMode = iota
+    WindowModeBorderless
+    WindowModeFullscreen
+)
 
-func (a *GlApplication) SetCubeShaderDebugSwitch(debugValue bool) {
-    val := 0.0
-    if debugValue {
-        val = 1.0
+// WindowModeNames are the labels for the modes, indexed by WindowMode.
+var WindowModeNames = []string{"Windowed", "Borderless", "Fullscreen"}
+
+// WindowMode reports the current mode by asking the window, so there is no second
+// copy of this state to go stale. Undecorated means borderless: nothing else takes
+// the decoration off.
+func (a *GlApplication) WindowMode() WindowMode {
+    switch {
+    case a.Window.GetMonitor() != nil:
+        return WindowModeFullscreen
+    case a.Window.GetAttrib(glfw.Decorated) == glfw.False:
+        return WindowModeBorderless
     }
-    a.cubeShader.Begin()
-    a.cubeShader.SetUniformAttr(CubeShaderDebugSwitch, float32(val))
-    a.cubeShader.End()
+    return WindowModeWindowed
+}
+
+// IsFullscreen is true for both of the screen-covering modes.
+func (a *GlApplication) IsFullscreen() bool {
+    return a.WindowMode() != WindowModeWindowed
+}
+
+// rememberWindowedBounds records the current position and size, so going back to
+// windowed can put the window where it was.
+func (a *GlApplication) rememberWindowedBounds() {
+    if a.IsFullscreen() {
+        return // the saved bounds are already the windowed ones
+    }
+    a.windowedX, a.windowedY = a.Window.GetPos()
+    a.windowedWidth, a.windowedHeight = a.Window.GetSize()
+}
+
+// nativeVideoMode is the panel's own resolution: the largest mode the display
+// offers. A display's mode list tops out at what the hardware actually has, so the
+// biggest entry is the native one. Not monitor.GetVideoMode(), which on macOS
+// reports the desktop's scaled UI size instead - see SetWindowMode.
+func nativeVideoMode(monitor *glfw.Monitor) *glfw.VidMode {
+    modes := monitor.GetVideoModes()
+    best := monitor.GetVideoMode()
+    for _, mode := range modes {
+        if mode.Width*mode.Height > best.Width*best.Height {
+            best = mode
+        }
+    }
+    return best
+}
+
+// SetWindowMode switches between windowed, borderless and real fullscreen.
+//
+// The two screen-covering modes differ in what they render into, and on macOS the
+// numbers are not the ones the API names suggest. Measured on a Mac with a 2880x1864
+// panel whose desktop is set to "looks like 1710x1107":
+//
+//   - Borderless matches the desktop: a 3420x2214 framebuffer (1710x1107 at a
+//     backing scale of 2), which the window server then downsamples to the panel.
+//     That is 39% more fragments than the panel has, spent on supersampling.
+//   - Fullscreen takes the panel's own 2880x1864, one fragment per physical pixel,
+//     and asks the window server to resample nothing.
+//
+// The desktop's 1710x1107 is not in the mode list and cannot be: on Apple Silicon a
+// scaled desktop is not a display mode, it is the compositor rendering large and
+// downsampling. The panel's real mode, 2880x1864, is listed - it is the last entry.
+func (a *GlApplication) SetWindowMode(mode WindowMode) {
+    if mode == a.WindowMode() {
+        return
+    }
+    a.applyWindowMode(mode)
+}
+
+// RefreshWindowMode re-applies the current mode, for when something it depends on
+// has changed - ConstrainToWorkArea, say.
+func (a *GlApplication) RefreshWindowMode() {
+    a.applyWindowMode(a.WindowMode())
+}
+
+func (a *GlApplication) applyWindowMode(mode WindowMode) {
+    a.rememberWindowedBounds()
+
+    // Leave whatever the window is in now, so each case starts from a plain window.
+    if a.Window.GetMonitor() != nil {
+        a.Window.SetMonitor(nil, a.windowedX, a.windowedY, a.windowedWidth, a.windowedHeight, glfw.DontCare)
+    }
+    showSystemChrome()
+    a.Window.SetAttrib(glfw.Decorated, glfw.True)
+    a.Window.SetAttrib(glfw.Resizable, glfw.False)
+
+    monitor := glfw.GetPrimaryMonitor()
+    switch mode {
+    case WindowModeWindowed:
+        a.Window.SetPos(a.windowedX, a.windowedY)
+        a.Window.SetSize(a.windowedWidth, a.windowedHeight)
+    case WindowModeBorderless:
+        if a.ConstrainToWorkArea {
+            // Sit inside the work area and leave the menu bar and Dock alone. The
+            // clamp below would force this anyway; asking for it is clearer than
+            // being overruled.
+            areaX, areaY, areaWidth, areaHeight := monitor.GetWorkarea()
+            a.Window.SetAttrib(glfw.Decorated, glfw.False)
+            a.Window.SetPos(areaX, areaY)
+            a.Window.SetSize(areaWidth, areaHeight)
+            break
+        }
+        videoMode := monitor.GetVideoMode()
+        monitorX, monitorY := monitor.GetPos()
+        // Resizable, only while borderless. Cocoa clamps a non-resizable window to
+        // the work area, which starts below the menu bar, so the window landed 29
+        // points down: an undrawn strip at the top and the bottom hanging off the
+        // screen. There is nothing to drag on an undecorated window anyway.
+        a.Window.SetAttrib(glfw.Resizable, glfw.True)
+        a.Window.SetAttrib(glfw.Decorated, glfw.False)
+        a.Window.SetPos(monitorX, monitorY)
+        a.Window.SetSize(videoMode.Width, videoMode.Height)
+        hideSystemChrome()
+    case WindowModeFullscreen:
+        videoMode := nativeVideoMode(monitor)
+        a.Window.SetMonitor(monitor, 0, 0, videoMode.Width, videoMode.Height, videoMode.RefreshRate)
+    }
+
+    a.ShouldRenderFullscreen = a.IsFullscreen()
+    a.OnResize(a.Window.GetSize())
+}
+
+// SetWindowSize applies a windowed resolution, leaving any screen-covering mode.
+func (a *GlApplication) SetWindowSize(vMode *glfw.VidMode) {
+    a.SetWindowMode(WindowModeWindowed)
+    a.windowedWidth, a.windowedHeight = vMode.Width, vMode.Height
+    // Keep the window where it is. Moving it to 0,0 puts the title bar under the
+    // menu bar on macOS, and then it cannot be dragged back.
+    a.Window.SetSize(vMode.Width, vMode.Height)
+    a.OnResize(a.Window.GetSize())
 }
 
 func (a *GlApplication) DrawAABBs() {
@@ -671,6 +920,181 @@ func (a *GlApplication) DrawParticles(cam core.Camera) {
         a.drawCallCountParticles += 2
     }
 }
+
+// bloomDownscale is how much smaller the bloom chain runs than the scene. A glow is low
+// frequency by definition, so a quarter resolution costs a sixteenth of the fragments,
+// the free bilinear upsample at the end widens it further, and every blur tap covers
+// four times as much screen as it would at full resolution - which is most of what
+// makes the glow reach far enough to read as light bleeding.
+const bloomDownscale = 4
+
+func (a *GlApplication) initBloomBuffers(width, height int) {
+    w, h := max(width/bloomDownscale, 1), max(height/bloomDownscale, 1)
+    for i := range a.bloomBuffers {
+        // smooth: the blur taps and the upsample into the post pass both want linear
+        // filtering, which is half the reason the chain can afford to be this small.
+        a.bloomBuffers[i] = glhf.NewFrameBufferHDR(w, h, true)
+    }
+}
+
+// bloomStrengthInUse is 0 when bloom is switched off, which turns the composite in the
+// post shader into a plain tone map without needing a second shader for the case.
+func (a *GlApplication) bloomStrengthInUse() float32 {
+    if !a.ShouldDrawBloom {
+        return 0
+    }
+    return a.bloomStrength
+}
+
+// renderBloom extracts the over-threshold part of the HDR scene into a half resolution
+// buffer and blurs it, ping-ponging between the two bloom buffers: horizontal into one,
+// vertical back into the other. Returns whichever buffer holds the result.
+//
+// ponytail: one blur width, no mip chain. A mip pyramid gives a softer, wider glow for
+// more passes and more buffers; worth it only if this reads too tight.
+func (a *GlApplication) renderBloom() *glhf.Frame {
+    source := a.bloomBuffers[0]
+    target := a.bloomBuffers[1]
+
+    if !a.ShouldDrawBloom {
+        // Still has to be a black texture rather than a stale one: the post shader
+        // multiplies it by a strength of zero, but sampling a buffer that was never
+        // cleared this session is asking for trouble.
+        source.Begin()
+        gl.Viewport(0, 0, int32(source.Texture().Width()), int32(source.Texture().Height()))
+        gl.ClearColor(0, 0, 0, 1)
+        gl.Clear(gl.COLOR_BUFFER_BIT)
+        source.End()
+        return source
+    }
+
+    gl.Disable(gl.DEPTH_TEST)
+    defer gl.Enable(gl.DEPTH_TEST)
+
+    a.bloomShader.Begin()
+    a.bloomQuad.Begin()
+    gl.Viewport(0, 0, int32(source.Texture().Width()), int32(source.Texture().Height()))
+
+    // Extract: HDR scene -> bloomBuffers[0]
+    a.bloomShader.SetUniformAttr(BloomShaderMode, BloomModeExtract)
+    a.bloomShader.SetUniformAttr(BloomShaderThreshold, a.bloomThreshold)
+    source.Begin()
+    a.postFrameBuffer.Texture().BeginOnUnit(gl.TEXTURE0)
+    a.bloomQuad.Draw()
+    a.postFrameBuffer.Texture().End()
+    source.End()
+
+    // Blur: alternate horizontal and vertical, ping-ponging between the two buffers.
+    // Each horizontal+vertical pair doubles the tap spacing, so three pairs reach far
+    // wider than three passes at a fixed radius would, for the same six draws.
+    a.bloomShader.SetUniformAttr(BloomShaderMode, BloomModeBlur)
+    radius := bloomBaseBlurRadius
+    for pass := 0; pass < bloomBlurPasses*2; pass++ {
+        direction := mgl32.Vec2{1, 0}
+        if pass%2 == 1 {
+            direction = mgl32.Vec2{0, 1}
+        }
+        a.bloomShader.SetUniformAttr(BloomShaderTexelDirection, direction)
+        a.bloomShader.SetUniformAttr(BloomShaderBlurRadius, radius)
+        if pass%2 == 1 {
+            radius *= 2
+        }
+
+        target.Begin()
+        source.Texture().BeginOnUnit(gl.TEXTURE0)
+        a.bloomQuad.Draw()
+        source.Texture().End()
+        target.End()
+
+        source, target = target, source
+    }
+
+    a.bloomQuad.End()
+    a.bloomShader.End()
+
+    // source is the buffer last written to, after the final swap.
+    return source
+}
+
+// SetExposure and SetGamma drive the tone map for every shader at once, through the
+// main UBO. Exposure is the knob that decides how far into the highlights the image
+// rolls before it clips.
+func (a *GlApplication) SetExposure(exposure float32) {
+    a.exposure = exposure
+    a.updateToneMapping()
+}
+
+func (a *GlApplication) SetGamma(gamma float32) {
+    a.gamma = gamma
+    a.updateToneMapping()
+}
+
+func (a *GlApplication) Exposure() float32 { return a.exposure }
+func (a *GlApplication) Gamma() float32    { return a.gamma }
+
+func (a *GlApplication) updateToneMapping() {
+    a.mainUbo.Begin()
+    a.mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{a.exposure, a.gamma})
+    a.mainUbo.End()
+}
+
+// SetBloom takes the threshold above which a fragment starts to glow and how much of
+// the blurred result is added back. Threshold is in HDR units, so 1.0 is "as bright as
+// white" and anything under it never blooms.
+// SetEmissiveStrength is how far past white a face marked emissive is pushed. It is
+// the other half of the bloom knob: this decides what glows, the bloom threshold
+// decides how much of it blooms.
+func (a *GlApplication) SetEmissiveStrength(strength float32) {
+    a.emissiveStrength = strength
+    a.cubeShader.Begin()
+    a.cubeShader.SetUniformAttr(CubeShaderEmissiveStrength, strength)
+    a.cubeShader.End()
+}
+
+// SetEmissiveCutoff is the luminance above which a texel of an emissive texture glows.
+// Turn it down towards 0 to light the whole tile, up to pick out only the brightest
+// screens on a busy panel.
+func (a *GlApplication) SetEmissiveCutoff(cutoff float32) {
+    a.emissiveCutoff = cutoff
+    a.cubeShader.Begin()
+    a.cubeShader.SetUniformAttr(CubeShaderEmissiveCutoff, cutoff)
+    a.cubeShader.End()
+}
+
+// SetEmissiveSaturation is how colourful a texel also has to be before it glows. It is
+// what keeps bare metal dark: raise it to light only strongly coloured fittings, drop it
+// to 0 to go back to a pure brightness mask.
+func (a *GlApplication) SetEmissiveSaturation(saturation float32) {
+    a.emissiveSaturation = saturation
+    a.cubeShader.Begin()
+    a.cubeShader.SetUniformAttr(CubeShaderEmissiveSaturation, saturation)
+    a.cubeShader.End()
+}
+
+func (a *GlApplication) EmissiveSaturation() float32 { return a.emissiveSaturation }
+
+func (a *GlApplication) EmissiveStrength() float32 { return a.emissiveStrength }
+func (a *GlApplication) EmissiveCutoff() float32   { return a.emissiveCutoff }
+
+// ToggleEmissiveTextureAt makes every face using the texture on this block side glow,
+// or stops it. Returns the texture index and its new state.
+func (a *GlApplication) ToggleEmissiveTextureAt(gridPos voxel.Int3, side voxel.CubeSide) (uint16, bool, bool) {
+    block := a.CubeMap.GetGlobalBlock(gridPos.X, gridPos.Y, gridPos.Z)
+    if block == nil || block.IsAir() {
+        return 0, false, false
+    }
+    textureIndex := block.GetTexture(side)
+    return textureIndex, a.CubeMap.ToggleEmissiveTexture(textureIndex), true
+}
+
+func (a *GlApplication) SetBloom(threshold, strength float32) {
+    a.bloomThreshold = threshold
+    a.bloomStrength = strength
+}
+
+func (a *GlApplication) BloomThreshold() float32 { return a.bloomThreshold }
+func (a *GlApplication) BloomStrength() float32  { return a.bloomStrength }
+
 func (a *GlApplication) drawSkybox(cubemap *glhf.Cubemap) {
     projection := a.Camera.GetProjectionMatrix()
     view := a.Camera.GetViewMatrix().Mat3().Mat4() // remove translation
@@ -724,7 +1148,8 @@ func (a *GlApplication) OpenTextureCube(atlasForSelection *glhf.TextureAtlasFixe
 
 func (a *GlApplication) OpenAtlasPicker(atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
     picker := NewGuiAtlasPicker(a.UiContext(), atlasForSelection)
-    picker.HandleResize(a.WindowWidth, a.WindowHeight, a.UIScale)
+    guiWidth, guiHeight := a.GuiSize()
+    picker.HandleResize(guiWidth, guiHeight, a.UIScale)
     return picker
 }
 func (a *GlApplication) OpenConfigMenu() *GuiConfig {
@@ -739,7 +1164,12 @@ func (a *GlApplication) SetFog(colour mgl32.Vec3, near, far float32) {
 
 // light 0 is the flashlight, parented to the camera. Off means black, the shadow pass still
 // runs for it, which costs a little but keeps the light indices stable.
-var flashlightColor = mgl32.Vec4{0.7, 0.7, 0.7, 1}
+//
+// The alpha is intensity, not opacity, and it is large because the falloff is
+// inverse square: it is the brightness at LIGHT_REF_DIST (2.5 units), not a
+// multiplier on the final colour. Reach and cone angle come from its shadow frustum
+// (45 degrees, 15 units) and are not set here.
+var flashlightColor = mgl32.Vec4{0.7, 0.7, 0.7, 8.0}
 var flashlightOffColor = mgl32.Vec4{0, 0, 0, 1}
 
 func (a *GlApplication) ToggleFlashlight() bool {
@@ -781,8 +1211,18 @@ func vec4ptr(vec mgl32.Vec4) unsafe.Pointer {
     return unsafe.Pointer(&vec[0])
 }
 
+// SaveScreenshot grabs the default framebuffer rather than the scene buffer. The scene
+// buffer is linear HDR now, so reading it back as bytes would clip every highlight and
+// skip the tone map; the screen has the finished image, GUI included.
 func (a *GlApplication) SaveScreenshot(filename string) error {
-    return a.postFrameBuffer.Texture().SaveAsPNG(filename)
+    width, height := a.FramebufferWidth, a.FramebufferHeight
+    pixels := make([]uint8, width*height*4)
+
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+    gl.ReadBuffer(gl.BACK)
+    gl.ReadPixels(0, 0, int32(width), int32(height), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
+
+    return glhf.WritePixelsToPNG(filename, pixels, width, height)
 }
 func (a *GlApplication) SaveShadowMaps(filename string) error {
     //near, far := a.Camera.GetNearAndFar()
@@ -806,19 +1246,64 @@ func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) map[mgl32.Ve
     a.CubeMap = cubeMap
     return entitySpawns
 }
+// OnResize takes the new window size in screen coordinates. Everything measured in
+// pixels - the viewport, the scissor box, the offscreen buffers - is asked of GLFW
+// rather than derived from the monitor's content scale, because that ratio is not a
+// constant. Measured on a retina Mac: a 640x480 window has a 1280x960 framebuffer,
+// but the same window fullscreen is 1920x1200 with a 1920x1200 framebuffer. Scaling
+// the window size by the content scale of 2 asked for a 3840x2400 viewport on that
+// 1920x1200 framebuffer, which is why fullscreen showed one quarter of the scene.
+// GuiScale is the current GUI scale factor.
+func (a *GlApplication) GuiScale() float32 {
+    return a.guiScale
+}
+
+// SetGuiScale resizes the GUI coordinate space, which scales everything drawn in
+// it: text, the crosshair, the menus, the minimap and the weapon.
+func (a *GlApplication) SetGuiScale(scale float32) {
+    if scale <= 0 {
+        return
+    }
+    a.guiScale = scale
+    a.OnResize(a.WindowWidth, a.WindowHeight)
+}
+
+// GuiSize is the GUI coordinate space: the window divided by the GUI scale. Lay
+// GUI elements out in these, not in window coordinates, or they stop scaling.
+func (a *GlApplication) GuiSize() (int, int) {
+    return int(float32(a.WindowWidth) / a.guiScale), int(float32(a.WindowHeight) / a.guiScale)
+}
+
+// GuiCoords converts a window position - a mouse event, say - into GUI coordinates,
+// so hit testing lands where the element was drawn.
+func (a *GlApplication) GuiCoords(x, y float64) (float64, float64) {
+    return x / float64(a.guiScale), y / float64(a.guiScale)
+}
+
 func (a *GlApplication) OnResize(width int, height int) {
     a.WindowWidth = width
     a.WindowHeight = height
+    a.FramebufferWidth, a.FramebufferHeight = a.Window.GetFramebufferSize()
+
+    // Viewport and scissor box together: SCISSOR_TEST is on for the whole run.
+    glhf.Bounds(0, 0, a.FramebufferWidth, a.FramebufferHeight)
+
+    println(fmt.Sprintf("Resize: window %dx%d, framebuffer %dx%d, mode %s",
+        width, height, a.FramebufferWidth, a.FramebufferHeight, WindowModeNames[a.WindowMode()]))
+
     a.Camera.SetScreenSize(width, height)
-    projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(width, height)
+
+    guiWidth, guiHeight := a.GuiSize()
+    projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(guiWidth, guiHeight)
     a.guiShader.Begin()
     a.guiShader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
     a.guiShader.End()
     if a.postFrameBuffer != nil {
-        a.postFrameBuffer.Resize(int(float32(width)*a.UIScale.X()), int(float32(height)*a.UIScale.Y()))
+        a.postFrameBuffer.Resize(a.FramebufferWidth, a.FramebufferHeight)
+        a.initBloomBuffers(a.FramebufferWidth, a.FramebufferHeight)
     }
     if a.minimap != nil {
-        a.minimap.Resize(width, height)
+        a.minimap.Resize(guiWidth, guiHeight)
     }
     a.ResizeHandler(width, height)
 }
@@ -859,8 +1344,46 @@ func (a *GlApplication) UiContext() UIContext {
     }
 }
 
+// SetLights replaces the scene's lights. Anything past MaxLights is dropped: the
+// UBO, the shadow atlas and the shader's light loop are all sized to that cap.
 func (a *GlApplication) SetLights(infos []LightInfo) {
+    if len(infos) > MaxLights {
+        infos = infos[:MaxLights]
+    }
+    a.lightsUbo.SetLights(infos)
+}
 
+// AddLights appends to the scene's lights, keeping the ones already there. The
+// flashlight lives in slot 0 and is updated by index every frame, so replacing
+// the whole list would unhook it.
+func (a *GlApplication) AddLights(infos ...LightInfo) {
+    a.SetLights(append(a.lightsUbo.lights, infos...))
+}
+
+// ShadowResolution is the edge length of one layer of the shadow atlas. Callers
+// that build their own lights need it to size the light's projection.
+func (a *GlApplication) ShadowResolution() int {
+    return a.shadowResolution
+}
+
+// ShadowPasses reports how many lights actually re-rendered their depth map last
+// frame, out of how many are switched on. Lights whose frustum and scene are
+// unchanged reuse the map from the previous frame.
+func (a *GlApplication) ShadowPasses() (rendered, lit int) {
+    for i := range a.lightsUbo.lights {
+        if !a.lightsUbo.lights[i].IsOff() {
+            lit++
+        }
+    }
+    return a.shadowPassCount, lit
+}
+
+// ShadowCacheState exposes the two inputs the shadow cache keys on. If rendered
+// stays at the lit count while standing still, one of these is churning: a
+// climbing mesh generation means the world keeps re-meshing, a changing scene
+// hash with a steady generation means a caster is moving.
+func (a *GlApplication) ShadowCacheState() (meshGeneration uint64, sceneHash uint64) {
+    return a.CubeMap.MeshGeneration(), a.shadowSceneSignature()
 }
 
 type UIContext struct {
@@ -876,7 +1399,6 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
     if glErr != nil {
         println("glfw: ", glErr.Error())
         panic(glErr)
-        return nil, nil
     }
     glfw.WindowHint(glfw.ContextVersionMajor, 3)
     glfw.WindowHint(glfw.ContextVersionMinor, 3)
@@ -920,10 +1442,13 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
         if initErr != nil {
             panic(initErr)
         }
-        gl.Enable(gl.BLEND)
+        // Blending stays off by default: only the transparent sprite pass and the
+        // 2D GUI need it. Left on, every opaque chunk and mesh fragment went
+        // through the blend unit for nothing.
         gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-        gl.Enable(gl.SCISSOR_TEST)
         gl.BlendEquation(gl.FUNC_ADD)
+        gl.Disable(gl.BLEND)
+        gl.Enable(gl.SCISSOR_TEST)
     }
 
     version := gl.GoStr(gl.GetString(gl.VERSION))
@@ -938,10 +1463,10 @@ func InitOpenGLWindow(title string, width, height int, fullScreen bool) (*glfw.W
     gl.CullFace(gl.BACK)
 
     /*
-    	if runtime.GOOS != "darwin" {
-    		gl.Enable(gl.DEBUG_OUTPUT)
-    		gl.DebugMessageCallback(gl.DebugProc(glErrorHandler), gl.Ptr(nil))
-    	}
+        if runtime.GOOS != "darwin" {
+            gl.Enable(gl.DEBUG_OUTPUT)
+            gl.DebugMessageCallback(gl.DebugProc(glErrorHandler), gl.Ptr(nil))
+        }
     */
 
     return win, func() {
@@ -985,7 +1510,7 @@ func FileExists(path string) bool {
 }
 func skyboxVertices() []glhf.GlFloat {
     return []glhf.GlFloat{
-        // positions          
+        // positions
         -1.0, 1.0, -1.0,
         -1.0, -1.0, -1.0,
         1.0, -1.0, -1.0,
@@ -1045,6 +1570,10 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, sh
 
     shader.Begin()
     shader.SetUniformAttr(CubeShaderAtlasGridSize, glhf.IntVec2{int32(atlas.GridWidth()), int32(atlas.GridHeight())})
+    // The voxel lookup buffer is strided by the chunk-aligned grid size, not by the
+    // dimensions LDtk reports, so the uniform has to come from the map itself.
+    gridX, gridY, gridZ := voxelMap.VoxelDimensions()
+    shader.SetUniformAttr(CubeShaderMapSize, glhf.IntVec4{gridX, gridY, gridZ, 0})
     shader.End()
 
     voxelMap.SetTerrainTexture(atlas)

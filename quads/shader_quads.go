@@ -4,7 +4,6 @@ import (
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
-    "strings"
 )
 
 const (
@@ -67,7 +66,7 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
         shader *glhf.Shader
     )
     var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSourceDepthPass(), quadFragmentShaderSourceDepth)
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+quadVertexShaderSource, quadFragmentShaderSourceDepth)
 
     if err != nil {
         panic(err)
@@ -88,34 +87,12 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
     return shader
 }
 
-func prefixFilter(input string, prefixes []string) string {
-    lines := strings.Split(input, "\n")
-    var filteredLines []string
-lineLoop:
-    for _, line := range lines {
-        for _, prefix := range prefixes {
-            if strings.HasPrefix(strings.TrimSpace(line), prefix) {
-                continue lineLoop
-            }
-        }
-        filteredLines = append(filteredLines, line)
-    }
-    return strings.Join(filteredLines, "\n")
-}
-
-func quadVertexShaderSourceDepthPass() string {
-    filteredSource := prefixFilter(quadVertexShaderSource, []string{
-        "out vec3",
-        "VertNormal",
-        "VertPos",
-    })
-    return filteredSource
-}
-
 const quadVertexShaderSource = `
-out vec3 VertPos;
 out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
+#ifndef DEPTH_PASS
+out vec3 VertPos;
 out vec3 VertNormal;
+#endif
 
 layout(location = 0) in uint cornerIndex;
 
@@ -188,8 +165,10 @@ void main() {
     gl_Position = camProjectionView * modelTransform * vec4(relativePos, 1.0);
 
     VertUV = getUV(cornerIndex, textureIndex);
+#ifndef DEPTH_PASS
     VertNormal = vec3(0.0, 0.0, 1.0); // THIS PROBABLY NEEDS TO BE TRANSFORMED?
     VertPos = relativePos;
+#endif
 }`
 
 const quadFragmentShaderSource = `
@@ -221,7 +200,7 @@ void main() {
     
         //vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
     
-        fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+        fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, vec3(0.0));
     }
 }`
 

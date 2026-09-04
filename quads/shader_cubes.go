@@ -9,7 +9,31 @@ import (
 const (
     CubeShaderModelTransform int = iota
     CubeShaderAtlasGridSize
-    CubeShaderDebugSwitch
+    CubeShaderMapSize
+    CubeShaderEmissiveStrength
+    CubeShaderEmissiveCutoff
+    CubeShaderEmissiveSaturation
+)
+
+// Marking a texture emissive does not light the whole tile: it lights the texels that
+// look like a lit fitting, so a console panel's screens come on while the metal around
+// them stays dark. That is what makes it safe to push the strength well past white -
+// only a small part of the tile gets it, and it needs real headroom over the bloom
+// threshold before any light bleeds out.
+//
+// Brightness alone cannot make that distinction on this art. Polished grey metal is as
+// bright as a cyan tube, so a luminance cutoff lit whole walls - measured on the wall
+// sheet, a luminance-only mask took 63% of tex 19 rather than its light strips. Lit
+// fittings here are saturated (cyan tubes, blue screens, green signs) and the metal is
+// not, so the mask gates on both: bright AND colourful. Grey panels then score zero
+// however bright they are.
+//
+// Set the saturation cutoff to 0 to go back to a pure brightness mask, and the
+// brightness cutoff to 0 as well to light the whole face.
+const (
+    DefaultEmissiveStrength   = float32(4.0)
+    DefaultEmissiveCutoff     = float32(0.35)
+    DefaultEmissiveSaturation = float32(0.35)
 )
 
 func LoadCubeShader(uboBlock string) *glhf.Shader {
@@ -20,7 +44,17 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
         uniformFormat = glhf.AttrFormat{
             glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
             glhf.Attr{Name: "atlasGridSize", Type: glhf.IVec2}, // 1
-            //glhf.Attr{Name: "debugSwitch", Type: glhf.Float},   // 2
+            // voxel grid dimensions of the lookup buffer. ivec4 because glhf has
+            // no ivec3; w is unused.
+            glhf.Attr{Name: "mapSize", Type: glhf.IVec4}, // 2
+            // How far past white an emissive face is pushed. A uniform rather than a
+            // constant because it is the knob you turn against the bloom threshold.
+            glhf.Attr{Name: "emissiveStrength", Type: glhf.Float}, // 3
+            // Luminance above which a texel of an emissive texture may glow.
+            glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float}, // 4
+            // ...and how colourful it also has to be, which is what separates a lit
+            // fitting from bright bare metal.
+            glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 5
         }
         shader *glhf.Shader
     )
@@ -37,6 +71,9 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
+    shader.SetUniformAttr(CubeShaderEmissiveStrength, DefaultEmissiveStrength)
+    shader.SetUniformAttr(CubeShaderEmissiveCutoff, DefaultEmissiveCutoff)
+    shader.SetUniformAttr(CubeShaderEmissiveSaturation, DefaultEmissiveSaturation)
     shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
     shader.BindSamplerNameToTextureUnit("voxelLookup", gl.TEXTURE1)
     shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
@@ -62,7 +99,7 @@ func LoadCubeShaderDepthPass(uboBlock string) *glhf.Shader {
     )
 
     var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+chunkVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+chunkVertexShaderSource, emptyFragmentShaderSource)
 
     if err != nil {
         panic(err)
@@ -73,7 +110,6 @@ func LoadCubeShaderDepthPass(uboBlock string) *glhf.Shader {
     }
     shader.Begin()
     shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
-    //shader.SetUniformAttr(CubeShaderDebugSwitch, float32(0.0))
     shader.End()
 
     glErr := gl.GetError()
@@ -82,15 +118,6 @@ func LoadCubeShaderDepthPass(uboBlock string) *glhf.Shader {
     }
 
     return shader
-}
-
-func chunkVertexShaderSourceDepthPass() string {
-    return prefixFilter(chunkVertexShaderSource, []string{
-        "flat out uint Vert",
-        "out float Vert",
-        "out vec3 Vert",
-        "Vert",
-    })
 }
 
 const chunkVertexShaderSource = `
@@ -143,9 +170,11 @@ Total  // 20 bits used of 32
 12-14 bits left for animation/lighting information
 */
 
+#ifndef DEPTH_PASS
 flat out uint VertNormalIndex;
 out float VertLightLevel;
 out vec3 VertPos;
+#endif
 
 layout(location = 0) in uint compressedValue;
 
@@ -178,9 +207,11 @@ void main() {
     gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
 
     // pass-through for fragment shader
+#ifndef DEPTH_PASS
     VertNormalIndex = normalDir;
     VertPos = position;
-    VertLightLevel = lightLevel; 
+    VertLightLevel = lightLevel;
+#endif
 }`
 
 const chunkFragmentShaderSource = `
@@ -203,10 +234,18 @@ in float VertLightLevel;
 
 uniform ivec2 atlasGridSize;
 uniform mat4 modelTransform;
-uniform float debugSwitch;
+uniform ivec4 mapSize;
 
 uniform sampler2D tex;
 uniform usamplerBuffer voxelLookup;
+uniform float emissiveStrength;
+uniform float emissiveCutoff;
+uniform float emissiveSaturation;
+
+// The lookup buffer's top bit marks a face as emissive; the rest is the texture index.
+// See Map.withEmissiveBit - it rides along for free rather than costing another buffer.
+#define EMISSIVE_TEXTURE_BIT uint(0x8000)
+#define EMISSIVE_TEXTURE_MASK uint(0x7FFF)
 
 layout (location = 0) out vec4 fragmentColor;
 
@@ -219,20 +258,25 @@ void main() {
     uint tileWidth  = uint(textureSize2d.x) / uint(atlasGridSize.x);
     uint tileHeight = uint(textureSize2d.y) / uint(atlasGridSize.y);
 
-    uint mapSizeX = uint(64);
-    uint mapSizeY = uint(32);
-    uint mapSizeZ = uint(64);
+    uint mapSizeX = uint(mapSize.x);
+    uint mapSizeY = uint(mapSize.y);
 
-    uint normOffsetX = uint((VertNormal.x + 1.0) * 0.5);
-    uint normOffsetY = uint((VertNormal.y + 1.0) * 0.5);
-    uint normOffsetZ = uint((VertNormal.z + 1.0) * 0.5);
+    // A face with a positive normal belongs to the cell one step back from the
+    // fragment. Done in signed arithmetic and clamped: at grid coordinate 0 the
+    // subtraction would otherwise wrap to ~4 billion and texelFetch would read
+    // whatever sits at that offset.
+    ivec3 normOffset = ivec3((VertNormal + 1.0) * 0.5);
 
-    uint gridX = uint(floor(fragWorldPos.x)) - normOffsetX;
-    uint gridY = uint(floor(fragWorldPos.y)) - normOffsetY;
-    uint gridZ = uint(floor(fragWorldPos.z)) - normOffsetZ;
+    ivec3 grid = max(ivec3(floor(fragWorldPos)) - normOffset, ivec3(0));
+
+    uint gridX = uint(grid.x);
+    uint gridY = uint(grid.y);
+    uint gridZ = uint(grid.z);
 
     uint wallOffset = (gridX + gridY * mapSizeX + gridZ * mapSizeX * mapSizeY) * uint(6);
-    uint textureIndex = texelFetch(voxelLookup, int(wallOffset + VertNormalIndex)).r;
+    uint lookupValue = texelFetch(voxelLookup, int(wallOffset + VertNormalIndex)).r;
+    uint textureIndex = lookupValue & EMISSIVE_TEXTURE_MASK;
+    float isEmissive = float((lookupValue & EMISSIVE_TEXTURE_BIT) != uint(0));
 
     // Compute tile position in texel space
     uint tileX = uint(textureIndex % uint(atlasGridSize.x)) * tileWidth;
@@ -269,5 +313,18 @@ void main() {
 
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+    // A texel of an emissive texture glows if it is both bright and colourful: that is
+    // what tells a cyan tube or a blue screen readout apart from the bare metal panel it
+    // is mounted on, which is just as bright but grey. Soft edges on both terms so the
+    // boundary does not crawl as the texture minifies.
+    float luminance = dot(surfaceColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float maxChannel = max(max(surfaceColor.r, surfaceColor.g), surfaceColor.b);
+    float minChannel = min(min(surfaceColor.r, surfaceColor.g), surfaceColor.b);
+    float saturation = maxChannel > 0.0001 ? (maxChannel - minChannel) / maxChannel : 0.0;
+
+    float emissiveMask = smoothstep(emissiveCutoff, emissiveCutoff + 0.1, luminance)
+                       * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
+    vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask * emissiveStrength;
+
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive);
 }`

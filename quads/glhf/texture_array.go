@@ -60,7 +60,14 @@ func NewDepthTextureArray(width, height, layers int, smooth bool) *TextureArray 
     gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
     gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_BORDER)
 
-    tex.SetSmooth(smooth)
+    // Depth comparison in the sampler: the shader passes a reference depth and
+    // gets back how much of the 2x2 neighbourhood passed, so filtering gives free
+    // PCF. Needs LINEAR, and a sampler2DArrayShadow on the shader side.
+    gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE)
+    gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL)
+    gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.TexParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    tex.smooth = smooth
 
     runtime.SetFinalizer(tex, (*TextureArray).delete)
 

@@ -9,7 +9,7 @@ import (
 
 type MeshDrawer struct {
     shader             *glhf.Shader
-    gameObjectsPerMesh map[int]map[*MeshComponent]bool
+    gameObjectsPerMesh map[int][]*MeshComponent
     loadedMeshes       []*CompoundMesh
     loadedAABBs        []voxel.AABB
     nameCache          map[string]int
@@ -40,7 +40,7 @@ func (m *MeshComponent) Transform() mgl32.Mat4 {
 func NewMeshDrawer(shader *glhf.Shader) *MeshDrawer {
     return &MeshDrawer{
         shader:             shader,
-        gameObjectsPerMesh: make(map[int]map[*MeshComponent]bool),
+        gameObjectsPerMesh: make(map[int][]*MeshComponent),
         nameCache:          make(map[string]int),
     }
 }
@@ -71,23 +71,23 @@ func (q *MeshDrawer) NewMesh(gltfFile string) (*MeshComponent, voxel.AABB) {
 }
 
 func (q *MeshDrawer) Update(elapsed float64) {
-    for _, meshes := range q.gameObjectsPerMesh {
-        for mesh := range meshes {
-            if mesh.IsDead(elapsed) {
-                q.Remove(mesh)
-                continue
+    for index, meshes := range q.gameObjectsPerMesh {
+        for i := len(meshes) - 1; i >= 0; i-- {
+            if meshes[i].IsDead(elapsed) {
+                meshes = swapRemove(meshes, i)
             }
         }
+        q.gameObjectsPerMesh[index] = meshes
     }
 }
 
-func (q *MeshDrawer) Draw(camera *core.FPSCamera, meshShader *glhf.Shader) {
+func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader) {
     meshShader.Begin()
     q.drawCalls = 0
     q.trianglesDrawn = 0
     for _, meshes := range q.gameObjectsPerMesh {
-        for mesh := range meshes {
-            if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(camera) {
+        for _, mesh := range meshes {
+            if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(frustum) {
                 continue
             }
             compoundMesh := q.loadedMeshes[mesh.MeshIndex]
@@ -100,20 +100,36 @@ func (q *MeshDrawer) Draw(camera *core.FPSCamera, meshShader *glhf.Shader) {
     meshShader.End()
 }
 
-func (q *MeshDrawer) Add(mesh *MeshComponent) {
-    if _, ok := q.gameObjectsPerMesh[mesh.MeshIndex]; !ok {
-        q.gameObjectsPerMesh[mesh.MeshIndex] = make(map[*MeshComponent]bool)
+// ForEachCaster visits the world position of every mesh that ends up in a shadow
+// map. Used to notice when the casting scene changed.
+func (q *MeshDrawer) ForEachCaster(visit func(pos mgl32.Vec3)) {
+    for _, meshes := range q.gameObjectsPerMesh {
+        for _, mesh := range meshes {
+            if mesh.IsHidden {
+                continue
+            }
+            visit(mesh.GameObject().Transform().GetPosition())
+        }
     }
-    q.gameObjectsPerMesh[mesh.MeshIndex][mesh] = true
+}
+
+func (q *MeshDrawer) Add(mesh *MeshComponent) {
+    q.gameObjectsPerMesh[mesh.MeshIndex] = append(q.gameObjectsPerMesh[mesh.MeshIndex], mesh)
 }
 
 func (q *MeshDrawer) Remove(mesh *MeshComponent) {
-    delete(q.gameObjectsPerMesh[mesh.MeshIndex], mesh)
+    list := q.gameObjectsPerMesh[mesh.MeshIndex]
+    for i, candidate := range list {
+        if candidate == mesh {
+            q.gameObjectsPerMesh[mesh.MeshIndex] = swapRemove(list, i)
+            return
+        }
+    }
 }
 
 func (q *MeshDrawer) DrawAABBs(lineShader *glhf.Shader) {
     for _, meshes := range q.gameObjectsPerMesh {
-        for mesh := range meshes {
+        for _, mesh := range meshes {
             if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
                 continue
             }
@@ -126,7 +142,7 @@ func (q *MeshDrawer) DrawAABBs(lineShader *glhf.Shader) {
 
 func (q *MeshDrawer) DrawOBBs(lineShader *glhf.Shader) {
     for _, meshes := range q.gameObjectsPerMesh {
-        for mesh := range meshes {
+        for _, mesh := range meshes {
             if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
                 continue
             }
@@ -138,7 +154,7 @@ func (q *MeshDrawer) DrawOBBs(lineShader *glhf.Shader) {
 }
 
 func (q *MeshDrawer) Clear() {
-    q.gameObjectsPerMesh = make(map[int]map[*MeshComponent]bool)
+    q.gameObjectsPerMesh = make(map[int][]*MeshComponent)
 }
 
 func (q *MeshDrawer) DrawnLastFrame() (triangles, drawCalls int) {

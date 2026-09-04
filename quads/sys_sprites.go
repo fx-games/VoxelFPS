@@ -37,14 +37,14 @@ type SpriteDrawer struct {
     drawCalls    int
 
     animations         []SpriteAnimation
-    spritesPerTexture  map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool
+    spritesPerTexture  map[*glhf.TextureAtlasFixed][]*SpriteComponent
     transparentSprites []*SpriteComponent
 }
 
 func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
     return &SpriteDrawer{
         shader:            shader,
-        spritesPerTexture: make(map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool),
+        spritesPerTexture: make(map[*glhf.TextureAtlasFixed][]*SpriteComponent),
     }
 }
 func (q *SpriteDrawer) AddAnimation(animation SpriteAnimation) int {
@@ -73,21 +73,25 @@ func (q *SpriteDrawer) uploadQuad() {
    3 -> leftU, bottomV
 */
 func (q *SpriteDrawer) Update(elapsed float64) {
-    for _, sprites := range q.spritesPerTexture {
-        for sprite := range sprites {
+    for atlas, sprites := range q.spritesPerTexture {
+        for i := len(sprites) - 1; i >= 0; i-- {
+            sprite := sprites[i]
             if sprite.IsDead(elapsed) {
-                q.Remove(sprite)
+                sprites = swapRemove(sprites, i)
                 continue
             }
             q.updateSprite(sprite, elapsed)
         }
+        q.spritesPerTexture[atlas] = sprites
     }
 
     for i := len(q.transparentSprites) - 1; i >= 0; i-- {
         sprite := q.transparentSprites[i]
         if sprite.IsDead(elapsed) {
-            // mark for reuse
+            // Order matters here - the pass draws farthest first - so this one
+            // shifts instead of swapping, and a dead sprite is not updated.
             q.transparentSprites = append(q.transparentSprites[:i], q.transparentSprites[i+1:]...)
+            continue
         }
         q.updateSprite(sprite, elapsed)
     }
@@ -120,11 +124,7 @@ func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) 
     return sprite.TextureIndexAnimated(frames)
 }
 
-func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, spriteShader *glhf.Shader) {
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
     spriteShader.Begin()
     spriteShader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
     //spriteShader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
@@ -138,10 +138,6 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
 
     spritesDrawn := 0
     drawCalls := 0
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     for currentAtlas, spriteList := range q.spritesPerTexture {
         if len(spriteList) == 0 {
             continue
@@ -151,12 +147,8 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
         spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 
         currentAtlas.BeginOnUnit(gl.TEXTURE0)
-        glErr = gl.GetError()
-        if glErr != gl.NO_ERROR {
-            panic(glErr)
-        }
-        for sprite := range spriteList {
-            if !sprite.GameObject().IsInViewFrustum(camera) {
+        for _, sprite := range spriteList {
+            if !sprite.GameObject().IsInViewFrustum(observer) {
                 continue
             }
 
@@ -166,15 +158,7 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
             if !shouldShow {
                 continue
             }
-            glErr = gl.GetError()
-            if glErr != gl.NO_ERROR {
-                panic(glErr)
-            }
             q.drawSprite(observer, spriteShader, sprite, texIndex)
-            glErr = gl.GetError()
-            if glErr != gl.NO_ERROR {
-                panic(glErr)
-            }
             spritesDrawn++
             drawCalls++
         }
@@ -182,20 +166,47 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
         currentAtlas.End()
     }
 
-    // transparent sprites should be drawn last and sorted by distance
+    quad.End()
 
+    spriteShader.End()
+    q.quadsDrawn = spritesDrawn
+    q.drawCalls = drawCalls
+}
+
+// DrawTransparent draws the alpha-blended sprites. It is a separate pass from Draw
+// because the skybox has to land in the framebuffer between the two: a translucent
+// sprite drawn before the sky blends against the clear colour and gets a halo.
+func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glhf.Shader) {
+    if len(q.transparentSprites) == 0 {
+        return
+    }
+    spriteShader.Begin()
+    spriteShader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
+
+    if q.quadVertices == nil {
+        q.uploadQuad()
+    }
+    quad := q.quadVertices
+    quad.Begin()
+
+    spritesDrawn := 0
+    drawCalls := 0
+
+    // Transparent sprites are drawn last, farthest first. The sort puts the farthest
+    // at index 0, so this has to iterate forwards: drawing nearest first let the near
+    // sprite write depth and the ones behind it failed the depth test outright, so
+    // they did not blend badly - they vanished.
     slices.SortStableFunc(q.transparentSprites, func(i, j *SpriteComponent) int {
         iPos := i.GameObject().Transform().GetPosition()
         jPos := j.GameObject().Transform().GetPosition()
-        iDist := camera.GetPosition().Sub(iPos).LenSqr()
-        jDist := camera.GetPosition().Sub(jPos).LenSqr()
+        iDist := observer.GetPosition().Sub(iPos).LenSqr()
+        jDist := observer.GetPosition().Sub(jPos).LenSqr()
         return cmp.Compare(jDist, iDist)
     })
 
-    for i := len(q.transparentSprites) - 1; i >= 0; i-- {
+    for i := 0; i < len(q.transparentSprites); i++ {
         sprite := q.transparentSprites[i]
-        sprite.AtlasTexture.Begin() // THIS COULD BE SLOW..
-        if !sprite.GameObject().IsInViewFrustum(camera) {
+        if !sprite.GameObject().IsInViewFrustum(observer) {
             continue
         }
         viewDirection := core.GetViewDirection(observer.GetPosition(), sprite.Position(), sprite.LookDirection())
@@ -204,6 +215,7 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
         if !shouldShow {
             continue
         }
+        sprite.AtlasTexture.Begin() // THIS COULD BE SLOW..
         q.drawSprite(observer, spriteShader, sprite, texIndex)
         spritesDrawn++
         drawCalls++
@@ -214,8 +226,8 @@ func (q *SpriteDrawer) Draw(camera *core.FPSCamera, observer core.Transformer, s
     quad.End()
 
     spriteShader.End()
-    q.quadsDrawn = spritesDrawn
-    q.drawCalls = drawCalls
+    q.quadsDrawn += spritesDrawn
+    q.drawCalls += drawCalls
 }
 
 func (q *SpriteDrawer) drawSprite(observer core.Transformer, shader *glhf.Shader, sprite *SpriteComponent, texIndex uint16) {
@@ -238,6 +250,19 @@ func (q *SpriteDrawer) drawSprite(observer core.Transformer, shader *glhf.Shader
     }
 }
 
+// ForEachCaster visits the world position of every sprite that ends up in a
+// shadow map. Used to notice when the casting scene changed.
+func (q *SpriteDrawer) ForEachCaster(visit func(pos mgl32.Vec3)) {
+    for _, spriteList := range q.spritesPerTexture {
+        for _, sprite := range spriteList {
+            visit(sprite.Position())
+        }
+    }
+    for _, sprite := range q.transparentSprites {
+        visit(sprite.Position())
+    }
+}
+
 func (q *SpriteDrawer) DrawnLastFrame() (int, int) {
     return q.quadsDrawn * 2, q.drawCalls
 }
@@ -247,19 +272,34 @@ func (q *SpriteDrawer) Add(sprite *SpriteComponent) {
         q.transparentSprites = append(q.transparentSprites, sprite)
         return
     }
-    if _, ok := q.spritesPerTexture[sprite.Atlas()]; !ok {
-        q.spritesPerTexture[sprite.Atlas()] = make(map[*SpriteComponent]bool)
-    }
-    q.spritesPerTexture[sprite.Atlas()][sprite] = true
+    q.spritesPerTexture[sprite.Atlas()] = append(q.spritesPerTexture[sprite.Atlas()], sprite)
 }
 
 func (q *SpriteDrawer) Remove(sprite *SpriteComponent) {
-    delete(q.spritesPerTexture[sprite.Atlas()], sprite)
+    atlas := sprite.Atlas()
+    list := q.spritesPerTexture[atlas]
+    // ponytail: linear scan. The lists are per atlas and short; a lookup index
+    // only pays off if removals start showing up in a profile.
+    for i, candidate := range list {
+        if candidate == sprite {
+            q.spritesPerTexture[atlas] = swapRemove(list, i)
+            return
+        }
+    }
+}
+
+// swapRemove drops index i by moving the last element into its place. The draw
+// lists are unordered, so the cheap removal is the right one.
+func swapRemove[T any](list []T, i int) []T {
+    list[i] = list[len(list)-1]
+    var zero T
+    list[len(list)-1] = zero
+    return list[:len(list)-1]
 }
 
 func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
     for _, spriteIndices := range q.spritesPerTexture {
-        for sprite := range spriteIndices {
+        for _, sprite := range spriteIndices {
             if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
                 continue
             }
@@ -271,7 +311,7 @@ func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 }
 func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
     for _, spriteIndices := range q.spritesPerTexture {
-        for sprite := range spriteIndices {
+        for _, sprite := range spriteIndices {
             if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
                 continue
             }
@@ -284,7 +324,7 @@ func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
     }
 }
 func (q *SpriteDrawer) Clear() {
-    q.spritesPerTexture = make(map[*glhf.TextureAtlasFixed]map[*SpriteComponent]bool)
+    q.spritesPerTexture = make(map[*glhf.TextureAtlasFixed][]*SpriteComponent)
 }
 
 func (q *SpriteDrawer) GetFirstFrameIndex(anim int, viewDirection int) uint16 {

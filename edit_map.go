@@ -66,7 +66,8 @@ func (g *Game) openVoxelBrushMenu() {
         }),
     }
     configMenu.SetOptions(options)
-    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    guiWidth, guiHeight := g.GuiSize()
+    configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
 
     g.pushToWidgetStack(configMenu)
 }
@@ -137,7 +138,8 @@ func (g *Game) openVoxelEditMenu() {
         }),
     }
     configMenu.SetOptions(options)
-    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    guiWidth, guiHeight := g.GuiSize()
+    configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
 
     g.replaceWidgetStack(configMenu)
 }
@@ -248,7 +250,7 @@ func (v *VoxelBrushRectangle) StartDrag(pos voxel.Int3) []voxel.Int3 {
 
 func (v *VoxelBrushRectangle) Drag(cur voxel.Int3) []voxel.Int3 {
     // force same height
-    cur = voxel.Int3{cur.X, v.start.Y, cur.Z}
+    cur = voxel.Int3{X: cur.X, Y: v.start.Y, Z: cur.Z}
     minX := min(v.start.X, cur.X)
     maxX := max(v.start.X, cur.X)
 
@@ -259,17 +261,17 @@ func (v *VoxelBrushRectangle) Drag(cur voxel.Int3) []voxel.Int3 {
     if v.fill {
         for x := int(minX); x <= int(maxX); x++ {
             for z := int(minZ); z <= int(maxZ); z++ {
-                rect = append(rect, voxel.Int3{int32(x), v.start.Y, int32(z)})
+                rect = append(rect, voxel.Int3{X: int32(x), Y: v.start.Y, Z: int32(z)})
             }
         }
     } else {
         for x := int(minX); x <= int(maxX); x++ {
-            rect = append(rect, voxel.Int3{int32(x), v.start.Y, minZ})
-            rect = append(rect, voxel.Int3{int32(x), v.start.Y, maxZ})
+            rect = append(rect, voxel.Int3{X: int32(x), Y: v.start.Y, Z: minZ})
+            rect = append(rect, voxel.Int3{X: int32(x), Y: v.start.Y, Z: maxZ})
         }
         for z := int(minZ); z <= int(maxZ); z++ {
-            rect = append(rect, voxel.Int3{minX, v.start.Y, int32(z)})
-            rect = append(rect, voxel.Int3{maxX, v.start.Y, int32(z)})
+            rect = append(rect, voxel.Int3{X: minX, Y: v.start.Y, Z: int32(z)})
+            rect = append(rect, voxel.Int3{X: maxX, Y: v.start.Y, Z: int32(z)})
         }
     }
 

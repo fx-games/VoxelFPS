@@ -7,6 +7,7 @@ import (
     "io"
     "os"
     "runtime"
+    "unsafe"
 
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
@@ -158,6 +159,17 @@ func NewDepthTexture(width, height int) *Texture {
 // NewTextureRGBA creates a new texture with the specified width and height with some initial
 // pixel values. The pixels must be a sequence of RGBA values (one byte per component).
 func NewTextureRGBA(width, height int, smooth bool, pixels []uint8, textureTarget uint32) *Texture {
+    return newTexture2D(width, height, smooth, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels), textureTarget)
+}
+
+// NewTextureHDR creates a half-float colour texture. Values above 1.0 survive in it,
+// which is the whole point of rendering the scene to one: tone mapping and bloom both
+// need to see how far past white a fragment actually went.
+func NewTextureHDR(width, height int, smooth bool, textureTarget uint32) *Texture {
+    return newTexture2D(width, height, smooth, gl.RGBA16F, gl.RGBA, gl.FLOAT, nil, textureTarget)
+}
+
+func newTexture2D(width, height int, smooth bool, internalFormat int32, format, pixelType uint32, pixels unsafe.Pointer, textureTarget uint32) *Texture {
     tex := &Texture{
         target: textureTarget,
         tex: binder{
@@ -179,13 +191,13 @@ func NewTextureRGBA(width, height int, smooth bool, pixels []uint8, textureTarge
     gl.TexImage2D(
         tex.target,
         0,
-        gl.RGBA,
+        internalFormat,
         int32(width),
         int32(height),
         0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        gl.Ptr(pixels),
+        format,
+        pixelType,
+        pixels,
     )
 
     borderColor := mgl32.Vec4{0, 0, 0, 0}

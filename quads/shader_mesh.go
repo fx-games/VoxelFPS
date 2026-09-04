@@ -58,7 +58,7 @@ func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
         shader *glhf.Shader
     )
     var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+meshVertexShaderSourceDepthPass(), emptyFragmentShaderSource)
+    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+meshVertexShaderSource, emptyFragmentShaderSource)
 
     if err != nil {
         panic(err)
@@ -76,13 +76,6 @@ func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
     return shader
 }
 
-func meshVertexShaderSourceDepthPass() string {
-    return prefixFilter(meshVertexShaderSource, []string{
-        "out vec",
-        "Vert",
-    })
-}
-
 const meshVertexShaderSource = `
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoord;
@@ -91,19 +84,23 @@ layout(location = 3) in vec3 normal;
 
 uniform mat4 modelTransform;
 
+#ifndef DEPTH_PASS
 out vec3 VertPos;
 out vec2 VertUV;
 out vec3 VertNormal;
 out vec3 VertColor;
+#endif
 
 void main() {
     gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
 
     // pass-through for fragment shader
+#ifndef DEPTH_PASS
     VertUV = texCoord;
     VertNormal = normal;
     VertPos = position;
     VertColor = vertexColor;
+#endif
 }`
 
 const meshFragmentShaderSource = `
@@ -129,6 +126,6 @@ void main() {
     vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
     
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal);
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, vec3(0.0));
 }
 `

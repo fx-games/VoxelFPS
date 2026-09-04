@@ -2,7 +2,6 @@ package voxel
 
 import (
     "fmt"
-    "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/quads/glhf"
     "math"
@@ -118,13 +117,6 @@ func (c *Chunk) InitNeighbors() {
     if c.chunkPosZ < c.m.depth-1 && c.cZP == nil {
         c.cZP = c.m.GetChunk(c.chunkPosX, c.chunkPosY, c.chunkPosZ+1)
     }
-}
-
-func (c *Chunk) GreedyMeshOnOtherThread() {
-    newMesh := c.GreedyMeshing()
-    glhf.CallNonBlock(func() {
-        c.MeshUpload(newMesh)
-    })
 }
 
 func (c *Chunk) GreedyMeshing() *MeshBuffer {
@@ -465,10 +457,6 @@ func (c *Chunk) Draw(shader *glhf.Shader, modelUniformIndex int) {
     shader.SetUniformAttr(modelUniformIndex, c.GetMatrix())
 
     c.meshBuffer.Draw(shader.ID())
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
 }
 func (c *Chunk) getDiscreteCamDir(camDir mgl32.Vec3) Int3 {
     intPos := Int3{0, 0, 0}
@@ -535,6 +523,7 @@ func (c *Chunk) GenerateAndUpload() {
 func (c *Chunk) MeshUpload(newMesh *MeshBuffer) {
     newMesh.UploadMeshToGPU(c.m.chunkShader)
     c.meshBuffer = newMesh
+    c.m.meshGeneration++
 }
 
 func (c *Chunk) ContainsWorldPosition(position mgl32.Vec3) bool {

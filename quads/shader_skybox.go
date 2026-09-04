@@ -64,6 +64,7 @@ void main() {
 func skyboxFragmentShaderSource(uboBlock string) string {
     return fmt.Sprintf(`#version 400 core
 %s
+%s
 layout (location = 0) out vec4 color;
 
 in vec3 TexCoords;
@@ -78,6 +79,10 @@ void main() {
     float pitch = asin(clamp(normalize(TexCoords).y, -1.0, 1.0));
     float fadeWindow = max(radians(horizonFadeDegrees), 0.0001);
     float skyAmount = smoothstep(0.0, 1.0, clamp(pitch / fadeWindow, 0.0, 1.0));
-    color = vec4(mix(fogColor.rgb, texture(skybox, TexCoords).rgb, skyAmount), 1.0);
-}`, uboBlock)
+    // Written into the linear HDR scene buffer, so both the fog colour and the cubemap
+    // sample - authored in display range - are lifted to the HDR values that tone map
+    // back to themselves in the post pass.
+    vec3 skyDisplay = mix(fogColor.rgb, texture(skybox, TexCoords).rgb, skyAmount);
+    color = vec4(hdrFromDisplay(skyDisplay, toneMapParams.y, toneMapParams.x), 1.0);
+}`, uboBlock, toneMapGLSL)
 }

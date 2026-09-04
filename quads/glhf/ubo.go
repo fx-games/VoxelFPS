@@ -14,27 +14,33 @@ type UniformBufferObject struct {
     std140Offsets []int
 }
 
-func NewUBOWithAttributes(attributes []Attr) *UniformBufferObject {
-    var std140Offsets []int
-    println("*** Main UBO ***")
+// std140Layout returns the byte offset of every attribute inside a std140 uniform
+// block, plus the size of the block.
+func std140Layout(attributes []Attr) (offsets []int, blockSize int) {
+    offsets = make([]int, len(attributes))
+    offset := 0
     for i, attr := range attributes {
-        ownSize := attr.Type.Std140BaseAlignment()
-        if i == 0 {
-            std140Offsets = append(std140Offsets, 0)
-            println(fmt.Sprintf("%d %s (%d): %d", i, attr.Name, ownSize, 0))
-        } else {
-            prevSize := attributes[i-1].Type.Std140BaseAlignment()
-            alignedOffset := std140Offsets[i-1] + prevSize
-            // check if alignedOffset is a multiple of ownSize
-            baseAlignmentForMultipleCheck := min(16, ownSize)
-            if alignedOffset%baseAlignmentForMultipleCheck != 0 {
-                alignedOffset += baseAlignmentForMultipleCheck - (alignedOffset % baseAlignmentForMultipleCheck)
-            }
-            println(fmt.Sprintf("%d %s (%d): %d", i, attr.Name, ownSize, alignedOffset))
-            std140Offsets = append(std140Offsets, alignedOffset)
+        if !attr.Type.Std140MatchesGoLayout() {
+            // The small matrix types pad every column to a vec4 in the block but not
+            // in mgl32, so SetAttribute cannot upload them as one packed write.
+            panic(fmt.Sprintf("UBO attribute %s: %s has no packed Go equivalent in std140", attr.Name, attr.Type.GLSLName()))
         }
+        align := attr.Type.Std140Alignment()
+        if offset%align != 0 {
+            offset += align - (offset % align)
+        }
+        offsets[i] = offset
+        offset += attr.Type.Std140Size()
     }
-    bufferSizeNeeded := std140Offsets[len(std140Offsets)-1] + attributes[len(attributes)-1].Type.Std140BaseAlignment()
+    // A std140 block is rounded up to a multiple of its largest base alignment, 16.
+    if offset%16 != 0 {
+        offset += 16 - (offset % 16)
+    }
+    return offsets, offset
+}
+
+func NewUBOWithAttributes(attributes []Attr) *UniformBufferObject {
+    std140Offsets, bufferSizeNeeded := std140Layout(attributes)
     u := NewUBO(bufferSizeNeeded)
 
     u.attributes = attributes
@@ -115,7 +121,7 @@ func (u *UniformBufferObject) BindUBOTo(bindingIndex uint32) {
 // NOTE: Requires Begin() and End() to be called before and after setting attributes.
 func (u *UniformBufferObject) SetAttribute(attrIndex int, value any) {
     offset := u.std140Offsets[attrIndex]
-    size := u.attributes[attrIndex].Type.Std140BaseAlignment()
+    size := u.attributes[attrIndex].Type.Std140Size()
     var ptrToValue unsafe.Pointer
     switch v := value.(type) {
     case mgl32.Mat4:
@@ -132,10 +138,6 @@ func (u *UniformBufferObject) SetAttribute(attrIndex int, value any) {
 
     gl.BufferSubData(gl.UNIFORM_BUFFER, offset, size, ptrToValue)
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
 }
 
 func (u *UniformBufferObject) GetShaderBlockSource(blockName string) string {

@@ -167,13 +167,13 @@ func (g *GameObject) IsAlive() bool {
     return !g.isDead
 }
 
-func (g *GameObject) IsInViewFrustum(camera *core.FPSCamera) bool {
+func (g *GameObject) IsInViewFrustum(frustum core.Culler) bool {
     if g.HasComponent(ComponentTypePhysics) {
-        if !camera.IsCubeInViewFrustum(g.Physics().AABB().Extremes()) {
+        if !frustum.IsCubeInViewFrustum(g.Physics().AABB().Extremes()) {
             return false
         }
     } else {
-        if !camera.IsSphereInViewFrustum(g.Transform().GetPosition(), 0.5) {
+        if !frustum.IsSphereInViewFrustum(g.Transform().GetPosition(), 0.5) {
             return false
         }
     }

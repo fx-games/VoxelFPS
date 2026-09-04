@@ -14,11 +14,10 @@ reports one event for the surface that was actually hit (see Physics below).
 - **`quads/voxel/map.go:230`** — `chunkIsVisible` returns after a sphere-vs-frustum test; the
   AABB path below is unreachable and marked `// TODO: THIS DOES NOT WORK`. Culling is therefore
   sphere-only and over-inclusive. This is the "do better frustum culling" item in `optimize.txt`.
-- **`zdwep/weapon_test.go` does not compile** (pre-existing): calls
-  `readDoomAtlas(pngFile)` but the function is now `readDoomAtlas(filename string, atlasFile
-  io.ReadSeeker) (*glhf.TextureAtlasPacked, string, error)`. It also reads from
-  `../doom_likes/`, which is gitignored, so it can never pass in CI. `go vet ./...` fails
-  because of it.
+- ~~`zdwep/weapon_test.go` does not compile~~ **Deleted.** It called the old
+  `readDoomAtlas` signature and read from `../doom_likes/`, which is gitignored, so it could
+  never pass in CI. The Doom atlas parser is uncovered again; a replacement would need a
+  small PNG in `zdwep/testdata/`.
 
 ## Weapons
 
@@ -45,11 +44,10 @@ reports one event for the surface that was actually hit (see Physics below).
   fixed (`quads.Assets.open` panics with the file name); the rest are mostly GL and parsing.
 - `dungen/accretion.go:176` — `panic("first room cannot be placed")` instead of retrying or
   reporting a failed generation.
-- `go vet` warnings still open: unreachable code in `png_chunks/chunk_text.go:174`,
-  `quads/glhf/shader.go:265`, `quads/gl_application.go:855`, `quads/sys_pathfinder.go:95`,
-  plus the two listed under Bugs; six unkeyed `voxel.Int3` literals in `edit_map.go`
-  (silently wrong if the field order ever changes). Worth adding `go vet ./...` to
-  `.github/workflows/go.yml`.
+- ~~`go vet` warnings~~ **Clear.** The four unreachable `return`s after `panic` are gone and
+  the six `voxel.Int3` literals in `edit_map.go` are keyed. `go build`, `go vet` and
+  `go test` all run on every push through `.github/workflows/test.yml` - `go.yml` only fires
+  on release tags, which is too late to learn the tree is broken.
 
 ## Dead or unused code
 
@@ -107,6 +105,21 @@ Covered: `png_chunks`, `quads/voxel` (OBB sweep, DDA raycast incl. the range/mis
 it was verified by hand by shrinking a batch to one quad and watching it double.
 Untested and worth it next: `voxel.SweepAABB` / `CheckAABBVsOBB` (the physics core),
 `tpack` atlas pack/decode round-trip, `quads/assets.go` loaders against a `fstest.MapFS`.
+
+## Measuring performance
+
+`-stress` generates a map built to load the renderer, because the shipped test map draws 816
+triangles in 2-3 calls and nothing can be measured against it (see `findings.md`,
+Measurement). `go run . -stress` gives 128x128 tiles, a pillar every 6, about a thousand
+barrel sprites and 8 downward spotlights; `-stress-size`, `-stress-pillars`,
+`-stress-sprites` and `-stress-lights` move each knob. It is fully deterministic, so two
+builds can be compared on the same frame. The FPS average is in the window title.
+
+The pillars are load bearing: a flat floor with four outer walls collapses into a handful of
+quads under greedy meshing and stresses nothing.
+
+Known limit: `PathfindingSystem.calculatePath` hardcodes a 64x64 path range, so pathfinding
+is wrong on a stress map bigger than that. Nothing in a stress run calls it.
 
 ## Gameplay backlog
 

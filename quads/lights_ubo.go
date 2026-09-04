@@ -1,6 +1,8 @@
 package quads
 
 import (
+    "fmt"
+
     "github.com/go-gl/gl/v3.3-core/gl"
     "github.com/go-gl/mathgl/mgl32"
     "github.com/memmaker/goray/core"
@@ -10,6 +12,47 @@ import (
 type LightInfo struct {
     *core.PerspectiveTransform
     Color mgl32.Vec4
+
+    // What the depth map in the shadow buffer was rendered from. A light only has
+    // to redraw it when its own frustum moved or the casting scene changed.
+    shadowProjView  mgl32.Mat4
+    shadowScene     uint64
+    shadowRendered  bool
+}
+
+// IsOff reports a light that contributes nothing, so it needs neither a shadow
+// map nor a slot in the shader's light loop.
+func (l LightInfo) IsOff() bool {
+    return (l.Color.X() <= 0 && l.Color.Y() <= 0 && l.Color.Z() <= 0) || l.Color.W() <= 0
+}
+
+// packed lays a light out the way the shader reads it. The three spare components
+// carry what used to be hardcoded in the shader for every light alike:
+//
+//	position.w  reach, the light's own far plane
+//	color.w     intensity
+//	direction.w cosine of the half FOV, the outer edge of the cone
+//
+// Reach and cone come from the light's shadow frustum, so the region it lights and
+// the region it has depth information for cannot drift apart.
+func (l LightInfo) packed() (pos, col, dir mgl32.Vec4, projView mgl32.Mat4) {
+    return l.GetPosition().Vec4(l.GetFarPlaneDist()),
+        l.Color,
+        l.GetForward().Vec4(l.ConeCosine()),
+        l.GetProjectionViewMatrix()
+}
+
+// NeedsShadowUpdate reports whether the cached depth map for this light is stale.
+func (l *LightInfo) NeedsShadowUpdate(sceneSignature uint64) bool {
+    return !l.shadowRendered ||
+        l.shadowScene != sceneSignature ||
+        l.shadowProjView != l.GetProjectionViewMatrix()
+}
+
+func (l *LightInfo) MarkShadowRendered(sceneSignature uint64) {
+    l.shadowRendered = true
+    l.shadowScene = sceneSignature
+    l.shadowProjView = l.GetProjectionViewMatrix()
 }
 
 type LightsUBO struct {
@@ -19,7 +62,12 @@ type LightsUBO struct {
     rawBuffer  []glhf.GlFloat
 }
 
-const lightsGLSLBlock = `
+// MaxLights caps the shadow map array, the UBO and the shader's light loop. Each
+// light costs a layer of the depth texture (512^2 x 4 bytes) whether it is used
+// or not, so this is not free headroom.
+const MaxLights = 16
+
+var lightsGLSLBlock = fmt.Sprintf(`
    struct LightInfo
    {
        vec4 position;
@@ -31,13 +79,13 @@ const lightsGLSLBlock = `
    // Uniform block named Lights, follows std140 alignment rules
    layout (std140) uniform Lights {
         vec4 lightCounts;
-        LightInfo lights [64];
+        LightInfo lights [%d];
    };
-`
+`, MaxLights)
 const floatsPerLightStruct = 4 + 4 + 4 + 16 // vec4 + vec4 + vec4 + mat4
 
 func NewLightsUBO() *LightsUBO {
-    floatsInArray := (64 * floatsPerLightStruct) + 4 // 4 for the lightCount
+    floatsInArray := (MaxLights * floatsPerLightStruct) + 4 // 4 for the lightCount
     totalSizeInBytes := floatsInArray * 4
     ubo := &LightsUBO{
         UniformBufferObject: glhf.NewUBO(totalSizeInBytes),
@@ -56,7 +104,7 @@ func (lu *LightsUBO) SetLights(lights []LightInfo) {
     offset := 4
     for i := 0; i < lu.lightCount; i++ {
         curLight := lights[i]
-        setLightAt(lu.rawBuffer, offset, i, floatsPerLightStruct, curLight.GetPosition().Vec4(1.0), curLight.Color, curLight.GetForward().Vec4(0), curLight.GetProjectionViewMatrix())
+        setLightAt(lu.rawBuffer, offset, i, floatsPerLightStruct, curLight)
     }
     lu.Begin()
     gl.BufferSubData(gl.UNIFORM_BUFFER, 0, totalSizeInBytes, gl.Ptr(lu.rawBuffer))
@@ -65,7 +113,7 @@ func (lu *LightsUBO) SetLights(lights []LightInfo) {
 
 func (lu *LightsUBO) updateLightAt(index int) {
     light := lu.lights[index]
-    setLightAt(lu.rawBuffer, 4, index, floatsPerLightStruct, light.GetPosition().Vec4(1.0), light.Color, light.GetForward().Vec4(0), light.GetProjectionViewMatrix())
+    setLightAt(lu.rawBuffer, 4, index, floatsPerLightStruct, light)
     rawBufferOffset := (index * floatsPerLightStruct) + 4
     byteOffset := (4 + (index * floatsPerLightStruct)) * 4
 
@@ -74,7 +122,8 @@ func (lu *LightsUBO) updateLightAt(index int) {
     lu.End()
 }
 
-func setLightAt(lightBuffer []glhf.GlFloat, offset int, index int, elementsPerStruct int, pos, col, dir mgl32.Vec4, projView mgl32.Mat4) {
+func setLightAt(lightBuffer []glhf.GlFloat, offset int, index int, elementsPerStruct int, light LightInfo) {
+    pos, col, dir, projView := light.packed()
     lightBuffer[index*elementsPerStruct+0+offset] = glhf.GlFloat(pos.X()) // position
     lightBuffer[index*elementsPerStruct+1+offset] = glhf.GlFloat(pos.Y())
     lightBuffer[index*elementsPerStruct+2+offset] = glhf.GlFloat(pos.Z())

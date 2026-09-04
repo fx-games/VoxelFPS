@@ -1,6 +1,7 @@
 package main
 
 import (
+    "flag"
     "fmt"
     "github.com/fsnotify/fsnotify"
     "github.com/go-gl/glfw/v3.3/glfw"
@@ -26,15 +27,41 @@ var stringMapData = `################
 ################`
 
 func main() {
+    defaults := DefaultStressConfig()
+    stress := flag.Bool("stress", false, "generate a stress map instead of loading the LDtk map")
+    stressSize := flag.Int("stress-size", defaults.Size, "stress map edge length in tiles")
+    stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
+    stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
+    stressLightCount := flag.Int("stress-lights", defaults.Lights, "stress map: static spotlights on top of the flashlight")
+    flag.Parse()
 
-    mapLoad := loadLDTK("assets/raymap.ldtk")
-    //mapLoad := loadText(strings.Split(stringMapData, "\n"))
+    var stressConfig *StressConfig
+    var mapLoad core.MapLoadResult
+    if *stress {
+        stressConfig = &StressConfig{
+            Size:          *stressSize,
+            PillarSpacing: *stressPillars,
+            SpriteSpacing: *stressSprites,
+            Lights:        *stressLightCount,
+        }
+        mapLoad = loadStressMap(*stressConfig)
+    } else {
+        mapLoad = loadLDTK("assets/raymap.ldtk")
+        //mapLoad = loadText(strings.Split(stringMapData, "\n"))
+    }
+
     glhf.Run(func() {
-        quads.Start(NewGame(), mapLoad, 640, 480)
+        quads.Start(NewGame(stressConfig), mapLoad, 640, 480)
     })
 }
-func NewGame() *Game {
-    return &Game{isMouseCursorCaptured: true}
+
+// NewGame takes a stress config, or nil for a normal run.
+func NewGame(stress *StressConfig) *Game {
+    return &Game{
+        isMouseCursorCaptured: true,
+        stressConfig:          stress,
+        currentGuiScaleIndex:  defaultGuiScaleIndex,
+    }
 }
 
 type Lifekeeper interface {
@@ -66,7 +93,15 @@ type Game struct {
     fogStart               float32
     fogEnd                 float32
     skyHorizonFade         float32
+    exposure               float32
+    bloomThreshold         float32
+    bloomStrength          float32
+    emissiveStrength       float32
+    emissiveCutoff         float32
+    emissiveSaturation     float32
     currentResolutionIndex int
+    currentGuiScaleIndex   int
+    currentWindowModeIndex int
 
     watchFileChanges      bool
     isMouseCursorCaptured bool
@@ -88,6 +123,9 @@ type Game struct {
     weapons                     []Weapon
     currentWeaponIndex          int
     currentPaintGunTextureIndex int
+
+    // Set only by -stress, nil on a normal run.
+    stressConfig *StressConfig
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
@@ -197,6 +235,10 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     g.mapLoad(mapLoadResult, false)
 
+    if g.stressConfig != nil {
+        g.AddLights(stressLights(*g.stressConfig, g.ShadowResolution())...)
+    }
+
     events.Subscribe(events.EventPlayerWeaponFired, func(id events.EventID, event events.Event) {
         origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
         g.fireWeapon(origin, direction, event.(WeaponEffect))
@@ -246,6 +288,22 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     // Load Map
     entitySpawns := g.LoadVoxelMap(mapLoad)
 
+    // The wall textures in the Blake Stone sheet that carry a lit fitting: the cyan tube
+    // panels (19, 27) and the console screens (47), which are the three this map actually
+    // uses, plus the lit strips (29, 30), FOOD UNIT signs (45, 46) and cyan vent (26) for
+    // other maps. Marking a texture does not light the whole tile - only the texels that
+    // are both bright and colourful, so the tubes and screens come on and the grey metal
+    // panel they are mounted on stays dark.
+    //
+    // 49 is a brightened copy of the console panel 47, written into the free slot in the
+    // wall sheet's last row: same art with its screen readouts lifted, so the screens
+    // clear the emissive cutoff by a wide margin and read as lit rather than as painted.
+    // raymap.ldtk points the two console walls at it.
+    //
+    // Indices are literal because this atlas's layout is fixed and indexed directly
+    // everywhere else too, see ISSUES.md. Press G at any wall to add another at runtime.
+    g.CubeMap.SetEmissiveTextures([]uint16{19, 26, 27, 29, 30, 45, 46, 47, 49})
+
     /*
        sphere := physics.NewSphericalHull(5)
        bulletSDK := bullet.BulletNewPhysicsSDK()
@@ -271,6 +329,12 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.fogStart = 4
     g.fogEnd = 22
     g.skyHorizonFade = 7
+    g.exposure = quads.DefaultExposure
+    g.bloomThreshold = quads.DefaultBloomThreshold
+    g.bloomStrength = quads.DefaultBloomStrength
+    g.emissiveStrength = quads.DefaultEmissiveStrength
+    g.emissiveCutoff = quads.DefaultEmissiveCutoff
+    g.emissiveSaturation = quads.DefaultEmissiveSaturation
     g.updateFog()
     g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
@@ -279,23 +343,26 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 
 }
 
+// HandleResize lays the HUD out in GUI coordinates, not window coordinates, so the
+// GUI scale applies to it.
 func (g *Game) HandleResize(windowWidth, windowHeight int) {
+    guiWidth, guiHeight := g.GuiSize()
     if len(g.widgetStack) > 0 {
-        g.focusedWidget().HandleResize(windowWidth, windowHeight, g.UIScale)
+        g.focusedWidget().HandleResize(guiWidth, guiHeight, g.UIScale)
     }
 
-    screenCenter := mgl32.Vec2{float32(windowWidth) / 2, float32(windowHeight) / 2}
-    listWidth := windowWidth / 3
-    listHeight := min(windowHeight/2, 160)
+    screenCenter := mgl32.Vec2{float32(guiWidth) / 2, float32(guiHeight) / 2}
+    listWidth := guiWidth / 3
+    listHeight := min(guiHeight/2, 160)
 
     // center in the right side of the screen
-    listX := float32(windowWidth)/2 + (float32(windowWidth) / 4) - (float32(listWidth) / 2)
+    listX := float32(guiWidth)/2 + (float32(guiWidth) / 4) - (float32(listWidth) / 2)
     g.entityMenu.SetOrigin(listX, screenCenter.Y())
     g.entityMenu.SetBounds(float32(listWidth), float32(listHeight))
 
     tileW, tileH := g.UIAtlas.GetAtlasItemSize()
-    centerX := (float32(windowWidth) / 2) - (float32(tileW) / 2)
-    centerY := (float32(windowHeight) / 2) - (float32(tileH) / 2)
+    centerX := (float32(guiWidth) / 2) - (float32(tileW) / 2)
+    centerY := (float32(guiHeight) / 2) - (float32(tileH) / 2)
 
     g.crossHair.SetDestRect(mgl32.Vec4{centerX, centerY, centerX + float32(tileW), centerY + float32(tileH)})
     /*
@@ -345,6 +412,8 @@ func (g *Game) printDebugInfo() {
     spriteTrisDrawn, spriteDrawCalls := g.Sprites.DrawnLastFrame()
     guiTrisDrawn, guiDrawCalls := g.Gui.DrawnLastFrame()
     meshTriangles, meshDrawCalls := g.Meshes.DrawnLastFrame()
+    shadowPasses, litLights := g.ShadowPasses()
+    meshGen, sceneHash := g.ShadowCacheState()
 
     rows := []core.TableRow{
         core.NewTableRow("Cam Fwd", "", vec3String(forward)),
@@ -356,6 +425,8 @@ func (g *Game) printDebugInfo() {
         core.NewTableRow("GUI", fmt.Sprintf("%d tris", guiTrisDrawn), fmt.Sprintf("%d", guiDrawCalls)),
         core.NewTableRow("Sprites", fmt.Sprintf("%d tris", spriteTrisDrawn), fmt.Sprintf("%d", spriteDrawCalls)),
         core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
+        core.NewTableRow("Shadows", fmt.Sprintf("%d/%d lit", shadowPasses, litLights), fmt.Sprintf("gen %d", meshGen)),
+        core.NewTableRow("Shadow key", fmt.Sprintf("%04x", sceneHash&0xffff), ""),
     }
     debugLines := core.TableLayout(rows, []core.TextAlignment{core.AlignLeft, core.AlignRight, core.AlignRight})
     g.PrintMulti(debugLines)
@@ -441,7 +512,8 @@ func (g *Game) DrawGui(elapsed float64) {
     }
 
     if weapon := g.currentWeapon(); weapon != nil {
-        weapon.Draw(elapsed, int32(g.WindowWidth), int32(g.WindowHeight))
+        guiWidth, guiHeight := g.GuiSize()
+        weapon.Draw(elapsed, int32(guiWidth), int32(guiHeight))
     }
 
     if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
@@ -563,6 +635,7 @@ func (g *Game) rayCastFromScreenPos(screenPosX, screenPosY float64) RaycastResul
     origin, dir := g.Camera.GetPickingRayFromScreenPosition(normalizedX, normalizedY)
     return g.rayCast(origin, dir)
 }
+
 // rayCastRange is how far picking rays reach, in world units.
 const rayCastRange = 100.0
 
@@ -626,7 +699,8 @@ func (g *Game) openCubeTextureMapper() {
 
     g.widgetsAreBlockingMovement = true
     atlasPicker := g.OpenTextureCube(g.AtlasMap, g.voxelBlock.Textures)
-    atlasPicker.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    guiWidth, guiHeight := g.GuiSize()
+    atlasPicker.HandleResize(guiWidth, guiHeight, g.UIScale)
 
     atlasPicker.SetOnClose(func() {
         g.SetMouseCapture(true)
@@ -656,7 +730,8 @@ func (g *Game) openEscapeMenu() {
         quads.NewGuiOptionAction("Quit", g.quitGame),
     }
     configMenu.SetOptions(options)
-    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    guiWidth, guiHeight := g.GuiSize()
+    configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
     configMenu.SetOnClose(func() {
         g.captureMouse(previousMouseState)
         g.popFromWidgetStack()
@@ -685,10 +760,21 @@ func (g *Game) openWizardMenu() {
             //core.BigDebugSwitch = !core.BigDebugSwitch
             g.CubeMap.GetTerrainTexture().GenerateMipMaps()
         }),
-        quads.NewGuiOptionAction("Fullscreen", g.toggleFullscreen),
+        quads.NewGuiOptionList("Window Mode", quads.WindowModeNames, &g.currentWindowModeIndex, g.setWindowMode),
         quads.NewGuiOptionAction("VSync", g.toggleVsync),
 
-        quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowMode),
+        quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowResolution),
+        quads.NewGuiOptionList("GUI Scale", guiScaleLabels, &g.currentGuiScaleIndex, g.setGuiScale),
+    }
+
+    // Only macOS puts a menu bar and Dock over a borderless window, so only there is
+    // there anything to choose between.
+    if quads.CanConstrainToWorkArea {
+        options = append(options, quads.NewGuiOptionBool("Constrain to work area", &g.ConstrainToWorkArea).
+            ActivateFunc(g.RefreshWindowMode))
+    }
+
+    options = append(options,
         quads.NewGuiOptionBool("Show Chunk AABBs", &g.ShouldDrawChunkAABBs),
         quads.NewGuiOptionBool("Show AABBs", &g.ShouldDrawAABBs),
         quads.NewGuiOptionBool("Show OBBs", &g.ShouldDrawOBBs),
@@ -701,7 +787,14 @@ func (g *Game) openWizardMenu() {
         quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
         quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
         quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
-    }
+        quads.NewGuiOptionBool("Bloom", &g.ShouldDrawBloom),
+        quads.NewGuiOptionFloat("Exposure", &g.exposure).StepSize(0.1).ActivateFunc(g.updateToneMapping),
+        quads.NewGuiOptionFloat("Bloom Threshold", &g.bloomThreshold).StepSize(0.1).ActivateFunc(g.updateBloom),
+        quads.NewGuiOptionFloat("Bloom Strength", &g.bloomStrength).StepSize(0.05).ActivateFunc(g.updateBloom),
+        quads.NewGuiOptionFloat("Emissive Strength", &g.emissiveStrength).StepSize(0.5).ActivateFunc(g.updateEmissive),
+        quads.NewGuiOptionFloat("Emissive Cutoff", &g.emissiveCutoff).StepSize(0.05).ActivateFunc(g.updateEmissive),
+        quads.NewGuiOptionFloat("Emissive Saturation", &g.emissiveSaturation).StepSize(0.05).ActivateFunc(g.updateEmissive),
+    )
 
     if !g.watchFileChanges {
         options = append(options, quads.NewGuiOptionAction("Start Map Hot Reload", func() {
@@ -712,18 +805,61 @@ func (g *Game) openWizardMenu() {
         }))
     }
     configMenu.SetOptions(options)
-    configMenu.HandleResize(g.WindowWidth, g.WindowHeight, g.UIScale)
+    guiWidth, guiHeight := g.GuiSize()
+    configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
     configMenu.SetOnClose(func() {
         g.captureMouse(previousMouseState)
         g.popFromWidgetStack()
     })
     g.pushToWidgetStack(configMenu)
 }
-func (g *Game) setWindowMode(index int) {
-    g.ShouldRenderFullscreen = false
-    vMode := g.GetVideoModes()[index]
-    g.SetWindowSize(vMode)
+// guiScaleSteps are the GUI scale factors the menu offers, with their labels.
+// 1.0 is the size the GUI has always been drawn at.
+var guiScaleSteps = []float32{0.25, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0}
+
+var guiScaleLabels = func() []string {
+    labels := make([]string, len(guiScaleSteps))
+    for i, scale := range guiScaleSteps {
+        // 0.25x keeps both decimals, 1.00x reads better as 1.0x.
+        labels[i] = strings.TrimSuffix(fmt.Sprintf("%.2f", scale), "0") + "x"
+    }
+    return labels
+}()
+
+// defaultGuiScaleIndex is the entry for 1.0.
+const defaultGuiScaleIndex = 2
+
+func (g *Game) setGuiScale(index int) {
+    g.SetGuiScale(guiScaleSteps[index])
+    g.Toast(fmt.Sprintf("GUI scale: %s", guiScaleLabels[index]))
 }
+
+func (g *Game) setWindowMode(index int) {
+    g.SetWindowMode(quads.WindowMode(index))
+    g.Toast(fmt.Sprintf("Window mode: %s", quads.WindowModeNames[index]))
+}
+
+func (g *Game) setWindowResolution(index int) {
+    g.SetWindowSize(g.GetVideoModes()[index])
+    g.currentWindowModeIndex = int(quads.WindowModeWindowed)
+}
+func (g *Game) updateToneMapping() {
+    g.SetExposure(g.exposure)
+    g.Toast(fmt.Sprintf("Exposure: %.2f", g.exposure))
+}
+
+func (g *Game) updateBloom() {
+    g.SetBloom(g.bloomThreshold, g.bloomStrength)
+    g.Toast(fmt.Sprintf("Bloom: threshold %.2f, strength %.2f", g.bloomThreshold, g.bloomStrength))
+}
+
+func (g *Game) updateEmissive() {
+    g.SetEmissiveStrength(g.emissiveStrength)
+    g.SetEmissiveCutoff(g.emissiveCutoff)
+    g.SetEmissiveSaturation(g.emissiveSaturation)
+    g.Toast(fmt.Sprintf("Emissive: strength %.1f, cutoff %.2f, sat %.2f", g.emissiveStrength, g.emissiveCutoff, g.emissiveSaturation))
+}
+
 func (g *Game) updateFog() {
     toastMessage := fmt.Sprintf("Fog: %.0f - %.0f, horizon %.0f deg", g.fogStart, g.fogEnd, g.skyHorizonFade)
     g.Toast(toastMessage)
@@ -731,14 +867,6 @@ func (g *Game) updateFog() {
     g.SetSkyFog(g.skyHorizonFade)
 }
 
-func (g *Game) toggleFullscreen() {
-    if g.ShouldRenderFullscreen {
-        g.SetWindowSize(g.GetVideoModes()[g.currentResolutionIndex])
-    } else {
-        g.SetFullscreen()
-    }
-    g.ShouldRenderFullscreen = !g.ShouldRenderFullscreen
-}
 
 func (g *Game) toggleVsync() {
     g.ShouldUseVsync = !g.ShouldUseVsync
@@ -757,7 +885,8 @@ func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
     }
 
     if len(g.widgetStack) > 0 {
-        if g.focusedWidget().HandleDrop(names, screenDropX, screenDropY) {
+        guiX, guiY := g.GuiCoords(screenDropX, screenDropY)
+        if g.focusedWidget().HandleDrop(names, guiX, guiY) {
             return
         }
     }

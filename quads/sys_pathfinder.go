@@ -92,7 +92,6 @@ func (c *PathfindingSystem) calculatePath(position mgl32.Vec3, destination mgl32
     heightPlaneDestination := destination.Y()
     if heightPlaneOrigin != heightPlaneDestination {
         panic("PathfindingSystem: calculatePath: height difference between origin and destination is not supported")
-        return nil
     }
 
     pathrange := geometry.NewPathRange(geometry.NewRect(0, 0, 64, 64))

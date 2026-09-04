@@ -151,12 +151,9 @@ func TestUpdateRemovesObjectsThatLeaveTheMap(t *testing.T) {
     escaping.SetVelocity(mgl32.Vec3{10, 0, 0})
     system.AddObject(escaping)
 
-    system.Update(1) // moves it to x = 19, outside the map
-    if len(system.movingObjects) != 1 {
-        t.Fatalf("object should still be tracked right after the move, have %d", len(system.movingObjects))
-    }
-
-    system.Update(1) // now it is noticed as gone
+    // Update runs fixed steps, so the step after the one that carries the object
+    // out of the map is the one that notices - within the same call.
+    system.Update(1)
     if len(system.movingObjects) != 0 {
         t.Errorf("expected the escaped object to be removed, %d left", len(system.movingObjects))
     }
@@ -285,5 +282,54 @@ func TestCheckForCollisionsPublishesOneEvent(t *testing.T) {
     // The mover is 0.25 wide and the near blocker starts at x = 2.5.
     if math.Abs(float64(collisions[0].WorldPos.X()-2.25)) > 0.01 {
         t.Errorf("collision position = %v, want the mover touching the first blocker", collisions[0].WorldPos)
+    }
+}
+
+// The whole point of the fixed step: one second of falling is one second of
+// falling, whether the frames were 60 or 120 per second.
+func TestUpdateIsFramerateIndependent(t *testing.T) {
+    fall := func(frames int, frameTime float64) mgl32.Vec3 {
+        system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+        system.SetGravityEnabled(true)
+        object := mover(t, mgl32.Vec3{0.5, 100, 0.5})
+        object.ApplyGravity = true
+        system.AddObject(object)
+        for i := 0; i < frames; i++ {
+            system.Update(frameTime)
+        }
+        return object.Position()
+    }
+
+    at60 := fall(60, 1.0/60.0)
+    at120 := fall(120, 1.0/120.0)
+    if at60 != at120 {
+        t.Errorf("one second of fall differs with the framerate: 60fps %v, 120fps %v", at60, at120)
+    }
+    if at60.Y() >= 100 {
+        t.Errorf("object did not fall at all, y = %v", at60.Y())
+    }
+}
+
+// Two objects on the collision grid: the mover has to stop at the blocker
+// rather than pass through it. Also guards the reused collider scratch buffer
+// in step(), which every grid cell now writes into.
+func TestUpdateStopsAtObjectOnGrid(t *testing.T) {
+    system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+
+    blocker := mover(t, mgl32.Vec3{3, 0.5, 0.5}) // no velocity, so it never moves
+    system.AddObject(blocker)
+
+    moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+    moving.SetVelocity(mgl32.Vec3{6, 0, 0})
+    system.AddObject(moving)
+
+    system.Update(1)
+
+    // Both boxes are 0.25 wide, so the centres cannot come closer than 0.5.
+    if gap := blocker.Position().X() - moving.Position().X(); gap < 0.49 {
+        t.Errorf("moved into the blocker: gap = %f, want >= 0.5", gap)
+    }
+    if moving.Position().X() < 1 {
+        t.Errorf("stopped far too early: x = %f", moving.Position().X())
     }
 }

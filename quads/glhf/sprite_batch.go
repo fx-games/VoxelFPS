@@ -59,17 +59,9 @@ func (a *SpriteBatch) End() {
     }
     a.gpuVertexBuffer.Begin()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
     a.gpuVertexBuffer.SetVertexData(a.cpuVertexBuffer[:a.vertexElementCounter])
     a.gpuVertexBuffer.End()
 
-    glErr = gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
 }
 
 func (a *SpriteBatch) Render() {
@@ -93,10 +85,6 @@ func (a *SpriteBatch) RenderSlice(firstIndex int, quadCount int) {
     a.gpuVertexBuffer.End()
     //a.twoDeeShader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
 }
 
 func (a *SpriteBatch) DrawColoredRect(dstRect mgl32.Vec4, color mgl32.Vec4) {
