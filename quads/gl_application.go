@@ -464,6 +464,14 @@ func (a *GlApplication) StartEventLoop() {
 					}
 				})
 
+				// Particles draw in the main pass only: they need the view and
+				// projection matrices separately (the geometry shader billboards in
+				// view space), which Observer does not expose, and a shadow pass has
+				// no business rasterising them.
+				if a.ShouldDrawParticles {
+					a.DrawParticles(a.Camera)
+				}
+
 				a.draw3dDebug()
 
 				a.shadowBuffer.DepthTextureArray().End()
@@ -603,9 +611,6 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 		gl.Enable(gl.BLEND)
 		a.Sprites.DrawTransparent(observer, spriteShader)
 		gl.Disable(gl.BLEND)
-	}
-	if a.ShouldDrawParticles {
-		//a.DrawParticles(cam)
 	}
 }
 

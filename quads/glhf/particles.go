@@ -62,6 +62,7 @@ type ParticleSystem struct {
 	frontIsSource bool
 
 	currentOffset           int
+	activeVertexCount       int
 	maxVertexCount          int
 	transformFeedbackShader *Shader
 	particleShader          *Shader
@@ -80,7 +81,7 @@ type ParticleSystem struct {
 
 func NewParticleSystem(particleCount int) *ParticleSystem {
 	particleVertexFormat := getParticleVertexFormat()
-	v := &ParticleSystem{ // TODO: specify DYNAMIC_READ instead of STATIC_DRAW during buffer creation
+	v := &ParticleSystem{
 		maxVertexCount:          particleCount,
 		transformFeedbackShader: loadTransformFeedbackShader(particleVertexFormat),
 		particleShader:          loadParticleShader(particleVertexFormat),
@@ -161,7 +162,7 @@ func (v *ParticleSystem) doTransfer(src, dest *VertexArray[GlFloat], deltaTime f
 	gl.BindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, dest.vbo.obj)
 
 	gl.BeginTransformFeedback(v.primitiveType)
-	src.DrawWithOffset(0, int32(v.maxVertexCount))
+	src.DrawWithOffset(0, int32(v.activeVertexCount))
 	gl.EndTransformFeedback()
 
 	gl.BindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, 0)
@@ -190,20 +191,33 @@ func (v *ParticleSystem) doTransfer(src, dest *VertexArray[GlFloat], deltaTime f
 	*/
 }
 
+// Draw reads the buffer that holds the current state, which is the one Emit also
+// writes into: after Update's swap the transform feedback destination has become
+// the source for the next frame.
 func (v *ParticleSystem) Draw(cam core.Camera) {
-	// Another DrawWithOffset Call here
-	v.draw(cam, v.currentFrontBuffer())
+	if v.activeVertexCount == 0 {
+		return
+	}
+	v.draw(cam, v.currentBackBuffer())
 }
 func (v *ParticleSystem) Update(deltaTime float64) {
 	v.totalTime += float32(deltaTime)
 	if v.lastParticleLifetime <= 0.00 && !v.isInfiteEmitter {
+		// Everything this system emitted has expired. Dropping the active count
+		// here is what lets both the feedback pass and the draw be skipped
+		// entirely: an idle system used to keep stepping and rasterising its full
+		// buffer of dead particles every frame.
+		v.activeVertexCount = 0
+		v.currentOffset = 0
 		return
 	}
 	v.lastParticleLifetime -= float32(deltaTime)
 
-	v.frontIsSource = !v.frontIsSource
-	// One DrawWithOffset Call here
+	// Swap after the transfer, not before. Swapping first made the buffer Emit had
+	// just written into the transform feedback destination, so every particle
+	// emitted this frame was overwritten before it was ever stepped or drawn.
 	v.doTransfer(v.currentBackBuffer(), v.currentFrontBuffer(), deltaTime)
+	v.frontIsSource = !v.frontIsSource
 }
 
 func (v *ParticleSystem) draw(cam core.Camera, drawBuffer *VertexArray[GlFloat]) {
@@ -217,7 +231,12 @@ func (v *ParticleSystem) draw(cam core.Camera, drawBuffer *VertexArray[GlFloat])
 	v.particleShader.SetUniformAttr(1, modelView)
 
 	drawBuffer.Begin()
-	gl.DrawTransformFeedback(gl.POINTS, v.xfbo)
+	// DrawTransformFeedback, which would take the vertex count from the feedback
+	// object, raises GL_INVALID_OPERATION on this driver and draws nothing. Every
+	// slot up to activeVertexCount has been written (dead particles are zeroed and
+	// the geometry shader discards them), so a plain DrawArrays over that range is
+	// equivalent.
+	gl.DrawArrays(gl.POINTS, 0, int32(v.activeVertexCount))
 	drawBuffer.End()
 
 	v.particleShader.End()
@@ -241,11 +260,7 @@ func (v *ParticleSystem) Emit(props ParticleProperties, count int) int {
 	flatCount := count * flatStride
 	for index := 0; index < count; index++ {
 		flatIndex := (flatOffset + index*flatStride) % len(v.flatData)
-		particle := v.createParticle(props, index)
-		// copy particle data into flatData
-		for i := 0; i < flatStride; i++ {
-			v.flatData[flatIndex+i] = particle[i]
-		}
+		v.writeParticle(v.flatData[flatIndex:flatIndex+flatStride], props, index)
 	}
 	buffer.Begin()
 	if vertexOffset+count > v.maxVertexCount {
@@ -257,9 +272,6 @@ func (v *ParticleSystem) Emit(props ParticleProperties, count int) int {
 		buffer.setVertexDataWithOffset(vertexOffset, v.flatData[flatOffset:flatOffset+flatCount])
 	}
 	buffer.End()
-
-	var maxComponents int32
-	gl.GetIntegerv(gl.MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, &maxComponents)
 
 	// hmm3: we will overwrite the properties of existing particles being emitted the moment here..
 	v.particleShader.Begin()
@@ -273,12 +285,22 @@ func (v *ParticleSystem) Emit(props ParticleProperties, count int) int {
 	v.transformFeedbackShader.SetUniformAttr(2, props.Lifetime)
 	v.transformFeedbackShader.End()
 
+	if vertexOffset+count > v.activeVertexCount {
+		v.activeVertexCount = vertexOffset + count
+	}
+	if v.activeVertexCount > v.maxVertexCount {
+		v.activeVertexCount = v.maxVertexCount
+	}
 	v.currentOffset = (vertexOffset + count) % v.maxVertexCount
 
 	return vertexOffset
 }
 
-func (v *ParticleSystem) createParticle(props ParticleProperties, index int) []GlFloat {
+// writeParticle fills one vertex worth of flatData in place. It used to return a
+// freshly allocated slice that the caller copied out of, which put one heap
+// allocation per particle on the emit path - a few hundred per burst, all garbage
+// before the frame was over.
+func (v *ParticleSystem) writeParticle(dst []GlFloat, props ParticleProperties, index int) {
 	x := props.Origin.X() + props.PositionVariation.X()*(rand.Float32()-0.5)
 	y := props.Origin.Y() + props.PositionVariation.Y()*(rand.Float32()-0.5)
 	z := props.Origin.Z() + props.PositionVariation.Z()*(rand.Float32()-0.5)
@@ -295,32 +317,22 @@ func (v *ParticleSystem) createParticle(props ParticleProperties, index int) []G
 		lifeTimeAbs = lifeTimeAbs - (float64(index) * float64(props.SpreadLifetime))
 	}
 	lifetimeLeft := GlFloat(lifeTimeAbs)
-	return []GlFloat{
-		// position x,y,z
-		GlFloat(x),
-		GlFloat(y),
-		GlFloat(z),
-		// lifetime left
-		lifetimeLeft,
-		// velocity X
-		velocityX,
-		// velocity Y
-		velocityY,
-		// velocity Z
-		velocityZ,
-		// size begin
-		GlFloat(props.SizeBegin + props.SizeVariation*(rand.Float32()-0.5)),
-		// color begin r,g,b
-		GlFloat(mgl32.Clamp(props.ColorBegin.X()+colorVariation, 0, 1)),
-		GlFloat(mgl32.Clamp(props.ColorBegin.Y()+colorVariation, 0, 1)),
-		GlFloat(mgl32.Clamp(props.ColorBegin.Z()+colorVariation, 0, 1)),
-		// origin x,y,z
-		//GlFloat(props.Origin.X()), GlFloat(props.Origin.Y()), GlFloat(props.Origin.Z()),
-		// debug: what if we just use the variation as the origin?
-		GlFloat(x),
-		GlFloat(y),
-		GlFloat(z),
-	}
+
+	// position x,y,z
+	dst[0], dst[1], dst[2] = GlFloat(x), GlFloat(y), GlFloat(z)
+	// lifetime left
+	dst[3] = lifetimeLeft
+	// velocity x,y,z
+	dst[4], dst[5], dst[6] = velocityX, velocityY, velocityZ
+	// size begin
+	dst[7] = GlFloat(props.SizeBegin + props.SizeVariation*(rand.Float32()-0.5))
+	// color begin r,g,b
+	dst[8] = GlFloat(mgl32.Clamp(props.ColorBegin.X()+colorVariation, 0, 1))
+	dst[9] = GlFloat(mgl32.Clamp(props.ColorBegin.Y()+colorVariation, 0, 1))
+	dst[10] = GlFloat(mgl32.Clamp(props.ColorBegin.Z()+colorVariation, 0, 1))
+	// origin x,y,z: the particle's own spawn point, not the emitter's, so
+	// MaxDistance measures how far it personally drifted
+	dst[11], dst[12], dst[13] = GlFloat(x), GlFloat(y), GlFloat(z)
 }
 
 func (v *ParticleSystem) Clear(vertexOffset int, vertexCount int) {

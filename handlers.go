@@ -206,6 +206,8 @@ func (g *Game) createImpactEffects(effect WeaponEffect, hitObject *quads.GameObj
 		}
 	case WeaponEffectKillingProjectile:
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
+		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
+		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
 		if hitObject != nil {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}

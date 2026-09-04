@@ -247,6 +247,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 	g.SetupParticleSystem(quads.ParticlesBulletImpact, 2000)
 	g.SetupParticleSystem(quads.ParticlesBlood, 2000)
+	g.SetupParticleSystem(quads.ParticlesExplosion, 2000)
+	g.SetupParticleSystem(quads.ParticlesSmoke, 2000)
 	g.SetupParticleSystem(quads.ParticlesCustom, 2000)
 	//midiplayer := audio.NewPlayer(44100)
 	//midiStream, _ := audio.RenderSMF("assets/audio/SC-55.sf2", "assets/audio/duke1.mid", 44100)
