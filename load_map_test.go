@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
@@ -11,7 +13,10 @@ import (
 // loader or a stray save from the editor can drop them and the map just goes dark
 // with nothing to say so. This is what says so.
 func TestLDtkMapCarriesItsLights(t *testing.T) {
-	result := loadLDTK("assets/raymap.ldtk")
+	result, err := loadLDTK("assets/raymap.ldtk")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(result.Lights) < 2 {
 		t.Fatalf("raymap.ldtk parsed to %d lights, want the two it is authored with", len(result.Lights))
@@ -42,6 +47,28 @@ func TestLDtkMapCarriesItsLights(t *testing.T) {
 		if light.Pitch <= 0 {
 			t.Errorf("light at %v has pitch %.1f: horizontal lights cast no floor shadow worth looking at",
 				light.Position, light.Pitch)
+		}
+	}
+}
+
+// The file watcher hands loadLDTK whatever is on disk at the moment LDtk saved,
+// which can be a truncated or malformed project. It has to come back as an error
+// - a panic here kills the running engine and the session with it.
+func TestLoadLDTKReportsBadFilesInsteadOfPanicking(t *testing.T) {
+	dir := t.TempDir()
+
+	truncated := filepath.Join(dir, "truncated.ldtk")
+	full, err := os.ReadFile("assets/raymap.ldtk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(truncated, full[:len(full)/2], 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{truncated, filepath.Join(dir, "missing.ldtk")} {
+		if _, err := loadLDTK(name); err == nil {
+			t.Errorf("loadLDTK(%s) returned no error", name)
 		}
 	}
 }

@@ -6,9 +6,11 @@ import (
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/tpack"
 	"image"
+	"image/color"
 	_ "image/png"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path"
 )
@@ -92,12 +94,22 @@ func ReadTextureAtlasPacked(fileName string, file io.ReadSeeker) *glhf.TextureAt
 	return glhf.NewTextureAtlasPacked(atlas, atlasMeta, fileName)
 }
 
+// Texture loads a texture, or a magenta placeholder if the file is missing or
+// will not decode. A texture is data a user can edit, move or break while the
+// game is running - the editor reloads them - so one bad PNG has to be a wall
+// that is visibly wrong, not a dead process. Structural assets that are only
+// read at startup (font indices, atlas metadata, shaders) still panic.
 func (a Assets) Texture(filePath string) *glhf.Texture {
-	file := a.open(filePath)
+	file, err := a.Open(filePath)
+	if err != nil {
+		log.Printf("[Assets] could not open texture %s: %v - using placeholder", filePath, err)
+		return NewPlaceholderTexture()
+	}
 	defer file.Close()
 	texture, err := glhf.NewTextureFromReader(file)
 	if err != nil {
-		panic("could not decode texture " + filePath + ": " + err.Error())
+		log.Printf("[Assets] could not decode texture %s: %v - using placeholder", filePath, err)
+		return NewPlaceholderTexture()
 	}
 	return texture
 }
@@ -140,11 +152,22 @@ func (a Assets) Cubemap(filePath [6]string) *glhf.Cubemap {
 }
 
 func NewOneWhitePixelTexture() *glhf.Texture {
+	return newSolidTexture(color.White)
+}
+
+// NewPlaceholderTexture is the stand-in for a texture that failed to load.
+// Magenta because nothing in the art is magenta, so it reads as "missing" at a
+// glance instead of looking like a dark or untextured surface.
+func NewPlaceholderTexture() *glhf.Texture {
+	return newSolidTexture(color.RGBA{R: 255, G: 0, B: 255, A: 255})
+}
+
+func newSolidTexture(fill color.Color) *glhf.Texture {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
-	img.Set(0, 0, image.White)
+	img.Set(0, 0, fill)
 	texture, err := glhf.NewTextureFromImage(img)
 	if err != nil {
-		panic(err)
+		panic(err) // a 1x1 image in memory: this is a broken GL context, not bad data
 	}
 	return texture
 }

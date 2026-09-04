@@ -2,6 +2,7 @@ package main
 
 import (
 	hex2 "encoding/hex"
+	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/dungen"
@@ -110,16 +111,23 @@ func loadDungeonMap(generatedMap *dungen.DungeonMap) core.MapLoadResult {
 	return loadResult
 }
 
-func loadLDTK(filename string) core.MapLoadResult {
+// loadLDTK reads a map from an LDtk project file. It returns an error rather
+// than panicking because the file watcher re-reads this file every time LDtk
+// saves it: a half-written or malformed save used to take the running engine
+// down with it, losing whatever was not saved on the Go side.
+func loadLDTK(filename string) (core.MapLoadResult, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		panic(err)
+		return core.MapLoadResult{}, fmt.Errorf("open %s: %w", filename, err)
 	}
 	defer file.Close()
-	data, _ := io.ReadAll(file)
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return core.MapLoadResult{}, fmt.Errorf("read %s: %w", filename, err)
+	}
 	ldtkProject, err := ldtk.UnmarshalLdtkJSON(data)
 	if err != nil {
-		panic(err)
+		return core.MapLoadResult{}, fmt.Errorf("parse %s: %w", filename, err)
 	}
 
 	loadResult := core.MapLoadResult{}
@@ -331,7 +339,7 @@ func loadLDTK(filename string) core.MapLoadResult {
 	loadResult.PlayerDir = spawnDir
 	loadResult.MapDimensions = [3]int{mapSizeX, mapSizeY, mapSizeZ}
 
-	return loadResult
+	return loadResult, nil
 }
 
 // colorVecFromHex is the linear-ish 0..1 form of an authored "#RRGGBB", which is what

@@ -104,7 +104,10 @@ func (t *TextureAtlasFixed) GetUV(index int) (GlFloat, GlFloat, GlFloat, GlFloat
 	tileWidthInPx := t.itemSizeX
 	tileHeightInPx := t.itemSizeY
 
-	xCount := int(t.textureWidth / tileWidthInPx)
+	xCount := t.columns()
+	if xCount == 0 {
+		return 0, 0, 1, 1 // the whole texture: a placeholder smaller than one tile
+	}
 
 	leftBorder := t.itemMarginX + ((int(index) % xCount) * (tileWidthInPx + t.itemPaddingX))
 	topBorder := t.itemMarginY + ((int(index) / xCount) * (tileHeightInPx + t.itemPaddingY))
@@ -121,12 +124,25 @@ func (t *TextureAtlasFixed) GetUVInPx(index int) (int, int, int, int) {
 	tileWidthInPx := t.itemSizeX
 	tileHeightInPx := t.itemSizeY
 
-	xCount := int(t.textureWidth / tileWidthInPx)
+	xCount := t.columns()
+	if xCount == 0 {
+		return 0, 0, t.textureWidth, t.textureHeight
+	}
 
 	leftBorder := t.itemMarginX + ((index % xCount) * (tileWidthInPx + t.itemPaddingX))
 	topBorder := t.itemMarginY + ((index / xCount) * (tileHeightInPx + t.itemPaddingY))
 
 	return leftBorder, topBorder, leftBorder + tileWidthInPx, topBorder + tileHeightInPx
+}
+
+// columns is how many tiles fit across the texture. It is zero when the texture
+// is smaller than one tile, which is what a failed load leaves behind: the
+// magenta placeholder is 1x1 and every caller here divides by this.
+func (t *TextureAtlasFixed) columns() int {
+	if t.itemSizeX <= 0 {
+		return 0
+	}
+	return t.textureWidth / t.itemSizeX
 }
 
 func (t *TextureAtlasFixed) HasIndex(index int) bool {
@@ -155,11 +171,14 @@ func (t *TextureAtlasFixed) SetAtlasMargin(x int, y int) {
 }
 
 func (t *TextureAtlasFixed) GridWidth() int {
-	return (t.textureWidth) / (t.itemSizeX)
+	return t.columns()
 }
 
 func (t *TextureAtlasFixed) GridHeight() int {
-	return (t.textureHeight) / (t.itemSizeY)
+	if t.itemSizeY <= 0 {
+		return 0
+	}
+	return t.textureHeight / t.itemSizeY
 }
 
 func (t *TextureAtlasFixed) AppendImages(index int, images []tpack.NamedImage) {

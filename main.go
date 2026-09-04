@@ -55,7 +55,11 @@ func main() {
 		}
 		mapLoad = loadStressMap(*stressConfig)
 	} else {
-		mapLoad = loadLDTK("assets/raymap.ldtk")
+		var err error
+		mapLoad, err = loadLDTK("assets/raymap.ldtk")
+		if err != nil {
+			log.Fatal(err)
+		}
 		//mapLoad = loadText(strings.Split(stringMapData, "\n"))
 	}
 
@@ -1024,8 +1028,16 @@ func (g *Game) watchFileChangesLoop() {
 			log.Println("event:", event)
 			if event.Has(fsnotify.Write) {
 				log.Println("modified file:", event.Name)
+				// LDtk writes in more than one step, so an event can land on a
+				// half-written file. Keep the map that is loaded and wait for the
+				// next event rather than taking the process down over it.
+				reloaded, err := loadLDTK(fileToWatch)
+				if err != nil {
+					log.Println("hot reload skipped:", err)
+					continue
+				}
 				glhf.Call(func() {
-					g.mapLoad(loadLDTK(fileToWatch), true)
+					g.mapLoad(reloaded, true)
 				})
 			}
 		case err, ok := <-watcher.Errors:
