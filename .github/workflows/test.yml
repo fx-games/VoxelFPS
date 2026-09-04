@@ -33,6 +33,9 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; echo "run gofmt -w ."; exit 1; }
+
       - name: Vet
         run: go vet ./...
 
