@@ -11,6 +11,7 @@ import (
 	"github.com/memmaker/goray/quads/glhf"
 	"math"
 	"os"
+	"time"
 )
 
 type Map struct {
@@ -210,6 +211,7 @@ func (m *Map) ToggleEmissiveTexture(textureIndex uint16) bool {
 		delete(m.emissiveTextures, textureIndex)
 	}
 	m.textureBufferIsDirty = true
+	m.bakeEmissiveTorchlight()
 	return nowEmissive
 }
 
@@ -220,6 +222,7 @@ func (m *Map) SetEmissiveTextures(textureIndices []uint16) {
 		m.emissiveTextures[index] = true
 	}
 	m.textureBufferIsDirty = true
+	m.bakeEmissiveTorchlight()
 }
 
 func (m *Map) EmissiveTextureCount() int {
@@ -643,14 +646,35 @@ type DistLocPair struct {
 	Location Int3
 }
 
+// MaxTorchLight is the brightest a block can be. Four bits per block, and the
+// vertex format carries the same four - see MeshBuffer.Compress.
+const MaxTorchLight = byte(15)
+
+// EmissiveTorchLight is what an emissive wall panel puts into the air in front of
+// it. Below the maximum on purpose: a wall fitting is a fill light, and leaving
+// headroom keeps a hand-placed FillTorchlight brighter than the scenery.
+const EmissiveTorchLight = byte(12)
+
+// FillTorchlight floods baked light out from one block, losing one level per step
+// and stopping at solid blocks. Blocks it touches are dirty, so the next mesh pass
+// bakes the new levels into the vertices.
 func (m *Map) FillTorchlight(origin Int3) {
-	if !m.ContainsGrid(origin) {
+	m.fillTorchlightFrom(origin, MaxTorchLight)
+}
+
+func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
+	if !m.ContainsGrid(origin) || level == 0 {
 		return
 	}
-	maxLightLevel := 15
 
 	startBlock, startChunk := m.GetBlockAndChunk(origin)
-	startBlock.SetTorchLight(byte(maxLightLevel))
+	if startBlock == nil || !startBlock.IsAir() {
+		return // light lives in the air; the mesher only reads it off air blocks
+	}
+	if startBlock.GetTorchLight() >= level {
+		return // already at least this bright from another emitter
+	}
+	startBlock.SetTorchLight(level)
 	startChunk.SetDirty()
 
 	spread := func(origin, currentNode, currentNeighbor Int3, costToPrev int) (bool, int) {
@@ -659,20 +683,101 @@ func (m *Map) FillTorchlight(origin Int3) {
 		}
 
 		nodeLight := m.GetBlockFromInt3(currentNode).GetTorchLight()
+		// byte arithmetic: nodeLight-1 at 0 wraps to 255 and every dark block in
+		// the map then looks like it should be lit to 255.
+		if nodeLight == 0 {
+			return false, 0
+		}
 
 		neighborBlock, neighborChunk := m.GetBlockAndChunk(currentNeighbor)
-		neighborLight := neighborBlock.GetTorchLight()
+		if neighborBlock == nil {
+			return false, 0
+		}
 
-		if neighborLight < nodeLight-1 {
+		if neighborBlock.GetTorchLight() < nodeLight-1 {
 			neighborBlock.SetTorchLight(nodeLight - 1)
 			neighborChunk.SetDirty()
-			println(fmt.Sprintf("[Map] Spread torchlight from %s to %s: %d -> %d", currentNode.ToString(), currentNeighbor.ToString(), nodeLight, nodeLight-1))
 			return true, costToPrev + 1
 		}
 		return false, 0
 	}
 
-	m.FloodFill(origin, maxLightLevel, spread)
+	m.FloodFill(origin, int(level), spread)
+}
+
+// emissiveFaceOffsets is the block a face of the given index faces into, in the
+// face order bake3dTextureIndices writes: +X, -X, +Y, -Y, +Z, -Z.
+var emissiveFaceOffsets = [6]Int3{
+	{1, 0, 0}, {-1, 0, 0},
+	{0, 1, 0}, {0, -1, 0},
+	{0, 0, 1}, {0, 0, -1},
+}
+
+// bakeEmissiveTorchlight turns the emissive texture set into per-block light: every
+// face using one of those textures seeds the air in front of it, and the light
+// floods from there. It is the cheap half of the lighting - dozens of static
+// sources for the cost of four bits a vertex - and it is what the shadow-mapped
+// spotlights cannot afford to be.
+//
+// Called from the two places that change the emissive set, so the baked light and
+// the glowing faces cannot drift apart.
+//
+// ponytail: one flood fill per emitting face over the whole map. Walls stop the
+// fill after a few metres, so on a corridor map this is milliseconds. If a big
+// open map makes a map load or a G keypress hitch, the fix is one multi-source
+// BFS seeded with every emitter, not a goroutine.
+func (m *Map) bakeEmissiveTorchlight() {
+	m.clearTorchlight()
+	if len(m.emissiveTextures) == 0 {
+		return
+	}
+
+	start := time.Now()
+	emitters := 0
+	mapSizeX, mapSizeY, mapSizeZ := m.VoxelDimensions()
+	for z := int32(0); z < mapSizeZ; z++ {
+		for y := int32(0); y < mapSizeY; y++ {
+			for x := int32(0); x < mapSizeX; x++ {
+				block := m.GetGlobalBlock(x, y, z)
+				if block == nil || block.IsAir() {
+					continue
+				}
+				faces := [6]uint16{
+					block.ZYTextureIndexPos(), block.ZYTextureIndexNeg(),
+					block.XZTextureIndexPos(), block.XZTextureIndexNeg(),
+					block.XYTextureIndexPos(), block.XYTextureIndexNeg(),
+				}
+				for face, textureIndex := range faces {
+					if !m.emissiveTextures[textureIndex] {
+						continue
+					}
+					m.fillTorchlightFrom(Int3{x, y, z}.Add(emissiveFaceOffsets[face]), EmissiveTorchLight)
+					emitters++
+				}
+			}
+		}
+	}
+	println(fmt.Sprintf("[Light] %d emissive faces baked into voxel light in %s", emitters, time.Since(start).Round(time.Millisecond)))
+}
+
+// clearTorchlight resets every block's baked light. Re-baking has to start from
+// dark: a panel that stopped being emissive would otherwise keep its light.
+func (m *Map) clearTorchlight() {
+	mapSizeX, mapSizeY, mapSizeZ := m.VoxelDimensions()
+	for z := int32(0); z < mapSizeZ; z++ {
+		for y := int32(0); y < mapSizeY; y++ {
+			for x := int32(0); x < mapSizeX; x++ {
+				block := m.GetGlobalBlock(x, y, z)
+				if block == nil || block.GetTorchLight() == 0 {
+					continue
+				}
+				block.SetTorchLight(0)
+				if chunk := m.GetChunkFromBlock(x, y, z); chunk != nil {
+					chunk.SetDirty()
+				}
+			}
+		}
+	}
 }
 func (m *Map) FloodFill(origin Int3, maxSteps int, spreadFunc func(origin, location, neighbor Int3, stepsToLocation int) (bool, int)) {
 	visited := make(map[Int3]bool)

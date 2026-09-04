@@ -190,9 +190,6 @@ void main() {
         discard;
     } else {
         // apply tint
-        float VertLightLevel = 12;
-        vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel/15.0);
-    
         surfaceColor *= tintColor;
     
         vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;

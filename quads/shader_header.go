@@ -265,13 +265,39 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     return lighting;
 }
 
+// BAKED_LIGHT_COLOR and BAKED_LIGHT_STRENGTH turn a block's flood-filled light level
+// into a colour. Cool white because what emits it in the shipped map is cyan tubes and
+// console screens, and below 1.0 because this is fill light: it lifts a room off pure
+// ambient without competing with a shadow-mapped spotlight.
+//
+// ponytail: constants, not uniforms. The UBO is shared by every shader and this is one
+// value that has never needed to move at runtime. If it wants a slider, it joins
+// shadowParams in mainUBO.
+const vec3 BAKED_LIGHT_COLOR = vec3(0.85, 0.92, 1.0);
+const float BAKED_LIGHT_STRENGTH = 0.55;
+
+// bakedLight converts a 0..15 voxel light level into light. Unshadowed and
+// directionless on purpose - the level already encodes how far the light got around
+// corners, which is the part a shadow map would otherwise have to pay for.
+vec3 bakedLight(float lightLevel) {
+    return BAKED_LIGHT_COLOR * BAKED_LIGHT_STRENGTH * (lightLevel / 15.0);
+}
+
 // emissive is added after the lighting multiply and before the fog: a glowing surface
 // does not care how lit it is, but it does still fade into the distance like everything
 // else. Values above 1.0 are the point - that is what the bloom threshold picks up.
-vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive) {
+//
+// baked is the flood-filled voxel light at this fragment, and it multiplies the surface
+// like any other light does. Overloaded rather than given a fifth argument everywhere:
+// only the voxel shader has a light level to pass.
+vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked);
 
-    //vec3 litColor = floodLight * surfaceColor.rgb;
-    //vec3 toneMappedColor = toneMapping(litColor, 1.2, 1.0);
+vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive) {
+    return finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, vec3(0.0));
+}
+
+vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked) {
+
     vec3 ambientLightColor = calculateAmbientLight();
 
     // GLSL does not zero locals: this is accumulated into below, so it has to start at 0.
@@ -290,7 +316,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
     //vec3 spotLightColor = calculateSpotLight(fragWorldNormal, fragWorldPos, camPosition, light_color, camDirection, 0.98,  0.96);
     //vec3 litColor = (ambientLightColor + pointLightColor + spotLightColor) * surfaceColor.rgb;
 
-    vec3 litColor = (ambientLightColor + spotLightColor) * surfaceColor.rgb + emissive;
+    vec3 litColor = (ambientLightColor + baked + spotLightColor) * surfaceColor.rgb + emissive;
 
     // No tone mapping here any more. Anything the flashlight hits head-on still runs
     // past 1.0, but it now stays past 1.0 all the way into the post pass, where it is

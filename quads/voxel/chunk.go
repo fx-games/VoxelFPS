@@ -84,8 +84,23 @@ type VoxelFace struct {
 	lightLevel byte
 }
 
+// EqualForMerge decides whether greedy meshing may fold two faces into one quad.
+// The light level is part of it: a merged quad carries one level for all four of
+// its vertices, so merging a lit face with a dark one used to hand the whole run
+// whichever level came first - a wall next to a glowing panel lit in one flat
+// slab, or not at all. Away from a light every level is 0 and the merge is as
+// wide as it ever was; the extra quads appear only in the gradient.
+//
+// It is not free: raymap goes from 1324 to 3448 triangles, all of it in the
+// gradients around the 680 emissive faces. At this size that is nothing.
+//
+// ponytail: one level per quad, so baked light is flat per face and steps at the
+// quad edge. Smooth would mean a level per vertex, which is four lookups and a
+// wider vertex - worth it only if the stepping is visible in play. If the
+// triangle count ever matters, quantising the level to fewer steps cuts the
+// splits before anything else does.
 func (v *VoxelFace) EqualForMerge(face *VoxelFace) bool {
-	return face.inVisible == v.inVisible
+	return face.inVisible == v.inVisible && face.lightLevel == v.lightLevel
 }
 
 func (c *Chunk) InitNeighbors() {

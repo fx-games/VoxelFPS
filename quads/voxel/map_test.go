@@ -66,3 +66,73 @@ func TestEmissiveMaskCoversAtlasIndices(t *testing.T) {
 		t.Error("bit and mask overlap")
 	}
 }
+
+// The flood-fill light path was fully built and never called: FillTorchlight had no
+// callers, so every vertex shipped a light level of 0 and the shader threw the value
+// away again. It is wired to the emissive texture set now - the panels that glow are
+// the ones that light the room - so this pins what that has to mean.
+func TestEmissiveFacesBakeLightIntoTheBlocksAroundThem(t *testing.T) {
+	const litTexture = uint16(27)
+	const plainTexture = uint16(3)
+
+	// Solid rock with two sealed corridors carved along +X, so nothing leaks from one
+	// into the other: a lit panel closes the end of the first, a plain wall the second.
+	m := NewMapWithEmptyChunks(1, 1, 1, 8, 8)
+	for x := int32(0); x < 8; x++ {
+		for y := int32(0); y < 8; y++ {
+			for z := int32(0); z < 8; z++ {
+				m.SetBlock(x, y, z, NewBlock(byte(plainTexture)))
+			}
+		}
+	}
+	for x := int32(1); x < 7; x++ {
+		m.SetBlock(x, 0, 1, NewAirBlock())
+		m.SetBlock(x, 0, 5, NewAirBlock())
+	}
+	m.SetBlock(0, 0, 1, NewBlock(byte(litTexture)))
+
+	m.SetEmissiveTextures([]uint16{litTexture})
+
+	// The air in front of the panel gets the emitter's level, and each step away
+	// costs one.
+	for step := int32(0); step < 6; step++ {
+		want := EmissiveTorchLight - byte(step)
+		if got := m.GetGlobalBlock(1+step, 0, 1).GetTorchLight(); got != want {
+			t.Errorf("light %d blocks from the panel: got %d want %d", step, got, want)
+		}
+	}
+
+	// The wall the panel is painted on is solid: light lives in the air.
+	if got := m.GetGlobalBlock(0, 0, 1).GetTorchLight(); got != 0 {
+		t.Errorf("the panel block itself holds light %d, want 0", got)
+	}
+
+	// The second corridor is sealed and its walls are a texture nobody marked.
+	if got := m.GetGlobalBlock(1, 0, 5).GetTorchLight(); got != 0 {
+		t.Errorf("light reached the corridor behind the wall: got %d want 0", got)
+	}
+
+	// Dropping the texture from the set has to take its light with it, or a panel
+	// switched off at runtime keeps lighting the corridor.
+	m.SetEmissiveTextures(nil)
+	if got := m.GetGlobalBlock(1, 0, 1).GetTorchLight(); got != 0 {
+		t.Errorf("light survived the panel being unmarked: got %d want 0", got)
+	}
+}
+
+// Greedy meshing folds neighbouring faces into one quad, and a quad carries a single
+// light level. Merging across a light gradient therefore paints a whole run with one
+// block's brightness - which is what happened while EqualForMerge only looked at
+// visibility.
+func TestGreedyMergeStopsAtALightLevelChange(t *testing.T) {
+	lit := &VoxelFace{side: Top, lightLevel: 12}
+	dimmer := &VoxelFace{side: Top, lightLevel: 11}
+	alsoLit := &VoxelFace{side: Top, lightLevel: 12}
+
+	if lit.EqualForMerge(dimmer) {
+		t.Error("faces of different light level merged into one quad")
+	}
+	if !lit.EqualForMerge(alsoLit) {
+		t.Error("faces of equal light level refused to merge")
+	}
+}

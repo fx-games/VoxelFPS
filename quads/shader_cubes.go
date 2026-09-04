@@ -309,8 +309,6 @@ void main() {
 
     vec4 surfaceColor = texelFetch(tex, texelCoord, 0);
     
-    vec3 floodLight = vec3(2.0, 2.0, 2.0) * (VertLightLevel / 15.0) * camDirection.xyz;
-
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     // A texel of an emissive texture glows if it is both bright and colourful: that is
@@ -326,5 +324,5 @@ void main() {
                        * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
     vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask * emissiveStrength;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive);
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(VertLightLevel));
 }`

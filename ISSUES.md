@@ -31,9 +31,17 @@ reports one event for the surface that was actually hit (see Physics below).
 - Floor shadows work (finding #22): normal-offset bias, a `w <= 0` guard, and a
   spotlight near plane of 0.5 instead of 0.15. Judge them with `-shadowtest`, tune
   them with `-shadow-offset` / `-shadow-bias` or the two F1 sliders.
-- The baked voxel flood-fill light path is still computed and thrown away:
-  `FillTorchlight` has no callers and `floodLight` in `quads/shader_cubes.go` is
-  assigned and never used. Finding #17. Wire it up or delete it.
+- The baked voxel flood-fill light is wired up (finding #17). The emissive texture set
+  is what seeds it: every face using one of those textures lights the air in front of
+  it, `Map.bakeEmissiveTorchlight` floods from there, and the level rides the vertex
+  bits into `bakedLight()` in the shader. Both places that change the emissive set
+  re-bake, so glow and light cannot drift apart. On `raymap.ldtk` that is 680 emitting
+  faces baked in ~8ms at load.
+  - Greedy meshing no longer merges faces of different light level, which is what a
+    per-quad light level requires. Costs raymap 1324 -> 3448 triangles.
+  - The colour and strength are constants in `quads/shader_header.go`
+    (`BAKED_LIGHT_COLOR`, `BAKED_LIGHT_STRENGTH`), not a runtime slider.
+  - Still flat per quad. Smooth would need a level per vertex.
 
 ## Weapons
 
