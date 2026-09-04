@@ -1,58 +1,58 @@
 package quads
 
 import (
-    "fmt"
-    "math"
+	"fmt"
+	"math"
 
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 func vertexShaderHeader(uboBlock string) string {
-    return fmt.Sprintf("#version 400 core\n%s\n", uboBlock)
+	return fmt.Sprintf("#version 400 core\n%s\n", uboBlock)
 }
 
 // depthVertexShaderHeader is the vertex header for the shadow pass. The #define
 // switches off the varyings the depth pass has no fragment shader to read, so the
 // depth variant is the same source as the main one rather than a filtered copy.
 func depthVertexShaderHeader(uboBlock string) string {
-    return fmt.Sprintf("#version 400 core\n#define DEPTH_PASS\n%s\n", uboBlock)
+	return fmt.Sprintf("#version 400 core\n#define DEPTH_PASS\n%s\n", uboBlock)
 }
 
 func fragmentShaderHeader(uboBlock string) string {
-    return fmt.Sprintf("#version 400 core\n%s\n%s", uboBlock, fragmentShaderSharedFunctions)
+	return fmt.Sprintf("#version 400 core\n%s\n%s", uboBlock, fragmentShaderSharedFunctions)
 }
 
 const (
-    UboFogRange int = iota
-    UboCamPosition
-    UboCamDirection
-    UboCamLightColor
-    UboGlobalLightColor
-    UboFogColor
-    UboCamProjectionView
-    UboToneMapParams
-    UboShadowParams
+	UboFogRange int = iota
+	UboCamPosition
+	UboCamDirection
+	UboCamLightColor
+	UboGlobalLightColor
+	UboFogColor
+	UboCamProjectionView
+	UboToneMapParams
+	UboShadowParams
 )
 
 func mainUBO() *glhf.UniformBufferObject {
-    return glhf.NewUBOWithAttributes([]glhf.Attr{
-        {Name: "fogRange", Type: glhf.Vec2},
-        {Name: "camPosition", Type: glhf.Vec4},
-        {Name: "camDirection", Type: glhf.Vec4},
-        {Name: "camLightColor", Type: glhf.Vec4},
-        {Name: "globalLightColor", Type: glhf.Vec4},
-        {Name: "fogColor", Type: glhf.Vec4},
-        {Name: "camProjectionView", Type: glhf.Mat4},
-        {Name: "toneMapParams", Type: glhf.Vec2}, // x: exposure, y: gamma
-        {Name: "shadowParams", Type: glhf.Vec2},  // x: normal offset scale, y: depth bias
-    })
+	return glhf.NewUBOWithAttributes([]glhf.Attr{
+		{Name: "fogRange", Type: glhf.Vec2},
+		{Name: "camPosition", Type: glhf.Vec4},
+		{Name: "camDirection", Type: glhf.Vec4},
+		{Name: "camLightColor", Type: glhf.Vec4},
+		{Name: "globalLightColor", Type: glhf.Vec4},
+		{Name: "fogColor", Type: glhf.Vec4},
+		{Name: "camProjectionView", Type: glhf.Mat4},
+		{Name: "toneMapParams", Type: glhf.Vec2}, // x: exposure, y: gamma
+		{Name: "shadowParams", Type: glhf.Vec2},  // x: normal offset scale, y: depth bias
+	})
 }
 
 // DefaultExposure and DefaultGamma are what the tone map shipped with while it lived
 // at the end of finalColor. They are the starting values for the runtime knobs.
 const (
-    DefaultExposure = float32(1.0)
-    DefaultGamma    = float32(1.2)
+	DefaultExposure = float32(1.0)
+	DefaultGamma    = float32(1.2)
 )
 
 // DefaultShadowNormalOffset and DefaultShadowDepthBias are the two knobs of the
@@ -62,8 +62,8 @@ const (
 // purpose. Both are exposed in the config menu (F1) because the right values depend
 // on the shadow resolution and the map's scale, which no constant can know.
 const (
-    DefaultShadowNormalOffset = float32(2.0)
-    DefaultShadowDepthBias    = float32(0.0005)
+	DefaultShadowNormalOffset = float32(2.0)
+	DefaultShadowDepthBias    = float32(0.0005)
 )
 
 // HDRFromDisplay is the Go twin of the GLSL function of the same name: it takes a
@@ -75,27 +75,27 @@ const (
 // TestHDRFromDisplayRoundTrips rather than by a shared code path, because Go and GLSL
 // cannot share one.
 func HDRFromDisplay(c, exposure, gamma float32) float32 {
-    linear := float32(math.Pow(float64(clamp01(c)), float64(gamma)))
-    if linear >= 1 {
-        linear = 1 - 1e-4
-    }
-    return float32(-math.Log(float64(1-linear))) / exposure
+	linear := float32(math.Pow(float64(clamp01(c)), float64(gamma)))
+	if linear >= 1 {
+		linear = 1 - 1e-4
+	}
+	return float32(-math.Log(float64(1-linear))) / exposure
 }
 
 // ToneMap is the Go twin of the GLSL toneMapping, used only to check the two agree.
 func ToneMap(hdr, exposure, gamma float32) float32 {
-    mapped := 1 - float32(math.Exp(float64(-hdr*exposure)))
-    return float32(math.Pow(float64(mapped), 1/float64(gamma)))
+	mapped := 1 - float32(math.Exp(float64(-hdr*exposure)))
+	return float32(math.Pow(float64(mapped), 1/float64(gamma)))
 }
 
 func clamp01(v float32) float32 {
-    if v < 0 {
-        return 0
-    }
-    if v > 1 {
-        return 1
-    }
-    return v
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 // toneMapGLSL is shared by the scene shaders, the skybox and the post pass. The scene

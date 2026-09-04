@@ -1,64 +1,64 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    GuiShaderProjection = 0 + iota
-    GuiShaderPositionOffset
-    GuiShaderScaleFactor
-    GuiShaderTintColor
+	GuiShaderProjection = 0 + iota
+	GuiShaderPositionOffset
+	GuiShaderScaleFactor
+	GuiShaderTintColor
 )
 
 const (
-    GuiShaderEffectTextureMapping = uint32(0) + iota
-    GuiShaderEffectColoredBackground
-    GuiShaderEffectColoredBorder
+	GuiShaderEffectTextureMapping = uint32(0) + iota
+	GuiShaderEffectColoredBackground
+	GuiShaderEffectColoredBorder
 )
 
 func LoadGuiShader(windowSizeX, windowSizeY int, uiScale mgl32.Vec2) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec3},
-            {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertColor", Type: glhf.Vec4},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "projection", Type: glhf.Mat4},       // 0
-            glhf.Attr{Name: "positionOffset", Type: glhf.Vec2},   // 1
-            glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 2
-            glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, guiVertexShaderSource, guiFragmentShaderSource)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "position", Type: glhf.Vec3},
+			{Name: "texCoord", Type: glhf.Vec2},
+			{Name: "vertColor", Type: glhf.Vec4},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "projection", Type: glhf.Mat4},       // 0
+			glhf.Attr{Name: "positionOffset", Type: glhf.Vec2},   // 1
+			glhf.Attr{Name: "scaleFactor", Type: glhf.Vec2},      // 2
+			glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, guiVertexShaderSource, guiFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    // scale using the projection matrix
-    projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(windowSizeX, windowSizeY)
-    shader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
-    shader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    shader.SetUniformAttr(GuiShaderScaleFactor, uiScale)
+	shader.Begin()
+	// scale using the projection matrix
+	projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(windowSizeX, windowSizeY)
+	shader.SetUniformAttr(GuiShaderProjection, projectionMatrix)
+	shader.SetUniformAttr(GuiShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
+	shader.SetUniformAttr(GuiShaderScaleFactor, uiScale)
 
-    shader.End()
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 
 /*

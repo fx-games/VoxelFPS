@@ -1,8 +1,8 @@
 package glhf
 
 import (
-    "errors"
-    "runtime"
+	"errors"
+	"runtime"
 )
 
 // CallQueueCap is the capacity of the call queue. This means how many calls to CallNonBlock will not
@@ -12,17 +12,17 @@ import (
 var CallQueueCap = 16
 
 var (
-    callQueue chan func()
+	callQueue chan func()
 )
 
 func init() {
-    runtime.LockOSThread()
+	runtime.LockOSThread()
 }
 
 func checkRun() {
-    if callQueue == nil {
-        panic(errors.New("mainthread: did not call StartEventLoop"))
-    }
+	if callQueue == nil {
+		panic(errors.New("mainthread: did not call StartEventLoop"))
+	}
 }
 
 // Run enables mainthread package functionality. To use mainthread package, put your main function
@@ -30,58 +30,58 @@ func checkRun() {
 //
 // Run returns when run (argument) function finishes.
 func Run(run func()) {
-    callQueue = make(chan func(), CallQueueCap)
+	callQueue = make(chan func(), CallQueueCap)
 
-    done := make(chan struct{})
-    go func() {
-        run()
-        done <- struct{}{}
-    }()
+	done := make(chan struct{})
+	go func() {
+		run()
+		done <- struct{}{}
+	}()
 
-    for {
-        select {
-        case f := <-callQueue:
-            f()
-        case <-done:
-            return
-        }
-    }
+	for {
+		select {
+		case f := <-callQueue:
+			f()
+		case <-done:
+			return
+		}
+	}
 }
 
 // CallNonBlock queues function f on the main thread and returns immediately. Does not wait until f
 // finishes.
 func CallNonBlock(f func()) {
-    checkRun()
-    callQueue <- f
+	checkRun()
+	callQueue <- f
 }
 
 // Call queues function f on the main thread and blocks until the function f finishes.
 func Call(f func()) {
-    checkRun()
-    done := make(chan struct{})
-    callQueue <- func() {
-        f()
-        done <- struct{}{}
-    }
-    <-done
+	checkRun()
+	done := make(chan struct{})
+	callQueue <- func() {
+		f()
+		done <- struct{}{}
+	}
+	<-done
 }
 
 // CallErr queues function f on the main thread and returns an error returned by f.
 func CallErr(f func() error) error {
-    checkRun()
-    errChan := make(chan error)
-    callQueue <- func() {
-        errChan <- f()
-    }
-    return <-errChan
+	checkRun()
+	errChan := make(chan error)
+	callQueue <- func() {
+		errChan <- f()
+	}
+	return <-errChan
 }
 
 // CallVal queues function f on the main thread and returns a value returned by f.
 func CallVal(f func() interface{}) interface{} {
-    checkRun()
-    respChan := make(chan interface{})
-    callQueue <- func() {
-        respChan <- f()
-    }
-    return <-respChan
+	checkRun()
+	respChan := make(chan interface{})
+	callQueue <- func() {
+		respChan <- f()
+	}
+	return <-respChan
 }

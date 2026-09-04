@@ -1,18 +1,18 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    CubeShaderModelTransform int = iota
-    CubeShaderAtlasGridSize
-    CubeShaderMapSize
-    CubeShaderEmissiveStrength
-    CubeShaderEmissiveCutoff
-    CubeShaderEmissiveSaturation
+	CubeShaderModelTransform int = iota
+	CubeShaderAtlasGridSize
+	CubeShaderMapSize
+	CubeShaderEmissiveStrength
+	CubeShaderEmissiveCutoff
+	CubeShaderEmissiveSaturation
 )
 
 // Marking a texture emissive does not light the whole tile: it lights the texels that
@@ -31,93 +31,93 @@ const (
 // Set the saturation cutoff to 0 to go back to a pure brightness mask, and the
 // brightness cutoff to 0 as well to light the whole face.
 const (
-    DefaultEmissiveStrength   = float32(4.0)
-    DefaultEmissiveCutoff     = float32(0.35)
-    DefaultEmissiveSaturation = float32(0.35)
+	DefaultEmissiveStrength   = float32(4.0)
+	DefaultEmissiveCutoff     = float32(0.35)
+	DefaultEmissiveSaturation = float32(0.35)
 )
 
 func LoadCubeShader(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "compressedValue", Type: glhf.UInt},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-            glhf.Attr{Name: "atlasGridSize", Type: glhf.IVec2}, // 1
-            // voxel grid dimensions of the lookup buffer. ivec4 because glhf has
-            // no ivec3; w is unused.
-            glhf.Attr{Name: "mapSize", Type: glhf.IVec4}, // 2
-            // How far past white an emissive face is pushed. A uniform rather than a
-            // constant because it is the knob you turn against the bloom threshold.
-            glhf.Attr{Name: "emissiveStrength", Type: glhf.Float}, // 3
-            // Luminance above which a texel of an emissive texture may glow.
-            glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float}, // 4
-            // ...and how colourful it also has to be, which is what separates a lit
-            // fitting from bright bare metal.
-            glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 5
-        }
-        shader *glhf.Shader
-    )
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "compressedValue", Type: glhf.UInt},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+			glhf.Attr{Name: "atlasGridSize", Type: glhf.IVec2}, // 1
+			// voxel grid dimensions of the lookup buffer. ivec4 because glhf has
+			// no ivec3; w is unused.
+			glhf.Attr{Name: "mapSize", Type: glhf.IVec4}, // 2
+			// How far past white an emissive face is pushed. A uniform rather than a
+			// constant because it is the knob you turn against the bloom threshold.
+			glhf.Attr{Name: "emissiveStrength", Type: glhf.Float}, // 3
+			// Luminance above which a texel of an emissive texture may glow.
+			glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float}, // 4
+			// ...and how colourful it also has to be, which is what separates a lit
+			// fitting from bright bare metal.
+			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 5
+		}
+		shader *glhf.Shader
+	)
 
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+chunkVertexShaderSource, fragmentShaderHeader(uboBlock)+chunkFragmentShaderSource)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+chunkVertexShaderSource, fragmentShaderHeader(uboBlock)+chunkFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
-    shader.Begin()
-    shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
-    shader.SetUniformAttr(CubeShaderEmissiveStrength, DefaultEmissiveStrength)
-    shader.SetUniformAttr(CubeShaderEmissiveCutoff, DefaultEmissiveCutoff)
-    shader.SetUniformAttr(CubeShaderEmissiveSaturation, DefaultEmissiveSaturation)
-    shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
-    shader.BindSamplerNameToTextureUnit("voxelLookup", gl.TEXTURE1)
-    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
-    shader.End()
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
+	shader.Begin()
+	shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
+	shader.SetUniformAttr(CubeShaderEmissiveStrength, DefaultEmissiveStrength)
+	shader.SetUniformAttr(CubeShaderEmissiveCutoff, DefaultEmissiveCutoff)
+	shader.SetUniformAttr(CubeShaderEmissiveSaturation, DefaultEmissiveSaturation)
+	shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
+	shader.BindSamplerNameToTextureUnit("voxelLookup", gl.TEXTURE1)
+	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
 
-    return shader
+	return shader
 }
 
 func LoadCubeShaderDepthPass(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "compressedValue", Type: glhf.UInt},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-        }
-        shader *glhf.Shader
-    )
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "compressedValue", Type: glhf.UInt},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+		}
+		shader *glhf.Shader
+	)
 
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+chunkVertexShaderSource, emptyFragmentShaderSource)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+chunkVertexShaderSource, emptyFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
-    shader.Begin()
-    shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
-    shader.End()
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
+	shader.Begin()
+	shader.SetUniformAttr(CubeShaderModelTransform, mgl32.Ident4())
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
 
-    return shader
+	return shader
 }
 
 const chunkVertexShaderSource = `

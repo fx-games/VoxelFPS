@@ -1,38 +1,38 @@
 package png_chunks
 
 import (
-    "github.com/stretchr/testify/assert"
-    "os"
-    "path/filepath"
-    "testing"
+	"github.com/stretchr/testify/assert"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func GimmeOrPanic[T any](val T, err error) T {
-    if err != nil {
-        panic(err)
-    }
-    return val
+	if err != nil {
+		panic(err)
+	}
+	return val
 }
 func OrPanic(err error) {
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 }
 func TestReadTextChunkFromPNG(t *testing.T) {
 
-    file := GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test.png")))
-    outFile := GimmeOrPanic(os.Create(filepath.Join("..", "assets", "test_text.png")))
+	file := GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test.png")))
+	outFile := GimmeOrPanic(os.Create(filepath.Join("..", "assets", "test_text.png")))
 
-    OrPanic(InjectTextChunkIntoPNG(file, outFile, "AtlasInfo", longText))
+	OrPanic(InjectTextChunkIntoPNG(file, outFile, "AtlasInfo", longText))
 
-    outFile.Close()
-    file.Close()
+	outFile.Close()
+	file.Close()
 
-    file = GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test_text.png")))
-    readBack := ReadTextChunkFromPNG(file, "AtlasInfo")
-    file.Close()
+	file = GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test_text.png")))
+	readBack := ReadTextChunkFromPNG(file, "AtlasInfo")
+	file.Close()
 
-    assert.Equal(t, longText, readBack)
+	assert.Equal(t, longText, readBack)
 }
 
 const longText = `

@@ -1,9 +1,9 @@
 package eassets
 
 import (
-    "embed"
-    "github.com/memmaker/goray/quads"
-    "io/fs"
+	"embed"
+	"github.com/memmaker/goray/quads"
+	"io/fs"
 )
 
 //go:embed files/*
@@ -13,9 +13,9 @@ var assets embed.FS
 var Embedded = quads.Assets{FS: subDir()}
 
 func subDir() fs.FS {
-    files, err := fs.Sub(assets, "files")
-    if err != nil {
-        panic(err)
-    }
-    return files
+	files, err := fs.Sub(assets, "files")
+	if err != nil {
+		panic(err)
+	}
+	return files
 }

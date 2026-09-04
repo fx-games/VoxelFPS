@@ -1,62 +1,62 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    BloomShaderMode int = iota
-    BloomShaderTexelDirection
-    BloomShaderThreshold
-    BloomShaderBlurRadius
+	BloomShaderMode int = iota
+	BloomShaderTexelDirection
+	BloomShaderThreshold
+	BloomShaderBlurRadius
 )
 
 // Bloom modes. One shader does both jobs: the first pass reads the HDR scene and
 // keeps only what is brighter than the threshold, every pass after that blurs.
 const (
-    BloomModeExtract int32 = 0
-    BloomModeBlur    int32 = 1
+	BloomModeExtract int32 = 0
+	BloomModeBlur    int32 = 1
 )
 
 // LoadBloomShader builds the extract/blur shader used by the bloom chain. It renders
 // the same fullscreen quad as the post shader.
 func LoadBloomShader() *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec2},
-            {Name: "texCoord", Type: glhf.Vec2},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "mode", Type: glhf.Int},              // 0
-            glhf.Attr{Name: "texelDirection", Type: glhf.Vec2},   // 1
-            glhf.Attr{Name: "bloomThreshold", Type: glhf.Float},  // 2
-            // Spacing between blur taps, in texels. Doubling it per pass pair widens
-            // the glow geometrically without adding taps - a poor man's mip chain.
-            glhf.Attr{Name: "blurRadius", Type: glhf.Float}, // 3
-        }
-    )
-    shader, err := glhf.NewBasicShader(vertexFormat, uniformFormat, fullscreenVertexShaderSource, bloomFragmentShaderSource)
-    if err != nil {
-        panic(err)
-    }
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "position", Type: glhf.Vec2},
+			{Name: "texCoord", Type: glhf.Vec2},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "mode", Type: glhf.Int},             // 0
+			glhf.Attr{Name: "texelDirection", Type: glhf.Vec2},  // 1
+			glhf.Attr{Name: "bloomThreshold", Type: glhf.Float}, // 2
+			// Spacing between blur taps, in texels. Doubling it per pass pair widens
+			// the glow geometrically without adding taps - a poor man's mip chain.
+			glhf.Attr{Name: "blurRadius", Type: glhf.Float}, // 3
+		}
+	)
+	shader, err := glhf.NewBasicShader(vertexFormat, uniformFormat, fullscreenVertexShaderSource, bloomFragmentShaderSource)
+	if err != nil {
+		panic(err)
+	}
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    shader.SetUniformAttr(BloomShaderMode, BloomModeExtract)
-    shader.SetUniformAttr(BloomShaderTexelDirection, mgl32.Vec2{1, 0})
-    shader.SetUniformAttr(BloomShaderThreshold, DefaultBloomThreshold)
-    shader.SetUniformAttr(BloomShaderBlurRadius, float32(1))
-    shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
-    shader.End()
+	shader.Begin()
+	shader.SetUniformAttr(BloomShaderMode, BloomModeExtract)
+	shader.SetUniformAttr(BloomShaderTexelDirection, mgl32.Vec2{1, 0})
+	shader.SetUniformAttr(BloomShaderThreshold, DefaultBloomThreshold)
+	shader.SetUniformAttr(BloomShaderBlurRadius, float32(1))
+	shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
+	shader.End()
 
-    if glErr := gl.GetError(); glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	if glErr := gl.GetError(); glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 
 // A 5-tap Gaussian, applied separably: horizontal then vertical is 10 taps for what a

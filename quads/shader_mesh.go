@@ -1,79 +1,79 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    MeshShaderModelTransform int = iota
+	MeshShaderModelTransform int = iota
 )
 
 func LoadMeshShader(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec3},
-            {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertexColor", Type: glhf.Vec3},
-            {Name: "normal", Type: glhf.Vec3},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+meshVertexShaderSource, fragmentShaderHeader(uboBlock)+meshFragmentShaderSource)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "position", Type: glhf.Vec3},
+			{Name: "texCoord", Type: glhf.Vec2},
+			{Name: "vertexColor", Type: glhf.Vec3},
+			{Name: "normal", Type: glhf.Vec3},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+meshVertexShaderSource, fragmentShaderHeader(uboBlock)+meshFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
-    shader.End()
+	shader.Begin()
+	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
 
-    return shader
+	return shader
 }
 func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec3},
-            {Name: "texCoord", Type: glhf.Vec2},
-            {Name: "vertexColor", Type: glhf.Vec3},
-            {Name: "normal", Type: glhf.Vec3},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+meshVertexShaderSource, emptyFragmentShaderSource)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "position", Type: glhf.Vec3},
+			{Name: "texCoord", Type: glhf.Vec2},
+			{Name: "vertexColor", Type: glhf.Vec3},
+			{Name: "normal", Type: glhf.Vec3},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+meshVertexShaderSource, emptyFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
 
-    return shader
+	return shader
 }
 
 const meshVertexShaderSource = `

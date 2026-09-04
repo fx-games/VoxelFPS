@@ -1,90 +1,90 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    QuadShaderModelTransform int = iota
-    QuadShaderOriginOffset
-    QuadShaderTextureIndex
-    QuadShaderAtlasItemSize
-    QuadShaderTintColor
+	QuadShaderModelTransform int = iota
+	QuadShaderOriginOffset
+	QuadShaderTextureIndex
+	QuadShaderAtlasItemSize
+	QuadShaderTintColor
 )
 
 func LoadQuadShader(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "cornerIndex", Type: glhf.UInt}, // 0-3
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-            glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
-            glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
-            glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
-            glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 4
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSource, fragmentShaderHeader(uboBlock)+quadFragmentShaderSource)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+			glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
+			glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
+			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
+			glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 4
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, vertexShaderHeader(uboBlock)+quadVertexShaderSource, fragmentShaderHeader(uboBlock)+quadFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-    shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
-    shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
-    shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
-    shader.End()
+	shader.Begin()
+	shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
+	shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
+	shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
+	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "cornerIndex", Type: glhf.UInt}, // 0-3
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-            glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
-            glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
-            glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+quadVertexShaderSource, quadFragmentShaderSourceDepth)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
+			glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
+			glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
+			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+quadVertexShaderSource, quadFragmentShaderSourceDepth)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
-    shader.End()
+	shader.Begin()
+	shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 
 const quadVertexShaderSource = `

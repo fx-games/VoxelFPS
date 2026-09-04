@@ -1,12 +1,12 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    PostShaderBloomStrength = 0 + iota
+	PostShaderBloomStrength = 0 + iota
 )
 
 // Bloom defaults. The threshold is above 1.0 on purpose: the scene is linear HDR, so
@@ -23,46 +23,46 @@ const (
 // emissive surface at 1.2 lost almost everything to the threshold and what survived was
 // divided by three, giving a glow of about 0.03 - invisible, which is what prompted this.
 const (
-    DefaultBloomThreshold = float32(1.5)
-    DefaultBloomStrength  = float32(0.6)
-    // bloomBlurPasses is how many horizontal+vertical pairs the chain runs, each at
-    // twice the tap spacing of the last. Three pairs starting at 2 texels reach ~32
-    // texels of quarter-resolution buffer, which is a wide, soft glow for six passes
-    // over a sixteenth of the screen.
-    bloomBlurPasses    = 3
-    bloomBaseBlurRadius = float32(2)
+	DefaultBloomThreshold = float32(1.5)
+	DefaultBloomStrength  = float32(0.6)
+	// bloomBlurPasses is how many horizontal+vertical pairs the chain runs, each at
+	// twice the tap spacing of the last. Three pairs starting at 2 texels reach ~32
+	// texels of quarter-resolution buffer, which is a wide, soft glow for six passes
+	// over a sixteenth of the screen.
+	bloomBlurPasses     = 3
+	bloomBaseBlurRadius = float32(2)
 )
 
 // LoadPostShader takes the main UBO block so the tone map reads the same exposure and
 // gamma the scene shaders use - one source of truth, fed from mainUBO().
 func LoadPostShader(uboBlock string) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "position", Type: glhf.Vec2},
-            {Name: "texCoord", Type: glhf.Vec2},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "bloomStrength", Type: glhf.Float}, // 0
-        }
-    )
-    shader, err := glhf.NewBasicShader(vertexFormat, uniformFormat, fullscreenVertexShaderSource, postFragmentShaderSource(uboBlock))
-    if err != nil {
-        panic(err)
-    }
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "position", Type: glhf.Vec2},
+			{Name: "texCoord", Type: glhf.Vec2},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "bloomStrength", Type: glhf.Float}, // 0
+		}
+	)
+	shader, err := glhf.NewBasicShader(vertexFormat, uniformFormat, fullscreenVertexShaderSource, postFragmentShaderSource(uboBlock))
+	if err != nil {
+		panic(err)
+	}
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    shader.SetUniformAttr(PostShaderBloomStrength, DefaultBloomStrength)
-    shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
-    shader.BindSamplerNameToTextureUnit("bloomTex", gl.TEXTURE1)
-    shader.End()
+	shader.Begin()
+	shader.SetUniformAttr(PostShaderBloomStrength, DefaultBloomStrength)
+	shader.BindSamplerNameToTextureUnit("tex", gl.TEXTURE0)
+	shader.BindSamplerNameToTextureUnit("bloomTex", gl.TEXTURE1)
+	shader.End()
 
-    if glErr := gl.GetError(); glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	if glErr := gl.GetError(); glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 
 // fullscreenVertexShaderSource is shared by the post and bloom shaders - both draw the
@@ -85,7 +85,7 @@ void main() {
 // map, so a glow around a blown-out highlight rolls off with everything else instead of
 // being pasted on top of an already-compressed image.
 func postFragmentShaderSource(uboBlock string) string {
-    return `#version 400 core
+	return `#version 400 core
 ` + uboBlock + toneMapGLSL + `
 
 in vec2 VertUV;

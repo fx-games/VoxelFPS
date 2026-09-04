@@ -1,10 +1,10 @@
 package events
 
 const (
-    EventPlayerWeaponFired EventID = iota
-    EventHitScanCollision
-    EventPlayerInteractWith
-    EventPhysicsCollision
+	EventPlayerWeaponFired EventID = iota
+	EventHitScanCollision
+	EventPlayerInteractWith
+	EventPhysicsCollision
 )
 
 type EventID uint16
@@ -16,11 +16,11 @@ type Event interface{}
 var listeners = make(map[EventID][]EventListener)
 
 func Subscribe(eventID EventID, listener EventListener) {
-    listeners[eventID] = append(listeners[eventID], listener)
+	listeners[eventID] = append(listeners[eventID], listener)
 }
 
 func Publish(eventID EventID, event Event) {
-    for _, listener := range listeners[eventID] {
-        listener(eventID, event)
-    }
+	for _, listener := range listeners[eventID] {
+		listener(eventID, event)
+	}
 }

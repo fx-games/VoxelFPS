@@ -1,60 +1,60 @@
 package quads
 
 import (
-    "github.com/go-gl/gl/v3.3-core/gl"
-    "github.com/go-gl/mathgl/mgl32"
-    "github.com/memmaker/goray/quads/glhf"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/quads/glhf"
 )
 
 const (
-    Shader2DProjection = 0 + iota
-    Shader2DScreenRect
-    Shader2DUVRect
-    Shader2DAppliedTintColor
-    Shader2DVerticalCutoff
-    Shader2DSpecialEffect
+	Shader2DProjection = 0 + iota
+	Shader2DScreenRect
+	Shader2DUVRect
+	Shader2DAppliedTintColor
+	Shader2DVerticalCutoff
+	Shader2DSpecialEffect
 )
 
 func Load2DShader(windowSizeX, windowSizeY int) *glhf.Shader {
-    var (
-        vertexFormat = glhf.AttrFormat{
-            {Name: "cornerIndex", Type: glhf.UInt},
-        }
-        uniformFormat = glhf.AttrFormat{
-            glhf.Attr{Name: "projection", Type: glhf.Mat4},       // 0
-            glhf.Attr{Name: "screenRect", Type: glhf.IVec4},      // 1
-            glhf.Attr{Name: "uvRect", Type: glhf.IVec4},          // 2
-            glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
-            glhf.Attr{Name: "specialEffect", Type: glhf.UInt},    // 5
-            glhf.Attr{Name: "verticalCutoff", Type: glhf.IVec2},  // 4
-        }
-        shader *glhf.Shader
-    )
-    var err error
-    shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, twoDVertexShaderSource, twoDFragmentShaderSource)
+	var (
+		vertexFormat = glhf.AttrFormat{
+			{Name: "cornerIndex", Type: glhf.UInt},
+		}
+		uniformFormat = glhf.AttrFormat{
+			glhf.Attr{Name: "projection", Type: glhf.Mat4},       // 0
+			glhf.Attr{Name: "screenRect", Type: glhf.IVec4},      // 1
+			glhf.Attr{Name: "uvRect", Type: glhf.IVec4},          // 2
+			glhf.Attr{Name: "appliedTintColor", Type: glhf.Vec4}, // 3
+			glhf.Attr{Name: "specialEffect", Type: glhf.UInt},    // 5
+			glhf.Attr{Name: "verticalCutoff", Type: glhf.IVec2},  // 4
+		}
+		shader *glhf.Shader
+	)
+	var err error
+	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, twoDVertexShaderSource, twoDFragmentShaderSource)
 
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
-    if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
-        panic(errorMsg)
-    }
+	if errorMsg, isValid := shader.IsUniformsValid(); !isValid {
+		panic(errorMsg)
+	}
 
-    shader.Begin()
-    // scale using the projection matrix
-    projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(windowSizeX, windowSizeY)
-    shader.SetUniformAttr(Shader2DProjection, projectionMatrix)
-    shader.SetUniformAttr(Shader2DAppliedTintColor, mgl32.Vec4{1, 1, 1, 1})
-    shader.SetUniformAttr(Shader2DVerticalCutoff, glhf.IntVec2{0, 81920})
-    shader.SetUniformAttr(Shader2DScreenRect, glhf.IntVec4{0, 0, 400, 400})
-    shader.End()
+	shader.Begin()
+	// scale using the projection matrix
+	projectionMatrix := Get2DPixelCoordOrthographicProjectionMatrix(windowSizeX, windowSizeY)
+	shader.SetUniformAttr(Shader2DProjection, projectionMatrix)
+	shader.SetUniformAttr(Shader2DAppliedTintColor, mgl32.Vec4{1, 1, 1, 1})
+	shader.SetUniformAttr(Shader2DVerticalCutoff, glhf.IntVec2{0, 81920})
+	shader.SetUniformAttr(Shader2DScreenRect, glhf.IntVec4{0, 0, 400, 400})
+	shader.End()
 
-    glErr := gl.GetError()
-    if glErr != gl.NO_ERROR {
-        panic(glErr)
-    }
-    return shader
+	glErr := gl.GetError()
+	if glErr != gl.NO_ERROR {
+		panic(glErr)
+	}
+	return shader
 }
 
 const twoDVertexShaderSource = `

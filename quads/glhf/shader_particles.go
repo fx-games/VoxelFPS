@@ -2,61 +2,61 @@ package glhf
 
 // 48 + 8 = 56
 func getParticleVertexFormat() AttrFormat {
-    return AttrFormat{
-        {Name: "position", Type: Vec3},      // 3*4
-        {Name: "lifetimeLeft", Type: Float}, // 4
-        {Name: "velocity", Type: Vec3},      // 3*4
-        {Name: "sizeBegin", Type: Float},    // 4
-        {Name: "colorBegin", Type: Vec3},    // 3*4
-        {Name: "origin", Type: Vec3},        // 3*4
-    }
+	return AttrFormat{
+		{Name: "position", Type: Vec3},      // 3*4
+		{Name: "lifetimeLeft", Type: Float}, // 4
+		{Name: "velocity", Type: Vec3},      // 3*4
+		{Name: "sizeBegin", Type: Float},    // 4
+		{Name: "colorBegin", Type: Vec3},    // 3*4
+		{Name: "origin", Type: Vec3},        // 3*4
+	}
 }
 func loadTransformFeedbackShader(vertexFormat AttrFormat) *Shader {
-    uniformFormat := AttrFormat{
-        Attr{Name: "deltaTime", Type: Float},
-        Attr{Name: "maxDistance", Type: Float},
-        Attr{Name: "lifetime", Type: Float},
-    }
+	uniformFormat := AttrFormat{
+		Attr{Name: "deltaTime", Type: Float},
+		Attr{Name: "maxDistance", Type: Float},
+		Attr{Name: "lifetime", Type: Float},
+	}
 
-    tfShader, shaderErr := NewShader(
-        vertexFormat,
-        uniformFormat,
-        transformFeedbackVertexShaderSource,
-        "",
-        "",
-        []string{"VS_OUT.position\x00", "VS_OUT.lifetimeLeft\x00", "VS_OUT.velocity\x00", "VS_OUT.sizeBegin\x00", "VS_OUT.colorBegin\x00", "VS_OUT.origin\x00"},
-    )
-    if shaderErr != nil {
-        panic(shaderErr)
-    }
+	tfShader, shaderErr := NewShader(
+		vertexFormat,
+		uniformFormat,
+		transformFeedbackVertexShaderSource,
+		"",
+		"",
+		[]string{"VS_OUT.position\x00", "VS_OUT.lifetimeLeft\x00", "VS_OUT.velocity\x00", "VS_OUT.sizeBegin\x00", "VS_OUT.colorBegin\x00", "VS_OUT.origin\x00"},
+	)
+	if shaderErr != nil {
+		panic(shaderErr)
+	}
 
-    return tfShader
+	return tfShader
 }
 
 func loadParticleShader(vertexFormat AttrFormat) *Shader {
-    uniformFormat := AttrFormat{
-        Attr{Name: "projection", Type: Mat4},
-        Attr{Name: "modelView", Type: Mat4},
+	uniformFormat := AttrFormat{
+		Attr{Name: "projection", Type: Mat4},
+		Attr{Name: "modelView", Type: Mat4},
 
-        Attr{Name: "lifetime", Type: Float},
-        //glhf.Attr{Name: "colorBegin", Type: glhf.Vec4},
-        Attr{Name: "colorEnd", Type: Vec3},
-        Attr{Name: "sizeEnd", Type: Float},
-    }
+		Attr{Name: "lifetime", Type: Float},
+		//glhf.Attr{Name: "colorBegin", Type: glhf.Vec4},
+		Attr{Name: "colorEnd", Type: Vec3},
+		Attr{Name: "sizeEnd", Type: Float},
+	}
 
-    particleShader, shaderErr := NewShader(
-        vertexFormat,
-        uniformFormat,
-        quadParticleVertexShaderSource,
-        quadParticleGeometryShaderSource,
-        quadParticleFragmentShaderSource,
-        nil,
-    )
-    if shaderErr != nil {
-        panic(shaderErr)
-    }
+	particleShader, shaderErr := NewShader(
+		vertexFormat,
+		uniformFormat,
+		quadParticleVertexShaderSource,
+		quadParticleGeometryShaderSource,
+		quadParticleFragmentShaderSource,
+		nil,
+	)
+	if shaderErr != nil {
+		panic(shaderErr)
+	}
 
-    return particleShader
+	return particleShader
 }
 
 const transformFeedbackVertexShaderSource = `#version 400 core
