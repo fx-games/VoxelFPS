@@ -1712,8 +1712,11 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, sh
 				isWall := y <= floorStartsAt || y >= wallStartsAt && y < wallEndsAt
 				cube.IsSolid = isWall || isCeiling
 				cube.Textures = make(map[voxel.CubeSide]uint16)
-				cube.SetSunLight(14)
-				cube.SetTorchLight(14)
+				// No light is seeded here. Torch light is owned by
+				// Map.bakeEmissiveTorchlight, which clears before it floods, and
+				// nothing reads sun light at all - GetSunLight has no callers. A
+				// level of 14 on every block in the map was a trap waiting for the
+				// first load where the bake had not run yet.
 				cube.Textures[voxel.North] = safeTex(tileInfo.WallTex)
 				cube.Textures[voxel.South] = safeTex(tileInfo.WallTex)
 				cube.Textures[voxel.East] = safeTex(tileInfo.WallTex)
