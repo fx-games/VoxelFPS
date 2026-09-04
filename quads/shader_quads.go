@@ -7,12 +7,31 @@ import (
 )
 
 const (
-	QuadShaderModelTransform int = iota
-	QuadShaderOriginOffset
-	QuadShaderTextureIndex
-	QuadShaderAtlasItemSize
+	QuadShaderAtlasItemSize int = iota
 	QuadShaderTintColor
 )
+
+// The per-sprite values used to be uniforms reset before every draw. They are
+// instance attributes now, so the locations have to be pinned in the GLSL: the
+// same vertex array is drawn by the lit shader and the depth shader, and a VAO
+// stores attribute pointers by location, not by name.
+const (
+	QuadInstanceModelLocation    = 1 // through 4, a mat4 spans four slots
+	QuadInstanceOriginLocation   = 5
+	QuadInstanceTexIdxLocation   = 6
+	QuadInstanceEmissiveLocation = 7
+)
+
+// QuadInstanceFormat is the per-sprite attribute layout: mat4, vec2, float, float.
+var QuadInstanceFormat = []glhf.InstanceAttr{
+	{Location: QuadInstanceModelLocation, Floats: 16},
+	{Location: QuadInstanceOriginLocation, Floats: 2},
+	{Location: QuadInstanceTexIdxLocation, Floats: 1},
+	{Location: QuadInstanceEmissiveLocation, Floats: 1},
+}
+
+// QuadInstanceFloats is how many float32 one sprite occupies in that buffer.
+const QuadInstanceFloats = 16 + 2 + 1 + 1
 
 func LoadQuadShader(uboBlock string) *glhf.Shader {
 	var (
@@ -20,11 +39,8 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
 			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-			glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
-			glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
-			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
-			glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 4
+			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 0
+			glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 1
 		}
 		shader *glhf.Shader
 	)
@@ -41,7 +57,6 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
 
 	shader.Begin()
 	shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-	shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
 	shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
 	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
 	shader.End()
@@ -58,10 +73,7 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
 			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-			glhf.Attr{Name: "originOffset", Type: glhf.Vec2},   // 1
-			glhf.Attr{Name: "textureIndex", Type: glhf.UInt},   // 2
-			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 3
+			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 0
 		}
 		shader *glhf.Shader
 	)
@@ -77,7 +89,7 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
 	}
 
 	shader.Begin()
-	shader.SetUniformAttr(QuadShaderOriginOffset, mgl32.Vec2{0, 0})
+	shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
 	shader.End()
 
 	glErr := gl.GetError()
@@ -92,14 +104,18 @@ out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
 #ifndef DEPTH_PASS
 out vec3 VertPos;
 out vec3 VertNormal;
+out float VertEmissive;
 #endif
 
 layout(location = 0) in uint cornerIndex;
 
-uniform mat4 modelTransform;
-uniform uint textureIndex;
+// Per-instance: one sprite per instance, advanced by glVertexAttribDivisor.
+layout(location = 1) in mat4 instModelTransform;
+layout(location = 5) in vec2 instOriginOffset;
+layout(location = 6) in float instTextureIndex;// float, so the whole instance buffer stays one float array
+layout(location = 7) in float instEmissive;// 0 for a normal sprite, otherwise how far past white it glows
+
 uniform ivec2 atlasItemSize;
-uniform vec2 originOffset;
 
 uniform sampler2D tex;
 
@@ -160,23 +176,27 @@ void main() {
         vec3(-0.5, 0.5, 0.0) // top left
     );
 
-    vec3 relativePos = vertPosByCorner[cornerIndex] + vec3(originOffset, 0.0);
+    vec3 relativePos = vertPosByCorner[cornerIndex] + vec3(instOriginOffset, 0.0);
+    vec4 worldPos = instModelTransform * vec4(relativePos, 1.0);
 
-    gl_Position = camProjectionView * modelTransform * vec4(relativePos, 1.0);
+    gl_Position = camProjectionView * worldPos;
 
-    VertUV = getUV(cornerIndex, textureIndex);
+    VertUV = getUV(cornerIndex, uint(instTextureIndex));
 #ifndef DEPTH_PASS
-    VertNormal = vec3(0.0, 0.0, 1.0); // THIS PROBABLY NEEDS TO BE TRANSFORMED?
-    VertPos = relativePos;
+    // The model transform is per instance now, so the fragment shader cannot
+    // reach it. World position and normal are handed over instead.
+    VertNormal = normalize((instModelTransform * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
+    VertPos = worldPos.xyz;
+    VertEmissive = instEmissive;
 #endif
 }`
 
 const quadFragmentShaderSource = `
-in vec3 VertPos;
+in vec3 VertPos;// world space
 in vec2 VertUV;
-in vec3 VertNormal;
+in vec3 VertNormal;// world space
+in float VertEmissive;
 
-uniform mat4 modelTransform;
 uniform vec4 tintColor;
 
 uniform sampler2D tex;
@@ -191,13 +211,11 @@ void main() {
     } else {
         // apply tint
         surfaceColor *= tintColor;
-    
-        vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-        vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
-    
-        //vec3 transformedFragPos = (camProjectionView * modelTransform * vec4(VertPos, 1.0)).xyz;
-    
-        fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, vec3(0.0));
+
+        // An emissive sprite is handed to finalColor as its own light: the emissive
+        // term is added after the lighting multiply, so shadows and the light loop
+        // cannot darken it, and past 1.0 it is what the bloom threshold picks up.
+        fragmentColor = finalColor(surfaceColor, VertPos, VertNormal, surfaceColor.rgb * VertEmissive);
     }
 }`
 

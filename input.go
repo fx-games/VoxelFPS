@@ -206,6 +206,14 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 func (g *Game) spawnCurrentGameObject() {
 	if g.gameObjectForSpawning != nil {
 		decoToSpawn := g.gameObjectForSpawning
+		if !decoToSpawn.HasComponent(quads.ComponentTypeSprite) {
+			// A mesh ghost - a torch. It is already the object it will be, so it
+			// only has to stop being the ghost: its light goes into the map and a
+			// fresh ghost takes over the crosshair.
+			g.dropTorch(decoToSpawn.Transform().GetPosition())
+			g.gameObjectForSpawning = g.spawnTorch(decoToSpawn.Transform().GetPosition())
+			return
+		}
 		sprite := decoToSpawn.Sprite()
 		g.Sprites.Remove(sprite)
 		sprite.Tint = mgl32.Vec4{1, 1, 1, 1}

@@ -13,6 +13,14 @@ type LightInfo struct {
 	*core.PerspectiveTransform
 	Color mgl32.Vec4
 
+	// Omni makes this a point light: it lights in every direction and casts no
+	// shadow, because a single perspective frustum has no depth information for
+	// the sphere around it. The shader recognises it by a cone cosine of -1 (see
+	// packed) and skips both the cone test and the shadow lookup, and the shadow
+	// pass skips it entirely. For a small moving light - a projectile, a spark -
+	// that is the whole feature; a cube shadow map would be six passes a frame.
+	Omni bool
+
 	// What the depth map in the shadow buffer was rendered from. A light only has
 	// to redraw it when its own frustum moved or the casting scene changed.
 	shadowProjView mgl32.Mat4
@@ -36,17 +44,27 @@ func (l LightInfo) IsOff() bool {
 // Reach and cone come from the light's shadow frustum, so the region it lights and
 // the region it has depth information for cannot drift apart.
 func (l LightInfo) packed() (pos, col, dir mgl32.Vec4, projView mgl32.Mat4) {
+	coneCosine := l.ConeCosine()
+	if l.Omni {
+		coneCosine = omniConeCosine
+	}
 	return l.GetPosition().Vec4(l.GetFarPlaneDist()),
 		l.Color,
-		l.GetForward().Vec4(l.ConeCosine()),
+		l.GetForward().Vec4(coneCosine),
 		l.GetProjectionViewMatrix()
 }
 
+// omniConeCosine is the sentinel an omni light packs into direction.w. A real cone
+// cosine cannot reach -1 (that would be a 360 degree spotlight), so the shader can
+// read it as "no cone, no shadow" without another vec4.
+const omniConeCosine = float32(-1)
+
 // NeedsShadowUpdate reports whether the cached depth map for this light is stale.
+// An omni light never has one.
 func (l *LightInfo) NeedsShadowUpdate(sceneSignature uint64) bool {
-	return !l.shadowRendered ||
+	return !l.Omni && (!l.shadowRendered ||
 		l.shadowScene != sceneSignature ||
-		l.shadowProjView != l.GetProjectionViewMatrix()
+		l.shadowProjView != l.GetProjectionViewMatrix())
 }
 
 func (l *LightInfo) MarkShadowRendered(sceneSignature uint64) {

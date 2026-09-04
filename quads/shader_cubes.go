@@ -31,7 +31,9 @@ const (
 // Set the saturation cutoff to 0 to go back to a pure brightness mask, and the
 // brightness cutoff to 0 as well to light the whole face.
 const (
-	DefaultEmissiveStrength   = float32(4.0)
+	// 4.0 sat only just over the old bloom threshold. 7.0 puts a masked texel well
+	// past it, so an emissive fitting is a light source on screen and not a bright decal.
+	DefaultEmissiveStrength   = float32(7.0)
 	DefaultEmissiveCutoff     = float32(0.35)
 	DefaultEmissiveSaturation = float32(0.35)
 )

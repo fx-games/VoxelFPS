@@ -185,3 +185,46 @@ func TestFaceLookupPacksLightEmissiveAndTexture(t *testing.T) {
 		}
 	}
 }
+
+// A torch is placed in the running editor, and every re-bake starts from dark. So
+// the emitter has to be map state that the bake re-seeds - the first version called
+// FillTorchlight once at placement, and the torch went out the next time a block was
+// placed anywhere in the map.
+func TestPlacedTorchesSurviveARebake(t *testing.T) {
+	m := NewMapWithEmptyChunks(1, 1, 1, 8, 8)
+	for x := int32(0); x < 8; x++ {
+		for y := int32(0); y < 8; y++ {
+			for z := int32(0); z < 8; z++ {
+				m.SetBlock(x, y, z, NewBlock(3))
+			}
+		}
+	}
+	// One corridor along +X for the light to travel down.
+	for x := int32(0); x < 7; x++ {
+		m.SetBlock(x, 0, 0, NewAirBlock())
+	}
+
+	torch := Int3{0, 0, 0}
+	m.AddTorchLight(torch)
+	m.bakeEmissiveTorchlight()
+
+	if got := m.GetGlobalBlock(0, 0, 0).GetTorchLight(); got != MaxTorchLight {
+		t.Errorf("light at the torch: got %d want %d", got, MaxTorchLight)
+	}
+	if got := m.GetGlobalBlock(3, 0, 0).GetTorchLight(); got != MaxTorchLight-3 {
+		t.Errorf("light three blocks away: got %d want %d", got, MaxTorchLight-3)
+	}
+
+	// A second bake is what a block placed elsewhere costs, and the torch has to
+	// still be there afterwards.
+	m.bakeEmissiveTorchlight()
+	if got := m.GetGlobalBlock(3, 0, 0).GetTorchLight(); got != MaxTorchLight-3 {
+		t.Errorf("light after a re-bake: got %d want %d", got, MaxTorchLight-3)
+	}
+
+	m.RemoveTorchLight(torch)
+	m.bakeEmissiveTorchlight()
+	if got := m.GetGlobalBlock(3, 0, 0).GetTorchLight(); got != 0 {
+		t.Errorf("light survived the torch being removed: got %d want 0", got)
+	}
+}

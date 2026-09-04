@@ -712,7 +712,11 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 			return false // outside the map there is nothing to hit, keep going until the ray runs out
 		}
 		for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
-			if gObj.GameObject() == g.player || gObj.GameObject() == g.gameObjectForSpawning {
+			// A projectile in flight is not something to look at, interact with or
+			// shoot: it is skipped here rather than in hoveredObj, so the HUD frame,
+			// the label and the hitscan weapons all lose it at once.
+			if gObj.GameObject() == g.player || gObj.GameObject() == g.gameObjectForSpawning ||
+				gObj.GameObject().HasComponent(quads.ComponentTypeProjectile) {
 				continue
 			}
 			intersectionDistance, intersects := voxel.IntersectRayOBB(origin, direction, gObj.OBB(g.Camera))

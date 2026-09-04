@@ -38,6 +38,10 @@ type VertexArray[V any] struct {
 	use                     uint32
 	currentBufferSize       int
 
+	instanceVbo        *binder
+	instanceStride     int
+	instanceBufferSize int
+
 	DebugName string
 }
 
@@ -279,6 +283,9 @@ func (va *VertexArray[V]) delete() {
 		gl.DeleteVertexArrays(1, &va.vao.obj)
 		gl.DeleteBuffers(1, &va.vbo.obj)
 		gl.DeleteBuffers(1, &va.ibo.obj)
+		if va.instanceVbo != nil {
+			gl.DeleteBuffers(1, &va.instanceVbo.obj)
+		}
 	})
 }
 

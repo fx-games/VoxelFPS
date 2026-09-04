@@ -107,6 +107,10 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, weaponEffect WeaponE
 	offsetOrigin := origin.Add(direction.Mul(0.8))
 
 	sprite := quads.NewSprite(g.AtlasSprites, []uint16{179})
+	// A plasma bolt is its own light source: the sprite is drawn past white so the
+	// bloom pass halos it, and an omni light rides along so the room it flies through
+	// lights up with it. Both are the same colour, which is what sells it as one thing.
+	sprite.Emissive = projectileEmissive
 	newProjectile := quads.NewGameObject("Projectile")
 	newProjectile.SetLifeTime(5)
 	newProjectile.Transform().SetPosition(offsetOrigin)
@@ -122,7 +126,21 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, weaponEffect WeaponE
 
 	g.physicsSystem.AddObject(physics)
 	physics.SetVelocity(direction.Mul(10))
+
+	g.AttachLightTo(newProjectile, projectileLightColor, projectileLightIntensity, projectileLightReach)
 }
+
+// How a projectile glows. Emissive is how far past white the sprite is drawn, which
+// has to clear DefaultBloomThreshold by a margin to bloom at all; the light's
+// intensity is its brightness at LIGHT_REF_DIST, on the same scale as a map light.
+const (
+	projectileEmissive       = float32(6)
+	projectileLightIntensity = float32(10)
+	projectileLightReach     = float32(8)
+)
+
+var projectileLightColor = mgl32.Vec3{0.4, 0.8, 1.0}
+
 func (g *Game) playerInteractWith(id events.EventID, event events.Event) {
 	hoveredObj := event.(*quads.GameObject)
 	if hoveredObj != nil && hoveredObj.DisplayName == "Scientist" {

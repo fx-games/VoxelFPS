@@ -38,6 +38,7 @@ type Map struct {
 	lookupVoxels          *glhf.TextureBuffer
 	textureBufferIsDirty  bool
 	emissiveTextures      map[uint16]bool
+	torchLights           map[Int3]bool
 	locationTex           int32
 	locationVox           int32
 }
@@ -744,6 +745,31 @@ func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
 	m.FloodFill(origin, int(level), spread)
 }
 
+// AddTorchLight registers a point emitter at a grid position - a torch dropped by
+// the editor. It has to be map state rather than a one-off FillTorchlight call:
+// bakeEmissiveTorchlight starts every re-bake from dark, so light that is not
+// re-seeded there vanishes the next time a block is placed or a panel is toggled.
+func (m *Map) AddTorchLight(pos Int3) {
+	if m.torchLights == nil {
+		m.torchLights = make(map[Int3]bool)
+	}
+	m.torchLights[pos] = true
+	m.textureBufferIsDirty = true
+}
+
+// RemoveTorchLight drops an emitter. The light it cast goes away on the next bake.
+func (m *Map) RemoveTorchLight(pos Int3) {
+	if _, exists := m.torchLights[pos]; !exists {
+		return
+	}
+	delete(m.torchLights, pos)
+	m.textureBufferIsDirty = true
+}
+
+func (m *Map) TorchLightCount() int {
+	return len(m.torchLights)
+}
+
 // emissiveFaceOffsets is the block a face of the given index faces into, in the one
 // face order bake3dTextureIndices writes and the cube shader's normalLookup reads:
 // +X, -X, +Y, -Y, +Z, -Z.
@@ -769,6 +795,14 @@ var emissiveFaceOffsets = [6]Int3{
 // BFS seeded with every emitter, not a goroutine.
 func (m *Map) bakeEmissiveTorchlight() {
 	m.clearTorchlight()
+
+	// Hand-placed torches first: they are the brightest thing in the fill, so
+	// seeding them before the panels saves the panels re-flooding blocks a torch
+	// already lit brighter.
+	for pos := range m.torchLights {
+		m.FillTorchlight(pos)
+	}
+
 	if len(m.emissiveTextures) == 0 {
 		return
 	}

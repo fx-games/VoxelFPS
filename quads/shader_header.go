@@ -222,12 +222,18 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     float dist = max(length(toLight), 0.0001);
     vec3 lightDir = toLight / dist;
 
-    float theta = dot(lightDir, normalize(-light.direction.xyz));
-    // one authored angle: the cone's outer edge is the light's own half FOV, and
-    // the rim softens over half the remaining angle to the axis.
-    float cone = smoothstep(coneOuter, mix(coneOuter, 1.0, 0.5), theta);
-    if (cone <= 0.0) {
-        return vec3(0.0);
+    // A cone cosine of -1 marks an omni light (LightInfo.Omni): it has no cone and
+    // no shadow map, so both tests below are skipped for it.
+    bool isOmni = coneOuter <= -1.0;
+    float cone = 1.0;
+    if (!isOmni) {
+        float theta = dot(lightDir, normalize(-light.direction.xyz));
+        // one authored angle: the cone's outer edge is the light's own half FOV, and
+        // the rim softens over half the remaining angle to the axis.
+        cone = smoothstep(coneOuter, mix(coneOuter, 1.0, 0.5), theta);
+        if (cone <= 0.0) {
+            return vec3(0.0);
+        }
     }
     // Inverse square, the way light actually falls off. Without it a wall one unit
     // away and a wall eight units away were both at full brightness, so the only
@@ -258,7 +264,7 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     float spec = pow(max(dot(normal, halfwayDir), 0.0), 64.0);
     vec3 specular = spec * 0.15 * lightColor;
     // calculate shadow
-    float shadow = ShadowCalculation(lightIndex, light, fragWorldPos, normal, lightDir);
+    float shadow = isOmni ? 0.0 : ShadowCalculation(lightIndex, light, fragWorldPos, normal, lightDir);
     
     vec3 lighting = (1.0 - shadow) * (diffuse + specular) * cone * falloff;    
     //vec3 lighting = (diffuse + specular);

@@ -39,6 +39,11 @@ type SpriteDrawer struct {
 	animations         []SpriteAnimation
 	spritesPerTexture  map[*glhf.TextureAtlasFixed][]*SpriteComponent
 	transparentSprites []*SpriteComponent
+
+	// Instance attribute scratch, reused every frame so the per-frame draw does
+	// not allocate. Two batches because a static sprite needs face culling off.
+	culledBatch   []float32
+	unculledBatch []float32
 }
 
 func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
@@ -59,6 +64,7 @@ func (q *SpriteDrawer) uploadQuad() {
 	vertices := glhf.NewVertexArray[glhf.GlUInt](q.shader, false)
 	vertices.DebugName = "SpriteDrawer"
 	vertices.SetIndices32(changedIndices)
+	vertices.SetInstanceFormat(QuadInstanceFormat)
 	vertices.Begin()
 	vertices.SetVertexData(rawVertices)
 	vertices.End()
@@ -126,8 +132,6 @@ func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) 
 
 func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 	spriteShader.Begin()
-	spriteShader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
-	//spriteShader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
 
 	if q.quadVertices == nil {
 		q.uploadQuad()
@@ -147,6 +151,9 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 		spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 
 		currentAtlas.BeginOnUnit(gl.TEXTURE0)
+
+		q.culledBatch = q.culledBatch[:0]
+		q.unculledBatch = q.unculledBatch[:0]
 		for _, sprite := range spriteList {
 			if !sprite.GameObject().IsInViewFrustum(observer) {
 				continue
@@ -158,10 +165,19 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 			if !shouldShow {
 				continue
 			}
-			q.drawSprite(observer, spriteShader, sprite, texIndex)
+			// A static sprite keeps its own orientation, so the observer can end
+			// up behind it and its back face has to survive culling. A billboard
+			// is turned to face the observer and never shows its back.
+			if sprite.DrawMode() == SpriteModeStatic {
+				q.unculledBatch = appendInstance(q.unculledBatch, observer, sprite, texIndex)
+			} else {
+				q.culledBatch = appendInstance(q.culledBatch, observer, sprite, texIndex)
+			}
 			spritesDrawn++
-			drawCalls++
 		}
+
+		drawCalls += q.drawBatch(q.culledBatch, true)
+		drawCalls += q.drawBatch(q.unculledBatch, false)
 
 		currentAtlas.End()
 	}
@@ -181,7 +197,6 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		return
 	}
 	spriteShader.Begin()
-	spriteShader.SetUniformAttr(QuadShaderModelTransform, mgl32.Ident4())
 
 	if q.quadVertices == nil {
 		q.uploadQuad()
@@ -204,6 +219,10 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		return cmp.Compare(jDist, iDist)
 	})
 
+	// ponytail: one instance per draw here. Blending needs the back-to-front order
+	// kept and every sprite carries its own atlas, so batching would mean grouping
+	// runs of equal atlas - worth it only once transparent sprites are more than a
+	// handful. The opaque pass above is the one the benchmark measures.
 	for i := 0; i < len(q.transparentSprites); i++ {
 		sprite := q.transparentSprites[i]
 		if !sprite.GameObject().IsInViewFrustum(observer) {
@@ -216,9 +235,10 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 			continue
 		}
 		sprite.AtlasTexture.Begin() // THIS COULD BE SLOW..
-		q.drawSprite(observer, spriteShader, sprite, texIndex)
+
+		q.culledBatch = appendInstance(q.culledBatch[:0], observer, sprite, texIndex)
+		drawCalls += q.drawBatch(q.culledBatch, sprite.DrawMode() != SpriteModeStatic)
 		spritesDrawn++
-		drawCalls++
 
 		sprite.AtlasTexture.End()
 	}
@@ -230,24 +250,34 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 	q.drawCalls += drawCalls
 }
 
-func (q *SpriteDrawer) drawSprite(observer core.Transformer, shader *glhf.Shader, sprite *SpriteComponent, texIndex uint16) {
-	shader.SetUniformAttr(QuadShaderModelTransform, sprite.Transform(observer))
-	//q.shader.SetUniformAttr(QuadShaderTintColor, tintColor)
+// appendInstance packs one sprite into the instance attribute buffer, in the order
+// given by QuadInstanceFormat: mat4 model, vec2 origin offset, texture index, emissive.
+func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComponent, texIndex uint16) []float32 {
+	model := sprite.Transform(observer)
 
 	originOffset := mgl32.Vec2{0, 0} // offset zero = center of sprite
 	if sprite.Origin() == SpriteOriginBottomCenter {
 		originOffset = mgl32.Vec2{0, 0.5}
 	}
-	shader.SetUniformAttr(QuadShaderOriginOffset, originOffset)
-	shader.SetUniformAttr(QuadShaderTextureIndex, uint32(texIndex))
 
-	if sprite.DrawMode() == SpriteModeStatic {
+	dst = append(dst, model[:]...)
+	return append(dst, originOffset[0], originOffset[1], float32(texIndex), sprite.Emissive)
+}
+
+// drawBatch submits one instanced draw and reports the number of draw calls it cost.
+func (q *SpriteDrawer) drawBatch(instances []float32, cullFace bool) int {
+	if len(instances) == 0 {
+		return 0
+	}
+	if !cullFace {
 		gl.Disable(gl.CULL_FACE)
 	}
-	q.quadVertices.Draw()
-	if sprite.DrawMode() == SpriteModeStatic {
+	q.quadVertices.SetInstanceData(instances)
+	q.quadVertices.DrawInstanced(int32(len(instances) / QuadInstanceFloats))
+	if !cullFace {
 		gl.Enable(gl.CULL_FACE)
 	}
+	return 1
 }
 
 // ForEachCaster visits the world position of every sprite that ends up in a

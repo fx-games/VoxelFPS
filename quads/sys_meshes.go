@@ -21,6 +21,10 @@ type MeshComponent struct {
 	baseComponent
 	MeshIndex int
 	IsHidden  bool
+	// EmissiveStrength pushes this mesh's bright, colourful texels past white, the
+	// way an emissive block face is pushed. 0 - the default - means the mesh only
+	// reflects light. A torch sets it so its flame glows and blooms.
+	EmissiveStrength float32
 }
 
 func NewMeshComponent(meshIndex int) *MeshComponent {
@@ -89,6 +93,9 @@ func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader) {
 		for _, mesh := range meshes {
 			if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(frustum) {
 				continue
+			}
+			if meshShader.HasUniform(MeshShaderEmissiveStrength) {
+				meshShader.SetUniformAttr(MeshShaderEmissiveStrength, mesh.EmissiveStrength)
 			}
 			compoundMesh := q.loadedMeshes[mesh.MeshIndex]
 			compoundMesh.RootNode.SetParent(mesh.GameObject().Transform())

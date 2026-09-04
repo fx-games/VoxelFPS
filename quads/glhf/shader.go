@@ -259,6 +259,14 @@ func (s *Shader) UniformFormat() AttrFormat {
 // No other types are supported.
 //
 // The Shader must be bound before calling this method.
+// HasUniform reports whether this program declares - and kept - the uniform at the
+// given index. The depth-pass twin of a shader has a shorter uniform list, and both
+// are handed the same draw code, so the extras have to be asked about before they
+// are set: SetUniformAttr panics on a uniform the program does not have.
+func (s *Shader) HasUniform(uniform int) bool {
+	return uniform >= 0 && uniform < len(s.uniformLoc) && s.uniformLoc[uniform] >= 0
+}
+
 func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
 	if s.uniformLoc[uniform] < 0 {
 		panic(fmt.Sprintf("Uniform attribute %d not found", uniform))

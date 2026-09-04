@@ -151,6 +151,10 @@ func (g *GameObject) Sprite() *SpriteComponent {
 	return g.components[ComponentTypeSprite].(*SpriteComponent)
 }
 
+func (g *GameObject) Mesh() *MeshComponent {
+	return g.components[ComponentTypeMesh].(*MeshComponent)
+}
+
 func (g *GameObject) Physics() *PhysicsComponent {
 	return g.components[ComponentTypePhysics].(*PhysicsComponent)
 }

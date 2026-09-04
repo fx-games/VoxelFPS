@@ -31,15 +31,43 @@ debugging use `glDebugMessageCallback` (GL 4.3) or gate the checks behind a
 frame. Typed methods (`SetMat4`, `SetVec2`) remove both the allocation and the
 type switch.
 
-### [ ] 2. One draw call per sprite
+### [x] 2. One draw call per sprite
 
-`quads/sys_sprites.go:235` draws the same 4-vertex quad once per sprite, resetting
-three uniforms each time. `glhf.SpriteBatch` exists but is only used for the GUI.
+`quads/sys_sprites.go` drew the same 4-vertex quad once per sprite, resetting three
+uniforms each time. `glhf.SpriteBatch` exists but is only used for the GUI.
 
-**Fix:** instanced rendering — a per-sprite buffer of (model matrix, texIndex,
-originOffset) with `glVertexAttribDivisor`, one `glDrawElementsInstanced` per
-atlas. `quads/glhf/vertex.go:236` already has divisor handling for matrix
-attributes.
+**Fixed** by instanced rendering. `modelTransform`, `originOffset` and `textureIndex`
+stopped being uniforms and became per-instance vertex attributes, fed from a second
+buffer on the quad's VAO with `glVertexAttribDivisor(loc, 1)`. The opaque pass packs
+one atlas worth of sprites into a float scratch slice that is reused every frame and
+issues one `glDrawElementsInstanced`. Measured result below.
+
+Three things that were not obvious going in:
+
+- **The attribute locations have to be pinned in the GLSL.** The same vertex array is
+  drawn by the lit shader and by the shadow depth shader, and a VAO stores attribute
+  pointers by location, not by name. `glGetAttribLocation` only agrees between two
+  programs by accident, so `layout(location = N)` is load-bearing here, not style.
+  `TestInstanceLocationsDoNotOverlap` guards the other half of it: a `mat4` occupies
+  four consecutive slots, so locations 1-4 are the matrix and the next attribute has
+  to start at 5.
+- **The fragment shader lost its model matrix.** It used to reconstruct the world
+  position from the uniform. With the transform per instance it cannot, so the vertex
+  shader hands over world position and world normal as varyings. That also settles
+  the `THIS PROBABLY NEEDS TO BE TRANSFORMED?` comment the normal carried - it is
+  transformed now.
+- **`textureIndex` travels as a float**, not a uint. Mixing an integer attribute into
+  the buffer would mean a second `glVertexAttribIPointer` and a split stride, for a
+  value that never exceeds a few thousand and is exact in float32 up to 2^24.
+
+Two sprites in one atlas can still need different state: a `SpriteModeStatic` sprite
+keeps its own orientation, so the observer can walk behind it and face culling has to
+go off, while a billboard always faces front. That is two batches per atlas, not one.
+
+Left alone: the transparent pass still draws one instance per call. Blending needs
+the back-to-front order kept and every transparent sprite carries its own atlas, so
+batching there means grouping runs of equal atlas - worth doing once transparent
+sprites are more than the editor's single placement ghost.
 
 `quads/sys_meshes.go:84` has the same shape: one draw per node per object.
 
@@ -551,6 +579,30 @@ Two things to know before reading a later comparison:
   sprite cost by the number of lights, and instancing would be worth
   correspondingly more there.
 
+### Result after instancing (#2)
+
+Same command, same machine, same session:
+
+| scene | sprite draw calls | median ms | mean | p95 | fps at median |
+|---|---|---|---|---|---|
+| baseline, one call per sprite | 284 | 1.898 / 1.920 / 1.932 | 2.41-2.55 | 5.4-5.9 | ~521 |
+| instanced, one call per atlas | **1** | **1.409 / 1.448 / 1.483** | 1.89-1.97 | 5.0-5.8 | ~692 |
+
+Median 1.917 to 1.447 ms, so **0.470 ms of the 0.935 ms sprite budget came back** -
+50% of it, 25% of the whole frame, and the run-to-run spread is 5% against a 24%
+effect, so the number is real. It lands inside the ceiling set above: not worth
+declaring a miss, and exactly where the prediction said the line between worth it
+and not worth it was.
+
+The other half of the budget is not draw calls. It is the per-sprite CPU work the
+loop still does either way: the frustum test, `Transform(observer)` building a
+billboard matrix, and packing 19 floats. Attacking that means culling less often or
+building matrices on the GPU, and neither is worth starting before something in a
+profile says so.
+
+The p95 and max are unchanged, as expected - that tail was already shown to be
+present with zero sprites on screen.
+
 Found while setting this up, and fixed: `-stress-sprites 1` and `-stress-sprites 2`
 built maps with no sprites at all (`x%spacing == 2` is a residue a spacing of 1 or 2
 can never produce), which is precisely the flag anyone reaches for to make sprites
@@ -559,7 +611,7 @@ so the F1 checkbox did nothing and the overlay could not be switched off.
 
 ## Not started
 
-#2 instanced sprites (baseline measured, see above), #7 texture arrays, #16 light
+#7 texture arrays, #16 light
 types, #17 baked voxel light, #18 many-light shading, #20 unconditional UBO write,
 #21 projection matrix cache.
 
@@ -752,12 +804,12 @@ failure surfaces as a driver compile error at startup, far from the edit.
 **Fix:** one source with `#ifdef DEPTH_PASS` and a `#define` prepended for the depth
 variant. Shorter than the filter, and it cannot rot.
 
-### [ ] 32. `CULL_FACE` is toggled per sprite
+### [x] 32. `CULL_FACE` is toggled per sprite
 
-`quads/sys_sprites.go` — `drawSprite` calls `gl.Disable(gl.CULL_FACE)` and
+`quads/sys_sprites.go` — `drawSprite` called `gl.Disable(gl.CULL_FACE)` and
 `gl.Enable(gl.CULL_FACE)` around the draw for every static sprite, inside the innermost
-loop. Partition the draw list by draw mode and toggle twice per frame instead. Ranks
-below #2 (instanced sprites), which would subsume it.
+loop. Subsumed by #2 as predicted: the opaque pass partitions each atlas into a culled
+and an unculled batch, so the toggle happens at most once per batch.
 
 ### [x] 33. Blending is enabled for the whole 3D pass
 

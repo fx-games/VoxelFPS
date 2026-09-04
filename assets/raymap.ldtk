@@ -1194,7 +1194,7 @@
 					"acceptFileTypes": null,
 					"defaultOverride": {
 						"id": "V_Float",
-						"params": [6.0]
+						"params": [14.0]
 					},
 					"textLanguageMode": null,
 					"symmetricalRef": false,
@@ -14165,7 +14165,7 @@
 								{ "__identifier": "Yaw", "__type": "Float", "__value": 0.0, "__tile": null, "defUid": 37, "realEditorValues": [] },
 								{ "__identifier": "Pitch", "__type": "Float", "__value": 25.0, "__tile": null, "defUid": 38, "realEditorValues": [] },
 								{ "__identifier": "Color", "__type": "Color", "__value": "#00B300", "__tile": null, "defUid": 39, "realEditorValues": [] },
-								{ "__identifier": "Intensity", "__type": "Float", "__value": 6.0, "__tile": null, "defUid": 40, "realEditorValues": [] },
+								{ "__identifier": "Intensity", "__type": "Float", "__value": 14.0, "__tile": null, "defUid": 40, "realEditorValues": [] },
 								{ "__identifier": "Angle", "__type": "Float", "__value": 45.0, "__tile": null, "defUid": 41, "realEditorValues": [] },
 								{ "__identifier": "Reach", "__type": "Float", "__value": 15.0, "__tile": null, "defUid": 42, "realEditorValues": [] }
 							],
@@ -14189,7 +14189,7 @@
 								{ "__identifier": "Yaw", "__type": "Float", "__value": -90.0, "__tile": null, "defUid": 37, "realEditorValues": [] },
 								{ "__identifier": "Pitch", "__type": "Float", "__value": 25.0, "__tile": null, "defUid": 38, "realEditorValues": [] },
 								{ "__identifier": "Color", "__type": "Color", "__value": "#B30000", "__tile": null, "defUid": 39, "realEditorValues": [] },
-								{ "__identifier": "Intensity", "__type": "Float", "__value": 6.0, "__tile": null, "defUid": 40, "realEditorValues": [] },
+								{ "__identifier": "Intensity", "__type": "Float", "__value": 14.0, "__tile": null, "defUid": 40, "realEditorValues": [] },
 								{ "__identifier": "Angle", "__type": "Float", "__value": 45.0, "__tile": null, "defUid": 41, "realEditorValues": [] },
 								{ "__identifier": "Reach", "__type": "Float", "__value": 15.0, "__tile": null, "defUid": 42, "realEditorValues": [] }
 							],

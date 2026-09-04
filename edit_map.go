@@ -94,6 +94,12 @@ func (g *Game) openVoxelEditMenu() {
 			})
 		}),
 		quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
+		quads.NewGuiOptionAction("Place Torches", func() {
+			g.captureMouse(previousMouseState)
+			g.startTorchPlacement()
+			g.Toast("Left click drops a torch")
+			g.popFromWidgetStack()
+		}),
 		quads.NewGuiOptionAction("Add Blocks", func() {
 			g.captureMouse(previousMouseState)
 			if g.voxelBrush == nil {
@@ -144,9 +150,45 @@ func (g *Game) openVoxelEditMenu() {
 	g.replaceWidgetStack(configMenu)
 }
 
+const (
+	torchMeshName = "torch"
+	// Far enough past white for the bloom threshold to pick the flame out, the same
+	// reason emissive wall panels sit at 7: a torch head is a light source on
+	// screen, not a bright decal.
+	torchEmissiveStrength = float32(6.0)
+	// The torch is 0.625 tall and stands on the floor, so this samples the air
+	// block it is standing in rather than whatever the floor boundary rounds to.
+	torchLightHeight = float32(0.3)
+)
+
+// startTorchPlacement puts a torch on the cursor. It rides the same ghost the
+// sprite decorations use - updateGUI moves it to whatever ground the crosshair is
+// over, and a left click drops it.
+func (g *Game) startTorchPlacement() {
+	if g.gameObjectForSpawning != nil {
+		g.gameObjectForSpawning.Kill()
+	}
+	g.gameObjectForSpawning = g.spawnTorch(mgl32.Vec3{})
+}
+
+// spawnTorch is the model half of a torch: six quads and a flame that glows. The
+// light half is CubeMap.AddTorchLight, which only the dropped copy gets - a ghost
+// following the crosshair would otherwise re-bake the map every frame.
+func (g *Game) spawnTorch(pos mgl32.Vec3) *quads.GameObject {
+	torch := g.spawnEntity(pos, core.MapEntity{Name: "Torch", MeshName: torchMeshName})
+	torch.Mesh().EmissiveStrength = torchEmissiveStrength
+	return torch
+}
+
+// dropTorch turns the ghost standing at pos into a placed torch: it stays where it
+// is and its light goes into the map, where the next bake floods from it.
+func (g *Game) dropTorch(pos mgl32.Vec3) {
+	g.CubeMap.AddTorchLight(voxel.PositionToGridInt3(pos.Add(mgl32.Vec3{0, torchLightHeight, 0})))
+}
+
 func (g *Game) changeDecorationTexture() {
 	g.pickTexture(g.AtlasSprites, func(selectedIndex int) {
-		if g.gameObjectForSpawning != nil {
+		if g.gameObjectForSpawning != nil && g.gameObjectForSpawning.HasComponent(quads.ComponentTypeSprite) {
 			g.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
 		}
 	})

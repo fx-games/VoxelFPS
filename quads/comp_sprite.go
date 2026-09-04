@@ -8,11 +8,15 @@ import (
 
 type SpriteComponent struct {
 	baseComponent
-	CameraFollowMode  SpriteMode
-	SpriteOrigin      SpriteOrigin
-	TextureIndices    []uint16
-	AtlasTexture      *glhf.TextureAtlasFixed
-	Tint              mgl32.Vec4
+	CameraFollowMode SpriteMode
+	SpriteOrigin     SpriteOrigin
+	TextureIndices   []uint16
+	AtlasTexture     *glhf.TextureAtlasFixed
+	Tint             mgl32.Vec4
+	// Emissive is how far past white the sprite glows, 0 for a normal one. It is
+	// added after the light loop, so an emissive sprite ignores shadows and lights
+	// itself - see the emissive term in quadFragmentShaderSource.
+	Emissive          float32
 	currentFrame      int
 	currentAnimation  int
 	currentFrameTime  float32

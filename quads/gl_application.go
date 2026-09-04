@@ -89,6 +89,10 @@ type GlApplication struct {
 	skyboxCubeMap *glhf.Cubemap
 	mainUbo       *glhf.UniformBufferObject
 	lightsUbo     *LightsUBO
+	// The one light slot that follows a game object around. -1 until something asks
+	// for it; the slot is then kept for good, see DetachLight.
+	trackedLightIndex  int
+	trackedLightObject *GameObject
 
 	colorBatch *glhf.SpriteBatch
 
@@ -231,6 +235,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 			guiShader:          LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
 			postShader:         LoadPostShader(mainUboGLSL),
 			bloomShader:        LoadBloomShader(),
+			trackedLightIndex:  -1, // nothing is tracking a light yet, see AttachLightTo
 			bloomStrength:      DefaultBloomStrength,
 			bloomThreshold:     DefaultBloomThreshold,
 			emissiveStrength:   DefaultEmissiveStrength,
@@ -413,6 +418,7 @@ func (a *GlApplication) StartEventLoop() {
 				a.Meshes.Update(deltaTime)
 				a.UpdateParticles(deltaTime)
 				a.lightsUbo.updateLightAt(0)
+				a.updateTrackedLight()
 			} // Update END
 
 			// The scene buffer is linear HDR, so the authored ceiling colour is lifted to
@@ -1434,6 +1440,65 @@ func (a *GlApplication) SetLights(infos []LightInfo) {
 		infos = infos[:MaxLights]
 	}
 	a.lightsUbo.SetLights(infos)
+	// The list was rebuilt, so whatever slot the tracked light had is gone with it.
+	a.trackedLightIndex = -1
+	a.trackedLightObject = nil
+}
+
+// AttachLightTo parents a point light to a game object: it moves with the object and
+// switches itself off the frame the object dies. Reach is how far it carries and
+// intensity its brightness at LIGHT_REF_DIST, the same numbers a map light uses.
+//
+// ponytail: one tracked slot for the whole application, reused by every caller. The
+// thing that wants it is whatever the player just fired, and two of those at once
+// would need a slot pool plus a light index that is no longer a shadow atlas layer.
+func (a *GlApplication) AttachLightTo(obj *GameObject, color mgl32.Vec3, intensity, reach float32) {
+	// The FOV is unused - an omni light has no cone - but the frustum still supplies
+	// the position and the far plane, which is the light's reach.
+	transform := core.NewPerspectiveTransformForSpotlightFromParent(obj.Transform(), 90, reach, a.shadowResolution)
+	transform.SetPosition(mgl32.Vec3{}) // sit on the object, not under it like the flashlight
+	light := LightInfo{
+		PerspectiveTransform: transform,
+		Color:                color.Vec4(intensity),
+		Omni:                 true,
+	}
+	if a.trackedLightIndex < 0 {
+		slot := len(a.lightsUbo.lights)
+		if slot >= MaxLights {
+			return // every slot is a map light; the projectile just does not light the room
+		}
+		a.AddLights(light)
+		a.trackedLightIndex = slot
+	} else {
+		a.lightsUbo.lights[a.trackedLightIndex] = light
+		a.lightsUbo.updateLightAt(a.trackedLightIndex)
+	}
+	a.trackedLightObject = obj
+}
+
+// DetachLight switches the tracked light off but keeps its slot. A light's index is
+// also its layer in the shadow atlas, so dropping one out of the list would hand the
+// lights after it someone else's cached depth map.
+func (a *GlApplication) DetachLight() {
+	if a.trackedLightIndex < 0 {
+		return
+	}
+	a.lightsUbo.lights[a.trackedLightIndex].Color = mgl32.Vec4{}
+	a.lightsUbo.updateLightAt(a.trackedLightIndex)
+	a.trackedLightObject = nil
+}
+
+// updateTrackedLight re-uploads the tracked light's slot, which is what makes it
+// follow its parent, and switches it off once that parent is dead.
+func (a *GlApplication) updateTrackedLight() {
+	if a.trackedLightIndex < 0 || a.trackedLightObject == nil {
+		return
+	}
+	if !a.trackedLightObject.IsAlive() {
+		a.DetachLight()
+		return
+	}
+	a.lightsUbo.updateLightAt(a.trackedLightIndex)
 }
 
 // AddLights appends to the scene's lights, keeping the ones already there. The

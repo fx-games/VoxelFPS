@@ -22,9 +22,14 @@ const (
 // easily. The original 1.1/0.35 was arithmetic nonsense in the other direction: an
 // emissive surface at 1.2 lost almost everything to the threshold and what survived was
 // divided by three, giving a glow of about 0.03 - invisible, which is what prompted this.
+//
+// Turned up from 1.5/0.6: at that pairing only the hottest few percent of the frame
+// bloomed at all, and what did was added back at less than the source. 1.0 puts the
+// threshold at white, so anything the tone mapper would have clipped glows, and a
+// strength above 1 makes the halo read as light spilling rather than as a soft edge.
 const (
-	DefaultBloomThreshold = float32(1.5)
-	DefaultBloomStrength  = float32(0.6)
+	DefaultBloomThreshold = float32(1.0)
+	DefaultBloomStrength  = float32(1.3)
 	// bloomBlurPasses is how many horizontal+vertical pairs the chain runs, each at
 	// twice the tap spacing of the last. Three pairs starting at 2 texels reach ~32
 	// texels of quarter-resolution buffer, which is a wide, soft glow for six passes

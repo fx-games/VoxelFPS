@@ -89,3 +89,27 @@ func TestShadowCacheInvalidatesOnChange(t *testing.T) {
 		t.Error("a moved light must invalidate its own cached depth map")
 	}
 }
+
+// An omni light is recognised by the shader only through the sentinel in
+// direction.w, and it must never take a shadow pass: it has one frustum and would
+// render a depth map covering a fifth of the sphere it claims to light.
+func TestOmniLightPacksTheSentinelAndSkipsShadows(t *testing.T) {
+	omni := staticLight()
+	omni.Omni = true
+
+	_, _, dir, _ := omni.packed()
+	if dir.W() != omniConeCosine {
+		t.Errorf("omni light packed cone cosine %v, want %v", dir.W(), omniConeCosine)
+	}
+	if omni.NeedsShadowUpdate(1) {
+		t.Error("an omni light asked for a shadow pass")
+	}
+
+	spot := staticLight()
+	if spot.NeedsShadowUpdate(1) != true {
+		t.Error("a spotlight that never rendered still needs its shadow pass")
+	}
+	if _, _, spotDir, _ := spot.packed(); spotDir.W() == omniConeCosine {
+		t.Error("a spotlight packed the omni sentinel")
+	}
+}
