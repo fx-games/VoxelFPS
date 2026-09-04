@@ -104,6 +104,8 @@ type GlApplication struct {
     emissiveSaturation     float32
     exposure               float32
     gamma                  float32
+    shadowNormalOffset     float32
+    shadowDepthBias        float32
     ShouldDrawBloom        bool
     screenQuad             *glhf.VertexArray[glhf.GlFloat]
     UIScale                mgl32.Vec2
@@ -234,6 +236,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             emissiveSaturation: DefaultEmissiveSaturation,
             exposure:           DefaultExposure,
             gamma:              DefaultGamma,
+            shadowNormalOffset: DefaultShadowNormalOffset,
+            shadowDepthBias:    DefaultShadowDepthBias,
             ShouldDrawBloom:    true,
 
             quadShader: LoadQuadShader(injectedGLSL),
@@ -330,6 +334,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
         //ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
         mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
         mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{DefaultExposure, DefaultGamma})
+        mainUbo.SetAttribute(UboShadowParams, mgl32.Vec2{DefaultShadowNormalOffset, DefaultShadowDepthBias})
         mainUbo.End()
 
         glApp.mainUbo = mainUbo
@@ -346,10 +351,13 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
         glApp.lightsUbo = lightsUbo
 
+        // Slot 0 is the flashlight and nothing else: it is attached to the camera, is
+        // updated by index every frame, and belongs to the player rather than to any
+        // map. Every other light comes from the map file - the two that used to be
+        // hardcoded here now live in raymap.ldtk as Light entities, where they can be
+        // moved without a rebuild and where a second map can have its own.
         glApp.lightsUbo.SetLights([]LightInfo{
             {PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: flashlightOffColor},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{5.5, 2, 13.5}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, 0, -1}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0, 0.7, 0, 6}},
-            {PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(mgl32.Vec3{13, 2, 13}, mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{-1, 0, 0}), 45, 15, glApp.shadowResolution), Color: mgl32.Vec4{0.7, 0, 0, 6}},
         })
 
         parentApp.Init(glApp, mapLoad)
@@ -1032,6 +1040,27 @@ func (a *GlApplication) SetGamma(gamma float32) {
 func (a *GlApplication) Exposure() float32 { return a.exposure }
 func (a *GlApplication) Gamma() float32    { return a.gamma }
 
+// SetShadowBias takes the two knobs of the normal-offset shadow bias: how many shadow
+// texels the sample position is pushed along the surface normal, and the flat depth
+// bias left over for depth-buffer quantisation. Exposed because the useful value
+// depends on the shadow resolution and the scale of the map.
+// SetAmbientLight is the floor under everything: the colour, and in the alpha the
+// strength, that a surface gets no matter which lights reach it. Turning it down is
+// how a scene is made to show what its lights actually do.
+func (a *GlApplication) SetAmbientLight(colour mgl32.Vec3, strength float32) {
+    a.mainUbo.Begin()
+    a.mainUbo.SetAttribute(UboGlobalLightColor, colour.Vec4(strength))
+    a.mainUbo.End()
+}
+
+func (a *GlApplication) SetShadowBias(normalOffset, depthBias float32) {
+    a.shadowNormalOffset = normalOffset
+    a.shadowDepthBias = depthBias
+    a.mainUbo.Begin()
+    a.mainUbo.SetAttribute(UboShadowParams, mgl32.Vec2{normalOffset, depthBias})
+    a.mainUbo.End()
+}
+
 func (a *GlApplication) updateToneMapping() {
     a.mainUbo.Begin()
     a.mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{a.exposure, a.gamma})
@@ -1244,6 +1273,16 @@ func (a *GlApplication) setMainUBOCam(pos, dir mgl32.Vec3, projectionView mgl32.
 func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) map[mgl32.Vec3]core.MapEntity {
     cubeMap, entitySpawns := toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
     a.CubeMap = cubeMap
+
+    // The map owns its lighting. This replaces rather than appends, so a hot reload
+    // or a second map does not leave the previous map's lights burning, and a map
+    // with no lights is dark instead of inheriting someone else's.
+    lights := make([]LightInfo, 0, len(loadResult.Lights))
+    for _, light := range loadResult.Lights {
+        lights = append(lights, LightFromMap(light, a.shadowResolution))
+    }
+    a.SetStaticLights(lights...)
+
     return entitySpawns
 }
 // OnResize takes the new window size in screen coordinates. Everything measured in
@@ -1358,6 +1397,14 @@ func (a *GlApplication) SetLights(infos []LightInfo) {
 // the whole list would unhook it.
 func (a *GlApplication) AddLights(infos ...LightInfo) {
     a.SetLights(append(a.lightsUbo.lights, infos...))
+}
+
+// SetStaticLights replaces every light in the scene except the flashlight, which
+// lives in slot 0 and is updated by index every frame. A map that brings its own
+// lighting calls this on load, so switching maps does not accumulate the lights of
+// every map loaded before it.
+func (a *GlApplication) SetStaticLights(infos ...LightInfo) {
+    a.SetLights(append([]LightInfo{a.lightsUbo.lights[0]}, infos...))
 }
 
 // ShadowResolution is the edge length of one layer of the shadow atlas. Callers

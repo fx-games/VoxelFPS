@@ -29,6 +29,11 @@ var stringMapData = `################
 func main() {
     defaults := DefaultStressConfig()
     stress := flag.Bool("stress", false, "generate a stress map instead of loading the LDtk map")
+    shadowTest := flag.Bool("shadowtest", false, "load the shadow test map: one caster, one wall, one light from above")
+    // The two shadow knobs are also flags, not only config menu sliders, so a
+    // before/after can be run from a script instead of from muscle memory.
+    shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
+    shadowBias := flag.Float64("shadow-bias", float64(quads.DefaultShadowDepthBias), "flat shadow depth bias")
     stressSize := flag.Int("stress-size", defaults.Size, "stress map edge length in tiles")
     stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
     stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
@@ -37,7 +42,10 @@ func main() {
 
     var stressConfig *StressConfig
     var mapLoad core.MapLoadResult
-    if *stress {
+    shadowTestMap := *shadowTest
+    if shadowTestMap {
+        mapLoad = loadShadowTestMap()
+    } else if *stress {
         stressConfig = &StressConfig{
             Size:          *stressSize,
             PillarSpacing: *stressPillars,
@@ -51,7 +59,16 @@ func main() {
     }
 
     glhf.Run(func() {
-        quads.Start(NewGame(stressConfig), mapLoad, 640, 480)
+        game := NewGame(stressConfig)
+        game.isShadowTest = shadowTestMap
+        game.shadowNormalOffset = float32(*shadowOffset)
+        game.shadowDepthBias = float32(*shadowBias)
+        // The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
+        width, height := 640, 480
+        if shadowTestMap {
+            width, height = 1280, 800
+        }
+        quads.Start(game, mapLoad, width, height)
     })
 }
 
@@ -99,10 +116,13 @@ type Game struct {
     emissiveStrength       float32
     emissiveCutoff         float32
     emissiveSaturation     float32
+    shadowNormalOffset     float32
+    shadowDepthBias        float32
     currentResolutionIndex int
     currentGuiScaleIndex   int
     currentWindowModeIndex int
 
+    isShadowTest          bool
     watchFileChanges      bool
     isMouseCursorCaptured bool
     projectileFlyingAnim  int
@@ -235,9 +255,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
     g.mapLoad(mapLoadResult, false)
 
-    if g.stressConfig != nil {
-        g.AddLights(stressLights(*g.stressConfig, g.ShadowResolution())...)
-    }
 
     events.Subscribe(events.EventPlayerWeaponFired, func(id events.EventID, event events.Event) {
         origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
@@ -328,6 +345,14 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.CeilingColor = mapLoad.CeilingColorVec4()
     g.fogStart = 4
     g.fogEnd = 22
+    if g.isShadowTest {
+        // The rig is a microscope, so everything that dims a surface for a reason
+        // other than shadow is pushed out of the way: fog past the far wall, and an
+        // ambient floor low enough that unlit really looks unlit. With the shipped
+        // values the light pool and the fog fade were the same shade of brown and
+        // the shadow could not be told from either.
+        g.fogStart, g.fogEnd = 60, 120
+    }
     g.skyHorizonFade = 7
     g.exposure = quads.DefaultExposure
     g.bloomThreshold = quads.DefaultBloomThreshold
@@ -335,6 +360,10 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
     g.emissiveStrength = quads.DefaultEmissiveStrength
     g.emissiveCutoff = quads.DefaultEmissiveCutoff
     g.emissiveSaturation = quads.DefaultEmissiveSaturation
+    g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
+    if g.isShadowTest {
+        g.SetAmbientLight(mgl32.Vec3{0.35, 0.4, 0.55}, 0.08)
+    }
     g.updateFog()
     g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
@@ -794,6 +823,9 @@ func (g *Game) openWizardMenu() {
         quads.NewGuiOptionFloat("Emissive Strength", &g.emissiveStrength).StepSize(0.5).ActivateFunc(g.updateEmissive),
         quads.NewGuiOptionFloat("Emissive Cutoff", &g.emissiveCutoff).StepSize(0.05).ActivateFunc(g.updateEmissive),
         quads.NewGuiOptionFloat("Emissive Saturation", &g.emissiveSaturation).StepSize(0.05).ActivateFunc(g.updateEmissive),
+        quads.NewGuiOptionFloat("Shadow Normal Offset", &g.shadowNormalOffset).StepSize(0.5).ActivateFunc(g.updateShadowBias),
+        quads.NewGuiOptionFloat("Shadow Depth Bias", &g.shadowDepthBias).StepSize(0.0005).ActivateFunc(g.updateShadowBias),
+        quads.NewGuiOptionAction("Drop Light Here", g.dropLightHere),
     )
 
     if !g.watchFileChanges {
@@ -858,6 +890,35 @@ func (g *Game) updateEmissive() {
     g.SetEmissiveCutoff(g.emissiveCutoff)
     g.SetEmissiveSaturation(g.emissiveSaturation)
     g.Toast(fmt.Sprintf("Emissive: strength %.1f, cutoff %.2f, sat %.2f", g.emissiveStrength, g.emissiveCutoff, g.emissiveSaturation))
+}
+
+// updateShadowBias is the knob findings.md asks for: the useful normal offset depends
+// on the shadow resolution and the map's scale, so it is tuned in the running engine
+// rather than guessed at in a constant. Push it well past any plausible value and a
+// floor that stays dark means the mechanism is wrong, not the number.
+// dropLightHere adds a light where the camera stands, pointing where it looks. It is
+// the quick way to find out where a light wants to be; the answer belongs in the map
+// file afterwards, as a Light entity, because this one is gone on reload.
+func (g *Game) dropLightHere() {
+    g.popFromWidgetStack()
+
+    position := g.Camera.GetPosition()
+    light := core.MapLight{
+        Position:  position,
+        Color:     mgl32.Vec3{1, 0.95, 0.85},
+        Intensity: 6,
+        Angle:     45,
+        Reach:     15,
+    }.LookAt(position.Add(g.Camera.GetForward()))
+
+    g.AddLights(quads.LightFromMap(light, g.ShadowResolution()))
+    g.Toast(fmt.Sprintf("Light at %.1f %.1f %.1f, yaw %.0f pitch %.0f - not saved to the map",
+        position.X(), position.Y(), position.Z(), light.Yaw, light.Pitch))
+}
+
+func (g *Game) updateShadowBias() {
+    g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
+    g.Toast(fmt.Sprintf("Shadow: normal offset %.2f texels, depth bias %.4f", g.shadowNormalOffset, g.shadowDepthBias))
 }
 
 func (g *Game) updateFog() {

@@ -203,6 +203,50 @@ func loadLDTK(filename string) core.MapLoadResult {
                             spawnDir = mgl32.Vec2{-1, 0}
                         }
                     }
+                case "Light":
+                    // A light is not a tile entity: it does not sit in mapData, it
+                    // goes on the load result, and the renderer replaces the scene's
+                    // lights with the whole list. Grid position plus half a tile puts
+                    // it in the middle of the tile it was dropped on, and Height is
+                    // above the map floor.
+                    light := core.MapLight{
+                        Position: mgl32.Vec3{float32(gridPos[0]) + 0.5, 2, float32(gridPos[1]) + 0.5},
+                        Color:    mgl32.Vec3{1, 1, 1},
+                    }
+                    for _, field := range entity.FieldInstances {
+                        value, isNumber := field.Value.(float64)
+                        switch field.Identifier {
+                        case "Height":
+                            if isNumber {
+                                light.Position[1] = float32(value)
+                            }
+                        case "Yaw":
+                            if isNumber {
+                                light.Yaw = float32(value)
+                            }
+                        case "Pitch":
+                            if isNumber {
+                                light.Pitch = float32(value)
+                            }
+                        case "Intensity":
+                            if isNumber {
+                                light.Intensity = float32(value)
+                            }
+                        case "Angle":
+                            if isNumber {
+                                light.Angle = float32(value)
+                            }
+                        case "Reach":
+                            if isNumber {
+                                light.Reach = float32(value)
+                            }
+                        case "Color":
+                            if hex, isString := field.Value.(string); isString {
+                                light.Color = colorVecFromHex(hex)
+                            }
+                        }
+                    }
+                    loadResult.Lights = append(loadResult.Lights, light)
                 case "Mod":
                     mapIndex := int(gridPos[1])*int(mapSizeX) + int(gridPos[0])
                     for _, field := range entity.FieldInstances {
@@ -288,6 +332,16 @@ func loadLDTK(filename string) core.MapLoadResult {
     loadResult.MapDimensions = [3]int{mapSizeX, mapSizeY, mapSizeZ}
 
     return loadResult
+}
+
+// colorVecFromHex is the linear-ish 0..1 form of an authored "#RRGGBB", which is what
+// a light wants; colorFromHex below returns the color.Color the tile layers want.
+func colorVecFromHex(hex string) mgl32.Vec3 {
+    rgba, isRGBA := colorFromHex(hex).(color.RGBA)
+    if !isRGBA {
+        return mgl32.Vec3{1, 1, 1}
+    }
+    return mgl32.Vec3{float32(rgba.R) / 255, float32(rgba.G) / 255, float32(rgba.B) / 255}
 }
 
 func colorFromHex(hex string) color.Color {

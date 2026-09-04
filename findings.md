@@ -181,12 +181,37 @@ three lights that exist.
 
 ## Realtime lighting
 
-### [ ] 14. There is no way to place a light
+### [x] 14. There is no way to place a light
 
 `GlApplication.SetLights` at `quads/gl_application.go:862` is an empty stub. The
 three lights are hardcoded in the constructor, the LDtk loader has no light
 entity, and the editor cannot spawn one. This is the actual blocker for the
 feature; everything below is secondary.
+
+**Landed.** Lights are map data now. `core.MapLight` is the authored form - a
+position, yaw and pitch in degrees, a colour, an intensity, a cone angle and a
+reach - and it carries no GL types, so a map format never has to know how a shadow
+frustum is built. `MapLoadResult.Lights` carries them, `quads.LightFromMap` turns
+one into a `LightInfo`, and `LoadVoxelMap` *replaces* the scene's lights with the
+map's on every load, so a hot reload does not leave the last map's lights burning.
+
+Slot 0 stays the flashlight and nothing else: it hangs off the camera and is
+updated by index every frame, so `SetStaticLights` rebuilds the list around it.
+
+- `raymap.ldtk` has a `Light` entity definition and the two lights that used to be
+  Go literals in the `GlApplication` constructor. They are tilted 25 degrees down
+  now instead of dead horizontal, which is what gives the map any floor shadow at
+  all to look at (see #22). `TestLDtkMapCarriesItsLights` fails if a save from the
+  editor drops them.
+- The stress map and the shadow test map build theirs with `MapLight.LookAt`, which
+  is the same rotation the editor's yaw/pitch fields describe, checked both ways by
+  `TestLookAtAndForwardAreTheSameRotation`.
+- F1 has "Drop Light Here", which puts one where the camera stands pointing where it
+  looks and toasts the yaw and pitch to copy into the map file. It is a way to find
+  the number, not a way to save it.
+
+Still open: nothing writes a light back to `raymap.ldtk` - placement in the running
+engine is a scratchpad, and LDtk is where a light is kept.
 
 ### [x] 15. Light range is the fog range
 
@@ -281,7 +306,7 @@ the camera has not moved.
    per-light range and cone (#15).
 
 
-### [ ] 22. Floor surfaces get no shadows at all
+### [x] 22. Floor surfaces get no shadows at all
 
 Reported from a screenshot: shadows show up on walls but never on the floor.
 Confirmed, and it is not a floor-specific code path - it is the depth bias.
@@ -324,16 +349,51 @@ separate "wrong tuning" from "wrong mechanism" - could be read. Rather than leav
 an unverified change that visibly darkens the scene, both parts were reverted; the
 shader carries a NOTE pointing here.
 
-To pick this up: apply the two changes above, then raise the normal offset well
-past any plausible value (say `1.5 * grazing`) and look at the floor. Bright means
-the mechanism works and only the constant needs tuning; still dark means something
-else is wrong, and the next suspect is the missing `fragPosLightSpace.w <= 0`
-guard in `ShadowCalculation` - fragments behind the light's near plane divide
-through a negative w and can land on valid-looking coordinates.
+**Fixed.** All three parts of the note above went in, and the last paragraph of it
+turned out to be the important one: the reason this could not be settled before was
+that no map in the repo could show the answer.
 
-Worth noting either way: with lights this low and this horizontal, floor shadows
-would be long grazing smears even once the bias is right. A light angled downwards
-would show the fix off far better than the two that ship in the test map.
+What is in now:
+
+1. **Normal offset instead of depth bias.** `ShadowCalculation` takes the light and
+   the fragment's world position rather than a pre-projected `fragPosLightSpace`,
+   pushes the sample point along the surface normal in world space, and projects
+   afterwards. The push is measured in shadow texels *as they measure at that
+   fragment* - `2 * dist * tan(halfFov) / shadowResolution`, with the light's half
+   FOV read off the cosine already packed into `direction.w` - so one number means
+   the same thing at any distance, any cone angle and any shadow resolution. The
+   slope-scaled depth bias is gone; what is left is a flat 0.0005 against depth
+   quantisation.
+2. **The `w <= 0` guard**, which was indeed missing. Fragments behind the light's
+   near plane divided through a negative w and landed on coordinates that looked
+   perfectly valid.
+3. **Shadow near plane 0.15 to 0.5** (`core.spotlightNearPlane`), for spotlights
+   only - the camera keeps 0.15. 0.15-to-15 spent the depth range on the first
+   metre; nothing casts within half a unit of a light bulb.
+
+Both knobs are runtime knobs, not constants: `Shadow Normal Offset` and
+`Shadow Depth Bias` in the F1 menu, and `-shadow-offset` / `-shadow-bias` on the
+command line so a before/after is a script rather than muscle memory. The right
+value depends on the shadow resolution and the scale of the map, which no constant
+can know.
+
+**And a test map to judge it by,** `-shadowtest` (`shadow_map.go`): one wall, one
+light, one scientist walking a straight beat in front of it, nothing else. Fog is
+pushed past the far wall and the ambient floor is dropped, because with the shipped
+values the light pool and the fog fade were the same shade of brown.
+
+The geometry of that map is the whole design and the first version of it got it
+wrong. A caster one unit tall throws a shadow `1/tan(elevation)` long; whatever does
+not fit on the floor before the wall is what climbs the wall. The first attempt hung
+the light at 40 degrees over a beat three tiles out, which put the entire shadow on
+the floor **behind** the caster, where the caster hid it - and the screenshot showed
+nothing, exactly as before the fix. At 26 degrees over a beat 1.5 units out it
+splits: 1.5 units across the floor, then up the wall.
+`TestShadowReachesTheFloorAndThenTheWall` holds that geometry, so moving one
+constant cannot quietly turn the rig back into a blank wall.
+
+Confirmed in the running engine: the shadow reads on the floor and on the wall at
+once, and it tracks the scientist across frames.
 
 ---
 

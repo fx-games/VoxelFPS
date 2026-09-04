@@ -48,6 +48,13 @@ func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
     }
 }
 
+// spotlightNearPlane is deliberately far out compared to the camera's 0.15. A
+// shadow frustum's depth precision is spent on its near-to-far ratio, and 0.15 to 15
+// is 100:1, which leaves almost no resolution at the 8-15 units where a floor lit
+// from head height actually is. Nothing casts a shadow within half a unit of a light
+// bulb, so the near half unit is free to give away.
+const spotlightNearPlane = float32(0.5)
+
 func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fov float32, farPlaneDist float32, shadowResolution int) *PerspectiveTransform {
     p := &PerspectiveTransform{
         Transform: &Transform{
@@ -57,7 +64,7 @@ func NewPerspectiveTransformForSpotlight(position mgl32.Vec3, rot mgl32.Quat, fo
         },
         fov:           fov,
         defaultFOV:    fov,
-        nearPlaneDist: 0.15,
+        nearPlaneDist: spotlightNearPlane,
         farPlaneDist:  farPlaneDist,
         windowWidth:   shadowResolution,
         windowHeight:  shadowResolution,
@@ -72,7 +79,7 @@ func NewPerspectiveTransformForSpotlightFromParent(parent Transformer, fov float
         Transform:     t,
         fov:           fov,
         defaultFOV:    fov,
-        nearPlaneDist: 0.15,
+        nearPlaneDist: spotlightNearPlane,
         farPlaneDist:  farPlaneDist,
         windowWidth:   shadowResolution,
         windowHeight:  shadowResolution,

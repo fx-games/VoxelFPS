@@ -31,6 +31,7 @@ const (
     UboFogColor
     UboCamProjectionView
     UboToneMapParams
+    UboShadowParams
 )
 
 func mainUBO() *glhf.UniformBufferObject {
@@ -43,6 +44,7 @@ func mainUBO() *glhf.UniformBufferObject {
         {Name: "fogColor", Type: glhf.Vec4},
         {Name: "camProjectionView", Type: glhf.Mat4},
         {Name: "toneMapParams", Type: glhf.Vec2}, // x: exposure, y: gamma
+        {Name: "shadowParams", Type: glhf.Vec2},  // x: normal offset scale, y: depth bias
     })
 }
 
@@ -51,6 +53,17 @@ func mainUBO() *glhf.UniformBufferObject {
 const (
     DefaultExposure = float32(1.0)
     DefaultGamma    = float32(1.2)
+)
+
+// DefaultShadowNormalOffset and DefaultShadowDepthBias are the two knobs of the
+// normal-offset shadow bias. The offset is counted in shadow texels as they measure
+// at the shaded fragment, so it means the same thing at any distance and any cone
+// angle; the depth bias is only there for depth-buffer quantisation and is small on
+// purpose. Both are exposed in the config menu (F1) because the right values depend
+// on the shadow resolution and the map's scale, which no constant can know.
+const (
+    DefaultShadowNormalOffset = float32(2.0)
+    DefaultShadowDepthBias    = float32(0.0005)
 )
 
 // HDRFromDisplay is the Go twin of the GLSL function of the same name: it takes a
@@ -130,23 +143,43 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
     return outputColor;
 }
 
-float ShadowCalculation(uint lightIndex, vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
-    // perform perspective divide
+// Normal-offset shadow bias. A depth bias cannot work here: the slope-scaled term
+// is near its maximum on a floor lit at a grazing angle and near its minimum on a
+// wall lit head on, so the value that keeps walls free of acne erases floor shadows
+// entirely (the "floor shadows" finding in findings.md). Nudging the sample position
+// along the surface normal in *world* space instead takes the angle out of it - the
+// offset is expressed in shadow texels as they measure at this fragment, so it stays
+// the right size at any distance, any cone angle and any shadow resolution.
+float ShadowCalculation(uint lightIndex, LightInfo light, vec3 fragWorldPos, vec3 normal, vec3 lightDir) {
+    // How wide one shadow texel is in world units out here. direction.w carries the
+    // cosine of the light's half FOV, which is also the half angle of its shadow
+    // frustum, so the texel footprint follows from the distance alone.
+    float dist = length(light.position.xyz - fragWorldPos);
+    float cosHalfFov = clamp(light.direction.w, 0.001, 0.9999);
+    float tanHalfFov = sqrt(1.0 - cosHalfFov * cosHalfFov) / cosHalfFov;
+    float texelWorldSize = 2.0 * dist * tanHalfFov / float(textureSize(shadowMap, 0).x);
+
+    // A grazing surface spans more depth across one texel, so it needs a bigger push.
+    float grazing = clamp(1.0 - dot(normal, lightDir), 0.0, 1.0);
+    vec3 samplePos = fragWorldPos + normal * (texelWorldSize * (1.0 + 2.0 * grazing) * shadowParams.x);
+
+    vec4 fragPosLightSpace = light.projView * vec4(samplePos, 1.0);
+    // Behind the light's near plane w goes negative and the divide below lands on
+    // coordinates that look perfectly valid inside the map. There is no depth
+    // information back there, so nothing behind the light is shadowed by it.
+    if (fragPosLightSpace.w <= 0.0) {
+        return 0.0;
+    }
+    // perspective divide, then into the [0,1] range the depth map is addressed in
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    // transform to [0,1] range
     projCoords = projCoords * 0.5 + 0.5;
     // outside the light's frustum there is no depth information, so nothing is shadowed
     if (projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0 || projCoords.z > 1.0) {
         return 0.0;
     }
-    // Slope scaled bias: a surface at a grazing angle to the light covers more
-    // depth per shadow texel, so it needs more slack before it shadows itself.
-    // This used to be computed and then thrown away for a flat 0.001.
-    // NOTE: on floors this is large enough to erase the shadow entirely. See the
-    // "floor shadows" finding in findings.md - fixing it needs a normal offset,
-    // which is written but not yet verified.
-    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.0004);
-    float reference = projCoords.z - bias;
+    // What is left of the depth bias is a small constant against depth-buffer
+    // quantisation. The slope-scaled term is gone: the normal offset replaces it.
+    float reference = projCoords.z - shadowParams.y;
 
     // The sampler compares in hardware, so each fetch is already a 2x2 PCF tap.
     // 3x3 taps on top of that soften the 512x512 edges without a big cost.
@@ -178,7 +211,7 @@ vec3 calculateAmbientLight() {
 // constants for every light in the world, with reach borrowed from fogRange - so
 // moving the fog slider relit the level, and no light could be brighter, longer
 // or wider than any other.
-vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos, vec4 fragPosLightSpace, vec3 fragWorldNormal) {
+vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos, vec3 fragWorldNormal) {
     vec3 normal = normalize(fragWorldNormal);
     vec3 lightPos = light.position.xyz;
     float range = light.position.w;
@@ -225,7 +258,7 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     float spec = pow(max(dot(normal, halfwayDir), 0.0), 64.0);
     vec3 specular = spec * 0.15 * lightColor;
     // calculate shadow
-    float shadow = ShadowCalculation(lightIndex, fragPosLightSpace, normal, lightDir);
+    float shadow = ShadowCalculation(lightIndex, light, fragWorldPos, normal, lightDir);
     
     vec3 lighting = (1.0 - shadow) * (diffuse + specular) * cone * falloff;    
     //vec3 lighting = (diffuse + specular);
@@ -250,8 +283,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
         if (curLight.color.rgb == vec3(0.0) || curLight.color.a <= 0.0) {
             continue;
         }
-        vec4 fragPosLightSpace = curLight.projView * vec4(fragWorldPos, 1.0);
-        spotLightColor += calcLight(i, camPosition.xyz, curLight, fragWorldPos, fragPosLightSpace, fragWorldNormal);
+        spotLightColor += calcLight(i, camPosition.xyz, curLight, fragWorldPos, fragWorldNormal);
     }
     
     // FLASHLIGHT HERE

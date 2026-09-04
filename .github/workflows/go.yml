@@ -114,8 +114,8 @@ jobs:
     - name: Cache APT Packages
       uses: awalsh128/cache-apt-pkgs-action@latest
       with:
-        packages: libxxf86vm-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
-        version: 1.0
+        packages: libasound2-dev libxxf86vm-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+        version: 1.1
 
     - name: Create Build directory
       run: mkdir "$PROJECT_NAME"

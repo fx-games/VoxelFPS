@@ -85,14 +85,14 @@ func loadStressMap(cfg StressConfig) core.MapLoadResult {
         FloorColor:        color.RGBA{40, 40, 40, 255},
         MapDimensions:     [3]int{size, 3, size},
         MapData:           mapData,
+        Lights:            stressLights(cfg),
     }
 }
 
 // stressLights spreads shadow casting spotlights over the map, pointing straight
-// down. Down is deliberate: the two lights in the test map are horizontal, which
-// makes every floor shadow a long grazing smear - a bad thing to judge the floor
-// shadow bias against (finding #22).
-func stressLights(cfg StressConfig, shadowResolution int) []quads.LightInfo {
+// down. It is a performance rig: the lights are there to cost shadow passes, not to
+// be looked at. The map to judge shadows by is the one behind -shadowtest.
+func stressLights(cfg StressConfig) []core.MapLight {
     count := cfg.Lights
     if count > quads.MaxLights-1 { // the flashlight holds slot 0
         count = quads.MaxLights - 1
@@ -101,7 +101,6 @@ func stressLights(cfg StressConfig, shadowResolution int) []quads.LightInfo {
         return nil
     }
 
-    pointingDown := mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, mgl32.Vec3{0, -1, 0})
     // A square grid of `perSide` lights, spread evenly, inset by half a cell so
     // none of them sits in the border wall.
     perSide := 1
@@ -110,7 +109,7 @@ func stressLights(cfg StressConfig, shadowResolution int) []quads.LightInfo {
     }
     spacing := float32(cfg.Size) / float32(perSide)
 
-    var lights []quads.LightInfo
+    var lights []core.MapLight
     for row := 0; row < perSide && len(lights) < count; row++ {
         for column := 0; column < perSide && len(lights) < count; column++ {
             position := mgl32.Vec3{
@@ -118,9 +117,13 @@ func stressLights(cfg StressConfig, shadowResolution int) []quads.LightInfo {
                 2,
                 (float32(row) + 0.5) * spacing,
             }
-            lights = append(lights, quads.LightInfo{
-                PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(position, pointingDown, 45, 15, shadowResolution),
-                Color:                mgl32.Vec4{0.7, 0.7, 0.7, 6},
+            lights = append(lights, core.MapLight{
+                Position:  position,
+                Pitch:     90, // straight down
+                Color:     mgl32.Vec3{0.7, 0.7, 0.7},
+                Intensity: 6,
+                Angle:     45,
+                Reach:     15,
             })
         }
     }

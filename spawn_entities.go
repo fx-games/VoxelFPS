@@ -97,7 +97,13 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
         physics.SetAABBForAnimation(quads.AnimDying, dyingAABB)
 
         pather := quads.NewPathingComponent()
-        pather.SetDestination(mgl32.Vec3{5.5, 1, 2.5})
+        // The far end of the beat used to be this one literal, which only made sense
+        // for the LDtk test map. A map that wants a different one says so.
+        destination := mgl32.Vec3{5.5, 1, 2.5}
+        if entity.PatrolTo != nil {
+            destination = *entity.PatrolTo
+        }
+        pather.SetDestination(destination)
         goFromEntity.SetComponent(pather)
 
         g.Pathfinder.AddMovingObject(pather)

@@ -63,13 +63,13 @@ func TestStressMapIsDeterministic(t *testing.T) {
 
 func TestStressLightsStayInsideTheMapAndUnderTheCap(t *testing.T) {
     cfg := DefaultStressConfig()
-    lights := stressLights(cfg, 512)
+    lights := stressLights(cfg)
 
     if len(lights) != cfg.Lights {
         t.Fatalf("generated %d lights, want %d", len(lights), cfg.Lights)
     }
     for _, light := range lights {
-        pos := light.GetPosition()
+        pos := light.Position
         if pos.X() <= 0 || pos.X() >= float32(cfg.Size) || pos.Z() <= 0 || pos.Z() >= float32(cfg.Size) {
             t.Errorf("light at %v is outside the map", pos)
         }
@@ -77,7 +77,7 @@ func TestStressLightsStayInsideTheMapAndUnderTheCap(t *testing.T) {
 
     // Slot 0 is the flashlight, so the static lights have one less to fill.
     cfg.Lights = 999
-    if got := len(stressLights(cfg, 512)); got > 15 {
+    if got := len(stressLights(cfg)); got > 15 {
         t.Errorf("generated %d lights, want at most 15", got)
     }
 }

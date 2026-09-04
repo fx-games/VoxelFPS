@@ -55,6 +55,38 @@ func (l *LightInfo) MarkShadowRendered(sceneSignature uint64) {
     l.shadowProjView = l.GetProjectionViewMatrix()
 }
 
+// LightFromMap turns the map file's description of a light into one the renderer can
+// use. The map speaks in angles, a colour and a reach; a LightInfo is a projection
+// frustum plus a packed vec4, and the two are kept apart on purpose - core has no
+// business importing GL, and a map format should not have to know how a shadow
+// frustum is built.
+func LightFromMap(light core.MapLight, shadowResolution int) LightInfo {
+    angle := light.Angle
+    if angle <= 0 {
+        angle = 45
+    }
+    reach := light.Reach
+    if reach <= 0 {
+        reach = 15
+    }
+    intensity := light.Intensity
+    if intensity <= 0 {
+        intensity = 1
+    }
+    // The cone angle authored in the map is the full angle, the way a person thinks
+    // about a lamp; the frustum wants the same number as its FOV, so it passes
+    // straight through. Reach is the far plane, which is what keeps the lit region
+    // and the region with depth information the same region.
+    return LightInfo{
+        PerspectiveTransform: core.NewPerspectiveTransformForSpotlight(
+            light.Position,
+            mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, light.Forward()),
+            angle, reach, shadowResolution,
+        ),
+        Color: light.Color.Vec4(intensity),
+    }
+}
+
 type LightsUBO struct {
     *glhf.UniformBufferObject
     lightCount int

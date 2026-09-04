@@ -15,7 +15,9 @@ voxel cubes, meshes, sprites, lines, skybox, GUI and post-processing.
 - Greedy-meshed voxel chunks, texture indices kept out of the vertex buffer
 - Sprite batches with fixed and packed texture atlases
 - glTF/GLB static mesh loading (`qmuntal/gltf`)
-- Point lights via UBO, shadow maps ("pixel perfect", per the last commits), fog
+- Spotlights via UBO, authored in the map file (`Light` entities in LDtk), with
+  normal-offset shadow mapping, hardware PCF and per-light reach, cone and intensity
+- Fog, and a `-shadowtest` map built to judge shadow bias by
 - Render-to-framebuffer + post-processing pass, screenshot capture (F12)
 
 **World & entities** — LDtk maps (`ldtk/`) or a plain ASCII string map, voxel blocks with
@@ -45,6 +47,17 @@ Needs cgo, a C toolchain and GLFW system libs (`brew install glfw` on macOS).
 ```bash
 go run .
 ```
+
+Two generated maps stand in for the shipped one:
+
+```bash
+go run . -shadowtest                # one wall, one light, one walking caster
+go run . -stress -stress-lights 8   # a hall of pillars and barrels, for frame times
+```
+
+`-shadowtest` is a rig, not a level: it exists so shadow bias can be judged. The two
+knobs it is judged with are `-shadow-offset` (in shadow texels) and `-shadow-bias`,
+also live on sliders in the F1 menu.
 
 Windows cross-compile: `./build_win.sh` (mingw-w64). Tagged pushes (`v*.*.*`) build
 macOS/Linux/Windows binaries via `.github/workflows/go.yml`.

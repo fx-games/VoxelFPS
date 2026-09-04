@@ -19,6 +19,22 @@ reports one event for the surface that was actually hit (see Physics below).
   never pass in CI. The Doom atlas parser is uncovered again; a replacement would need a
   small PNG in `zdwep/testdata/`.
 
+## Lighting
+
+- Lights are map data now (`core.MapLight`, `MapLoadResult.Lights`), not Go literals:
+  `raymap.ldtk` holds the two static ones as `Light` entities, and loading a map
+  replaces the scene's lights with the map's. Slot 0 stays the flashlight. `AGENTS.md`
+  and finding #14 have the detail.
+- Nothing writes a light back to the map file. F1 -> "Drop Light Here" places one in
+  the running engine and toasts its yaw and pitch to copy into LDtk by hand, and it
+  is gone on the next reload.
+- Floor shadows work (finding #22): normal-offset bias, a `w <= 0` guard, and a
+  spotlight near plane of 0.5 instead of 0.15. Judge them with `-shadowtest`, tune
+  them with `-shadow-offset` / `-shadow-bias` or the two F1 sliders.
+- The baked voxel flood-fill light path is still computed and thrown away:
+  `FillTorchlight` has no callers and `floodLight` in `quads/shader_cubes.go` is
+  assigned and never used. Finding #17. Wire it up or delete it.
+
 ## Weapons
 
 - The ZDoom scripts stored in the weapon PNGs are interpreted just far enough for the sprites:
@@ -50,6 +66,10 @@ reports one event for the surface that was actually hit (see Physics below).
   on release tags, which is too late to learn the tree is broken.
 
 ## Dead or unused code
+
+**These stay. See `AGENTS.md`** - they have no callers today and are kept on purpose,
+because procedural generation, sound and the 3D texture path are all expected to be
+wired up later. Listing them here is a record of the fact, not a proposal.
 
 - `dungen/` (~2700 lines) — `loadDungeonMap` in `load_map.go` is never called; `main` always
   loads the LDtk map. `geometry/jps.go` exists only to serve it. Wire it up or drop both.
