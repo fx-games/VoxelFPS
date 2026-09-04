@@ -79,28 +79,21 @@ func (c *Chunk) SetBlock(x, y, z int32, block *Block) {
 }
 
 type VoxelFace struct {
-	inVisible  bool
-	side       CubeSide
-	lightLevel byte
+	inVisible bool
+	side      CubeSide
 }
 
 // EqualForMerge decides whether greedy meshing may fold two faces into one quad.
-// The light level is part of it: a merged quad carries one level for all four of
-// its vertices, so merging a lit face with a dark one used to hand the whole run
-// whichever level came first - a wall next to a glowing panel lit in one flat
-// slab, or not at all. Away from a light every level is 0 and the merge is as
-// wide as it ever was; the extra quads appear only in the gradient.
+// Visibility is the whole test: everything else that varies per face - the texture
+// index, whether it glows, how much baked light stands in front of it - lives in
+// the voxel lookup buffer, which the fragment shader indexes by grid position. A
+// merged quad can therefore span any amount of variation without flattening it.
 //
-// It is not free: raymap goes from 1324 to 3448 triangles, all of it in the
-// gradients around the 680 emissive faces. At this size that is nothing.
-//
-// ponytail: one level per quad, so baked light is flat per face and steps at the
-// quad edge. Smooth would mean a level per vertex, which is four lookups and a
-// wider vertex - worth it only if the stepping is visible in play. If the
-// triangle count ever matters, quantising the level to fewer steps cuts the
-// splits before anything else does.
+// Baked light briefly lived in the vertex bits instead, which forced this test to
+// compare levels and split every quad a light gradient crossed: raymap went from
+// 1324 to 3448 triangles for a picture identical to the one the buffer gives.
 func (v *VoxelFace) EqualForMerge(face *VoxelFace) bool {
-	return face.inVisible == v.inVisible && face.lightLevel == v.lightLevel
+	return face.inVisible == v.inVisible
 }
 
 func (c *Chunk) InitNeighbors() {
@@ -249,7 +242,7 @@ func (c *Chunk) GreedyMeshing() *MeshBuffer {
 								topLeft := Int3{x[0] + du[0], x[1] + du[1], x[2] + du[2]}
 								bottomRight := Int3{x[0] + dv[0], x[1] + dv[1], x[2] + dv[2]}
 								topRight := Int3{x[0] + du[0] + dv[0], x[1] + du[1] + dv[1], x[2] + du[2] + dv[2]}
-								mesh.AppendQuad(topRight, bottomRight, bottomLeft, topLeft, mask[n].side, mask[n].lightLevel)
+								mesh.AppendQuad(topRight, bottomRight, bottomLeft, topLeft, mask[n].side)
 								// we also would have width (w) and height (h) here
 								// backface is a bool, true if we are rendering the backface of a block
 							}
@@ -344,9 +337,6 @@ func (c *Chunk) getVoxelFace(x int32, y int32, z int32, side CubeSide) *VoxelFac
 	solidNeighbor := neighbor != nil && !neighbor.IsAir()
 	if solidNeighbor && !neighborIsFromChunkAboveOrBelow {
 		face.inVisible = true
-	}
-	if !solidNeighbor && neighbor != nil {
-		face.lightLevel = neighbor.GetTorchLight()
 	}
 	return face
 }

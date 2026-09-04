@@ -37,11 +37,19 @@ reports one event for the surface that was actually hit (see Physics below).
   bits into `bakedLight()` in the shader. Both places that change the emissive set
   re-bake, so glow and light cannot drift apart. On `raymap.ldtk` that is 680 emitting
   faces baked in ~8ms at load.
-  - Greedy meshing no longer merges faces of different light level, which is what a
-    per-quad light level requires. Costs raymap 1324 -> 3448 triangles.
+  - The level rides the voxel lookup buffer, in the spare bits of the uint16 the cube
+    shader already fetches per fragment for its texture index: emissive in bit 15,
+    light in 14-11, texture index in 10-0 (`Map.packFaceLookup`). Nothing per face is
+    in the vertices any more, so greedy meshing merges across a light gradient and
+    raymap stays at its original 1324 triangles. It went through the vertex bits
+    first, which cost 3448.
+  - `DrawWithShader` re-floods the light whenever the lookup buffer is dirty, so a
+    wall placed next to a panel changes the light it blocks. ~8ms on raymap, in a
+    frame that was rebuilding and re-uploading the buffer anyway.
   - The colour and strength are constants in `quads/shader_header.go`
     (`BAKED_LIGHT_COLOR`, `BAKED_LIGHT_STRENGTH`), not a runtime slider.
-  - Still flat per quad. Smooth would need a level per vertex.
+  - Still flat per face - that is the resolution greedy meshing leaves, and the same
+    resolution the emissive flag has always had.
 
 ## Weapons
 

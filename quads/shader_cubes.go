@@ -172,7 +172,6 @@ Total  // 20 bits used of 32
 
 #ifndef DEPTH_PASS
 flat out uint VertNormalIndex;
-out float VertLightLevel;
 out vec3 VertPos;
 #endif
 
@@ -180,7 +179,7 @@ layout(location = 0) in uint compressedValue;
 
 uniform mat4 modelTransform;
 
-void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir, out float lightLevel)
+void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir)
 {
     uint positionX = compressedValue & uint(0x3F);// 0x3F = 0b111111
     uint yPart = compressedValue >> uint(6);
@@ -190,10 +189,8 @@ void decompressVertex(uint compressedValue, out vec3 position, out uint normalDi
     position = vec3(float(positionX), float(positionY), float(positionZ));
 
     normalDir = (compressedValue >> uint(17)) & uint(0x7);// 0x7 = 0b111
-    //textureIndex = (compressedValue >> uint(20)) & uint(0xFF);// 0xFF = 0b11111111
-
-    uint light = (compressedValue >> uint(28)) & uint(0xF);
-    lightLevel = float(light);
+    // Bits 20 and up are unused. The texture index, the emissive flag and the baked
+    // light are per face, not per vertex, and live in the voxel lookup buffer.
 }
 
 
@@ -201,16 +198,14 @@ void main() {
     // decompress the vertex
     uint normalDir = uint(1);
     vec3 position = vec3(0.0);
-    float lightLevel = 0.0;
 
-    decompressVertex(compressedValue, position, normalDir, lightLevel);
+    decompressVertex(compressedValue, position, normalDir);
     gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
 
     // pass-through for fragment shader
 #ifndef DEPTH_PASS
     VertNormalIndex = normalDir;
     VertPos = position;
-    VertLightLevel = lightLevel;
 #endif
 }`
 
@@ -230,7 +225,6 @@ vec3[6] normalLookup = vec3[6](
 
 flat in uint VertNormalIndex;
 in vec3 VertPos;
-in float VertLightLevel;
 
 uniform ivec2 atlasGridSize;
 uniform mat4 modelTransform;
@@ -242,10 +236,14 @@ uniform float emissiveStrength;
 uniform float emissiveCutoff;
 uniform float emissiveSaturation;
 
-// The lookup buffer's top bit marks a face as emissive; the rest is the texture index.
-// See Map.withEmissiveBit - it rides along for free rather than costing another buffer.
+// One lookup entry describes one face: the top bit marks it emissive, the next four
+// carry its baked torch light, the rest is the texture index. See Map.packFaceLookup.
+// All three ride the one texel this shader already fetches - no second buffer, and
+// nothing per face in the vertices, which is what lets greedy meshing merge freely.
 #define EMISSIVE_TEXTURE_BIT uint(0x8000)
-#define EMISSIVE_TEXTURE_MASK uint(0x7FFF)
+#define TORCH_LIGHT_MASK uint(0x7800)
+#define TORCH_LIGHT_SHIFT uint(11)
+#define EMISSIVE_TEXTURE_MASK uint(0x07FF)
 
 layout (location = 0) out vec4 fragmentColor;
 
@@ -277,6 +275,7 @@ void main() {
     uint lookupValue = texelFetch(voxelLookup, int(wallOffset + VertNormalIndex)).r;
     uint textureIndex = lookupValue & EMISSIVE_TEXTURE_MASK;
     float isEmissive = float((lookupValue & EMISSIVE_TEXTURE_BIT) != uint(0));
+    float torchLight = float((lookupValue & TORCH_LIGHT_MASK) >> TORCH_LIGHT_SHIFT);
 
     // Compute tile position in texel space
     uint tileX = uint(textureIndex % uint(atlasGridSize.x)) * tileWidth;
@@ -324,5 +323,5 @@ void main() {
                        * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
     vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask * emissiveStrength;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(VertLightLevel));
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(torchLight));
 }`

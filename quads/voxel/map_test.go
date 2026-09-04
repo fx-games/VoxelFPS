@@ -59,11 +59,26 @@ func TestEmissiveBitLeavesTextureIndexRecoverable(t *testing.T) {
 // The mask has to cover every texture index the atlas can produce, or a high index
 // would collide with the flag.
 func TestEmissiveMaskCoversAtlasIndices(t *testing.T) {
-	if EmissiveTextureBit|EmissiveTextureMask != 0xFFFF {
-		t.Errorf("bit and mask do not partition the uint16: %#x | %#x", EmissiveTextureBit, EmissiveTextureMask)
+	if EmissiveTextureBit|TorchLightMask|EmissiveTextureMask != 0xFFFF {
+		t.Errorf("the three fields do not partition the uint16: %#x | %#x | %#x",
+			EmissiveTextureBit, TorchLightMask, EmissiveTextureMask)
 	}
-	if EmissiveTextureBit&EmissiveTextureMask != 0 {
-		t.Error("bit and mask overlap")
+	for _, pair := range [][2]uint16{
+		{EmissiveTextureBit, TorchLightMask},
+		{EmissiveTextureBit, EmissiveTextureMask},
+		{TorchLightMask, EmissiveTextureMask},
+	} {
+		if pair[0]&pair[1] != 0 {
+			t.Errorf("fields overlap: %#x & %#x", pair[0], pair[1])
+		}
+	}
+	// Four bits of light, and they have to sit where the shift says they do.
+	if TorchLightMask>>TorchLightShift != 0xF {
+		t.Errorf("light field is %#x wide after shifting, want 0xF", TorchLightMask>>TorchLightShift)
+	}
+	// Blocks carry a byte texture id, so the index field has to hold at least 255.
+	if EmissiveTextureMask < 255 {
+		t.Errorf("index field holds %d, too small for a byte texture id", EmissiveTextureMask)
 	}
 }
 
@@ -91,7 +106,10 @@ func TestEmissiveFacesBakeLightIntoTheBlocksAroundThem(t *testing.T) {
 	}
 	m.SetBlock(0, 0, 1, NewBlock(byte(litTexture)))
 
+	// DrawWithShader triggers this before it packs the lookup buffer; here there is
+	// no GL context, so drive the bake itself.
 	m.SetEmissiveTextures([]uint16{litTexture})
+	m.bakeEmissiveTorchlight()
 
 	// The air in front of the panel gets the emitter's level, and each step away
 	// costs one.
@@ -115,24 +133,55 @@ func TestEmissiveFacesBakeLightIntoTheBlocksAroundThem(t *testing.T) {
 	// Dropping the texture from the set has to take its light with it, or a panel
 	// switched off at runtime keeps lighting the corridor.
 	m.SetEmissiveTextures(nil)
+	m.bakeEmissiveTorchlight()
 	if got := m.GetGlobalBlock(1, 0, 1).GetTorchLight(); got != 0 {
 		t.Errorf("light survived the panel being unmarked: got %d want 0", got)
 	}
 }
 
-// Greedy meshing folds neighbouring faces into one quad, and a quad carries a single
-// light level. Merging across a light gradient therefore paints a whole run with one
-// block's brightness - which is what happened while EqualForMerge only looked at
-// visibility.
-func TestGreedyMergeStopsAtALightLevelChange(t *testing.T) {
-	lit := &VoxelFace{side: Top, lightLevel: 12}
-	dimmer := &VoxelFace{side: Top, lightLevel: 11}
-	alsoLit := &VoxelFace{side: Top, lightLevel: 12}
+// The lookup entry is the one thing the CPU and the cube shader both take apart, and
+// it now carries three fields instead of two. Baked light moved in here from the
+// vertex bits so that greedy meshing could go back to merging across a light gradient
+// - which only works if all three survive the packing.
+func TestFaceLookupPacksLightEmissiveAndTexture(t *testing.T) {
+	const litTexture = uint16(27)
 
-	if lit.EqualForMerge(dimmer) {
-		t.Error("faces of different light level merged into one quad")
+	// Solid rock with one corridor carved along +X, so the panel's other five faces
+	// look into stone and only the +X one has lit air in front of it.
+	m := NewMapWithEmptyChunks(1, 1, 1, 8, 8)
+	for x := int32(0); x < 8; x++ {
+		for y := int32(0); y < 8; y++ {
+			for z := int32(0); z < 8; z++ {
+				m.SetBlock(x, y, z, NewBlock(3))
+			}
+		}
 	}
-	if !lit.EqualForMerge(alsoLit) {
-		t.Error("faces of equal light level refused to merge")
+	for x := int32(1); x < 7; x++ {
+		m.SetBlock(x, 0, 0, NewAirBlock())
+	}
+	m.SetBlock(0, 0, 0, NewBlock(byte(litTexture)))
+	m.SetEmissiveTextures([]uint16{litTexture})
+	m.bakeEmissiveTorchlight()
+
+	// Face 0 is +X: the panel's lit side, facing the air the light is in.
+	entry := m.packFaceLookup(litTexture, Int3{0, 0, 0}, 0)
+
+	if got := entry & EmissiveTextureMask; got != litTexture {
+		t.Errorf("texture index: got %d want %d", got, litTexture)
+	}
+	if entry&EmissiveTextureBit == 0 {
+		t.Errorf("emissive bit not set in %#x", entry)
+	}
+	if got := byte((entry & TorchLightMask) >> TorchLightShift); got != EmissiveTorchLight {
+		t.Errorf("baked light: got %d want %d", got, EmissiveTorchLight)
+	}
+
+	// The other five faces of the same block look into rock, so they are unlit even
+	// though the texture is the same - which is the whole point of packing per face.
+	for face := 1; face < 6; face++ {
+		unlit := m.packFaceLookup(litTexture, Int3{0, 0, 0}, face)
+		if got := (unlit & TorchLightMask) >> TorchLightShift; got != 0 {
+			t.Errorf("face %d looks into rock but carries light %d", face, got)
+		}
 	}
 }

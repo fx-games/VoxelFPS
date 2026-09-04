@@ -162,14 +162,15 @@ func (m *Map) bake3dTextureIndices() {
 					continue
 				}
 
-				lookupTable[blockWallsStartIndex+0] = m.withEmissiveBit(block.ZYTextureIndexPos())
-				lookupTable[blockWallsStartIndex+1] = m.withEmissiveBit(block.ZYTextureIndexNeg())
-
-				lookupTable[blockWallsStartIndex+2] = m.withEmissiveBit(block.XZTextureIndexPos())
-				lookupTable[blockWallsStartIndex+3] = m.withEmissiveBit(block.XZTextureIndexNeg())
-
-				lookupTable[blockWallsStartIndex+4] = m.withEmissiveBit(block.XYTextureIndexPos())
-				lookupTable[blockWallsStartIndex+5] = m.withEmissiveBit(block.XYTextureIndexNeg())
+				blockPos := Int3{x, y, z}
+				faceTextures := [6]uint16{
+					block.ZYTextureIndexPos(), block.ZYTextureIndexNeg(),
+					block.XZTextureIndexPos(), block.XZTextureIndexNeg(),
+					block.XYTextureIndexPos(), block.XYTextureIndexNeg(),
+				}
+				for face, textureIndex := range faceTextures {
+					lookupTable[blockWallsStartIndex+int32(face)] = m.packFaceLookup(textureIndex, blockPos, face)
+				}
 			}
 		}
 	}
@@ -180,15 +181,45 @@ func (m *Map) bake3dTextureIndices() {
 	}
 }
 
-// EmissiveTextureBit rides in the top bit of each entry in the voxel lookup buffer.
-// Texture indices are a few hundred at most and the entries are uint16, so the bit was
-// free - no new buffer, no vertex format change, and emissive stays per face, which is
-// the resolution greedy meshing left us with anyway.
-const EmissiveTextureBit = uint16(0x8000)
+// Each entry in the voxel lookup buffer describes one face of one block, and the
+// cube shader already fetches it once per fragment to find the texture. Everything
+// else that is per face rides along in the spare bits of that same uint16 rather
+// than costing a buffer, a fetch or a vertex attribute:
+//
+//	bit 15     emissive
+//	bits 14-11 baked torch light, 0..15
+//	bits 10-0  texture index
+//
+// Blocks carry a byte texture id (see NewBlock), so 11 bits is 8 times the range
+// the data model can produce.
+const (
+	EmissiveTextureBit  = uint16(0x8000)
+	TorchLightMask      = uint16(0x7800)
+	TorchLightShift     = 11
+	EmissiveTextureMask = uint16(0x07FF)
+)
 
-// EmissiveTextureMask is what is left for the texture index itself.
-const EmissiveTextureMask = uint16(0x7FFF)
+// packFaceLookup builds the lookup entry for one face of the solid block at
+// blockPos: its texture, whether that texture glows, and the baked light standing
+// in front of it.
+//
+// The light is read off the neighbouring block rather than this one because light
+// lives in air - which is also why it is per face, and why it belongs here instead
+// of in the vertices. A vertex-borne level forces greedy meshing to split every
+// quad the gradient crosses; a lookup entry costs nothing, because the fragment is
+// already reading this exact texel for its texture index.
+func (m *Map) packFaceLookup(textureIndex uint16, blockPos Int3, face int) uint16 {
+	entry := textureIndex & EmissiveTextureMask
+	if m.emissiveTextures[textureIndex] {
+		entry |= EmissiveTextureBit
+	}
+	lit := m.GetBlockFromInt3(blockPos.Add(emissiveFaceOffsets[face]))
+	entry |= uint16(lit.GetTorchLight()) << TorchLightShift
+	return entry
+}
 
+// withEmissiveBit is packFaceLookup without a position, for the callers that only
+// care whether a texture is marked.
 func (m *Map) withEmissiveBit(textureIndex uint16) uint16 {
 	if m.emissiveTextures[textureIndex] {
 		return textureIndex | EmissiveTextureBit
@@ -211,7 +242,6 @@ func (m *Map) ToggleEmissiveTexture(textureIndex uint16) bool {
 		delete(m.emissiveTextures, textureIndex)
 	}
 	m.textureBufferIsDirty = true
-	m.bakeEmissiveTorchlight()
 	return nowEmissive
 }
 
@@ -222,7 +252,6 @@ func (m *Map) SetEmissiveTextures(textureIndices []uint16) {
 		m.emissiveTextures[index] = true
 	}
 	m.textureBufferIsDirty = true
-	m.bakeEmissiveTorchlight()
 }
 
 func (m *Map) EmissiveTextureCount() int {
@@ -261,6 +290,16 @@ func (m *Map) remeshDirtyChunks() {
 func (m *Map) DrawWithShader(frustum core.Culler, chunkShader *glhf.Shader) {
 	m.remeshDirtyChunks()
 	if m.textureBufferIsDirty {
+		// The light has to be re-flooded before the buffer is packed, because the
+		// buffer is where it ends up. Anything that dirties the buffer - a block
+		// placed, a texture repainted, a panel switched on - can have moved a wall
+		// the light was flowing around, and this is the one place that knows. The
+		// flag is cleared after the flood, which sets it again on its way through.
+		//
+		// ponytail: a full re-flood of the map on any edit, ~8ms on raymap, in a
+		// frame that already walks every block and re-uploads the buffer. If
+		// painting ever hitches, re-flood only the chunks near the edit.
+		m.bakeEmissiveTorchlight()
 		m.textureBufferIsDirty = false
 		m.bake3dTextureIndices()
 	}
@@ -656,8 +695,8 @@ const MaxTorchLight = byte(15)
 const EmissiveTorchLight = byte(12)
 
 // FillTorchlight floods baked light out from one block, losing one level per step
-// and stopping at solid blocks. Blocks it touches are dirty, so the next mesh pass
-// bakes the new levels into the vertices.
+// and stopping at solid blocks. It dirties the lookup buffer, which is re-baked
+// before the next draw - no re-meshing, because light is not in the vertices.
 func (m *Map) FillTorchlight(origin Int3) {
 	m.fillTorchlightFrom(origin, MaxTorchLight)
 }
@@ -667,7 +706,7 @@ func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
 		return
 	}
 
-	startBlock, startChunk := m.GetBlockAndChunk(origin)
+	startBlock, _ := m.GetBlockAndChunk(origin)
 	if startBlock == nil || !startBlock.IsAir() {
 		return // light lives in the air; the mesher only reads it off air blocks
 	}
@@ -675,7 +714,7 @@ func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
 		return // already at least this bright from another emitter
 	}
 	startBlock.SetTorchLight(level)
-	startChunk.SetDirty()
+	m.textureBufferIsDirty = true
 
 	spread := func(origin, currentNode, currentNeighbor Int3, costToPrev int) (bool, int) {
 		if m.IsSolidBlockAt(currentNeighbor.X, currentNeighbor.Y, currentNeighbor.Z) {
@@ -689,14 +728,14 @@ func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
 			return false, 0
 		}
 
-		neighborBlock, neighborChunk := m.GetBlockAndChunk(currentNeighbor)
+		neighborBlock, _ := m.GetBlockAndChunk(currentNeighbor)
 		if neighborBlock == nil {
 			return false, 0
 		}
 
 		if neighborBlock.GetTorchLight() < nodeLight-1 {
 			neighborBlock.SetTorchLight(nodeLight - 1)
-			neighborChunk.SetDirty()
+			m.textureBufferIsDirty = true
 			return true, costToPrev + 1
 		}
 		return false, 0
@@ -705,8 +744,9 @@ func (m *Map) fillTorchlightFrom(origin Int3, level byte) {
 	m.FloodFill(origin, int(level), spread)
 }
 
-// emissiveFaceOffsets is the block a face of the given index faces into, in the
-// face order bake3dTextureIndices writes: +X, -X, +Y, -Y, +Z, -Z.
+// emissiveFaceOffsets is the block a face of the given index faces into, in the one
+// face order bake3dTextureIndices writes and the cube shader's normalLookup reads:
+// +X, -X, +Y, -Y, +Z, -Z.
 var emissiveFaceOffsets = [6]Int3{
 	{1, 0, 0}, {-1, 0, 0},
 	{0, 1, 0}, {0, -1, 0},
@@ -716,11 +756,12 @@ var emissiveFaceOffsets = [6]Int3{
 // bakeEmissiveTorchlight turns the emissive texture set into per-block light: every
 // face using one of those textures seeds the air in front of it, and the light
 // floods from there. It is the cheap half of the lighting - dozens of static
-// sources for the cost of four bits a vertex - and it is what the shadow-mapped
-// spotlights cannot afford to be.
+// sources for four spare bits in a buffer the shader already reads - and it is what
+// the shadow-mapped spotlights cannot afford to be.
 //
-// Called from the two places that change the emissive set, so the baked light and
-// the glowing faces cannot drift apart.
+// Called from DrawWithShader whenever the face lookup buffer needs rebuilding, which
+// is the same signal for both: the buffer carries the light, so anything that
+// invalidates one invalidates the other and they cannot drift apart.
 //
 // ponytail: one flood fill per emitting face over the whole map. Walls stop the
 // fill after a few metres, so on a corridor map this is milliseconds. If a big
@@ -772,9 +813,7 @@ func (m *Map) clearTorchlight() {
 					continue
 				}
 				block.SetTorchLight(0)
-				if chunk := m.GetChunkFromBlock(x, y, z); chunk != nil {
-					chunk.SetDirty()
-				}
+				m.textureBufferIsDirty = true
 			}
 		}
 	}
