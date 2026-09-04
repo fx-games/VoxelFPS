@@ -47,6 +47,21 @@ func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {
     }
 }
 
+// A spacing the modulo cannot satisfy builds an empty map, and the flag that does it
+// is the one anybody reaches for to make sprites the bottleneck.
+func TestTightSpriteSpacingStillPlacesSprites(t *testing.T) {
+    for _, spacing := range []int{1, 2, 3, 4, 8} {
+        cfg := StressConfig{Size: 32, PillarSpacing: 0, SpriteSpacing: spacing}
+        sprites := 0
+        for _, tile := range loadStressMap(cfg).MapData {
+            sprites += len(tile.Entities)
+        }
+        if sprites == 0 {
+            t.Errorf("-stress-sprites %d placed no sprites at all", spacing)
+        }
+    }
+}
+
 // Same config, same map: a measurement you cannot repeat is not a measurement.
 func TestStressMapIsDeterministic(t *testing.T) {
     first := loadStressMap(DefaultStressConfig())

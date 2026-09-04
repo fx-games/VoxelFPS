@@ -503,12 +503,67 @@ compared on the same frame, and the knobs are flags. The lights point down on
 purpose - the two in the test map are horizontal, which is the worst case to judge
 floor shadows against (#22).
 
+### Baseline before instanced sprites (#2)
+
+The FPS-average-off-a-screenshot method above is what made the first measurement
+worthless. `-bench <seconds>` replaces it: the render loop throws away a two second
+warm up, records the wall time of every frame after it, prints percentiles and
+quits. VSync goes off with it, because a frame time capped at the refresh rate
+measures the monitor. The debug overlay goes off too - it is a text mesh rebuilt and
+drawn every frame, and it is not what is being measured.
+
+Frame time, not FPS, is the axis. FPS is a reciprocal, so averaging it weights the
+fast frames and hides the hitches; `p95` here is the 95th percentile frame time, so
+lower is better in every column.
+
+Command, and the one every comparison has to be made against:
+
+```bash
+go run . -stress -stress-size 96 -stress-sprites 2 -stress-pillars 12 -stress-lights 8 -bench 10
+```
+
+| scene | sprite draw calls | median ms | mean | p95 | fps at median |
+|---|---|---|---|---|---|
+| 96x96, sprites every 2 tiles | 284 | **1.898 / 1.920 / 1.932** | 2.41-2.55 | 5.4-5.9 | ~521 |
+| same map, `-stress-sprites 0` | 0 | 0.980 | 1.340 | 4.52 | ~1021 |
+| default `-stress` (128x128) | 126 | 1.555 | 2.005 | 5.09 | ~643 |
+
+Three runs of the first row are printed in full because run-to-run spread is the
+thing that decides whether a later number means anything: 1.898, 1.920, 1.932 ms,
+a spread of 1.8%, with an identical draw call count every time. Anything under about
+2% is noise.
+
+**What that says about #2.** 284 sprite draw calls cost 1.915 - 0.980 = **0.935 ms**,
+which is 3.3 us per sprite, and that is the entire budget instanced rendering can
+attack. The ceiling is the control row: collapsing 284 calls into one per atlas
+should take the frame from ~1.92 ms towards ~1.0 ms. Anything less than roughly half
+of that recovered is not worth the vertex divisor plumbing.
+
+Two things to know before reading a later comparison:
+
+- The distribution is bimodal - median 1.9 ms, min 1.7 ms, but p95 near 5.5 ms and a
+  max that lands on 10 ms in every run including the empty control. That tail is the
+  same size with no sprites on screen at all, so it is not the sprite path; it looks
+  like the compositor, and it is the reason the headline number is the median.
+- `0 of 8 lights redrew their shadow map` in every row. Nothing in the stress map
+  moves, so the shadow cache from #10 holds and sprites are drawn once per frame,
+  not once per light per frame. A scene with a moving caster would multiply the
+  sprite cost by the number of lights, and instancing would be worth
+  correspondingly more there.
+
+Found while setting this up, and fixed: `-stress-sprites 1` and `-stress-sprites 2`
+built maps with no sprites at all (`x%spacing == 2` is a residue a spacing of 1 or 2
+can never produce), which is precisely the flag anyone reaches for to make sprites
+the bottleneck. And `printDebugInfo` was called behind `if true || ShouldDrawDebugInfo`,
+so the F1 checkbox did nothing and the overlay could not be switched off.
+
 ## Not started
 
-#2 instanced sprites, #7 texture arrays, #14 light placement API, #16 light types,
-#17 baked voxel light, #18 many-light shading, #20 unconditional UBO write,
-#21 projection matrix cache, #22 floor shadows (diagnosed, fix drafted and
-reverted pending verification).
+#2 instanced sprites (baseline measured, see above), #7 texture arrays, #16 light
+types, #17 baked voxel light, #18 many-light shading, #20 unconditional UBO write,
+#21 projection matrix cache.
+
+Done since this list was written: #14 light placement, #22 floor shadows.
 
 ## Second pass
 

@@ -120,6 +120,8 @@ type GlApplication struct {
     // it is asked rather than derived from the monitor's content scale.
     FramebufferWidth, FramebufferHeight int
     drawCallCountParticles int
+    benchmark              *Benchmark
+    benchmarkLabel         string
     drawCallCountMeshes    int
     drawCallCountSprites   int
     drawCallCountVoxels    int
@@ -266,6 +268,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
             AtlasSprites:     atlasSprites,
 
             ShouldDrawSprites: true, ShouldDrawMeshes: true, ShouldDrawParticles: true, ShouldUseVsync: true,
+            ShouldDrawDebugInfo: true,
         }
 
         // Baseline for the fullscreen toggle, in case the first thing that happens
@@ -538,6 +541,14 @@ func (a *GlApplication) StartEventLoop() {
             a.Window.SwapBuffers()
             glfw.PollEvents()
             a.Ticks++
+
+            // Measured after SwapBuffers, so the wait for vblank is inside the frame
+            // it belongs to. With vsync on that makes every number the refresh rate,
+            // which is why -bench turns vsync off.
+            if a.benchmark != nil && a.benchmark.record(elapsed) {
+                fmt.Print(a.benchmark.Report(a.benchmarkLabel, a.SceneSummary()))
+                shouldQuit = true
+            }
         })
     }
 }
@@ -1044,6 +1055,33 @@ func (a *GlApplication) Gamma() float32    { return a.gamma }
 // texels the sample position is pushed along the surface normal, and the flat depth
 // bias left over for depth-buffer quantisation. Exposed because the useful value
 // depends on the shadow resolution and the scale of the map.
+// StartBenchmark makes this run a measurement: it quits after the benchmark's warm
+// up plus duration, having printed one report. VSync goes off, because a frame time
+// capped at the refresh rate measures the monitor and not the renderer.
+func (a *GlApplication) StartBenchmark(bench *Benchmark, label string) {
+    a.benchmark = bench
+    a.benchmarkLabel = label
+    a.ShouldUseVsync = false
+    a.SetVSync(false)
+}
+
+// SceneSummary is what was on screen, in the terms the render path is optimised in.
+// A frame time on its own is not comparable to another frame time; a frame time next
+// to a draw call count is.
+func (a *GlApplication) SceneSummary() string {
+    spriteTris, spriteCalls := a.Sprites.DrawnLastFrame()
+    meshTris, meshCalls := a.Meshes.DrawnLastFrame()
+    shadowPasses, litLights := a.ShadowPasses()
+
+    mapTris, mapCalls := 0, 0
+    if a.CubeMap != nil {
+        mapTris, mapCalls = a.CubeMap.TriangleDrawCount(), a.CubeMap.DrawCalls()
+    }
+    return fmt.Sprintf(
+        "last frame    map %d tris / %d calls, sprites %d tris / %d calls, meshes %d tris / %d calls, %d of %d lights redrew their shadow map",
+        mapTris, mapCalls, spriteTris, spriteCalls, meshTris, meshCalls, shadowPasses, litLights)
+}
+
 // SetAmbientLight is the floor under everything: the colour, and in the alpha the
 // strength, that a surface gets no matter which lights reach it. Turning it down is
 // how a scene is made to show what its lights actually do.

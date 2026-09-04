@@ -34,6 +34,7 @@ func main() {
     // before/after can be run from a script instead of from muscle memory.
     shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
     shadowBias := flag.Float64("shadow-bias", float64(quads.DefaultShadowDepthBias), "flat shadow depth bias")
+    benchSeconds := flag.Float64("bench", 0, "run this many seconds, print frame time percentiles and quit (turns vsync off)")
     stressSize := flag.Int("stress-size", defaults.Size, "stress map edge length in tiles")
     stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
     stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
@@ -63,6 +64,7 @@ func main() {
         game.isShadowTest = shadowTestMap
         game.shadowNormalOffset = float32(*shadowOffset)
         game.shadowDepthBias = float32(*shadowBias)
+        game.benchSeconds = *benchSeconds
         // The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
         width, height := 640, 480
         if shadowTestMap {
@@ -123,6 +125,7 @@ type Game struct {
     currentWindowModeIndex int
 
     isShadowTest          bool
+    benchSeconds          float64
     watchFileChanges      bool
     isMouseCursorCaptured bool
     projectileFlyingAnim  int
@@ -265,7 +268,29 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
     events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
     events.Subscribe(events.EventPlayerInteractWith, g.playerInteractWith)
 
+    if g.benchSeconds > 0 {
+        // The debug overlay is a text mesh rebuilt every frame and drawn over the
+        // scene, and it is not part of what is being measured. Same for the minimap.
+        g.ShouldDrawDebugInfo = false
+        g.ShouldDrawMinimap = false
+        g.StartBenchmark(quads.NewBenchmark(g.benchSeconds), g.benchmarkLabel())
+    }
+
     g.HandleResize(g.WindowWidth, g.WindowHeight)
+}
+
+// benchmarkLabel names the run in the report, so two reports pasted next to each
+// other say what they measured rather than both saying "benchmark".
+func (g *Game) benchmarkLabel() string {
+    if g.stressConfig != nil {
+        cfg := *g.stressConfig
+        return fmt.Sprintf("stress %dx%d, pillars every %d, barrels every %d, %d lights",
+            cfg.Size, cfg.Size, cfg.PillarSpacing, cfg.SpriteSpacing, cfg.Lights)
+    }
+    if g.isShadowTest {
+        return "shadow test map"
+    }
+    return "raymap.ldtk"
 }
 
 // loadDoomWeapon reads a Doom weapon sprite atlas plus the ZDoom script that is
@@ -418,7 +443,11 @@ func (g *Game) Update(elapsed float64) {
         }
     }
 
-    if true || g.ShouldDrawDebugInfo {
+    // The `true ||` that used to be here made the F1 "Show Debug Info" checkbox do
+    // nothing, and kept a text mesh rebuilt and drawn every frame with no way to
+    // switch it off - including while measuring frame times. The overlay still
+    // defaults to on, it is just switchable again now.
+    if g.ShouldDrawDebugInfo {
         g.printDebugInfo()
     }
 

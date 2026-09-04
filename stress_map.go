@@ -56,7 +56,14 @@ func loadStressMap(cfg StressConfig) core.MapLoadResult {
                 continue
             }
 
-            if cfg.SpriteSpacing > 0 && x%cfg.SpriteSpacing == 2 && z%cfg.SpriteSpacing == 2 {
+            // The offset is half the spacing, not a literal 2. With a literal 2 any
+            // spacing of 1 or 2 asked for a residue the modulo can never produce, so
+            // -stress-sprites 2 quietly built a map with no sprites at all - which is
+            // exactly the setting someone reaches for to make sprites the bottleneck.
+            // Half the spacing is 2 at the default of 4, so the default map is
+            // unchanged.
+            spriteOffset := cfg.SpriteSpacing / 2
+            if cfg.SpriteSpacing > 0 && x%cfg.SpriteSpacing == spriteOffset && z%cfg.SpriteSpacing == spriteOffset {
                 tile.Entities = append(tile.Entities, core.MapEntity{
                     Name:           "StressBarrel",
                     TextureIndices: []uint16{barrelTextureIndex},

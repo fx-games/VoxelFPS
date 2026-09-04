@@ -55,6 +55,16 @@ go run . -shadowtest                # one wall, one light, one walking caster
 go run . -stress -stress-lights 8   # a hall of pillars and barrels, for frame times
 ```
 
+Frame times, for before/after on the render path:
+
+```bash
+go run . -stress -stress-size 96 -stress-sprites 2 -bench 10
+```
+
+`-bench <seconds>` discards a warm up, records every frame, prints percentiles and
+quits. VSync and the debug overlay go off with it. The current baseline is in the
+Measurement section of `findings.md`.
+
 `-shadowtest` is a rig, not a level: it exists so shadow bias can be judged. The two
 knobs it is judged with are `-shadow-offset` (in shadow texels) and `-shadow-bias`,
 also live on sliders in the F1 menu.
