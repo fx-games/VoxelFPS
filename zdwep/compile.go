@@ -23,6 +23,7 @@ type Compiler struct {
 
 	actorName string
 	ammoType  string
+	ammoType2 string
 
 	// frameSteps maps a frame's ordinal within the actor's states to the step
 	// it became. ZDoom's numeric jump offsets count frames and skip the goto

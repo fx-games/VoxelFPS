@@ -1,0 +1,1 @@
+{"format":1,"name":"RedFlareSpawn","render":{"scale":[1,1],"alpha":1},"speed":20,"states":{"steps":[{"tics":1,"tics_max":1,"ops":[{"op":"fire_projectile","actor":"RedFlareSmall2","angle":-85,"spawn_height":-5}]},{"tics":1,"tics_max":1,"ops":[{"op":"fire_projectile","actor":"RedFlareSmall2","angle":-85,"spawn_height":-5}]},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

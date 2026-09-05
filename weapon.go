@@ -271,10 +271,11 @@ func (g *Game) updateWeapon(elapsed float64) {
 func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	switch op.Op {
 	case wep.OpFireBullets:
-		g.fireBullets(op, weapon.runtime.Rand)
+		g.fireBullets(weapon, op, weapon.runtime.Rand)
 	case wep.OpRailAttack:
 		// A beam rather than a spread: one ray straight down the line of fire.
-		g.fireHitscan(g.aim())
+		origin, direction := g.aim()
+		g.fireHitscanWith(weapon, origin, direction, op)
 	case wep.OpCustomPunch, wep.OpSaw:
 		g.fireMelee(op)
 	case wep.OpExplode:
@@ -417,9 +418,11 @@ func (g *Game) listenerFor(position mgl32.Vec3, volume float64) (pan, scaled flo
 // soundHalfDistance is how far away a sound has to be to lose half its volume.
 const soundHalfDistance = 8.0
 
-// explodeAt marks a blast at a place rather than where the player is looking.
+// explodeAt is A_Explode on a world actor already mid its own Death sprite: the
+// mod's own frames are the explosion, so this only does the blast's damage,
+// rather than laying the engine's generic explosion particles over the top of
+// a picture that is already drawing one.
 func (g *Game) explodeAt(position mgl32.Vec3, op wep.Op) {
-	g.createImpactEffects(wep.PuffExplosion, nil, position, mgl32.Vec3{0, 1, 0})
 	events.Publish(events.EventDamage, DamageEvent{Amount: op.Damage, Where: position})
 }
 
@@ -453,7 +456,7 @@ func (g *Game) explode(op wep.Op) {
 		return
 	}
 	position := hit.WorldPosition()
-	g.createImpactEffects(wep.PuffExplosion, hit.HitObject, position,
+	g.createImpactEffects(nil, wep.Op{Puff: wep.PuffExplosion}, hit.HitObject, position,
 		hit.HitInfo.Side.AsDirection().ToVec3())
 	events.Publish(events.EventDamage, DamageEvent{
 		Target: hit.HitObject, Amount: op.Damage, Where: position,
@@ -484,14 +487,14 @@ const (
 // fireBullets casts one ray per pellet, spread the way the script asked. The
 // weapon's own source of randomness is used, so a seeded run scatters the same
 // way twice.
-func (g *Game) fireBullets(op wep.Op, random *rand.Rand) {
+func (g *Game) fireBullets(weapon *Weapon, op wep.Op, random *rand.Rand) {
 	origin, direction := g.aim()
 	count := op.Count
 	if count < 1 {
 		count = 1
 	}
 	for i := 0; i < count; i++ {
-		g.fireHitscanWith(origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
+		g.fireHitscanWith(weapon, origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
 	}
 }
 

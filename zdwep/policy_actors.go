@@ -375,9 +375,14 @@ func lowerWarp(c *Compiler, call Call) ([]wep.Op, error) {
 	return []wep.Op{{Op: wep.OpWarp, Args: values, Flags: flagWords(call), Source: call.Raw}}, nil
 }
 
-// A_CustomMissile is A_FireCustomMissile from an actor rather than a weapon.
+// A_CustomMissile(missiletype, spawnheight, spawnofs_xy, angle, ...) is
+// A_FireCustomMissile from an actor rather than a weapon, but ZDoom orders its
+// three numbers differently: height comes first here, angle last, where
+// A_FireCustomMissile puts angle first and height last. A smoke actor spawning
+// its own trail with `A_CustomMissile("Smoke", 0, 0, 180)` means angle 180,
+// no height - read the other way round it lands 180 units above the gun.
 func lowerSpawnMissile(c *Compiler, call Call) ([]wep.Op, error) {
-	return c.spawn(call, wep.OpFireProjectile, 1, 2, 3)
+	return c.spawn(call, wep.OpFireProjectile, 3, 2, 1)
 }
 
 // A_SpawnItem(actor, distance, height) and A_SpawnItemEx(actor, x, y, z, ...).

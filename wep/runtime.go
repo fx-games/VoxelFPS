@@ -564,6 +564,13 @@ func NewRuntime(weapon *Weapon, random *rand.Rand) *Runtime {
 	if weapon.Ammo.Type != "" {
 		runtime.Inventory[weapon.Ammo.Type] = runtime.Caps[weapon.Ammo.Type]
 	}
+	// A second ammo type sits alongside the first rather than replacing it -
+	// commonly the loaded rounds next to the reserve they get drawn from -
+	// and starts full for the same reason: a freshly picked up gun is loaded,
+	// not found already needing a reload it has nothing to reload from.
+	if weapon.Ammo.Type2 != "" {
+		runtime.Inventory[weapon.Ammo.Type2] = runtime.Caps[weapon.Ammo.Type2]
+	}
 	return runtime
 }
 

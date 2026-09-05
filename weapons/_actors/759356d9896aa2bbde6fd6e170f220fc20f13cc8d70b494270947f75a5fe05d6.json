@@ -1,0 +1,1 @@
+{"format":1,"name":"SmokeSpawner11","render":{"scale":[1,1],"alpha":1},"speed":25,"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"fire_projectile","actor":"GunBarrelSmoke","spawn_height":-10}]},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

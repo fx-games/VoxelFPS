@@ -73,6 +73,25 @@ func (g *Game) spawnWorldActor(weapon *Weapon, op wep.Op) {
 	g.spawnActorAt(weapon, actor, op, g.spawnPosition(origin, direction, op))
 }
 
+// spawnPuffAt draws a hitscan's own puff exactly where it says: a spark, a
+// splinter of wood, whatever the mod's own actor animates - in place of the
+// engine's generic bullet hole. Reports whether it found one to draw.
+func (g *Game) spawnPuffAt(weapon *Weapon, actorName string, pos, surfaceNormal mgl32.Vec3) *WorldActor {
+	if weapon == nil || actorName == "" || g.sharedAtlas == nil {
+		return nil
+	}
+	actor, known := weapon.Actors[lowerName(actorName)]
+	if !known || actor.Stock {
+		return nil
+	}
+	if _, hasSpawn := actor.States.Label("Spawn"); !hasSpawn {
+		return nil
+	}
+	// Sat a hair off the surface it marks, facing along its normal, so it
+	// does not fight the wall or floor it is drawn on for depth.
+	return g.spawnActorAt(weapon, actor, wep.Op{}, pos.Add(surfaceNormal.Mul(0.01)))
+}
+
 // setMaster records what spawned this, so a warp knows what to sit on.
 func (live *WorldActor) setMaster(master *WorldActor) {
 	if live != nil {
@@ -91,7 +110,9 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	sprite.NoShadow = true
 	if actor.Render.Style == "add" || actor.Render.Style == "additive" {
 		// An additive sprite is its own light as far as the bloom pass cares.
-		sprite.Emissive = additiveEmissive
+		// Scaled by its own alpha: a script that draws its smoke at 0.06 alpha
+		// wants a haze, not the same bloom a full-strength muzzle flash gets.
+		sprite.Emissive = additiveEmissive * float32(alphaOf(actor))
 	}
 
 	object := quads.NewGameObject("Spawned:" + actor.Name)
@@ -199,7 +220,11 @@ func (g *Game) LiveActorCount() int { return len(g.worldActors) }
 func (g *Game) updateWorldActors(elapsed float64) {
 	for i := len(g.worldActors) - 1; i >= 0; i-- {
 		live := g.worldActors[i]
-		if live.cursor.Stopped() || !live.object.IsAlive() {
+		// A Stop just freezes the animation; in GZDoom the actor itself keeps
+		// falling until it touches something, which is what sends a missile-
+		// flagged casing on to Death. Only drop it once it has both stopped
+		// animating and come to rest, or its own lifetime runs out.
+		if (live.cursor.Stopped() && live.resting) || !live.object.IsAlive() {
 			live.remove(g)
 			g.worldActors = append(g.worldActors[:i], g.worldActors[i+1:]...)
 			continue
@@ -207,8 +232,10 @@ func (g *Game) updateWorldActors(elapsed float64) {
 		live.runtime.World = live
 		live.publishState()
 		live.move(g, elapsed)
-		for _, op := range live.cursor.Update(live.runtime, elapsed) {
-			live.apply(g, op)
+		if !live.cursor.Stopped() {
+			for _, op := range live.cursor.Update(live.runtime, elapsed) {
+				live.apply(g, op)
+			}
 		}
 		live.showCurrentFrame(g)
 	}
@@ -261,7 +288,7 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 		live.velocity = mgl32.Vec3{}
 		live.resting = true
 		live.homing = false
-		if live.data.Speed > 0 {
+		if live.data.Speed > 0 || live.data.Missile {
 			live.hitSomething(g, from)
 		}
 		return

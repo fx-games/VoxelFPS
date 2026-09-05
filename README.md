@@ -158,6 +158,19 @@ the line, rather than going quiet at runtime. `weapons.lock` records hashes only
 re-running the migration and diffing it says whether the mod moved, the compiler
 moved, or nothing did.
 
+Compiling is not the same as working: a weapon can pass every check here and still
+never actually fire, if the two-tier ammo it scripts by hand starts the runtime
+thinks is empty, or a jump lands somewhere the trigger never gets read again.
+`tools/firecheck` catches that without a window or a GPU - it raises every weapon
+in the folder, taps the trigger the way a player does (not an unbroken hold, which
+reads as "still charging" to a weapon whose A_Refire means the opposite), and reports
+whichever ones never spawn a projectile, take a hitscan shot, or swing:
+
+```
+go run ./tools/firecheck -weapons weapons        # just the failures
+go run ./tools/firecheck -weapons weapons -v      # every weapon, ok or not
+```
+
 Making one by hand from a sprite sheet:
 
 ```

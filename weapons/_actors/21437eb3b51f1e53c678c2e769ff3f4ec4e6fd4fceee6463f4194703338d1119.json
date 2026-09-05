@@ -1,1 +1,0 @@
-{"format":1,"name":"HeavyMachinegunProjectileTracerTrail3","render":{"scale":[2,2],"alpha":0.8,"style":"add"},"states":{"steps":[{"sprite":"MG74A0","tics":4,"tics_max":4,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

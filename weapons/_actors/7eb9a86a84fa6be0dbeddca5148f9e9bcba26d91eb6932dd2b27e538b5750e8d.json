@@ -1,1 +1,0 @@
-{"format":1,"name":"AutoCannonTracerTrail8","render":{"scale":[0.8,0.8],"alpha":0.55,"style":"add"},"states":{"steps":[{"sprite":"MG74C0","tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

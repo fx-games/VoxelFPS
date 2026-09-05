@@ -84,24 +84,22 @@ func (g *Game) currentWeapon() *Weapon {
 }
 
 // HitscanEffect is one pellet's worth of a shot, with the compiled op it came
-// from so the impact knows what kind of shot it was and how hard.
+// from so the impact knows what kind of shot it was and how hard, and the
+// weapon that fired it, so the puff it names can be drawn as itself.
 type HitscanEffect struct {
 	Hit       RaycastResult
 	Direction mgl32.Vec3
 	Shot      wep.Op
+	Weapon    *Weapon
 }
 
-// fireHitscan sends one plain shot down a ray.
-func (g *Game) fireHitscan(origin, direction mgl32.Vec3) {
-	g.fireHitscanWith(origin, direction, wep.Op{Puff: wep.PuffBullet})
-}
-
-func (g *Game) fireHitscanWith(origin, direction mgl32.Vec3, shot wep.Op) {
+func (g *Game) fireHitscanWith(weapon *Weapon, origin, direction mgl32.Vec3, shot wep.Op) {
 	hit := g.rayCast(origin, direction)
 	events.Publish(events.EventHitScanCollision, HitscanEffect{
 		Hit:       hit,
 		Direction: direction,
 		Shot:      shot,
+		Weapon:    weapon,
 	})
 }
 
@@ -119,7 +117,7 @@ func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	// The surface normal of a voxel hit is the face the ray came in through; an
 	// object hit has no face, so the decals go on the wall behind it instead.
 	surfaceNormal := hit.HitInfo.Side.AsDirection().ToVec3()
-	g.createImpactEffects(hitScanEffect.Shot.Puff, hit.HitObject, hitPos, surfaceNormal)
+	g.createImpactEffects(hitScanEffect.Weapon, hitScanEffect.Shot, hit.HitObject, hitPos, surfaceNormal)
 	if hit.HitObject != nil {
 		g.splatterBehind(hitPos, hitScanEffect.Direction)
 		g.damage(hit, hitScanEffect.Shot.Damage)
@@ -215,7 +213,7 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 		}
 
 		_ = relativePosition
-		g.createImpactEffects(wep.PuffExplosion, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
+		g.createImpactEffects(nil, wep.Op{Puff: wep.PuffExplosion}, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
 		if hitObject != nil && projectileComponent.HitEffect > 0 && hitObject.DisplayName == "Scientist" {
 			hitObject.Sprite().PlayAnimationFreezeLastFrame(int(quads.AnimDying))
 		}
@@ -245,24 +243,27 @@ const (
 	bloodSplatterRange = 4.0
 )
 
-// createImpactEffects paints what a shot leaves where it landed. The kind comes
-// from the puff the script named, so a weapon that fires a different puff gets
-// a different mark without any of this changing.
-func (g *Game) createImpactEffects(puff string, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
-	switch puff {
-	case wep.PuffExplosion:
+// createImpactEffects paints what a shot leaves where it landed. A weapon that
+// names its own puff actor gets that actor's own sprite, drawn exactly as its
+// mod drew it; the particle system is only what is left for a shot with
+// nothing of its own to draw, or for a body, which has no mod sprite for blood.
+func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
+	if shot.Puff == wep.PuffExplosion {
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
 		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
 		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
 		if hitObject != nil {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}
-	default: // wep.PuffBullet, and anything a policy line has not named
-		if hitObject == nil {
-			g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
-			g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBulletHole, pos, surfaceNormal, bulletHoleSize)
-		} else {
-			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
-		}
+		return
 	}
+	if hitObject != nil {
+		g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
+		return
+	}
+	if weapon != nil && g.spawnPuffAt(weapon, shot.PuffActor, pos, surfaceNormal) != nil {
+		return
+	}
+	g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
+	g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBulletHole, pos, surfaceNormal, bulletHoleSize)
 }

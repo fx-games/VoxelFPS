@@ -355,8 +355,8 @@ func TestCompileIsDeterministic(t *testing.T) {
 // saying so. Looking for Weapon alone finds nothing in a mod written that way.
 func TestWeaponsFoundThroughEngineBaseClasses(t *testing.T) {
 	idx := indexFromFiles(t, map[string]string{"DECORATE": `
-ACTOR BrutalWeapon : DoomWeapon {}
-ACTOR BrutalShotgun : BrutalWeapon
+ACTOR ModWeaponBase : DoomWeapon {}
+ACTOR BrutalShotgun : ModWeaponBase
 {
   Tag "Brutal Shotgun"
   States
@@ -369,7 +369,7 @@ ACTOR BrutalShotgun : BrutalWeapon
 ACTOR SomeAmmo : Ammo {}
 `})
 
-	assert.Equal(t, []string{"BrutalShotgun", "BrutalWeapon"}, Weapons(idx))
+	assert.Equal(t, []string{"BrutalShotgun", "ModWeaponBase"}, Weapons(idx))
 	assert.False(t, IsWeapon(idx, "SomeAmmo"))
 
 	result, err := CompileWeapon(idx, DefaultPolicy(), "BrutalShotgun")

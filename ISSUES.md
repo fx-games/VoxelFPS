@@ -74,13 +74,44 @@ reports one event for the surface that was actually hit (see Physics below).
   is read and checked at startup and a folder that does not load stops the game with
   every problem it found listed. A weapon's pictures and sounds are read the first time
   it is held, not at startup.
-- 146 weapons are migrated from Final Doomer and Brutal Doom Community Expansion. 144
-  of the 147 in the folder do something when the trigger is held; the three that do not
-  are two abstract base classes and a coat.
+- 125 weapons are migrated from Final Doomer and Brutal Doom Community Expansion.
+  Brutal Doom's vehicles (the mech, the tank, the bike, the turrets), its meat-shield
+  grab-and-throw, its play-as-monster mode and its classic-mode weapon swap all satisfy
+  `IsWeapon` the same way a real weapon does - something the player "holds" while it
+  runs its own states - and are named out by `notPlayerWeapons` in
+  `zdwep/compile_weapon.go` rather than migrated and then hidden.
+- `tools/firecheck` raises every weapon and taps the trigger, watching for a hitscan, a
+  spawned projectile or a swing; run it after any migration. It found two real compiler
+  bugs this way: `Weapon.AmmoType1`/`AmmoUse1` were read without the `1`, so a weapon
+  using the numbered spelling (nearly all of them) compiled with no ammo type at all,
+  and `A_CustomMissile`'s height and angle arguments were swapped with
+  `A_FireCustomMissile`'s order, which is why a spawned smoke trail could show up
+  hundreds of units above the gun that spawned it. A second, real ammo pool
+  (`Weapon.AmmoType2`, the loaded rounds next to the reserve `AmmoType1` draws from) is
+  now filled to capacity the same way the first one always was. 86 of 125 fire when
+  tapped like a player taps a trigger, not held forever - some of Brutal Doom's melee
+  reads a continuous hold as "still charging" and only swings on release. The rest are
+  each their own scripted mechanic (a charge gauge, a heat gauge, a remote detonator)
+  worth chasing one at a time with the tool rather than guessed at in bulk.
 - Spawned actors are drawn: the mod's own smoke, casings and projectiles, from their
   own sprites. Their frames live in `weapons/_sprites/` and are packed into one atlas
   when the game starts, kept in `weapons/_sprites.png` until the store changes, so
   every casing and puff on screen is one texture and one batch whoever fired it.
+- A bullet's impact is the puff the weapon actually names (`A_FireBullets`'s fifth
+  argument), drawn as that actor's own sprite, when the mod defines one -
+  `weapon.json`'s `puff_actor` on the `fire_bullets` op. The engine's own generic
+  bullet-hole decal and particles are the fallback for a puff the mod leaves stock
+  (GZDoom's own) or names nothing, and for blood, which has no mod sprite. An
+  explosion already mid its own Death-state animation (`A_Explode` on a spawned
+  actor) no longer also gets the engine's explosion particles laid over it - the
+  mod's own frames are the explosion.
+- An actor without `+MISSILE` and without its own `Speed` (most shell casings - they
+  are launched by the spawner's velocity, not a property on themselves) never used
+  to reach its Death state on landing, so its tumble animation's own `Loop` ran
+  forever instead of settling into a rest pose. `wep.Actor.Missile` now carries the
+  flag the way `NoGravity` already did, and a spawned thing whose animation halts
+  (a `Stop`) before it has physically landed keeps falling rather than vanishing
+  mid-air - only stopping to be removed once it is both stopped and resting.
 - What the engine does not act on yet, all of it compiled and carried so that wiring it
   up needs no re-migration:
   - Monster behaviour (`monster_action`), the mod's own ACS scripts (`run_script`),
@@ -97,6 +128,10 @@ reports one event for the surface that was actually hit (see Physics below).
   crosshair is the target. A_Warp puts a thing on whatever spawned it.
 - Spawned sprites do not cast shadows, the way Doom sprites never did. A hundred
   drifting puffs that cast would have every light redraw its shadow map every frame.
+- An additive sprite's bloom now scales with its own alpha, not a flat value: a
+  script that draws its smoke at `alpha 0.06` wants a haze, and got the same bloom
+  a full-strength muzzle flash does, which is why gun smoke could read as a solid
+  glowing cloud up close.
 - No more than 192 spawned things are kept at once, oldest dropped first. That is
   right for smoke and casings and would be wrong for a rocket in flight.
 - Damage is published as an event and plays the hit reaction. Nothing has health.

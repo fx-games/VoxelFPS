@@ -58,10 +58,20 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 	c := newCompiler(idx, policy)
 	c.strictLabels = strict
 	c.actorName = actor.Name
-	c.ammoType, _ = c.mergedProperty(actor.Name, "weapon.ammotype")
+	// AmmoType and AmmoType1 are the same property in DECORATE - a weapon
+	// only ever writes one of the two spellings for its primary fire.
+	c.ammoType, _ = c.mergedProperty(actor.Name, "weapon.ammotype1")
+	if c.ammoType == "" {
+		c.ammoType, _ = c.mergedProperty(actor.Name, "weapon.ammotype")
+	}
 	c.ammoType = strings.Trim(c.ammoType, `"`)
 	if c.ammoType != "" {
 		c.needItem(c.ammoType)
+	}
+	c.ammoType2, _ = c.mergedProperty(actor.Name, "weapon.ammotype2")
+	c.ammoType2 = strings.Trim(c.ammoType2, `"`)
+	if c.ammoType2 != "" {
+		c.needItem(c.ammoType2)
 	}
 
 	states, err := c.lowerStates(c.mergedStates(actor.Name))
@@ -74,7 +84,7 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 		ID:         WeaponID(actor, idx),
 		Tag:        c.tag(actor),
 		Slot:       c.intProperty(actor.Name, "weapon.slotnumber"),
-		Ammo:       wep.Ammo{Type: c.ammoType, Use: c.ammoUse(actor.Name)},
+		Ammo:       wep.Ammo{Type: c.ammoType, Use: c.ammoUse(actor.Name), Type2: c.ammoType2, Use2: c.ammoUse2(actor.Name)},
 		Render:     c.render(actor.Name, true),
 		States:     states,
 		Reloadable: hasLabel(states, "Reload"),
@@ -166,6 +176,7 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 		Speed:     inner.floatProperty(actor.Name, "speed"),
 		States:    states,
 		NoGravity: inner.mergedFlag(actor.Name, "nogravity"),
+		Missile:   inner.actorIsMissile(actor.Name),
 	}
 	return compiled, sortedNames(inner.neededActors), nil
 }
@@ -218,10 +229,35 @@ func (c *Compiler) ammoUse(name string) int {
 	if c.ammoType == "" {
 		return 0
 	}
-	if use := c.intProperty(name, "weapon.ammouse"); use > 0 {
-		return use
+	// AmmoUse1 0 is a real, deliberate value - some weapons manage their ammo
+	// entirely by hand, through their own inventory Give/Take calls, and tell
+	// the engine's own ammo check to stay out of it. Only a property neither
+	// spelling declares falls back to the usual one round a shot.
+	if value, ok := c.mergedProperty(name, "weapon.ammouse1"); ok {
+		return atoiOr(value, 1)
+	}
+	if value, ok := c.mergedProperty(name, "weapon.ammouse"); ok {
+		return atoiOr(value, 1)
 	}
 	return 1
+}
+
+func (c *Compiler) ammoUse2(name string) int {
+	if c.ammoType2 == "" {
+		return 0
+	}
+	if value, ok := c.mergedProperty(name, "weapon.ammouse2"); ok {
+		return atoiOr(value, 1)
+	}
+	return 1
+}
+
+func atoiOr(value string, fallback int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 func (c *Compiler) intProperty(name, property string) int {
@@ -358,11 +394,45 @@ func IsWeapon(idx *Index, name string) bool {
 	return false
 }
 
+// notPlayerWeapons are actors that satisfy IsWeapon only because a mod's own
+// menu-driven machinery is built the same way a weapon is - something the
+// player "holds" while it runs its own states - rather than because they are
+// something to fight with. Brutal Doom drives its vehicles, its meat-shield
+// grab-and-throw, its classic-mode weapon swap and its play-as-monster mode
+// this way, and none of the three belong in a list a player picks a gun from.
+//
+// Named rather than inferred: nothing about a DECORATE chain says "this is a
+// HUD", so -all and -list skip these by name. A name passed explicitly on the
+// command line still compiles, in case one is ever wanted on its own.
+var notPlayerWeapons = map[string]bool{
+	// Vehicle "guns": what the player holds while riding a bike, tank, mech
+	// or helicopter around the map, not something carried and fired.
+	"mechgun": true, "bikehud": true, "attackhelicoptergun": true,
+	"artillerytankgun": true, "heavymachinegunhud": true, "tankgun": true,
+	// Meat shields: grab an enemy corpse to block shots, then throw it. A
+	// weapon slot in the DECORATE sense, a grab-and-throw prompt to a player.
+	"evilmarineshield": true, "impshield": true, "nazishield": true,
+	"sguyshield": true, "zmanshield": true, "zombiecivilianshield": true,
+	"cguyshield": true,
+	// Play-as-monster mode's own HUD.
+	"d4baronhud": true, "d4revenanthud": true,
+	// The options menu's classic-mode weapon swap and its utility actors:
+	// a rebind of the same three weapons already migrated under their own
+	// names, an ammo cheat, a level-repair tool.
+	"classicweapon": true, "classicsmg": true, "classicfist": true,
+	"classicpistol": true, "classicsaw": true,
+	"ammodroper": true, "repairtool": true,
+	// BrutalWeapon is what every real weapon inherits from, not a weapon of
+	// its own; it has states because Weapon requires them, not because
+	// anything gives it to a player.
+	"brutalweapon": true,
+}
+
 // Weapons lists every actor in the mod that is a weapon, by name, sorted.
 func Weapons(idx *Index) []string {
 	var names []string
 	for _, actor := range idx.Actors {
-		if IsWeapon(idx, actor.Name) {
+		if IsWeapon(idx, actor.Name) && !notPlayerWeapons[strings.ToLower(actor.Name)] {
 			names = append(names, actor.Name)
 		}
 	}

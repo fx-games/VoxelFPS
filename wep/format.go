@@ -85,6 +85,11 @@ type Op struct {
 	SpreadV float64 `json:"spread_v,omitempty"`
 	Damage  int     `json:"damage,omitempty"`
 	Puff    string  `json:"puff,omitempty"`
+	// PuffActor is the actor the mod itself names, so the impact can draw its
+	// own sprite (a spark, a puff of smoke) instead of the engine's generic
+	// bullet hole. Empty when the script named nothing or named an actor the
+	// weapon could not compile.
+	PuffActor string `json:"puff_actor,omitempty"`
 
 	// spawn_actor and fire_projectile.
 	Actor       string  `json:"actor,omitempty"`
@@ -311,6 +316,13 @@ type Ammo struct {
 	// Type is the inventory item, empty for a weapon that costs nothing.
 	Type string `json:"type,omitempty"`
 	Use  int    `json:"use,omitempty"`
+	// Type2 and Use2 are AmmoType2/AmmoUse2: a second ammo pool, alongside
+	// Type rather than instead of it. A two-stage reload (a magazine drawn
+	// from a reserve) is the common shape - Type is the reserve, Type2 the
+	// loaded rounds - and both need to start full, or the weapon reads as
+	// permanently needing a reload it can never finish from nothing.
+	Type2 string `json:"type2,omitempty"`
+	Use2  int    `json:"use2,omitempty"`
 }
 
 // Render is how the weapon or actor is drawn.
@@ -358,6 +370,12 @@ type Actor struct {
 	States StateMachine `json:"states"`
 	// NoGravity actors hang where they are put, which is what smoke does.
 	NoGravity bool `json:"no_gravity,omitempty"`
+	// Missile marks an actor that dies on the floor rather than settling into
+	// its own spin forever: a shell casing's tumble is a Loop with no exit of
+	// its own, and it is the engine's +MISSILE handling that sends it to
+	// Death the moment it lands. Speed alone does not say this - a casing is
+	// launched by the spawner's own velocity, not a Speed property on itself.
+	Missile bool `json:"missile,omitempty"`
 	// Impact is what this actor does where a hitscan lands, when it is used as
 	// a puff. Empty for actors that are only drawn.
 	Impact string `json:"impact,omitempty"`

@@ -1,0 +1,1 @@
+{"format":1,"name":"FDAutoAimRailgunPuff","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":-1,"tics_max":-1,"ops":[{"op":"nop","source":"Thing_ChangeTID(0,CallACS(\"FDRail_MakePuffTid\"))"}]},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}},"no_gravity":true}

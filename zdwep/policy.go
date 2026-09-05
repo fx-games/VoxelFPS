@@ -483,19 +483,29 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	impact := c.puffKind(call.NameArg(4, ""))
+	puffActor := call.NameArg(4, "")
+	impact := c.puffKind(puffActor)
 	// A negative count means "fire this many, ignoring autoaim spread rules".
 	if count < 0 {
 		count = -count
 	}
+	// Only a puff the mod actually defines is worth drawing as itself; the
+	// stock ones (a plain bullet puff GZDoom supplies) have no states of their
+	// own and would just be a dummy file in the shared store.
+	if _, defined := c.idx.Actor(puffActor); defined {
+		c.needActor(puffActor)
+	} else {
+		puffActor = ""
+	}
 	return []wep.Op{{
-		Op:      wep.OpFireBullets,
-		Count:   count,
-		SpreadH: spreadH.Range.Value(),
-		SpreadV: spreadV.Range.Value(),
-		Damage:  damage,
-		Puff:    impact,
-		Source:  call.Raw,
+		Op:        wep.OpFireBullets,
+		Count:     count,
+		SpreadH:   spreadH.Range.Value(),
+		SpreadV:   spreadV.Range.Value(),
+		Damage:    damage,
+		Puff:      impact,
+		PuffActor: puffActor,
+		Source:    call.Raw,
 	}}, nil
 }
 
