@@ -941,6 +941,9 @@ func (g *Game) toggleVsync() {
 func (g *Game) toggleMouseCapture() {
 	g.isMouseCursorCaptured = !g.isMouseCursorCaptured
 	g.SetMouseCapture(g.isMouseCursorCaptured)
+	// Letting go of the mouse has to let go of the trigger with it, or a
+	// weapon whose script keeps firing while it is held never stops.
+	g.triggerHeld = false
 }
 
 func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
