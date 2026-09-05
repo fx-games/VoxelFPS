@@ -313,6 +313,20 @@ func (p *Player) playOnChannel(channel int, streamer beep.Streamer) {
 	}
 }
 
+// StopChannel silences whatever is playing on one of ZDoom's channels, which
+// is what A_StopSound asks for: a weapon that stops its own idle hum before it
+// fires.
+func (p *Player) StopChannel(channel int) {
+	if p.disabled {
+		return
+	}
+	speaker.Lock()
+	defer speaker.Unlock()
+	if mixer, playing := p.channels[channel]; playing {
+		mixer.Clear()
+	}
+}
+
 func clampPan(pan float64) float64 {
 	if pan < -1 {
 		return -1

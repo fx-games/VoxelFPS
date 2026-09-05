@@ -120,10 +120,11 @@ Weapons are data. `weapons/` holds one self-contained folder per weapon, plus
 
 ```
 weapons/
-  keys.txt              1: small_gun
+  keys.txt              1: small_gun          (and , and . walk the rest)
+  _actors/              every actor any weapon spawns, named by its content
+    3f9a....json
   small_gun/
     weapon.json         behaviour: a state graph over a closed instruction set
-    actors.json         anything the weapon puts into the world
     sprites.png         its frames, packed, with the table in the atLS chunk
     sounds/             under the names the ops play them by
 ```
@@ -131,12 +132,22 @@ weapons/
 Everything in the folder is checked at startup; a folder that does not load stops
 the game with every problem it found, listed.
 
-Porting a weapon out of a ZDoom mod:
+146 weapons are in there, migrated from Final Doomer and Brutal Doom Community
+Expansion.
+
+Porting out of a ZDoom mod:
 
 ```
-go run ./tools/genweapons -source ../Brutal-Doom-Community-Expansion -list
-go run ./tools/genweapons -source ../Brutal-Doom-Community-Expansion FDHellboundShotgun
+go run ./tools/genweapons -source mod.pk3 -list          # what is in it
+go run ./tools/genweapons -source mod.pk3 -scan          # what it would need
+go run ./tools/genweapons -source mod.pk3,doom2.wad -all -prefix bd_
 ```
+
+Sources are searched in order, so a mod sits on top of the game data it takes for
+granted: Final Doomer's weapons spawn stock bullet puffs and never ship one. A
+pk3, a directory and an IWAD all work. `-scan` lowers every actor in the mod and
+reports the whole vocabulary it needs, so a new mod is one pass rather than one
+weapon at a time, and `-prune` sweeps shared actor files nothing points at.
 
 It indexes every actor in the mod, resolves inheritance, ammo caps, sounds and
 sprites, and compiles the states down to instructions the engine steps. An action

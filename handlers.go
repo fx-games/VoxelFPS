@@ -91,7 +91,12 @@ type HitscanEffect struct {
 	Shot      wep.Op
 }
 
-func (g *Game) fireHitscan(origin, direction mgl32.Vec3, shot wep.Op) {
+// fireHitscan sends one plain shot down a ray.
+func (g *Game) fireHitscan(origin, direction mgl32.Vec3) {
+	g.fireHitscanWith(origin, direction, wep.Op{Puff: wep.PuffBullet})
+}
+
+func (g *Game) fireHitscanWith(origin, direction mgl32.Vec3, shot wep.Op) {
 	hit := g.rayCast(origin, direction)
 	events.Publish(events.EventHitScanCollision, HitscanEffect{
 		Hit:       hit,

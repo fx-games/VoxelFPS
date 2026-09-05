@@ -69,26 +69,34 @@ reports one event for the surface that was actually hit (see Physics below).
 
 ## Weapons
 
-- Weapons are data. They live in `weapons/`, one self-contained folder each, and are
-  read and checked at startup; `weapons/keys.txt` binds the number keys. A folder that
-  does not load stops the game with every problem it found listed.
-- `tools/genweapons` compiles them out of a ZDoom mod, and `tools/gensheet` builds one
-  from a plain sprite sheet. Neither runs while the game does.
-- Spawned actors - muzzle smoke, ejected shell casings - are compiled into
-  `actors.json` and carried, but not yet drawn. World sprites come from a fixed grid
-  atlas and a weapon's frames are packed, so putting them in the air needs the sprite
-  system to take a packed atlas first. `spawn_actor` and `fire_projectile` are no-ops
-  in `applyWeaponOp` until then, and `fireProjectile` in `handlers.go` is waiting for
-  the same thing.
+- Weapons are data. `weapons/` holds one folder per weapon plus `_actors/`, the shared
+  store, and `keys.txt` binding the number keys; `,` and `.` walk the rest. Everything
+  is read and checked at startup and a folder that does not load stops the game with
+  every problem it found listed. A weapon's pictures and sounds are read the first time
+  it is held, not at startup.
+- 146 weapons are migrated from Final Doomer and Brutal Doom Community Expansion. 144
+  of the 147 in the folder do something when the trigger is held; the three that do not
+  are two abstract base classes and a coat.
+- What the engine does not act on yet, all of it compiled and carried so that wiring it
+  up needs no re-migration:
+  - **Spawned actors are not drawn.** `spawn_actor`, `fire_projectile`, `spawn_item`
+    and `spawn_particle` are no-ops. World sprites come from a fixed grid atlas and a
+    weapon's frames are packed, so the mod's own smoke, casings, rockets and plasma
+    balls need the sprite system to take a packed atlas first. This is the big one:
+    3784 spawn_actor and 470 fire_projectile in four seconds of holding every trigger.
+  - Monster behaviour (`monster_action`), the mod's own ACS scripts (`run_script`),
+    screen shake (`quake`), crosshairs, player flags, and everything about how a
+    spawned actor moves - velocity, seeking, warping, fading, scaling - which only
+    means something once they are drawn.
+  - `give_to_target`, `radius_give` and `radius_thrust`: nothing has health or mass.
+- Damage is published as an event and plays the hit reaction. Nothing has health.
+- `A_PlaySound`'s attenuation is compiled but not acted on. The player can pan and
+  attenuate, but a weapon's own sounds come from where the listener is standing.
 - The muzzle flash rides the single tracked light slot, which projectile lights also
   use, so firing while a bolt is in the air takes the light off the bolt.
-- `A_PlaySound`'s attenuation is compiled but not acted on. The player can pan and
-  attenuate (`audio.CueOptions`), but a weapon's own sounds come from where the
-  listener is standing, so there is nothing to place until a spawned actor makes a
-  noise somewhere else.
-- Damage is published and plays the hit reaction, but there is nothing with health to
-  apply it to, and `make_noise` reaches an event nobody subscribes to. Both are
-  compiled so wiring enemies up later needs no re-migration.
+- 45 sprites and a handful of sounds are named by Final Doomer and shipped by neither
+  it nor doom2.wad. Those frames show nothing, and each weapon lists which under
+  `defaulted`.
 
 ## Robustness
 

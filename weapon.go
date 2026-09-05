@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
@@ -245,37 +246,145 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	switch op.Op {
 	case wep.OpFireBullets:
 		g.fireBullets(op, weapon.runtime.Rand)
+	case wep.OpRailAttack:
+		// A beam rather than a spread: one ray straight down the line of fire.
+		g.fireHitscan(g.aim())
+	case wep.OpCustomPunch, wep.OpSaw:
+		g.fireMelee(op)
+	case wep.OpExplode:
+		g.explode(op)
+
 	case wep.OpGunFlash:
 		weapon.StartFlash(op.To)
 	case wep.OpFlashLight:
 		g.setMuzzleFlash(op.Level)
-	case wep.OpPlaySound:
-		g.playWeaponSound(op)
 	case wep.OpRecoil:
 		g.Camera.ChangeAngles(0, float32(op.Delta))
+	case wep.OpZoom:
+		g.setWeaponZoom(op)
+
+	case wep.OpPlaySound:
+		g.playWeaponSound(op)
+	case wep.OpStopSound:
+		if g.audio != nil {
+			g.audio.StopChannel(op.Channel)
+		}
+	case wep.OpPrint:
+		if op.Text != "" {
+			g.Toast(op.Text)
+		}
+
+	case wep.OpSelectWeapon:
+		g.selectWeaponByTag(op.Text)
+
 	case wep.OpMakeNoise:
 		// Nothing listens yet; there are no enemies to hear it. Compiled and
 		// published so wiring AI up later needs no re-migration.
 		events.Publish(events.EventWeaponNoise, op)
-	case wep.OpSpawnActor, wep.OpFireProjectile:
+
+	case wep.OpSpawnActor, wep.OpFireProjectile, wep.OpSpawnItem, wep.OpSpawnParticle:
 		// ponytail: compiled and carried, not yet drawn. World sprites come
 		// from a fixed grid atlas and a weapon's frames are packed, so putting
 		// the mod's own smoke and casings in the air needs the sprite system to
 		// take a packed atlas first.
+
+	case wep.OpMonsterAction, wep.OpRunScript, wep.OpSetCrosshair,
+		wep.OpPlayerFlag, wep.OpQuake, wep.OpRadiusThrust, wep.OpRadiusGive,
+		wep.OpBFGSpray, wep.OpChangeVelocity, wep.OpScaleVelocity,
+		wep.OpSetSpeed, wep.OpThrust, wep.OpWarp, wep.OpSeekerMissile,
+		wep.OpSetAlpha, wep.OpFadeTo, wep.OpSetScale, wep.OpDie,
+		wep.OpRemove, wep.OpKillChildren, wep.OpGiveToTarget:
+		// Carried, and waiting on the system that would act on it: monster AI,
+		// the mod's own scripts, screen shake, and the world sprites that
+		// spawned actors need before any of their movement means anything.
 	}
 }
+
+// selectWeaponByTag puts a weapon in hand by the name its script uses, which is
+// the actor's name rather than the folder's. Nothing matching is a script
+// asking for a weapon this folder does not have, which is not worth a fuss.
+func (g *Game) selectWeaponByTag(name string) {
+	if name == "" {
+		return
+	}
+	for index, weapon := range g.weapons {
+		if strings.EqualFold(weapon.Data.Provenance.Actor, name) ||
+			strings.EqualFold(weapon.Data.Tag, name) {
+			g.selectWeapon(index)
+			return
+		}
+	}
+}
+
+// aim is the ray from the middle of the screen.
+func (g *Game) aim() (origin, direction mgl32.Vec3) {
+	return g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
+}
+
+// fireMelee is a swing: one ray, but only as far as an arm reaches.
+func (g *Game) fireMelee(op wep.Op) {
+	origin, direction := g.aim()
+	reach := float64(meleeReach)
+	if len(op.Args) > 0 && op.Args[0] > 0 {
+		reach = op.Args[0] / worldUnitsPerVoxel
+	}
+	hit := g.rayCast(origin, direction)
+	if !hit.HitInfo.Hit || hit.HitInfo.Distance > reach {
+		return
+	}
+	events.Publish(events.EventHitScanCollision, HitscanEffect{
+		Hit: hit, Direction: direction, Shot: op,
+	})
+}
+
+// explode marks a blast where the player is looking. There is nothing with
+// health to hurt, so what lands is the mark and the event.
+func (g *Game) explode(op wep.Op) {
+	origin, direction := g.aim()
+	hit := g.rayCast(origin, direction)
+	if !hit.HitInfo.Hit {
+		return
+	}
+	position := hit.WorldPosition()
+	g.createImpactEffects(wep.PuffExplosion, hit.HitObject, position,
+		hit.HitInfo.Side.AsDirection().ToVec3())
+	events.Publish(events.EventDamage, DamageEvent{
+		Target: hit.HitObject, Amount: op.Damage, Where: position,
+	})
+}
+
+// setWeaponZoom narrows the view the way a scope does. A factor of one or less
+// puts it back.
+func (g *Game) setWeaponZoom(op wep.Op) {
+	factor := float32(1)
+	if len(op.Args) > 0 && op.Args[0] > 0 {
+		factor = float32(op.Args[0])
+	}
+	if g.baseFOV == 0 {
+		g.baseFOV = g.Camera.GetFOV()
+	}
+	g.Camera.SetFOV(g.baseFOV / factor)
+}
+
+// How far a melee swing reaches when the script does not say, and how many of
+// ZDoom's units make one of our voxels. Doom's world is 32 units to a wall
+// panel, and ours is one.
+const (
+	meleeReach         = 1.6
+	worldUnitsPerVoxel = 32.0
+)
 
 // fireBullets casts one ray per pellet, spread the way the script asked. The
 // weapon's own source of randomness is used, so a seeded run scatters the same
 // way twice.
 func (g *Game) fireBullets(op wep.Op, random *rand.Rand) {
-	origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
+	origin, direction := g.aim()
 	count := op.Count
 	if count < 1 {
 		count = 1
 	}
 	for i := 0; i < count; i++ {
-		g.fireHitscan(origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
+		g.fireHitscanWith(origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
 	}
 }
 

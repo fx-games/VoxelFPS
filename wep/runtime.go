@@ -73,6 +73,42 @@ type Input struct {
 	Reload  bool
 }
 
+// World answers the questions a script asks about its surroundings. Every one
+// of them is a jump, so the answer has to come back now rather than as
+// something for the game to do later.
+//
+// A game that has not built the thing being asked about answers false, which is
+// what NoWorld does. That is not the same as dropping the op: the jump is still
+// there, still compiled, and starts working the day the answer does.
+type World interface {
+	// Below and Above report whether the actor is standing on something or
+	// underneath something.
+	Below() bool
+	Above() bool
+	// CanSee reports whether the actor has a target it can see.
+	CanSee() bool
+	// TargetWithin reports whether the actor's target is closer than this.
+	TargetWithin(distance float64) bool
+	// TargetHealthBelow reports whether the target is hurt past this.
+	TargetHealthBelow(health int) bool
+	// TargetHas reports whether the target is carrying this.
+	TargetHas(item string, amount int) bool
+	// HasFlag reports whether the actor has one of ZDoom's flags set.
+	HasFlag(name string) bool
+}
+
+// NoWorld answers no to everything, which is the honest answer in a game with
+// no monsters, no targets and no actor standing anywhere.
+type NoWorld struct{}
+
+func (NoWorld) Below() bool                { return false }
+func (NoWorld) Above() bool                { return false }
+func (NoWorld) CanSee() bool               { return false }
+func (NoWorld) TargetWithin(float64) bool  { return false }
+func (NoWorld) TargetHealthBelow(int) bool { return false }
+func (NoWorld) TargetHas(string, int) bool { return false }
+func (NoWorld) HasFlag(string) bool        { return false }
+
 // Cursor is one layer's position in a state machine. A weapon runs two: its own
 // animation, and the flash overlay A_GunFlash starts alongside it.
 type Cursor struct {
@@ -191,6 +227,33 @@ type Runtime struct {
 	// FireLabel is where a ready frame sends the weapon when the trigger goes
 	// down, and where a refire goes back to.
 	FireLabel string
+
+	// Vars is the actor's own scratch space: the user_ variables its script
+	// keeps timers and counters in, and the few properties it reads off itself.
+	Vars map[string]float64
+	// World answers what a script asks about its surroundings. Nil answers no.
+	World World
+}
+
+// Var reads one of the actor's values, which is what a shipped expression does.
+func (r *Runtime) Var(name string) (float64, bool) {
+	value, known := r.Vars[name]
+	return value, known
+}
+
+// SetVar writes one.
+func (r *Runtime) SetVar(name string, value float64) {
+	if r.Vars == nil {
+		r.Vars = make(map[string]float64)
+	}
+	r.Vars[name] = value
+}
+
+func (r *Runtime) world() World {
+	if r.World == nil {
+		return NoWorld{}
+	}
+	return r.World
 }
 
 // OutOfAmmo reports whether the weapon cannot pay for another shot.
@@ -339,6 +402,37 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 				return false, effects
 			}
 
+		case OpJumpIf:
+			if op.Cond.True(runtime, runtime.Rand) && c.Goto(op.To) {
+				return false, effects
+			}
+
+		case OpSetVar:
+			runtime.SetVar(op.Item, op.Set.Eval(runtime, runtime.Rand))
+
+		case OpCountdown:
+			// The actor counts itself down and goes to its Death state when it
+			// runs out, which is how a timed effect ends itself.
+			left := runtime.Vars["reactiontime"] - 1
+			runtime.SetVar("reactiontime", left)
+			if left <= 0 && c.Goto(op.To) {
+				return false, effects
+			}
+
+		case OpSetTics:
+			if len(op.Args) > 0 {
+				c.ticsLeft = op.Args[0]
+				c.resting = true
+				return true, effects
+			}
+
+		case OpCheckFloor, OpCheckCeiling, OpCheckSight, OpCheckFlag,
+			OpCheckTarget, OpCheckHealth, OpCheckTargetInv, OpCheckCloser,
+			OpCheckReload:
+			if c.askWorld(runtime, op) && c.Goto(op.To) {
+				return false, effects
+			}
+
 		case OpRefire:
 			if runtime.Input.Trigger && c.Goto(op.To) {
 				return false, effects
@@ -378,6 +472,34 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 		c.holding = true
 	}
 	return true, effects
+}
+
+// askWorld answers one of the jumps whose answer is about the surroundings
+// rather than about the weapon.
+func (c *Cursor) askWorld(runtime *Runtime, op Op) bool {
+	world := runtime.world()
+	switch op.Op {
+	case OpCheckFloor:
+		return world.Below()
+	case OpCheckCeiling:
+		return world.Above()
+	case OpCheckSight, OpCheckTarget:
+		return world.CanSee()
+	case OpCheckFlag:
+		return world.HasFlag(op.Text)
+	case OpCheckHealth:
+		return world.TargetHealthBelow(op.N)
+	case OpCheckTargetInv:
+		return world.TargetHas(op.Item, max(op.N, 1))
+	case OpCheckCloser:
+		if len(op.Args) == 0 {
+			return false
+		}
+		return world.TargetWithin(op.Args[0])
+	case OpCheckReload:
+		return runtime.OutOfAmmo()
+	}
+	return false
 }
 
 // rollJump decides a random jump. ZDoom writes the chance out of 256, and a
@@ -429,6 +551,7 @@ func NewRuntime(weapon *Weapon, random *rand.Rand) *Runtime {
 	runtime := &Runtime{
 		Inventory: make(Inventory, len(weapon.Items)),
 		Caps:      make(Caps, len(weapon.Items)),
+		Vars:      make(map[string]float64),
 		Rand:      random,
 		Ammo:      weapon.Ammo.Type,
 		AmmoUse:   weapon.Ammo.Use,

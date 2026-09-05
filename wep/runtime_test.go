@@ -112,3 +112,69 @@ func TestInventoryRespectsItsCaps(t *testing.T) {
 	inventory.Give(caps, "uncapped", 100)
 	assert.False(t, inventory.AtMax(caps, "uncapped"))
 }
+
+// A script keeps its own timers in user variables and branches on them. That
+// branch cannot be settled at migration time without changing what the weapon
+// does, so it arrives as an expression and the stepper runs it.
+func TestUserVariablesDriveAJump(t *testing.T) {
+	// Count down from three, and go to Done when the counter runs out.
+	countdown := Expr{
+		{Kind: TokenVar, Name: "user_life"},
+		{Kind: TokenValue, Value: 1},
+		{Kind: TokenOp, Name: "-"},
+	}
+	spent := Expr{
+		{Kind: TokenVar, Name: "user_life"},
+		{Kind: TokenValue, Value: 0},
+		{Kind: TokenOp, Name: "<="},
+	}
+	machine := StateMachine{
+		Labels: map[string]int{"spawn": 0, "done": 3},
+		Steps: []Step{
+			{Sprite: "SMOKA0", Tics: 1, Ops: []Op{{Op: OpSetVar, Item: "user_life", Set: countdown}}},
+			{Tics: 0, Ops: []Op{{Op: OpJumpIf, Cond: spent, To: "done"}}},
+			{Tics: 0, Ops: []Op{{Op: OpGoto, To: "spawn"}}},
+			{Tics: 0, Ops: []Op{{Op: OpStop}}},
+		},
+	}
+
+	runtime := &Runtime{Inventory: Inventory{}, Caps: Caps{}, Vars: map[string]float64{}}
+	runtime.SetVar("user_life", 3)
+	cursor := NewCursor(&machine, "spawn")
+
+	run(cursor, runtime, 2)
+	assert.Equal(t, 1.0, runtime.Vars["user_life"])
+	assert.False(t, cursor.Stopped(), "still going round")
+
+	run(cursor, runtime, 2)
+	assert.True(t, cursor.Stopped(), "the counter ran out and it ended itself")
+}
+
+// The jumps that ask about the surroundings get an answer now, not later. A
+// game with nothing to see answers no, and the jump is not taken - which is a
+// different thing from the op having been dropped.
+func TestWorldJumpsAreAnsweredNotDropped(t *testing.T) {
+	machine := StateMachine{
+		Labels: map[string]int{"spawn": 0, "landed": 2},
+		Steps: []Step{
+			{Sprite: "CASGA0", Tics: 1, Ops: []Op{{Op: OpCheckFloor, To: "landed"}}},
+			{Tics: 0, Ops: []Op{{Op: OpGoto, To: "spawn"}}},
+			{Sprite: "CASGB0", Tics: 1, Ops: []Op{{Op: OpStop}}},
+		},
+	}
+
+	falling := &Runtime{Inventory: Inventory{}, Caps: Caps{}}
+	cursor := NewCursor(&machine, "spawn")
+	run(cursor, falling, 6)
+	assert.False(t, cursor.Stopped(), "nothing underneath, so it keeps falling")
+
+	landed := &Runtime{Inventory: Inventory{}, Caps: Caps{}, World: groundUnderfoot{}}
+	cursor = NewCursor(&machine, "spawn")
+	run(cursor, landed, 3)
+	assert.True(t, cursor.Stopped(), "something underneath, so it settles")
+}
+
+// groundUnderfoot is a world with a floor and nothing else.
+type groundUnderfoot struct{ NoWorld }
+
+func (groundUnderfoot) Below() bool { return true }

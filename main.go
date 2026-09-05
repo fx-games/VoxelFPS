@@ -159,6 +159,8 @@ type Game struct {
 	reloadPressed bool
 
 	audio *audio.Player
+	// baseFOV is what the view goes back to when a scope is lowered.
+	baseFOV float32
 
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
