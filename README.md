@@ -104,13 +104,56 @@ quads/voxel/ voxel block/chunk/mesh, raycast, collision shapes
 core/       camera, transforms, map types
 geometry/   pathfinding, FOV, points/rects
 dungen/     dungeon generators
-zdwep/      Doom weapon import
+wep/        compiled weapon format, loader and stepper
+zdwep/      Doom weapon migration (offline only)
 ldtk/ tpack/ eassets/  level format, texture packer, embedded assets
 audio/ events/ png_chunks/
 ```
 
-~26k lines of Go. Tests cover `quads/voxel` (OBB sweep, DDA raycast) and `png_chunks`;
-`zdwep`'s test does not compile.
+~26k lines of Go. Tests cover `quads/voxel` (OBB sweep, DDA raycast), `png_chunks`,
+and the weapon pipeline end to end in `zdwep` (compile, write, load, fire).
+
+## Weapons
+
+Weapons are data. `weapons/` holds one self-contained folder per weapon, plus
+`keys.txt` binding the number keys:
+
+```
+weapons/
+  keys.txt              1: small_gun
+  small_gun/
+    weapon.json         behaviour: a state graph over a closed instruction set
+    actors.json         anything the weapon puts into the world
+    sprites.png         its frames, packed, with the table in the atLS chunk
+    sounds/             under the names the ops play them by
+```
+
+Everything in the folder is checked at startup; a folder that does not load stops
+the game with every problem it found, listed.
+
+Porting a weapon out of a ZDoom mod:
+
+```
+go run ./tools/genweapons -source ../Brutal-Doom-Community-Expansion -list
+go run ./tools/genweapons -source ../Brutal-Doom-Community-Expansion FDHellboundShotgun
+```
+
+It indexes every actor in the mod, resolves inheritance, ammo caps, sounds and
+sprites, and compiles the states down to instructions the engine steps. An action
+function with no entry in `zdwep/policy.go` fails the migration naming the actor and
+the line, rather than going quiet at runtime. `weapons.lock` records hashes only, so
+re-running the migration and diffing it says whether the mod moved, the compiler
+moved, or nothing did.
+
+Making one by hand from a sprite sheet:
+
+```
+go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
+    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 2
+```
+
+The decisions behind all this are in [docs/adr/](docs/adr/), the vocabulary in
+[CONTEXT.md](CONTEXT.md).
 
 ## Status & backlog
 
