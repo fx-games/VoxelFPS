@@ -25,6 +25,11 @@ const maxStepsPerUpdate = 512
 // occasionally three.
 const ticEpsilon = 1e-6
 
+// raisePerTic is how much of the way a weapon travels each tic while it is
+// being brought up or put away. Doom moves a weapon six of its thirty two
+// units per tic, which is the same six tics.
+const raisePerTic = 6.0 / 32.0
+
 // Inventory is what the player is carrying: reserve ammo, rounds chambered, and
 // the counters scripts use as flags. One map for all three, because in ZDoom
 // they are all the same thing.
@@ -87,6 +92,10 @@ type Cursor struct {
 	holding bool
 	// stopped is set by a Stop, and by a machine that has nowhere left to go.
 	stopped bool
+	// raised is how far down the weapon is being held while it is swapped in or
+	// out: 0 is up and ready, 1 is fully out of sight. A_Raise and A_Lower walk
+	// it, and the script loops on them until it arrives.
+	raised float64
 	// ready mirrors the weapon_ready op on the step being rested on, so input
 	// is only accepted where the script says it is.
 	ready Op
@@ -158,6 +167,14 @@ func (c *Cursor) Step() *Step {
 // Ready reports whether the cursor is resting on a frame that accepts input,
 // and what that frame allows.
 func (c *Cursor) Ready() (Op, bool) { return c.ready, c.onReady }
+
+// Raised is how far out of sight the weapon is being held, from 0 for fully up
+// to 1 for fully away. Drawing shifts the sprite down by this much of its own
+// height, which is what makes a weapon swap look like one.
+func (c *Cursor) Raised() float64 { return c.raised }
+
+// StartRaise puts the weapon fully out of sight, ready to be brought up.
+func (c *Cursor) StartRaise() { c.raised = 1 }
 
 // Runtime is the state a machine needs while it runs: the inventory it branches
 // on, what the player is doing, and a source of randomness for the durations
@@ -263,6 +280,27 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 
 		case OpWeaponReady:
 			c.ready, c.onReady = op, true
+
+		case OpRaise:
+			// The script loops on this frame; each pass brings the weapon up a
+			// little, and arriving is what sends it to Ready.
+			c.raised -= raisePerTic
+			if c.raised <= 0 {
+				c.raised = 0
+				if c.Goto("Ready") {
+					return false, effects
+				}
+				c.stopped = true
+				return true, effects
+			}
+
+		case OpLower:
+			c.raised += raisePerTic
+			if c.raised >= 1 {
+				c.raised = 1
+				c.stopped = true // fully out of sight, and out of the way
+				return true, effects
+			}
 
 		case OpGive:
 			runtime.Inventory.Give(runtime.Caps, op.Item, max(op.N, 1))

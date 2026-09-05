@@ -82,9 +82,10 @@ reports one event for the surface that was actually hit (see Physics below).
   the same thing.
 - The muzzle flash rides the single tracked light slot, which projectile lights also
   use, so firing while a bolt is in the air takes the light off the bolt.
-- `A_PlaySound`'s attenuation and channel are compiled but only the channel is acted
-  on; sounds are not yet placed in the world, so panning and distance do nothing for a
-  first person weapon that is always at the listener.
+- `A_PlaySound`'s attenuation is compiled but not acted on. The player can pan and
+  attenuate (`audio.CueOptions`), but a weapon's own sounds come from where the
+  listener is standing, so there is nothing to place until a spawned actor makes a
+  noise somewhere else.
 - Damage is published and plays the hit reaction, but there is nothing with health to
   apply it to, and `make_noise` reaches an event nobody subscribes to. Both are
   compiled so wiring enemies up later needs no re-migration.

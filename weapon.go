@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"path/filepath"
+	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
@@ -58,9 +58,11 @@ func (w *Weapon) DisplayName() string { return w.Data.Tag }
 // Equip puts the weapon in hand, running its raise animation when it has one.
 func (w *Weapon) Equip() {
 	w.flash = nil
-	if !w.cursor.Goto("Select") {
-		w.cursor.Goto("Ready")
+	if w.cursor.Goto("Select") {
+		w.cursor.StartRaise()
+		return
 	}
+	w.cursor.Goto("Ready")
 }
 
 // Unequip stops the overlay; the weapon keeps its inventory, which is the
@@ -117,9 +119,13 @@ func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32)
 		w.uiScale.X() * float32(w.Data.Render.Scale[0]),
 		w.uiScale.Y() * float32(w.Data.Render.Scale[1]),
 	}
+	// A weapon being swapped in or out is held part of the way off the bottom
+	// of the screen, which is what makes the swap read as one.
+	_, top, _, bottom := w.Atlas.GetUVInPx(index)
+	swap := float32(cursor.Raised()) * float32(bottom-top) * scale.Y()
 	position := mgl32.Vec2{
 		float32(screenWidth)/2 + float32(step.OffsetX)*scale.X(),
-		float32(screenHeight) + float32(w.Data.Render.YAdjust+step.OffsetY)*scale.Y(),
+		float32(screenHeight) + swap + float32(w.Data.Render.YAdjust+step.OffsetY)*scale.Y(),
 	}
 	source, destination := w.Atlas.GetSourceAndDestRects(index, position, mgl32.Vec2{0.5, 1}, scale)
 	w.Atlas.GetSpriteBatch().DrawTextured(source, destination, mgl32.Vec4{1, 1, 1, 1})
@@ -133,10 +139,19 @@ func (g *Game) LoadWeapons(dir string) error {
 	if err != nil {
 		return err
 	}
+	var soundProblems []string
 	for _, data := range library.Ordered() {
 		atlas := g.LoadPackedAtlasWithBatch(library.AtlasPath(data.ID))
 		g.weapons = append(g.weapons, NewWeapon(data, library.Actors[data.ID], atlas, g.UIScale))
-		g.loadWeaponSounds(library, data)
+		if err := g.loadWeaponSounds(library, data); err != nil {
+			soundProblems = append(soundProblems, err.Error())
+		}
+	}
+	if len(soundProblems) > 0 {
+		// Every problem, then refuse, the same way wep.Load reports the folder
+		// itself. One weapon's unreadable sounds must not hide the next one's.
+		return fmt.Errorf("weapons: %d sound problem(s)\n  %s",
+			len(soundProblems), strings.Join(soundProblems, "\n  "))
 	}
 	g.weaponKeys = library.Keys
 	g.weaponByID = make(map[string]int, len(g.weapons))
@@ -152,21 +167,25 @@ func (g *Game) LoadWeapons(dir string) error {
 // loadWeaponSounds hands the weapon's sounds to the player under the names its
 // ops play them by. The migration writes them in the layout the cue names
 // imply, so this needs no mapping of its own.
-func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) {
+func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) error {
 	if len(data.Sounds) == 0 {
-		return
+		return nil
 	}
 	if g.audio == nil {
-		g.audio = audio.NewPlayer(44100)
+		g.audio = audio.NewPlayer(audioSampleRate)
 	}
 	// Cue names are the names the ops play by, which the migration wrote the
 	// folder to match, so no mapping is needed here. Two weapons that play the
 	// same ZDoom sound share the cue, which is what sharing a name means.
 	if err := g.audio.LoadCueTree(library.SoundsPath(data.ID)); err != nil {
-		panic(err)
+		return fmt.Errorf("%s: %w", data.ID, err)
 	}
 	g.audio.SoundsLoaded()
+	return nil
 }
+
+// audioSampleRate is what the speaker runs at.
+const audioSampleRate = 44100
 
 // selectWeaponByKey puts the weapon bound to a number key in the player's
 // hands. An unbound key does nothing.
@@ -186,8 +205,8 @@ func (g *Game) updateWeapon(elapsed float64) {
 	if weapon == nil {
 		return
 	}
-	input := wep.Input{Trigger: g.triggerHeld, Reload: g.reloadHeld}
-	g.reloadHeld = false // a reload is a press, not a state
+	input := wep.Input{Trigger: g.triggerHeld, Reload: g.reloadPressed}
+	g.reloadPressed = false // a reload is a press, not a state
 
 	for _, op := range weapon.Update(input, elapsed) {
 		g.applyWeaponOp(weapon, op)
@@ -198,7 +217,7 @@ func (g *Game) updateWeapon(elapsed float64) {
 func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	switch op.Op {
 	case wep.OpFireBullets:
-		g.fireBullets(op)
+		g.fireBullets(op, weapon.runtime.Rand)
 	case wep.OpGunFlash:
 		weapon.StartFlash(op.To)
 	case wep.OpFlashLight:
@@ -219,34 +238,53 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	}
 }
 
-// fireBullets casts one ray per pellet, spread the way the script asked.
-func (g *Game) fireBullets(op wep.Op) {
+// fireBullets casts one ray per pellet, spread the way the script asked. The
+// weapon's own source of randomness is used, so a seeded run scatters the same
+// way twice.
+func (g *Game) fireBullets(op wep.Op, random *rand.Rand) {
 	origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
 	count := op.Count
 	if count < 1 {
 		count = 1
 	}
 	for i := 0; i < count; i++ {
-		g.fireHitscan(origin, spreadDirection(direction, op.SpreadH, op.SpreadV), op)
+		g.fireHitscan(origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
 	}
 }
 
 // spreadDirection scatters a pellet within the horizontal and vertical spread,
 // which are half angles in degrees the way ZDoom writes them.
-func spreadDirection(direction mgl32.Vec3, spreadH, spreadV float64) mgl32.Vec3 {
+func spreadDirection(random *rand.Rand, direction mgl32.Vec3, spreadH, spreadV float64) mgl32.Vec3 {
 	if spreadH == 0 && spreadV == 0 {
 		return direction
 	}
-	up := mgl32.Vec3{0, 1, 0}
-	right := direction.Cross(up).Normalize()
-	trueUp := right.Cross(direction).Normalize()
-
-	yaw := (rand.Float64()*2 - 1) * spreadH * math.Pi / 180
-	pitch := (rand.Float64()*2 - 1) * spreadV * math.Pi / 180
+	right, up := spreadBasis(direction)
+	yaw := (randomSpan(random)) * spreadH * math.Pi / 180
+	pitch := (randomSpan(random)) * spreadV * math.Pi / 180
 	scattered := direction.
 		Add(right.Mul(float32(math.Tan(yaw)))).
-		Add(trueUp.Mul(float32(math.Tan(pitch))))
+		Add(up.Mul(float32(math.Tan(pitch))))
 	return scattered.Normalize()
+}
+
+// spreadBasis gives two axes across the line of fire. Crossing with world up
+// collapses when the player is looking straight up or down, which would scatter
+// every pellet to NaN, so that case crosses with something else.
+func spreadBasis(direction mgl32.Vec3) (right, up mgl32.Vec3) {
+	reference := mgl32.Vec3{0, 1, 0}
+	if math.Abs(float64(direction.Y())) > 0.999 {
+		reference = mgl32.Vec3{0, 0, 1}
+	}
+	right = direction.Cross(reference).Normalize()
+	return right, right.Cross(direction).Normalize()
+}
+
+// randomSpan is a number from -1 to 1.
+func randomSpan(random *rand.Rand) float64 {
+	if random == nil {
+		return rand.Float64()*2 - 1
+	}
+	return random.Float64()*2 - 1
 }
 
 func (g *Game) playWeaponSound(op wep.Op) {
@@ -302,5 +340,6 @@ func (g *Game) setMuzzleFlash(level int) {
 		muzzleFlashIntensity*float32(level), muzzleFlashReach)
 }
 
-// weaponsDir is where the engine looks for weapons, next to the binary.
-func weaponsDir() string { return filepath.Clean("weapons") }
+// weaponsDir is where the engine looks for weapons: a folder of that name in
+// the directory the game is started from.
+const weaponsDir = "weapons"

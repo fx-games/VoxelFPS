@@ -153,10 +153,10 @@ type Game struct {
 	// weaponKeys and weaponByID come out of the weapons folder's key map.
 	weaponKeys map[int]string
 	weaponByID map[string]int
-	// triggerHeld and reloadHeld are what the weapon's script reads; the script
+	// triggerHeld is a state and reloadPressed is an edge; the weapon's script
 	// decides whether either does anything.
-	triggerHeld bool
-	reloadHeld  bool
+	triggerHeld   bool
+	reloadPressed bool
 
 	audio *audio.Player
 
@@ -175,7 +175,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	// Weapons and the number keys that select them are data, in the weapons
 	// folder. A folder that does not load stops the game with every problem it
 	// found, rather than quietly leaving a gun out.
-	if err := g.LoadWeapons(weaponsDir()); err != nil {
+	if err := g.LoadWeapons(weaponsDir); err != nil {
 		panic(err)
 	}
 

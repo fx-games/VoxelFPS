@@ -9,18 +9,16 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
 	"image/png"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/png_chunks"
 	"github.com/memmaker/goray/tpack"
 	"github.com/memmaker/goray/wep"
 )
@@ -67,13 +65,13 @@ func main() {
 		images = append(images, tpack.NamedImage{Image: cropped(sheetImage, rect), Name: name})
 	}
 
-	writeAtlas(images, filepath.Join(dir, wep.AtlasFile))
+	must(wep.WriteAtlas(images, filepath.Join(dir, wep.AtlasFile)))
 	weapon := buildWeapon(*id, *tag, names, *tics, *scale, *damage, *sheet)
-	writeJSON(filepath.Join(dir, wep.WeaponFile), weapon)
-	writeJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
+	must(wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), weapon))
+	must(wep.WriteJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
 		Format: wep.Format,
 		Actors: map[string]*wep.Actor{},
-	})
+	}))
 	fmt.Fprintf(os.Stderr, "wrote %s: %d frames\n", dir, len(names))
 }
 
@@ -95,7 +93,7 @@ func buildWeapon(id, tag string, names []string, tics int, scale float64, damage
 		step := wep.Step{Sprite: name, Tics: tics}
 		if position == 0 {
 			step.Ops = []wep.Op{
-				{Op: wep.OpFireBullets, Count: 1, SpreadH: 1, SpreadV: 1, Damage: damage, Puff: "bullet"},
+				{Op: wep.OpFireBullets, Count: 1, SpreadH: 1, SpreadV: 1, Damage: damage, Puff: wep.PuffBullet},
 			}
 		}
 		states.Steps = append(states.Steps, step)
@@ -135,30 +133,12 @@ func buildWeapon(id, tag string, names []string, tics int, scale float64, damage
 	}
 }
 
+// cropped cuts one frame out of the sheet, into an image whose own origin is
+// zero, which is what the packer wants.
 func cropped(source image.Image, rect image.Rectangle) image.Image {
 	out := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
-	for y := 0; y < rect.Dy(); y++ {
-		for x := 0; x < rect.Dx(); x++ {
-			out.Set(x, y, source.At(rect.Min.X+x, rect.Min.Y+y))
-		}
-	}
+	draw.Draw(out, out.Bounds(), source, rect.Min, draw.Src)
 	return out
-}
-
-func writeAtlas(images []tpack.NamedImage, path string) {
-	atlas, metadata := tpack.PackImagesIntoAtlasTrimmed(images)
-	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, atlas); err != nil {
-		fail("%v", err)
-	}
-	out, err := os.Create(path)
-	if err != nil {
-		fail("%v", err)
-	}
-	defer out.Close()
-	if err := png_chunks.InjectChunkIntoPNG(&encoded, out, "atLS", metadata.Bytes()); err != nil {
-		fail("%v", err)
-	}
 }
 
 func readImage(path string) image.Image {
@@ -172,16 +152,6 @@ func readImage(path string) image.Image {
 		fail("%s: %v", path, err)
 	}
 	return decoded
-}
-
-func writeJSON(path string, value any) {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		fail("%v", err)
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		fail("%v", err)
-	}
 }
 
 func parseSize(text string) (int, int) {
@@ -216,6 +186,12 @@ func parseFrames(text string) []int {
 		fail("-frames named %d, and Doom frame letters run out at 26", len(indices))
 	}
 	return indices
+}
+
+func must(err error) {
+	if err != nil {
+		fail("%v", err)
+	}
 }
 
 func fail(format string, args ...any) {

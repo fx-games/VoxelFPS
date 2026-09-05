@@ -31,7 +31,11 @@ func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error)
 		return nil, fmt.Errorf("no actor named %q in this mod", actorName)
 	}
 	if !idx.InheritsFrom(actorName, "Weapon") {
-		return nil, fmt.Errorf("%s does not inherit from Weapon", actor.Name)
+		return nil, fmt.Errorf(
+			"%s does not inherit from Weapon; its chain is %s.\n"+
+				"If %s is defined in this mod, the DECORATE lump does not include the file "+
+				"holding it, and the whole mod has to be indexed for the chain to resolve.",
+			actor.Name, strings.Join(chainNames(idx, actorName), " -> "), UnresolvedRoot(idx, actorName))
 	}
 
 	c := newCompiler(idx, policy)
@@ -260,6 +264,31 @@ func sortedNames(set map[string]bool) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// chainNames spells out an actor's parent chain, ending in the class the mod
+// never defines.
+func chainNames(idx *Index, name string) []string {
+	names := []string{}
+	for _, actor := range idx.Ancestry(name) {
+		names = append(names, actor.Name)
+	}
+	if root := UnresolvedRoot(idx, name); root != "" {
+		names = append(names, root)
+	}
+	return names
+}
+
+// UnresolvedRoot is the first class in an actor's chain that the mod does not
+// define. For a weapon in a fully indexed mod that is an engine class such as
+// Weapon; anywhere else it is the name of a file the DECORATE lump did not
+// include, which is the usual reason a weapon is not recognised.
+func UnresolvedRoot(idx *Index, name string) string {
+	chain := idx.Ancestry(name)
+	if len(chain) == 0 {
+		return name
+	}
+	return chain[len(chain)-1].Parent
 }
 
 // Weapons lists every actor in the mod that is a weapon, by name, sorted.

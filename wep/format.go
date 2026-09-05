@@ -3,6 +3,8 @@
 // weapon migrated from a mod are the same thing here.
 package wep
 
+import "strings"
+
 // Format is the version of the on-disk layout this build reads and writes. A
 // weapons folder built by a different version says so on load, instead of
 // failing three checks later on something that looks unrelated.
@@ -17,6 +19,16 @@ const (
 	SourceFile = "source.txt"
 	// KeyMapFile lives in the weapons folder itself, not in a weapon's folder.
 	KeyMapFile = "keys.txt"
+	// AtlasChunk is the PNG chunk the frame table rides in.
+	AtlasChunk = "atLS"
+)
+
+// The impact kinds a puff can compile to. The migration's policy decides which
+// ZDoom puff actor becomes which; the engine decides what each one looks like.
+// Both ends name them from here rather than writing the string twice.
+const (
+	PuffBullet    = "bullet"
+	PuffExplosion = "explosion"
 )
 
 // Op is one instruction. The set is closed: the migration fails on anything it
@@ -145,7 +157,7 @@ type StateMachine struct {
 
 // Label finds where a label starts, case-insensitively.
 func (sm StateMachine) Label(name string) (int, bool) {
-	index, ok := sm.Labels[lower(name)]
+	index, ok := sm.Labels[strings.ToLower(name)]
 	return index, ok
 }
 
@@ -231,14 +243,4 @@ type Weapon struct {
 type Actors struct {
 	Format int               `json:"format"`
 	Actors map[string]*Actor `json:"actors"`
-}
-
-func lower(s string) string {
-	out := []byte(s)
-	for i := range out {
-		if out[i] >= 'A' && out[i] <= 'Z' {
-			out[i] += 'a' - 'A'
-		}
-	}
-	return string(out)
 }

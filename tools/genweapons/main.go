@@ -52,7 +52,19 @@ func main() {
 	fmt.Fprintf(os.Stderr, "indexed %d actors from %d files\n", len(index.Actors), len(index.Files))
 
 	if *list {
-		for _, name := range zdwep.Weapons(index) {
+		weapons := zdwep.Weapons(index)
+		if len(weapons) == 0 {
+			// Almost always a partial index: the actors are there, but the class
+			// they inherit from lives in a file the DECORATE lump did not pull
+			// in, so no chain reaches Weapon.
+			fmt.Fprintln(os.Stderr, "no weapons found. The classes these actors inherit from "+
+				"and this source does not define:")
+			for _, root := range unresolvedRoots(index) {
+				fmt.Fprintf(os.Stderr, "  %s\n", root)
+			}
+			return
+		}
+		for _, name := range weapons {
 			actor, _ := index.Actor(name)
 			tag := name
 			if value, ok := actor.Property("tag"); ok {
@@ -186,6 +198,9 @@ func writeLock(lockPath, outDir, source, revision string) error {
 		fmt.Sprintf("revision\t%s", revision),
 		fmt.Sprintf("format\t%d", wep.Format),
 	)
+	if sum := sourceHash(source); sum != "" {
+		lines = append(lines, fmt.Sprintf("source-sha256\t%s", sum))
+	}
 	if version := zdwep.FFmpegVersion(); version != "" {
 		lines = append(lines, fmt.Sprintf("ffmpeg\t%s", version))
 	}
@@ -228,6 +243,39 @@ func hashFile(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// sourceHash pins a pk3 by its bytes. A checkout is pinned by its revision
+// instead: hashing a whole working tree is slow and says less than the commit
+// it came from.
+func sourceHash(source string) string {
+	info, err := os.Stat(source)
+	if err != nil || info.IsDir() {
+		return ""
+	}
+	sum, err := hashFile(source)
+	if err != nil {
+		return ""
+	}
+	return sum
+}
+
+// unresolvedRoots lists the classes actors inherit from that this source does
+// not define, sorted and deduplicated. When nothing looks like a weapon, this is
+// what says why.
+func unresolvedRoots(index *zdwep.Index) []string {
+	seen := make(map[string]bool)
+	for name := range index.Actors {
+		if root := zdwep.UnresolvedRoot(index, name); root != "" {
+			seen[root] = true
+		}
+	}
+	var roots []string
+	for root := range seen {
+		roots = append(roots, root)
+	}
+	sort.Strings(roots)
+	return roots
 }
 
 // credit picks up the mod's own credits lump if it ships one, so a compiled

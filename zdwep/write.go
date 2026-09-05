@@ -2,19 +2,16 @@ package zdwep
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	"image/png"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 
-	"github.com/memmaker/goray/png_chunks"
 	"github.com/memmaker/goray/tpack"
 	"github.com/memmaker/goray/wep"
 )
@@ -39,10 +36,10 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 	}
 	result.Weapon.Sounds = sounds
 
-	if err := writeJSON(filepath.Join(dir, wep.WeaponFile), result.Weapon); err != nil {
+	if err := wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), result.Weapon); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
+	if err := wep.WriteJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
 		Format: wep.Format,
 		Actors: result.Actors,
 	}); err != nil {
@@ -88,18 +85,7 @@ func writeAtlas(result *Result, assets *AssetIndex, outPath string) error {
 		return fmt.Errorf("%s has no sprites at all", result.Weapon.ID)
 	}
 
-	atlas, metadata := tpack.PackImagesIntoAtlasTrimmed(images)
-
-	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, atlas); err != nil {
-		return err
-	}
-	out, err := os.Create(outPath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	return png_chunks.InjectChunkIntoPNG(&encoded, out, "atLS", metadata.Bytes())
+	return wep.WriteAtlas(images, outPath)
 }
 
 // writeSounds copies the weapon's sounds into its folder, keeping the name the
@@ -177,12 +163,4 @@ func FFmpegVersion() string {
 	}
 	first, _, _ := strings.Cut(string(out), "\n")
 	return strings.TrimSpace(first)
-}
-
-func writeJSON(path string, value any) error {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
 }

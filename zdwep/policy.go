@@ -151,8 +151,8 @@ func DefaultPolicy() Policy {
 	return Policy{
 		Settings: DefaultSettings(),
 		Puffs: map[string]string{
-			"fdbulletpuff": "bullet",
-			"bulletpuff":   "bullet",
+			"fdbulletpuff": wep.PuffBullet,
+			"bulletpuff":   wep.PuffBullet,
 		},
 		Spawns: map[string]string{},
 		Functions: map[string]Lowering{
@@ -359,7 +359,7 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 		return nil, err
 	}
 	puffActor := call.NameArg(4, "")
-	impact := "bullet"
+	impact := wep.PuffBullet
 	if puffActor != "" {
 		mapped, known := c.policy.Puffs[strings.ToLower(puffActor)]
 		if !known {

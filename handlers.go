@@ -121,11 +121,23 @@ func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	}
 }
 
+// DamageEvent is a shot landing on something, published so whatever grows a
+// health bar later has it without any of this changing.
+type DamageEvent struct {
+	Target *quads.GameObject
+	Amount int
+	Where  mgl32.Vec3
+}
+
 // damage is what a shot does to what it hits. There is nothing with health in
-// this game yet, so it plays the reaction and publishes the hit for whatever
-// grows a health bar later.
+// this game yet, so it publishes the hit and plays the reaction.
 func (g *Game) damage(hit RaycastResult, amount int) {
 	hitObject := hit.HitObject
+	events.Publish(events.EventDamage, DamageEvent{
+		Target: hitObject,
+		Amount: amount,
+		Where:  hit.WorldPosition(),
+	})
 	if hitObject == nil || hitObject.DisplayName != "Scientist" {
 		return
 	}
@@ -198,7 +210,7 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 		}
 
 		_ = relativePosition
-		g.createImpactEffects(puffExplosion, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
+		g.createImpactEffects(wep.PuffExplosion, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
 		if hitObject != nil && projectileComponent.HitEffect > 0 && hitObject.DisplayName == "Scientist" {
 			hitObject.Sprite().PlayAnimationFreezeLastFrame(int(quads.AnimDying))
 		}
@@ -228,26 +240,19 @@ const (
 	bloodSplatterRange = 4.0
 )
 
-// The impact kinds a compiled puff maps onto. Which ZDoom puff actor becomes
-// which is a line in the migration's policy file, not a decision made here.
-const (
-	puffBullet    = "bullet"
-	puffExplosion = "explosion"
-)
-
 // createImpactEffects paints what a shot leaves where it landed. The kind comes
 // from the puff the script named, so a weapon that fires a different puff gets
 // a different mark without any of this changing.
 func (g *Game) createImpactEffects(puff string, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
 	switch puff {
-	case puffExplosion:
+	case wep.PuffExplosion:
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
 		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
 		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
 		if hitObject != nil {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}
-	default: // puffBullet, and anything a policy line has not given its own mark
+	default: // wep.PuffBullet, and anything a policy line has not named
 		if hitObject == nil {
 			g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
 			g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBulletHole, pos, surfaceNormal, bulletHoleSize)

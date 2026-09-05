@@ -119,7 +119,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	// Reload is a press the weapon's script may or may not act on: a gun with
 	// no Reload state, like a pump shotgun that works itself, ignores it.
 	if key == glfw.KeyR && g.isMouseCursorCaptured {
-		g.reloadHeld = true
+		g.reloadPressed = true
 	}
 
 	if key == glfw.KeyEscape {

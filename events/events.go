@@ -8,6 +8,9 @@ const (
 	// EventWeaponNoise is a shot being heard. Nothing listens yet: there are no
 	// enemies to hear it, and the weapons already compile what they make.
 	EventWeaponNoise
+	// EventDamage is a shot landing on something. Nothing listens yet: nothing
+	// in this game has health.
+	EventDamage
 )
 
 type EventID uint16
