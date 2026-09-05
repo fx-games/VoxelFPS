@@ -136,7 +136,9 @@ func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) 
 	return sprite.TextureIndexAnimated(frames)
 }
 
-func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
+// Draw paints the opaque sprites. forShadows leaves out the ones that do not
+// cast, which is the same set that is left out of the scene signature.
+func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, forShadows bool) {
 	spriteShader.Begin()
 
 	if q.quadVertices == nil {
@@ -158,6 +160,9 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 		q.culledBatch = q.culledBatch[:0]
 		q.unculledBatch = q.unculledBatch[:0]
 		for _, sprite := range spriteList {
+			if forShadows && sprite.NoShadow {
+				continue
+			}
 			if !sprite.GameObject().IsInViewFrustum(observer) {
 				continue
 			}
@@ -195,7 +200,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 // DrawTransparent draws the alpha-blended sprites. It is a separate pass from Draw
 // because the skybox has to land in the framebuffer between the two: a translucent
 // sprite drawn before the sky blends against the clear colour and gets a halo.
-func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glhf.Shader) {
+func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glhf.Shader, forShadows bool) {
 	if len(q.transparentSprites) == 0 {
 		return
 	}
@@ -222,12 +227,29 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		return cmp.Compare(jDist, iDist)
 	})
 
-	// ponytail: one instance per draw here. Blending needs the back-to-front order
-	// kept and every sprite carries its own atlas, so batching would mean grouping
-	// runs of equal atlas - worth it only once transparent sprites are more than a
-	// handful. The opaque pass above is the one the benchmark measures.
+	// Blending needs the back-to-front order kept, so this batches runs of
+	// neighbours that share an atlas rather than sorting by texture. That used
+	// to be one draw call per sprite, which was fine while transparent sprites
+	// were a handful; everything a weapon throws into the world is translucent
+	// smoke and it comes out of one shared atlas, so a run is now usually the
+	// whole list.
+	var runAtlas glhf.TextureAtlas
+	q.culledBatch = q.culledBatch[:0]
+	flush := func() {
+		if runAtlas == nil || len(q.culledBatch) == 0 {
+			return
+		}
+		runAtlas.Begin()
+		drawCalls += q.drawBatch(q.culledBatch, true)
+		runAtlas.End()
+		q.culledBatch = q.culledBatch[:0]
+	}
+
 	for i := 0; i < len(q.transparentSprites); i++ {
 		sprite := q.transparentSprites[i]
+		if forShadows && sprite.NoShadow {
+			continue
+		}
 		if !sprite.GameObject().IsInViewFrustum(observer) {
 			continue
 		}
@@ -237,14 +259,23 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		if !shouldShow {
 			continue
 		}
-		sprite.AtlasTexture.Begin() // THIS COULD BE SLOW..
-
-		q.culledBatch = appendInstance(q.culledBatch[:0], observer, sprite, texIndex)
-		drawCalls += q.drawBatch(q.culledBatch, sprite.DrawMode() != SpriteModeStatic)
+		// A static sprite needs culling off, so it ends the run as surely as a
+		// different atlas would.
+		if sprite.AtlasTexture != runAtlas || sprite.DrawMode() == SpriteModeStatic {
+			flush()
+			runAtlas = sprite.AtlasTexture
+		}
+		q.culledBatch = appendInstance(q.culledBatch, observer, sprite, texIndex)
 		spritesDrawn++
-
-		sprite.AtlasTexture.End()
+		if sprite.DrawMode() == SpriteModeStatic {
+			runAtlas.Begin()
+			drawCalls += q.drawBatch(q.culledBatch, false)
+			runAtlas.End()
+			q.culledBatch = q.culledBatch[:0]
+			runAtlas = nil
+		}
 	}
+	flush()
 
 	quad.End()
 
@@ -295,12 +326,27 @@ func (q *SpriteDrawer) drawBatch(instances []float32, cullFace bool) int {
 func (q *SpriteDrawer) ForEachCaster(visit func(pos mgl32.Vec3)) {
 	for _, spriteList := range q.spritesPerTexture {
 		for _, sprite := range spriteList {
-			visit(sprite.Position())
+			if !sprite.NoShadow {
+				visit(sprite.Position())
+			}
 		}
 	}
 	for _, sprite := range q.transparentSprites {
-		visit(sprite.Position())
+		if !sprite.NoShadow {
+			visit(sprite.Position())
+		}
 	}
+}
+
+// SpriteCount is how many sprites the drawer is keeping, drawn or not, which is
+// a different number from how many it drew and the one that says whether
+// something is piling up.
+func (q *SpriteDrawer) SpriteCount() int {
+	total := len(q.transparentSprites)
+	for _, sprites := range q.spritesPerTexture {
+		total += len(sprites)
+	}
+	return total
 }
 
 func (q *SpriteDrawer) DrawnLastFrame() (int, int) {

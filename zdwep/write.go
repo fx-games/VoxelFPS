@@ -6,6 +6,7 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,9 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 		return err
 	}
 	if err := writeActors(result, weaponsDir); err != nil {
+		return err
+	}
+	if err := writeSharedSprites(result, assets, weaponsDir); err != nil {
 		return err
 	}
 
@@ -84,6 +88,58 @@ func writeActors(result *Result, weaponsDir string) error {
 		}
 	}
 	return nil
+}
+
+// writeSharedSprites puts the frames of the things a weapon spawns into the
+// shared picture store, one file each. They are not packed here: which weapons
+// are installed is the game's business, not the migration's, so the game packs
+// them into one atlas when it starts and keeps it until the set changes.
+func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) error {
+	if len(result.ActorSprites) == 0 {
+		return nil
+	}
+	store := filepath.Join(weaponsDir, wep.SpritesDir)
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		return err
+	}
+	for _, name := range result.ActorSprites {
+		target := filepath.Join(store, name+".png")
+		if _, err := os.Stat(target); err == nil {
+			continue // another weapon spawns the same thing
+		}
+		file, ok := assets.Sprite(name)
+		if !ok {
+			continue // already counted as missing, and already blanked
+		}
+		data, err := assets.ReadAll(file)
+		if err != nil {
+			return err
+		}
+		encoded, err := asPNG(data, name)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, encoded, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// asPNG makes sure a picture is one, whatever the mod stored it as.
+func asPNG(data []byte, name string) ([]byte, error) {
+	decoded, kind, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("sprite %s: %w", name, err)
+	}
+	if kind == "png" {
+		return data, nil
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, decoded); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }
 
 func stripSource(machine *wep.StateMachine) {

@@ -123,6 +123,8 @@ weapons/
   keys.txt              1: small_gun          (and , and . walk the rest)
   _actors/              every actor any weapon spawns, named by its content
     3f9a....json
+  _sprites/             the frames those actors are drawn with
+  _sprites.png          them packed, rebuilt when the store changes
   small_gun/
     weapon.json         behaviour: a state graph over a closed instruction set
     sprites.png         its frames, packed, with the table in the atLS chunk
@@ -161,6 +163,12 @@ Making one by hand from a sprite sheet:
 ```
 go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
     -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 2
+```
+
+Looking at one:
+
+```
+go run . -weapon fd_drum_shotgun -autofire
 ```
 
 The decisions behind all this are in [docs/adr/](docs/adr/), the vocabulary in

@@ -17,6 +17,15 @@ type SpriteComponent struct {
 	// says otherwise, which is what a sprite out of a packed atlas needs: its
 	// frames are all different sizes and the quad has to match.
 	Size mgl32.Vec2
+	// Hidden keeps a sprite out of the pass without taking it out of the world.
+	// A script has frames that show nothing, and a spawned thing that is
+	// between pictures still has to go on running.
+	Hidden bool
+	// NoShadow keeps a sprite out of the depth pass, and out of the reckoning
+	// of whether the scene has moved. Muzzle smoke drifts every frame, and a
+	// hundred puffs that cast would have every light redraw its shadow map
+	// every frame for something that in Doom never cast a shadow anyway.
+	NoShadow bool
 	// Emissive is how far past white the sprite glows, 0 for a normal one. It is
 	// added after the light loop, so an emissive sprite ignores shadows and lights
 	// itself - see the emissive term in quadFragmentShaderSource.
@@ -105,19 +114,10 @@ func (s *SpriteComponent) Transform(observer core.Transformer) mgl32.Mat4 {
 		transformMatrix = transformMatrix.Mul4(rotation)
 	}
 
-	if size := s.quadSize(); size != (mgl32.Vec2{1, 1}) {
-		transformMatrix = transformMatrix.Mul4(mgl32.Scale3D(size.X(), size.Y(), 1))
+	if s.Size != (mgl32.Vec2{1, 1}) {
+		transformMatrix = transformMatrix.Mul4(mgl32.Scale3D(s.Size.X(), s.Size.Y(), 1))
 	}
 	return transformMatrix
-}
-
-// quadSize is how big to draw the quad, defaulting to one by one so a sprite
-// made before there was a size still comes out the size it did.
-func (s *SpriteComponent) quadSize() mgl32.Vec2 {
-	if s.Size == (mgl32.Vec2{}) {
-		return mgl32.Vec2{1, 1}
-	}
-	return s.Size
 }
 
 func (s *SpriteComponent) DrawMode() SpriteMode {
@@ -128,7 +128,14 @@ func (s *SpriteComponent) Origin() SpriteOrigin {
 	return s.SpriteOrigin
 }
 
+// Hide and Show keep a sprite in the world but out of the pass.
+func (s *SpriteComponent) Hide() { s.Hidden = true }
+func (s *SpriteComponent) Show() { s.Hidden = false }
+
 func (s *SpriteComponent) TextureIndex(viewDirection int) (uint16, bool) {
+	if s.Hidden {
+		return 0, false
+	}
 	var texIndex uint16
 	if len(s.TextureIndices) == 1 {
 		texIndex = s.TextureIndices[0]
@@ -163,8 +170,10 @@ func (s *SpriteComponent) Update(frames []uint16, showTimes []float32, elapsed f
 	}
 }
 func (s *SpriteComponent) TextureIndexAnimated(frames []uint16) (uint16, bool) {
-	textureIndexToShowThisFrame := frames[s.currentFrame]
-	return textureIndexToShowThisFrame, true
+	if s.Hidden {
+		return 0, false
+	}
+	return frames[s.currentFrame], true
 }
 func (s *SpriteComponent) Atlas() glhf.TextureAtlas {
 	return s.AtlasTexture

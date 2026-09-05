@@ -178,3 +178,28 @@ func TestWorldJumpsAreAnsweredNotDropped(t *testing.T) {
 type groundUnderfoot struct{ NoWorld }
 
 func (groundUnderfoot) Below() bool { return true }
+
+// A script that resizes something relative to how big it already is cannot have
+// that worked out at migration time: `scalex * frandom(0.08, 0.14)` folds to
+// zero, because scalex is not known yet, and a smoke puff that should be a
+// thirtieth of its size comes out at none of it. So the arguments ship.
+func TestArgumentsThatDependOnTheActorAreWorkedOutWhileItRuns(t *testing.T) {
+	shrink := Expr{
+		{Kind: TokenVar, Name: "scalex"},
+		{Kind: TokenValue, Value: 0.1},
+		{Kind: TokenOp, Name: "*"},
+	}
+	op := Op{Op: OpSetScale, Args: []float64{0, 0}, ArgExprs: []Expr{shrink, shrink}}
+
+	runtime := &Runtime{Vars: map[string]float64{"scalex": 0.3}}
+	values := op.ArgValues(runtime, nil)
+	require.Len(t, values, 2)
+	assert.InDelta(t, 0.03, values[0], 0.0001)
+
+	// The same op read as plain numbers is the bug it exists to prevent.
+	assert.Equal(t, 0.0, op.Args[0])
+
+	// An op whose arguments all settled at migration time keeps carrying them.
+	plain := Op{Op: OpSetScale, Args: []float64{2, 2}}
+	assert.Equal(t, []float64{2, 2}, plain.ArgValues(runtime, nil))
+}

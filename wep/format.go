@@ -3,7 +3,10 @@
 // weapon migrated from a mod are the same thing here.
 package wep
 
-import "strings"
+import (
+	"math/rand"
+	"strings"
+)
 
 // Format is the version of the on-disk layout this build reads and writes. A
 // weapons folder built by a different version says so on load, instead of
@@ -16,10 +19,19 @@ const (
 	// ActorsDir holds every actor any weapon spawns, one file each, named by
 	// the hash of its content. 867 distinct actors were being stored 13710
 	// times when each weapon kept its own copy.
-	ActorsDir  = "_actors"
-	AtlasFile  = "sprites.png"
-	SoundsDir  = "sounds"
-	SourceFile = "source.txt"
+	ActorsDir = "_actors"
+	// SpritesDir holds the frames those actors are drawn with, one picture
+	// each, shared for the same reason. They are packed into one atlas when the
+	// game starts rather than by the migration, because which weapons are
+	// installed is not something the migration knows.
+	SpritesDir = "_sprites"
+	// SharedAtlasFile is where that packed atlas is kept between runs, and
+	// SharedAtlasKey is the chunk in it saying what it was packed from.
+	SharedAtlasFile = "_sprites.png"
+	SharedAtlasKey  = "spKY"
+	AtlasFile       = "sprites.png"
+	SoundsDir       = "sounds"
+	SourceFile      = "source.txt"
 	// KeyMapFile lives in the weapons folder itself, not in a weapon's folder.
 	KeyMapFile = "keys.txt"
 	// AtlasChunk is the PNG chunk the frame table rides in.
@@ -109,6 +121,11 @@ type Op struct {
 	// rail attack's colours. Spelling every one of those out as its own field
 	// would double this struct for ops the engine acts on as a group anyway.
 	Args []float64 `json:"args,omitempty"`
+	// ArgExprs replaces Args when at least one of them depends on the running
+	// actor. `A_SetScale(scalex * frandom(0.08, 0.14))` shrinks a smoke puff
+	// relative to how big it already is, and folding that to a number at
+	// migration time makes it zero, which is a different animation entirely.
+	ArgExprs []Expr `json:"arg_exprs,omitempty"`
 	// Flags is the argument's flag words, verbatim, for the ops whose behaviour
 	// turns on them.
 	Flags string `json:"flags,omitempty"`
@@ -245,6 +262,18 @@ var KnownOps = map[string]bool{
 	OpCheckFlag: true, OpCheckTarget: true, OpCheckHealth: true,
 	OpCheckTargetInv: true, OpGiveToTarget: true, OpCheckReload: true,
 	OpCheckCloser: true, OpMonsterAction: true,
+}
+
+// ArgValues is the op's numbers, worked out now if they depend on the actor.
+func (o Op) ArgValues(vars Vars, random *rand.Rand) []float64 {
+	if len(o.ArgExprs) == 0 {
+		return o.Args
+	}
+	values := make([]float64, len(o.ArgExprs))
+	for i, expr := range o.ArgExprs {
+		values[i] = expr.Eval(vars, random)
+	}
+	return values
 }
 
 // Step is one entry in a state machine: what to show, for how long, and what to

@@ -177,7 +177,7 @@ func readSndInfoFrom(src *Source) map[string][]string {
 // MissingAssets lists what a compiled weapon needs and the sources do not have,
 // split so a caller can either refuse the weapon or take it without them.
 func (a *AssetIndex) MissingAssets(result *Result) (sprites, sounds []string) {
-	for _, sprite := range result.Sprites {
+	for _, sprite := range append(append([]string{}, result.Sprites...), result.ActorSprites...) {
 		if _, ok := a.Sprite(sprite); !ok {
 			sprites = append(sprites, sprite)
 		}

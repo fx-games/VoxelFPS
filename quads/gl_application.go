@@ -615,13 +615,14 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 	// Sprites keep blending: the atlases have soft edges and the shader only
 	// discards fully transparent texels. Chunks and meshes are opaque and no
 	// longer pay for the blend unit.
+	forShadows := spriteShader == a.quadShaderDepth
 	if a.ShouldDrawSprites {
 		gl.Enable(gl.BLEND)
-		a.Sprites.Draw(observer, spriteShader)
+		a.Sprites.Draw(observer, spriteShader, forShadows)
 		// Decals are skipped in the shadow pass on purpose: they sit a centimetre
 		// off the wall they are stuck to, so a depth map holding them would shadow
 		// that wall with the bullet hole's own outline.
-		if spriteShader != a.quadShaderDepth {
+		if !forShadows {
 			a.Sprites.DrawDecals(observer, spriteShader)
 		}
 		gl.Disable(gl.BLEND)
@@ -633,7 +634,7 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 
 	if a.ShouldDrawSprites {
 		gl.Enable(gl.BLEND)
-		a.Sprites.DrawTransparent(observer, spriteShader)
+		a.Sprites.DrawTransparent(observer, spriteShader, forShadows)
 		gl.Disable(gl.BLEND)
 	}
 }

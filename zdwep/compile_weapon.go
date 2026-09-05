@@ -13,9 +13,12 @@ import (
 type Result struct {
 	Weapon *wep.Weapon
 	Actors map[string]*wep.Actor
-	// Sprites are the atlas frames to pack, in first use order so the packed
-	// atlas comes out the same on every run.
+	// Sprites are the weapon's own frames, packed into its own atlas in first
+	// use order so it comes out the same on every run.
 	Sprites []string
+	// ActorSprites are the frames of what it spawns. They go to the shared
+	// picture store, because the same smoke belongs to sixty weapons.
+	ActorSprites []string
 	// Sounds are the cue names the weapon plays, as the scripts write them.
 	Sounds []string
 	// SourceScript is the DECORATE the weapon was compiled from, kept beside the
@@ -120,6 +123,7 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 	weapon.Defaulted = c.defaultedNames
 	weapon.Items = c.items()
 	result.Sprites = c.sprites
+	result.ActorSprites = c.actorSprites
 	result.Sounds = sortedNames(c.neededSounds)
 	result.SourceScript = actor.SourceFile
 	return result, nil
@@ -134,15 +138,15 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 	}
 	inner := newCompiler(idx, policy)
 	inner.actorName = actor.Name
-	inner.sprites = shared.sprites
-	inner.spriteSeen = shared.spriteSeen
+	inner.sprites = shared.actorSprites
+	inner.spriteSeen = shared.actorSpriteSeen
 
 	states, err := inner.lowerStates(inner.mergedStates(actor.Name))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s (%s):\n%s", actor.Name, actor.SourceFile, err)
 	}
 
-	shared.sprites = inner.sprites
+	shared.actorSprites = inner.sprites
 	for sound := range inner.neededSounds {
 		shared.needSound(sound)
 	}
@@ -392,14 +396,18 @@ func (r *Result) DropSprites(missing []string) {
 	for _, actor := range r.Actors {
 		blank(&actor.States)
 	}
+	r.Sprites = without(r.Sprites, gone)
+	r.ActorSprites = without(r.ActorSprites, gone)
+}
 
-	kept := r.Sprites[:0]
-	for _, name := range r.Sprites {
+func without(names []string, gone map[string]bool) []string {
+	kept := names[:0]
+	for _, name := range names {
 		if !gone[name] {
 			kept = append(kept, name)
 		}
 	}
-	r.Sprites = kept
+	return kept
 }
 
 // DropSounds does for sounds what DropSprites does for pictures.

@@ -180,15 +180,18 @@ func lowerCheckCloser(c *Compiler, call Call) ([]wep.Op, error) {
 // the order ZDoom writes them. The names are only for the error message.
 func args(op string, names ...string) Lowering {
 	return func(c *Compiler, call Call) ([]wep.Op, error) {
-		values := make([]float64, 0, len(names))
-		for i, name := range names {
-			value, err := c.evalFloat(call.Arg(i, "0"))
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", name, err)
-			}
-			values = append(values, value)
+		defaults := make([]string, len(names))
+		for i := range defaults {
+			defaults[i] = "0"
 		}
-		return []wep.Op{{Op: op, Args: values, Flags: flagWords(call), Source: call.Raw}}, nil
+		values, programs, err := c.evalArgs(call, defaults...)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", strings.Join(names, ", "), err)
+		}
+		return []wep.Op{{
+			Op: op, Args: values, ArgExprs: programs,
+			Flags: flagWords(call), Source: call.Raw,
+		}}, nil
 	}
 }
 
@@ -468,30 +471,26 @@ func lowerFade(target float64) Lowering {
 }
 
 func lowerFadeTo(c *Compiler, call Call) ([]wep.Op, error) {
-	target, err := c.evalFloat(call.Arg(0, "1"))
-	if err != nil {
-		return nil, err
-	}
-	step, err := c.evalFloat(call.Arg(1, "0.1"))
+	values, programs, err := c.evalArgs(call, "1", "0.1")
 	if err != nil {
 		return nil, err
 	}
 	return []wep.Op{{
-		Op: wep.OpFadeTo, Args: []float64{target, step},
+		Op: wep.OpFadeTo, Args: values, ArgExprs: programs,
 		Flags: flagWords(call), Source: call.Raw,
 	}}, nil
 }
 
+// A_SetScale(x, y) usually resizes an actor relative to how big it already is,
+// which is why its arguments have to survive as expressions.
 func lowerSetScale(c *Compiler, call Call) ([]wep.Op, error) {
-	x, err := c.evalFloat(call.Arg(0, "1"))
+	values, programs, err := c.evalArgs(call, "1", call.Arg(0, "1"))
 	if err != nil {
 		return nil, err
 	}
-	y, err := c.evalFloat(call.Arg(1, call.Arg(0, "1")))
-	if err != nil {
-		return nil, err
-	}
-	return []wep.Op{{Op: wep.OpSetScale, Args: []float64{x, y}, Source: call.Raw}}, nil
+	return []wep.Op{{
+		Op: wep.OpSetScale, Args: values, ArgExprs: programs, Source: call.Raw,
+	}}, nil
 }
 
 func lowerSelectWeapon(c *Compiler, call Call) ([]wep.Op, error) {

@@ -15,7 +15,9 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 	_ "image/png"
 	"log"
+	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 )
 
@@ -36,6 +38,9 @@ func main() {
 	shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
 	shadowBias := flag.Float64("shadow-bias", float64(quads.DefaultShadowDepthBias), "flat shadow depth bias")
 	benchSeconds := flag.Float64("bench", 0, "run this many seconds, print frame time percentiles and quit (turns vsync off)")
+	startWeapon := flag.String("weapon", "", "start holding this weapon, by its folder name")
+	autoFire := flag.Bool("autofire", false, "hold the trigger down, for looking at a weapon or measuring what it costs")
+	cpuProfile := flag.String("cpuprofile", "", "write a CPU profile here while the benchmark runs")
 	stressSize := flag.Int("stress-size", defaults.Size, "stress map edge length in tiles")
 	stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
 	stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
@@ -66,12 +71,25 @@ func main() {
 		//mapLoad = loadText(strings.Split(stringMapData, "\n"))
 	}
 
+	if *cpuProfile != "" {
+		file, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := pprof.StartCPUProfile(file); err != nil {
+			log.Fatal(err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
 	glhf.Run(func() {
 		game := NewGame(stressConfig)
 		game.isShadowTest = shadowTestMap
 		game.shadowNormalOffset = float32(*shadowOffset)
 		game.shadowDepthBias = float32(*shadowBias)
 		game.benchSeconds = *benchSeconds
+		game.autoFire = *autoFire
+		game.startWeapon = *startWeapon
 		// The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
 		width, height := 640, 480
 		if shadowTestMap {
@@ -161,6 +179,20 @@ type Game struct {
 	audio *audio.Player
 	// baseFOV is what the view goes back to when a scope is lowered.
 	baseFOV float32
+
+	// autoFire holds the trigger down for the whole run, which is how a weapon
+	// is looked at or measured without a hand on the mouse.
+	autoFire bool
+	// startWeapon is the weapon to begin holding, by folder name.
+	startWeapon string
+
+	// sharedAtlas holds the frames of everything the weapons throw into the
+	// world, packed once for all of them, and worldActors are the ones in
+	// flight right now.
+	sharedAtlas       *glhf.TextureAtlasPacked
+	sharedSpriteIndex map[string]int
+	worldActors       []*WorldActor
+	warnedSprites     map[string]bool
 
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
@@ -433,6 +465,9 @@ func (g *Game) Update(elapsed float64) {
 
 	g.pollInput(elapsed)
 
+	if g.autoFire {
+		g.triggerHeld = true
+	}
 	g.updateWeapon(elapsed)
 	g.physicsSystem.Update(elapsed)
 	g.updateGUI(elapsed)
@@ -463,11 +498,21 @@ func (g *Game) printDebugInfo() {
 		core.NewTableRow("Map", fmt.Sprintf("%d tris", g.CubeMap.TriangleDrawCount()), fmt.Sprintf("%d", g.CubeMap.DrawCalls())),
 		core.NewTableRow("GUI", fmt.Sprintf("%d tris", guiTrisDrawn), fmt.Sprintf("%d", guiDrawCalls)),
 		core.NewTableRow("Sprites", fmt.Sprintf("%d tris", spriteTrisDrawn), fmt.Sprintf("%d", spriteDrawCalls)),
+		core.NewTableRow("Spawned", fmt.Sprintf("%d live", g.LiveActorCount()), weaponName(g.currentWeapon())),
 		core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
 		core.NewTableRow("Shadows", fmt.Sprintf("%d/%d lit", shadowPasses, litLights), fmt.Sprintf("gen %d", meshGen)),
 	}
 	debugLines := core.TableLayout(rows, []core.TextAlignment{core.AlignLeft, core.AlignRight, core.AlignRight})
 	g.PrintMulti(debugLines)
+}
+
+// weaponName is what to call the weapon in hand on the overlay, or nothing when
+// the player is empty handed.
+func weaponName(weapon *Weapon) string {
+	if weapon == nil {
+		return ""
+	}
+	return weapon.DisplayName()
 }
 
 func vec3String(v mgl32.Vec3) string {

@@ -78,15 +78,18 @@ func Load(dir string) (*Library, error) {
 	}
 
 	// Actors are shared between weapons and named by the hash of what is in
-	// them, so they are read once however many weapons point at one.
+	// them, so they are read once however many weapons point at one. Their
+	// pictures are shared too, in their own directory.
 	shared := newActorStore(filepath.Join(dir, ActorsDir))
+	sharedSprites := readSharedSprites(filepath.Join(dir, SpritesDir))
 
 	var problems []string
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == ActorsDir {
+		if !entry.IsDir() || entry.Name() == ActorsDir || entry.Name() == SpritesDir {
 			continue
 		}
-		weapon, actors, sprites, issues := loadWeapon(filepath.Join(dir, entry.Name()), entry.Name(), shared)
+		weapon, actors, sprites, issues := loadWeapon(
+			filepath.Join(dir, entry.Name()), entry.Name(), shared, sharedSprites)
 		problems = append(problems, issues...)
 		if weapon == nil {
 			continue
@@ -142,7 +145,24 @@ func (s *actorStore) get(file string) (*Actor, error) {
 	return &actor, nil
 }
 
-func loadWeapon(dir, id string, shared *actorStore) (*Weapon, map[string]*Actor, []string, []string) {
+// readSharedSprites lists the frames in the shared picture store. They are
+// packed into one atlas when the game starts; here they only have to be there.
+func readSharedSprites(dir string) map[string]bool {
+	names := make(map[string]bool)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return names
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		names[strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))] = true
+	}
+	return names
+}
+
+func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]bool) (*Weapon, map[string]*Actor, []string, []string) {
 	var problems []string
 	fail := func(format string, args ...any) (*Weapon, map[string]*Actor, []string, []string) {
 		return nil, nil, nil, append(problems, id+"/: "+fmt.Sprintf(format, args...))
@@ -186,7 +206,7 @@ func loadWeapon(dir, id string, shared *actorStore) (*Weapon, map[string]*Actor,
 			continue // the engine supplies it, so there are no states to check
 		}
 		problems = append(problems,
-			checkStates(id, "actor "+actor.Name, actor.States, known, actors, weapon.Sounds, dir)...)
+			checkStates(id, "actor "+actor.Name, actor.States, sharedSprites, actors, weapon.Sounds, dir)...)
 	}
 
 	if len(problems) > 0 {
@@ -207,7 +227,7 @@ func checkStates(id, what string, machine StateMachine, sprites map[string]bool,
 
 	for index, step := range machine.Steps {
 		if step.Sprite != "" && !sprites[step.Sprite] {
-			note("step %d shows %s, which is not in %s", index, step.Sprite, AtlasFile)
+			note("step %d shows %s, and there is no such picture", index, step.Sprite)
 		}
 		if step.Tics < -1 {
 			note("step %d lasts %d tics", index, step.Tics)

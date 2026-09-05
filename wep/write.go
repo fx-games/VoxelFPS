@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"image/png"
+	"io"
 	"os"
 
 	"github.com/memmaker/goray/png_chunks"
@@ -18,16 +19,20 @@ import (
 // WriteAtlas packs frames into one PNG with the frame table in the chunk the
 // engine's atlas reader looks for.
 func WriteAtlas(images []tpack.NamedImage, path string) error {
-	atlas, metadata := tpack.PackImagesIntoAtlasTrimmed(images)
-	var encoded bytes.Buffer
-	if err := png.Encode(&encoded, atlas); err != nil {
-		return err
-	}
 	out, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
+	return writeAtlasTo(images, out)
+}
+
+func writeAtlasTo(images []tpack.NamedImage, out io.Writer) error {
+	atlas, metadata := tpack.PackImagesIntoAtlasTrimmed(images)
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, atlas); err != nil {
+		return err
+	}
 	return png_chunks.InjectChunkIntoPNG(&encoded, out, AtlasChunk, metadata.Bytes())
 }
 

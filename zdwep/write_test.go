@@ -56,7 +56,7 @@ func modWithAssets(t *testing.T, sprites []string) *Source {
 func writeTestShotgun(t *testing.T) (string, *Result) {
 	t.Helper()
 	result := compileTestShotgun(t)
-	src := modWithAssets(t, result.Sprites)
+	src := modWithAssets(t, append(result.Sprites, result.ActorSprites...))
 	assets := NewAssetIndex(src)
 
 	missingSprites, missingSounds := assets.MissingAssets(result)
@@ -85,9 +85,12 @@ func TestWriteProducesALoadableWeaponsFolder(t *testing.T) {
 	assert.Equal(t, "Test Shotgun", weapon.Tag)
 	assert.Equal(t, "test_shotgun", library.Keys[1])
 
-	// Every sprite the steps ask for came through into the atlas.
+	// The weapon's own frames came through into its atlas, and what it spawns
+	// went to the store the whole folder shares.
 	assert.Contains(t, library.Sprites[weapon.ID], "TSHTA0")
-	assert.Contains(t, library.Sprites[weapon.ID], "TSMKA0")
+	assert.NotContains(t, library.Sprites[weapon.ID], "TSMKA0")
+	_, err = os.Stat(filepath.Join(dir, wep.SpritesDir, "TSMKA0.png"))
+	assert.NoError(t, err)
 
 	assert.Contains(t, library.Actors[weapon.ID], "testsmoke")
 
@@ -173,7 +176,7 @@ func TestActorsAreSharedBetweenWeapons(t *testing.T) {
 	for _, id := range []string{"first_gun", "second_gun"} {
 		result := compileTestShotgun(t)
 		result.Weapon.ID = id
-		src := modWithAssets(t, result.Sprites)
+		src := modWithAssets(t, append(result.Sprites, result.ActorSprites...))
 		require.NoError(t, Write(result, NewAssetIndex(src), src, dir))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, wep.KeyMapFile),

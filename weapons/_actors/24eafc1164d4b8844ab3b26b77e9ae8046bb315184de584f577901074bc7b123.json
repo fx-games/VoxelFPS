@@ -1,1 +1,0 @@
-{"format":1,"name":"Clip1Drop","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"spawn_item","actor":"Clip1"}]},{"tics":0,"ops":[{"op":"spawn_item","actor":"ClipPurist"}]},{"tics":1,"tics_max":1},{"tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

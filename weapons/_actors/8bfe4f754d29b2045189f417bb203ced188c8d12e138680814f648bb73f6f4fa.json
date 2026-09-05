@@ -1,1 +1,0 @@
-{"format":1,"name":"CellPackPurist","render":{"scale":[0.9,0.9],"alpha":1},"states":{"steps":[{"sprite":"CELLA0","tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]},{"sprite":"CELPA0","tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":2}}}

@@ -263,11 +263,16 @@ func TestCompileFoldsACSConditions(t *testing.T) {
 func TestCompileRecordsSpritesAndSounds(t *testing.T) {
 	result := compileTestShotgun(t)
 
+	// The weapon's own frames go in its own atlas.
 	assert.Contains(t, result.Sprites, "TSHTA0")
 	assert.Contains(t, result.Sprites, "TSHTN0")
-	assert.Contains(t, result.Sprites, "TSMKE0")
-	// TNT1 frames show nothing, so they never reach the atlas.
-	for _, sprite := range result.Sprites {
+	assert.NotContains(t, result.Sprites, "TSMKE0")
+
+	// What it spawns is shared with every other weapon that spawns the same.
+	assert.Contains(t, result.ActorSprites, "TSMKE0")
+
+	// TNT1 frames show nothing, so they never reach either.
+	for _, sprite := range append(result.Sprites, result.ActorSprites...) {
 		assert.NotContains(t, sprite, "TNT1")
 	}
 	assert.Equal(t, []string{"testshotgun/fire", "weapons/dryfire"}, result.Sounds)

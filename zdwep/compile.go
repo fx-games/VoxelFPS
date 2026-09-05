@@ -45,10 +45,15 @@ type Compiler struct {
 	neededLabels map[string]bool
 	// sprites is every atlas frame the compiled actor asks for, in first use
 	// order, which keeps the packed atlas stable between runs.
-	sprites     []string
-	spriteSeen  map[string]bool
-	dropped     []string
-	droppedSeen map[string]bool
+	sprites    []string
+	spriteSeen map[string]bool
+	// actorSprites are the frames of the things a weapon spawns, kept apart
+	// because they are shared between weapons and packed once for all of them
+	// rather than into each weapon's own atlas.
+	actorSprites    []string
+	actorSpriteSeen map[string]bool
+	dropped         []string
+	droppedSeen     map[string]bool
 	// defaulted names the puffs and spawners the policy had no line for, so
 	// the compiled weapon can carry what it guessed at.
 	defaultedNames []string
@@ -57,15 +62,16 @@ type Compiler struct {
 
 func newCompiler(idx *Index, policy Policy) *Compiler {
 	return &Compiler{
-		idx:           idx,
-		policy:        policy,
-		neededItems:   make(map[string]bool),
-		neededActors:  make(map[string]bool),
-		neededSounds:  make(map[string]bool),
-		neededLabels:  make(map[string]bool),
-		spriteSeen:    make(map[string]bool),
-		droppedSeen:   make(map[string]bool),
-		defaultedSeen: make(map[string]bool),
+		idx:             idx,
+		policy:          policy,
+		neededItems:     make(map[string]bool),
+		neededActors:    make(map[string]bool),
+		neededSounds:    make(map[string]bool),
+		neededLabels:    make(map[string]bool),
+		spriteSeen:      make(map[string]bool),
+		actorSpriteSeen: make(map[string]bool),
+		droppedSeen:     make(map[string]bool),
+		defaultedSeen:   make(map[string]bool),
 	}
 }
 
@@ -217,6 +223,30 @@ func (c *Compiler) evalInt(text string) (int, error) {
 		return 0, err
 	}
 	return int(value.Range.Value()), nil
+}
+
+// evalArgs reads a run of arguments. When every one of them settles here they
+// travel as numbers; when any depends on the running actor they all travel as
+// expressions, because the engine has to work them out together anyway.
+func (c *Compiler) evalArgs(call Call, defaults ...string) ([]float64, []wep.Expr, error) {
+	numbers := make([]float64, 0, len(defaults))
+	programs := make([]wep.Expr, 0, len(defaults))
+	varies := false
+	for i, fallback := range defaults {
+		value, err := c.eval(call.Arg(i, fallback))
+		if err != nil {
+			return nil, nil, err
+		}
+		numbers = append(numbers, value.Range.Value())
+		programs = append(programs, value.program())
+		if !value.Folded() {
+			varies = true
+		}
+	}
+	if varies {
+		return numbers, programs, nil
+	}
+	return numbers, nil, nil
 }
 
 // evalFloat is evalInt for a value with a fraction.

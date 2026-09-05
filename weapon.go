@@ -160,6 +160,22 @@ func (g *Game) LoadWeapons(dir string) error {
 	if err != nil {
 		return err
 	}
+	// Everything the weapons throw into the world is drawn from one atlas,
+	// packed from the shared picture store. It is packed here rather than by
+	// the migration because which weapons are installed is decided by which
+	// folders are present, and kept between runs because that rarely changes.
+	shared, err := wep.BuildSharedAtlas(dir)
+	if err != nil {
+		return fmt.Errorf("weapons: packing the shared pictures: %w", err)
+	}
+	if shared.Path != "" {
+		g.sharedAtlas = g.LoadPackedAtlas(shared.Path)
+		g.sharedSpriteIndex = sharedAtlasIndex(g.sharedAtlas)
+		if shared.Rebuilt {
+			log.Printf("[weapons] packed %d shared pictures into %s", shared.Frames, shared.Path)
+		}
+	}
+
 	for _, data := range library.Ordered() {
 		g.weapons = append(g.weapons, NewWeapon(g, data,
 			library.Actors[data.ID], library.AtlasPath(data.ID), library.SoundsPath(data.ID)))
@@ -170,6 +186,9 @@ func (g *Game) LoadWeapons(dir string) error {
 		g.weaponByID[weapon.Data.ID] = index
 	}
 	if len(g.weapons) > 0 {
+		if index, known := g.weaponByID[g.startWeapon]; known {
+			g.currentWeaponIndex = index
+		}
 		g.currentWeapon().Equip()
 	}
 	return nil
@@ -239,6 +258,7 @@ func (g *Game) updateWeapon(elapsed float64) {
 	for _, op := range weapon.Update(input, elapsed) {
 		g.applyWeaponOp(weapon, op)
 	}
+	g.updateWorldActors(elapsed)
 }
 
 // applyWeaponOp is the whole of what a compiled weapon can ask the world for.
@@ -282,11 +302,12 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 		// published so wiring AI up later needs no re-migration.
 		events.Publish(events.EventWeaponNoise, op)
 
-	case wep.OpSpawnActor, wep.OpFireProjectile, wep.OpSpawnItem, wep.OpSpawnParticle:
-		// ponytail: compiled and carried, not yet drawn. World sprites come
-		// from a fixed grid atlas and a weapon's frames are packed, so putting
-		// the mod's own smoke and casings in the air needs the sprite system to
-		// take a packed atlas first.
+	case wep.OpSpawnActor, wep.OpFireProjectile, wep.OpSpawnItem:
+		g.spawnWorldActor(weapon, op)
+	case wep.OpSpawnParticle:
+		// A bare coloured dot rather than a sprite, and we have a particle
+		// system of our own that does that.
+		g.EmitParticlesByName(quads.ParticlesSmoke, g.muzzlePosition(), 1)
 
 	case wep.OpMonsterAction, wep.OpRunScript, wep.OpSetCrosshair,
 		wep.OpPlayerFlag, wep.OpQuake, wep.OpRadiusThrust, wep.OpRadiusGive,
@@ -314,6 +335,71 @@ func (g *Game) selectWeaponByTag(name string) {
 			return
 		}
 	}
+}
+
+// muzzlePosition is roughly where a shot leaves the gun.
+func (g *Game) muzzlePosition() mgl32.Vec3 {
+	origin, direction := g.aim()
+	return origin.Add(direction.Mul(spawnDistanceInFront))
+}
+
+// spawnFrom puts an actor into the world where another one already is, which is
+// how a rocket lays a smoke trail behind itself.
+func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
+	weapon := g.currentWeapon()
+	if weapon == nil {
+		return
+	}
+	actor, known := weapon.Actors[lowerName(op.Actor)]
+	if !known || actor.Stock || g.sharedAtlas == nil {
+		return
+	}
+	// ponytail: the child appears where the parent is and drifts, rather than
+	// inheriting its heading. A trail behind a rocket looks right either way,
+	// and anything that needs the heading needs seeking first.
+	position := parent.object.Transform().GetPosition()
+	g.spawnActorAt(weapon, actor, op, position)
+}
+
+// playSoundAt plays a cue from somewhere in the world, panned and quietened by
+// where that is relative to the listener.
+func (g *Game) playSoundAt(op wep.Op, position mgl32.Vec3) {
+	if g.audio == nil {
+		return
+	}
+	pan, volume := g.listenerFor(position, op.Volume)
+	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
+		Volume: volume, Pitch: op.Pitch, Looping: op.Looping,
+		Channel: op.Channel, Pan: pan,
+	})
+}
+
+// listenerFor works out how a sound at a place reaches the player: which side
+// it is on, and how much of it is left by the time it arrives.
+func (g *Game) listenerFor(position mgl32.Vec3, volume float64) (pan, scaled float64) {
+	if volume <= 0 {
+		volume = 1
+	}
+	toSource := position.Sub(g.Camera.GetPosition())
+	distance := float64(toSource.Len())
+	if distance < 0.01 {
+		return 0, volume
+	}
+	// Falls off with distance, and never quite to nothing, so a shot across a
+	// room is quiet rather than absent.
+	scaled = volume / (1 + distance/soundHalfDistance)
+
+	right := g.Camera.GetForward().Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+	return float64(right.Dot(toSource.Normalize())), scaled
+}
+
+// soundHalfDistance is how far away a sound has to be to lose half its volume.
+const soundHalfDistance = 8.0
+
+// explodeAt marks a blast at a place rather than where the player is looking.
+func (g *Game) explodeAt(position mgl32.Vec3, op wep.Op) {
+	g.createImpactEffects(wep.PuffExplosion, nil, position, mgl32.Vec3{0, 1, 0})
+	events.Publish(events.EventDamage, DamageEvent{Amount: op.Damage, Where: position})
 }
 
 // aim is the ray from the middle of the screen.
@@ -428,8 +514,8 @@ func (g *Game) playWeaponSound(op wep.Op) {
 		return
 	}
 	// A weapon's own sounds come from where the listener is standing, so there
-	// is nothing to pan. Attenuation is compiled and carried for the day a
-	// spawned actor makes a noise somewhere else.
+	// is nothing to pan. What a spawned actor plays goes through playSoundAt,
+	// which does.
 	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
 		Volume:  op.Volume,
 		Pitch:   op.Pitch,
@@ -438,15 +524,20 @@ func (g *Game) playWeaponSound(op wep.Op) {
 	})
 }
 
-// LoadPackedAtlasWithBatch reads a weapon's packed sprite atlas off disk and
-// gives it a batch to draw through.
-func (g *Game) LoadPackedAtlasWithBatch(path string) *glhf.TextureAtlasPacked {
+// LoadPackedAtlas reads a packed sprite atlas off disk.
+func (g *Game) LoadPackedAtlas(path string) *glhf.TextureAtlasPacked {
 	file, err := os.Open(path)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
-	atlas := quads.ReadTextureAtlasPacked(path, file)
+	return quads.ReadTextureAtlasPacked(path, file)
+}
+
+// LoadPackedAtlasWithBatch is the same, for an atlas drawn as part of the HUD,
+// which needs a batch of its own.
+func (g *Game) LoadPackedAtlasWithBatch(path string) *glhf.TextureAtlasPacked {
+	atlas := g.LoadPackedAtlas(path)
 	g.SetupSpriteBatch(atlas)
 	return atlas
 }

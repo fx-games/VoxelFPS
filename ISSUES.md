@@ -77,18 +77,24 @@ reports one event for the surface that was actually hit (see Physics below).
 - 146 weapons are migrated from Final Doomer and Brutal Doom Community Expansion. 144
   of the 147 in the folder do something when the trigger is held; the three that do not
   are two abstract base classes and a coat.
+- Spawned actors are drawn: the mod's own smoke, casings and projectiles, from their
+  own sprites. Their frames live in `weapons/_sprites/` and are packed into one atlas
+  when the game starts, kept in `weapons/_sprites.png` until the store changes, so
+  every casing and puff on screen is one texture and one batch whoever fired it.
 - What the engine does not act on yet, all of it compiled and carried so that wiring it
   up needs no re-migration:
-  - **Spawned actors are not drawn.** `spawn_actor`, `fire_projectile`, `spawn_item`
-    and `spawn_particle` are no-ops. World sprites come from a fixed grid atlas and a
-    weapon's frames are packed, so the mod's own smoke, casings, rockets and plasma
-    balls need the sprite system to take a packed atlas first. This is the big one:
-    3784 spawn_actor and 470 fire_projectile in four seconds of holding every trigger.
   - Monster behaviour (`monster_action`), the mod's own ACS scripts (`run_script`),
     screen shake (`quake`), crosshairs, player flags, and everything about how a
-    spawned actor moves - velocity, seeking, warping, fading, scaling - which only
-    means something once they are drawn.
+    spawned actor moves that it does not do itself: seeking and warping. Velocity,
+    fading and scaling do work.
   - `give_to_target`, `radius_give` and `radius_thrust`: nothing has health or mass.
+- A spawned thing only collides with the world if it falls or has a speed of its own.
+  Smoke drifts by arithmetic instead, because a weapon makes a great deal of it and a
+  body sweeping the voxel world every frame for each puff is not worth it.
+- Spawned sprites do not cast shadows, the way Doom sprites never did. A hundred
+  drifting puffs that cast would have every light redraw its shadow map every frame.
+- No more than 192 spawned things are kept at once, oldest dropped first. That is
+  right for smoke and casings and would be wrong for a rocket in flight.
 - Damage is published as an event and plays the hit reaction. Nothing has health.
 - `A_PlaySound`'s attenuation is compiled but not acted on. The player can pan and
   attenuate, but a weapon's own sounds come from where the listener is standing.
