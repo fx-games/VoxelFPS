@@ -1,0 +1,1 @@
+{"format":1,"name":"FDPlutBFGRayEmitter","render":{"scale":[1,1],"alpha":1},"speed":25,"states":{"steps":[{"tics":1,"tics_max":1},{"tics":10,"tics_max":10,"ops":[{"op":"bfg_spray","count":40,"damage":15,"puff":"bullet"}]},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":0,"spawn":0}}}

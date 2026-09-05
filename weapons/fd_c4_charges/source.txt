@@ -1,0 +1,608 @@
+ 
+ACTOR FDHellboundRocketLauncher : FDWeapon
+{
+  Inventory.RestrictedTo "FDHellboundPlayer"
+  Inventory.Icon "HBROCKET"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDHellboundRocket"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 5
+  Obituary "%o got a present from %k."
+  Decal ""
+  Tag "C4 Charges"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_hellboundc4type") == 0, "SimpleMode")
+	TNT1 A 0 A_JumpIf(CallACS("FD_hellboundc4type") == 1, "StandardMode")
+	Goto AdvancedMode
+	
+  Select:
+	HROK R 0 A_JumpIfInventory("FDHellboundRocket", 1, 2)
+	HROK A 0
+  SelectLoop:
+	"####" "#" 1 A_Raise
+	"####" "#" 0 A_Raise
+	Loop
+
+  Deselect:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4DetonationPrimed", 1, "DeselectStandardCheck")
+  DeselectStandardCheckDone:
+    TNT1 A 0 A_GunFlash ("DispelGnu", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, 2)
+	HROK R 0 A_JumpIfInventory("FDHellboundRocket", 1, 2)
+	HROK A 0
+  DeselectLoop:
+	"####" "#"  1 A_Lower
+	"####" "#"  0 A_Lower
+	Loop
+  DeselectStandardCheck:
+	TNT1 A 0 A_JumpIf(CallACS("FD_hellboundc4type") == 1, "DeselectStandard")
+	Goto DeselectStandardCheckDone
+	
+  CancelDeselect:
+    TNT1 A 1 A_WeaponReady (WRF_NOFIRE | WRF_DISABLESWITCH | WRF_NOBOB)
+    Goto Ready
+  Dryfire:
+    HROK A 1
+    Goto Ready
+	
+  DispelGnu:
+	TNT1 A 0
+	Stop
+	
+  Fire:
+	"####" "#" 1 A_JumpIfInventory("FDHellboundRocket", 1, 1)
+	Goto Ready
+	TNT1 A 0 A_JumpIf(CallACS("FD_hellboundc4type") == 0, "SimpleFire")
+	TNT1 A 0 A_JumpIf(CallACS("FD_hellboundc4type") == 1, "StandardFire")
+	Goto AdvancedFire
+	
+//===========SIMPLE MODE========================================================
+
+  SimpleMode:
+    TNT1 A 0 A_GunFlash ("SimpleReadyDetonator", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "SimpleReadyBombAvailable")
+	Goto SimpleReadyBomb
+	
+  SimpleReadyDetonator:
+	HROK A 1 A_JumpIfInventory ("FDHellboundC4SelfDetonate", 1, "SimpleDetonatorDetonate")
+	Loop
+  SimpleDetonatorDetonate:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/detonate", CHAN_WEAPON, 1.0, 0, 1.4)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4SelfDetonate", 1)
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4Detonating", 1)
+	HRO2 ABCDDCBA 1 A_JumpIfInventory ("FDHellboundC4SelfDetonate", 1, "SimpleDetonatorDetonate")
+	Goto SimpleReadyDetonator
+  SimpleDetonatorThrowAnimation:
+	HROK ABCDEFGHIJKLM 1 A_JumpIfInventory ("FDHellboundC4SelfDetonate", 1, "SimpleDetonatorDetonate")
+	Goto SimpleReadyDetonator
+  SimpleDetonatorThrowAnimation2:
+	HROK NOPQPON 1 A_JumpIfInventory ("FDHellboundC4SelfDetonate", 1, "SimpleDetonatorDetonate")
+	Goto SimpleReadyDetonator
+	
+  SimpleReadyBomb:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "SimpleBombGet")
+	TNT1 A 1 A_WeaponReady (WRF_NOSECONDARY)
+	Loop
+  SimpleBombGet:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/another", CHAN_WEAPON, 0.7, 0, 1.4)
+	HBOM HGFEDCB 1
+	Goto SimpleReadyBombAvailable
+  SimpleReadyBombAvailable:
+	HBOM A 70 A_WeaponReady (WRF_NOSECONDARY)
+	HBOM IJK 2 A_WeaponReady (WRF_NOSECONDARY)
+	Loop
+	
+  SimpleFire:
+  SimpleBombThrow:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Detonating", 1, 2)
+    TNT1 A 0 A_GunFlash ("SimpleDetonatorThrowAnimation", GFF_NOEXTCHANGE)
+	HBOM ABCDEFGH 1
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "SimpleBombThrowContinue")
+	Goto SimpleReadyBomb
+  SimpleBombThrowContinue:
+	TNT1 A 5
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Detonating", 1, 2)
+    TNT1 A 0 A_GunFlash ("SimpleDetonatorThrowAnimation2", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/throw", CHAN_WEAPON, 1, 0, 1.3)
+	HROT ABC 1
+	TNT1 A 0 A_FireCustomMissile("FDHellboundC4SimpleProjectile", 0, 1) // not gonna change firing position, so it won't whiff by hitting walls.
+	HROT DEFGH 1
+	TNT1 A 5
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, 1)
+	Goto SimpleReadyBomb
+    TNT1 A 0 A_Refire ("SimpleBombThrowContinue")
+	Goto SimpleReadyBomb
+
+//===========STANDARD MODE======================================================
+
+  StandardMode:
+    TNT1 A 0 A_GunFlash ("StandardReadyDetonator", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "StandardReadyBombAvailable")
+	Goto StandardReadyBomb
+	
+  DeselectStandard:
+    TNT1 A 1 A_WeaponReady (WRF_NOFIRE | WRF_DISABLESWITCH | WRF_NOBOB)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4DetonationPrimed", 1)
+    Goto StandardReadyBomb
+	
+  StandardReadyDetonator:
+	HROK A 1 A_JumpIfInventory ("FDHellboundC4Detonate", 1, "StandardDetonatorDetonate")
+	Loop
+  StandardDetonatorDetonate:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/detonate", CHAN_WEAPON, 1.0, 0, 1.4)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4SelfDetonate", 1)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4Active", 0)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4Detonating", 1)
+	HRO2 ABCDDCBA 1
+	Goto StandardReadyDetonator
+  StandardDetonatorThrowAnimation:
+	HROK ABCDEFGHIJKLM 1
+	Goto StandardReadyDetonator
+  StandardDetonatorThrowAnimation2:
+	HROK NOPQPON 1
+	Goto StandardReadyDetonator
+	
+  StandardReadyBomb:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "StandardReadyBombLimit")
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "StandardBombGet")
+	TNT1 A 1 A_WeaponReady (WRF_NOFIRE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 1, "StandardReadyBombDetonateSoon") // This C4 code is really fucking terror
+	Loop
+  StandardBombGet:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/another", CHAN_WEAPON, 0.7, 0, 1.4)
+	HBOM HGFEDCB 1
+	Goto StandardReadyBombAvailable
+  StandardReadyBombAvailable:
+	HBOM A 70 A_WeaponReady (WRF_NOSECONDARY)
+	HBOM IJK 2 A_WeaponReady (WRF_NOSECONDARY)
+	Loop
+  StandardReadyBombLimit:
+	TNT1 A 1 A_WeaponReady (WRF_NOSECONDARY)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "StandardReadyBombDetonateSoon")
+	Goto StandardReadyBomb
+	
+  StandardBombLimitAlreadyActive:
+	HBOM ABCDEFGH 1
+	Goto StandardReadyBombDetonateSoon
+	
+  StandardFire:
+  StandardBombThrow:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "StandardBombLimitAlreadyActive")
+    TNT1 A 0 A_GunFlash ("StandardDetonatorThrowAnimation", GFF_NOEXTCHANGE)
+	HBOM ABCDEFGH 1
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "StandardBombThrowContinue")
+	Goto StandardReadyBomb
+  StandardBombThrowContinue:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "StandardReadyBombDetonateSoon")
+	TNT1 A 5
+    TNT1 A 0 A_GunFlash ("StandardDetonatorThrowAnimation2", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/throw", CHAN_WEAPON, 1, 0, 1.3)
+	HROT ABC 1
+	TNT1 A 0 A_JumpIf(CallACS("FD_MouseLookCheck") == 0, 3) // Need a C4 projectile that isn't affected by gravity for non-mouselook people.
+	TNT1 A 0 A_FireCustomMissile("FDHellboundC4Projectile", 0, 1) // not gonna change firing position, so it won't whiff by hitting walls.
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile("FDHellboundC4ProjectileNoGravity", 0, 1)
+	HROT DEFGH 1
+	TNT1 A 5
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, 1)
+	Goto StandardReadyBombDetonateSoon
+    TNT1 A 0 A_Refire ("StandardBombThrowContinue")
+	Goto StandardReadyBombDetonateSoon
+	
+  StandardReadyBombDetonateSoon:
+    TNT1 A 1
+    TNT1 A 0 A_Refire ("StandardReadyBombDetonateSoon")
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4DetonationPrimed", 1)
+  StandardReadyBombDetonateTime:
+	TNT1 A 1 A_WeaponReady (WRF_NOFIRE | WRF_NOBOB)
+	TNT1 A 0 A_JumpIfInventory("FDSynthFireFire", 1, "StandardReadyBombDetonate")
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4DetonationPrimed", 1, "StandardReadyBombDetonateTime")
+	Goto StandardReadyBomb
+  StandardReadyBombDetonate:
+    TNT1 A 0 A_ClearRefire
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4DetonationPrimed", 1)
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4Detonate", 1)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4Active", 0) // just to make sure
+	Goto StandardReadyBomb
+	
+//===========ADVANCED MODE======================================================
+
+  AdvancedMode:
+    TNT1 A 0 A_GunFlash ("AdvancedReadyDetonator", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "AdvancedReadyBombAvailable")
+	Goto AdvancedReadyBomb
+	
+  AdvancedReadyDetonator:
+	HROK A 1 A_JumpIfInventory ("FDSynthFireAltFire", 1, "AdvancedDetonatorDetonate")
+	Loop
+  AdvancedDetonatorDetonate:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/detonate", CHAN_WEAPON, 1.0, 0, 1.4)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4SelfDetonate", 1)
+	TNT1 A 0 A_TakeInventory ("FDHellboundC4Active", 0)
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4Detonating", 1)
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4Detonate", 1)
+	HRO2 ABCDDCBA 1
+	Goto AdvancedReadyDetonator
+  AdvancedDetonatorThrowAnimation:
+	HROK ABCDEFGHIJKLM 1 A_JumpIfInventory ("FDSynthFireAltFire", 1, "AdvancedDetonatorDetonate")
+	Goto AdvancedReadyDetonator
+  AdvancedDetonatorThrowAnimation2:
+	HROK NOPQPON 1 A_JumpIfInventory ("FDSynthFireAltFire", 1, "AdvancedDetonatorDetonate")
+	Goto AdvancedReadyDetonator
+	
+  AdvancedReadyBomb:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "AdvancedReadyBombLimit")
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "AdvancedBombGet")
+	TNT1 A 1 A_WeaponReady (WRF_NOSECONDARY)
+	Loop
+  AdvancedBombGet:
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/another", CHAN_WEAPON, 0.7, 0, 1.4)
+	HBOM HGFEDCB 1
+	Goto AdvancedReadyBombAvailable
+  AdvancedReadyBombAvailable:
+	HBOM A 70 A_WeaponReady (WRF_NOSECONDARY)
+	HBOM IJK 2 A_WeaponReady (WRF_NOSECONDARY)
+	Loop
+  AdvancedReadyBombLimit:
+	TNT1 A 1 A_WeaponReady (WRF_NOFIRE)
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "AdvancedReadyBombLimit")
+	Goto AdvancedReadyBomb
+	
+  AdvancedFire:
+  AdvancedBombThrow:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Detonating", 1, 2)
+    TNT1 A 0 A_GunFlash ("AdvancedDetonatorThrowAnimation", GFF_NOEXTCHANGE)
+	HBOM ABCDEFGH 1
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, "AdvancedBombThrowContinue")
+	Goto AdvancedReadyBomb
+  AdvancedBombThrowContinue:
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Active", 0, "AdvancedReadyBomb")
+	TNT1 A 5
+	TNT1 A 0 A_JumpIfInventory("FDHellboundC4Detonating", 1, 2)
+    TNT1 A 0 A_GunFlash ("AdvancedDetonatorThrowAnimation2", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_PlaySound("hellboundrocketlauncher/throw", CHAN_WEAPON, 1, 0, 1.3)
+	HROT ABC 1
+	TNT1 A 0 A_JumpIf(CallACS("FD_MouseLookCheck") == 0, 3) // Need a C4 projectile that isn't affected by gravity for non-mouselook people.
+	TNT1 A 0 A_FireCustomMissile("FDHellboundC4Projectile", 0, 1) // not gonna change firing position, so it won't whiff by hitting walls.
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile("FDHellboundC4ProjectileNoGravity", 0, 1)
+	HROT DEFGH 1
+	TNT1 A 5
+	TNT1 A 0 A_JumpIfInventory("FDHellboundRocket", 1, 1)
+	Goto AdvancedReadyBomb
+    TNT1 A 0 A_Refire ("AdvancedBombThrowContinue")
+	Goto AdvancedReadyBomb
+  }
+}
+
+actor FDHellboundC4Projectile
+{
+    Radius 12
+    Height 10
+    Speed 40
+    Damage 0
+    Health 20
+    Projectile
+	DamageFactor "Radiation", 0
+	DamageFactor "Poison", 0
+	DamageFactor "Neutron", 0
+	Obituary "%o got a present from %k."
+    +VULNERABLE // ehehehehehe
+    +NOBLOOD
+    +NOICEDEATH
+    +DONTRIP
+    +SEEKERMISSILE
+    +DONTSPLASH
+    +DONTFALL
+    +FORCERADIUSDMG
+	+SKYEXPLODE
+    -NOGRAVITY
+	+THRUSPECIES
+	+HITTRACER
+//	+FORCEPAIN
+	Species "Player"
+    Gravity 0.15
+    Scale 0.5
+	
+	var int user_hitx;
+	var int user_hity;
+	var int user_hitz;
+	var int user_actuallyfuckingexists;
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_GiveInventory ("FDHellboundC4Active", 1, AAPTR_TARGET)
+		TNT1 A 0 A_ChangeVelocity(0.0,0.0,frandom(1.5,2.0),CVF_RELATIVE)
+		TNT1 A 0 A_SetUserVar("user_actuallyfuckingexists", 1)
+	Looplet:
+		C4PR AAABBBCCCDDDEEEFFFGGGHHH 1 A_JumpIfInTargetInventory("FDHellboundC4Detonate",1,"EmitBomb")
+		Loop
+		
+		// These states exist because firing a projectile at point blank puts it into the death state immediately.
+		// Because, you know, why bother having a spawn state at all, right?
+    DeathFixer:
+		"####" "#" 0 A_GiveInventory ("FDHellboundC4Active", 1, AAPTR_TARGET)
+		"####" "#" 0 A_SetUserVar("user_actuallyfuckingexists", 1)
+		Goto Death
+    XDeathFixer:
+		"####" "#" 0 A_GiveInventory ("FDHellboundC4Active", 1, AAPTR_TARGET)
+		"####" "#" 0 A_SetUserVar("user_actuallyfuckingexists", 1)
+		Goto XDeath
+		
+    Death:
+		"####" "#" 0 A_JumpIf(user_actuallyfuckingexists == 0, "DeathFixer") // Used to fix point blank C4 bullshit
+		"####" "#" 0 A_ChangeFlag ("FORCEPAIN", 0)
+		"####" "#" 0 A_PlaySound("hellboundrocketlauncher/thud", 5, 0.8, 0, 1.2)
+		"####" "#" 0 A_JumpIf(z == floorz, "HitFloor")
+		"####" "#" 0 A_CheckCeiling ("HitCeiling")
+		"####" "#" 0 A_Jump(256, 2)
+		C4PR C 0
+		Goto EmitBomb
+		C4PR G 0
+		Goto EmitBomb
+    HitFloor:
+		C4PR I 0
+		Goto EmitBomb
+    HitCeiling:
+		C4PR J 0
+		Goto EmitBomb
+    EmitBomb:
+		"####" "#" 0 A_SpawnItemEx("FDHellboundC4Wallie", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_TRANSFERSPRITEFRAME | SXF_NOCHECKPOSITION)
+		Stop
+		
+	XDeath:
+		"####" "#" 0 A_JumpIf(user_actuallyfuckingexists == 0, "XDeathFixer") // Used to fix point blank C4 bullshit
+		"####" "#" 0 A_ChangeFlag ("FORCEPAIN", 0)
+		Goto Stick
+    Stick:
+		// Shamelessly adapted from Xaser's Argent mod. HEIL XASER AND HIS ALMIGHTY SUPERCOMPUTER BRAIN~
+		"####" "#" 0 A_PlaySound("hellboundrocketlauncher/thud", 5, 0.8, 0, 1.2)
+		"####" "#" 0 A_SpawnItemEx("FDC4CollectionArea", 0,0,0, 0,0,0, 0, SXF_SETMASTER | SXF_ORIGINATOR | SXF_NOCHECKPOSITION)
+		"####" "#" 0 A_SetUserVar("user_hitx", CallACS("FDGetTracerX"))
+		"####" "#" 0 A_SetUserVar("user_hity", CallACS("FDGetTracerY"))
+		"####" "#" 0 A_SetUserVar("user_hitz", CallACS("FDGetTracerZ"))
+    StickLoop:
+		C4PR "#" 0 A_JumpIfInventory("FDHellboundC4ArmedCycle", 0, "StickLoopFlash")
+		"####" "#" 0 A_GiveInventory("FDHellboundC4ArmedCycle", 1)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		Loop
+    StickLoopFlash:
+		C4PL "#" 0 A_TakeInventory("FDHellboundC4ArmedCycle", 0)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		"####" "#" 0 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "EmitBomb")
+		"####" "#" 1 Light("FDHellBoundC4RedLight") A_Warp(AAPTR_TRACER, user_hitx, user_hity, user_hitz, 0, WARPF_ABSOLUTEOFFSET | WARPF_USECALLERANGLE | WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE)
+		Goto StickLoop
+    }
+}
+
+actor FDHellboundC4ProjectileNoGravity : FDHellboundC4Projectile
+{
+    +NOGRAVITY
+}
+
+actor FDHellboundC4SimpleProjectile : FDHellboundC4Projectile
+{
+	DamageType "C4Explosive"
+	PainType "Explosive"
+	DeathType "Explosive"
+    +NOGRAVITY
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_ChangeVelocity(0.0,0.0,frandom(1.5,2.0),CVF_RELATIVE)
+	Looplet:
+		C4PR ABCDEFGH 3
+		Loop
+	XDeath:
+    Death:
+		TNT1 A 0 A_ChangeFlag ("SHOOTABLE", 0)
+	Detonation:
+		TNT1 A 0 A_GiveInventory ("FDHellboundC4SelfDetonate", 1, AAPTR_TARGET)
+		TNT1 A 0 A_Explode ((20 * random(1,8)) + 150, 256, 0)
+		TNT1 A 0 A_Explode (50, 192, 1)
+		TNT1 A 0 A_AlertMonsters
+		TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (730000, SPF_FULLBRIGHT | SPF_RELATIVE, random(30,70), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ef0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(25,60), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (f37317, SPF_FULLBRIGHT | SPF_RELATIVE, random(20,50), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ffa35b, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,3,6)
+		TNT1 AAAAAAAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,4), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+		Goto QuakeTime
+	QuakeTime:
+		TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+		TNT1 A 0 A_Quake (2, 35, 0, 1536, "")
+		TNT1 A 0 A_Quake (7, 35, 0, 512, "")
+		Goto DeathAnimation
+	DeathAnimation:
+		TNT1 A 0 A_SetScale (3.0)
+		TNT1 A 0 A_SetTranslucent (0.98, 1)
+		TNT1 A 0 A_PlaySound("hellboundrocketlauncher/simpleexplode", CHAN_WEAPON, 0.8, 0, 0.2)
+		TNT1 A 0 A_PlaySound("hellboundrocketlauncher/simplefar", 7, 0.3, 0, 0.01)
+		MEXP A 4 Bright Light("FDHellBoundC4Explosion1")
+		MEXP B 4 Bright Light("FDHellBoundC4Explosion2")
+		MEXP C 3 Bright Light("FDHellBoundC4Explosion3")
+		MEXP D 3 Bright Light("FDHellBoundC4Explosion4")
+		MEXP E 2 Bright Light("FDHellBoundC4Explosion5")
+		MEXP F 2 Bright Light("FDHellBoundC4Explosion6")
+		Stop
+    }
+}
+
+actor FDHellboundC4Wallie
+{
+	Radius 12
+	Height 10
+	Speed 0
+	DamageType "C4Explosive"
+	PainType "Explosive"
+	DeathType "Explosive"
+	Health 10
+	DamageFactor "Radiation", 0
+	DamageFactor "Poison", 0
+	DamageFactor "Neutron", 0
+	Mass 0x7fffffff
+	ProjectileKickBack 150
+	+NOGRAVITY
+	+FRIENDLY
+	+VULNERABLE // watch out for cyberdemons and archvile :^)
+	+NOBLOOD
+	+DONTFALL
+	+DONTBLAST
+	+NOICEDEATH
+    +FORCERADIUSDMG
+	+SKYEXPLODE
+	+DONTRIP
+	+LOOKALLAROUND
+	+THRUSPECIES
+	//+ROLLSPRITE
+	Species "Player"
+	Obituary "%o was blasted by %k's explosive surprise."
+	Scale 0.5
+	States
+	{
+	Spawn:
+		C4PR "#" 0 NoDelay A_SpawnItemEx("FDC4CollectionArea", 0,0,0, 0,0,0, 0, SXF_SETMASTER | SXF_NOCHECKPOSITION)
+	See:
+		C4PR "######################################################################" 1 A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "Death")
+		C4PL "######" 1 Light("FDHellBoundC4RedLight") A_JumpIfInTargetInventory("FDHellboundC4Detonate", 1, "Death")
+		loop
+	Death:
+		TNT1 A 0 A_Die
+	Detonation:
+		TNT1 A 0 A_Explode ((20 * random(1,8)) + 150, 256, 0)
+		TNT1 A 0 A_Explode (50, 192, 1)
+		TNT1 A 0 A_TakeInventory ("FDHellboundC4Active", 1, 0, AAPTR_TARGET)
+		TNT1 A 0 A_AlertMonsters
+		TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (730000, SPF_FULLBRIGHT | SPF_RELATIVE, random(30,70), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ef0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(25,60), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (f37317, SPF_FULLBRIGHT | SPF_RELATIVE, random(20,50), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,5,10)
+		TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ffa35b, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+		TNT1 A 0 A_Jump (256, 1,3,6)
+		TNT1 AAAAAAAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,4), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+		Goto QuakeTime
+	QuakeTime:
+		TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+		TNT1 A 0 A_Quake (2, 35, 0, 1536, "")
+		TNT1 A 0 A_Quake (7, 35, 0, 512, "")
+		Goto DeathAnimation
+	DeathAnimation:
+		TNT1 A 0 A_SetScale (3.0)
+		TNT1 A 0 A_SetTranslucent (0.98, 1)
+		TNT1 A 0 A_PlaySound("hellboundrocketlauncher/explode", CHAN_WEAPON, 0.8, 0, 0.2)
+		TNT1 A 0 A_PlaySound("hellboundrocketlauncher/far", 7, 0.3, 0, 0.01)
+		MEXP A 4 Bright Light("FDHellBoundC4Explosion1")
+		MEXP B 4 Bright Light("FDHellBoundC4Explosion2")
+		MEXP C 3 Bright Light("FDHellBoundC4Explosion3")
+		MEXP D 3 Bright Light("FDHellBoundC4Explosion4")
+		MEXP E 2 Bright Light("FDHellBoundC4Explosion5")
+		MEXP F 2 Bright Light("FDHellBoundC4Explosion6")
+		Stop
+  }
+}
+
+actor FDC4CollectionArea : SwitchableDecoration
+{
+  Radius 12
+  Height 10
+  Mass 0x7fffffff
+  -SOLID
+  +NEVERRESPAWN
+  +DONTGIB
+  +NOBLOOD
+  +USESPECIAL
+  +NOTELEPORT
+  +NOCLIP
+    
+    Activation THINGSPEC_ThingActs | THINGSPEC_ThingTargets | THINGSPEC_Switch
+    
+  States
+  {
+  Spawn:
+	TNT1 A 0
+  SpawnLoop:
+	TNT1 A 1
+	TNT1 A 0 A_Warp(AAPTR_MASTER, 0,0,0, 0, WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION | WARPF_NOCHECKPOSITION, "SpawnLoop")
+    Stop
+	
+  Inactive:
+  Active:
+	TNT1 A 0 A_JumpIfInventory ("FDHellboundRocket", 0, "CannotPickup", AAPTR_TARGET)
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundToken", 1, "PickupC4", AAPTR_TARGET)
+	Goto CannotPickup
+  PickupC4:
+	TNT1 A 0 A_GiveInventory ("FDHellboundC4Recollect", 1, AAPTR_TARGET)
+    TNT1 A 0 A_RemoveMaster (RMVF_EVERYTHING)
+    Stop
+  CannotPickup:
+    TNT1 A 0 A_ChangeFlag("USESPECIAL", 0)
+    TNT1 A 15 // Doesn't need to warp here because you can't pick the bloody thing up anyway
+    TNT1 A 0 A_ChangeFlag("USESPECIAL", 1)
+	TNT1 A 0 A_Warp(AAPTR_MASTER, 0,0,0, 0, WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION | WARPF_NOCHECKPOSITION, "SpawnLoop")
+    Stop
+    }
+}
+
+ACTOR FDHellboundC4Recollect : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0 A_GiveInventory ("FDHellboundRocket", 1)
+    TNT1 A 0 A_TakeInventory ("FDHellboundC4Active", 1)
+    TNT1 A 0 A_PlaySound ("items/hellboundrocketsmall", CHAN_ITEM, 1, 0, 1.5)
+	TNT1 A 0 A_SpawnItemEx("FDC4PickupMessage", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    Stop
+  }
+}
+
+Actor FDHellboundC4Active : FDLevelLimit
+{
+inventory.maxamount 10
+}
+
+ACTOR FDHellboundC4Detonating : Powerup
+{
+	Powerup.Duration 6
+}
+
+ACTOR FDHellboundC4Detonate : Powerup
+{
+	Powerup.Duration 2
+}
+
+ACTOR FDHellboundC4SelfDetonate : Powerup
+{
+	Powerup.Duration 3
+}
+
+ACTOR FDHellboundC4DetonationPrimed : Powerup
+{
+	Powerup.Duration -0x7FFFFFFF
+}
+
+Actor FDHellboundC4ArmedCycle : FDLevelLimit
+{
+inventory.maxamount 70
+}

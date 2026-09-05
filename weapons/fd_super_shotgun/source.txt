@@ -1,0 +1,114 @@
+ 
+ACTOR FDDoom2SuperShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDDoom2Player"
+  Inventory.Icon "D2SUPERS"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDDoom2Shells"
+  Weapon.AmmoUse 2
+  Weapon.SlotNumber 3
+  Obituary "%o got DWANGO'd by %k's super shotgun."
+  Decal "BulletChip"
+  Tag "Super Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Shells", 2, "ReadyAmmo")
+    DSSG A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    DSSG A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    DSSG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    DSSG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    DSSG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Shells", 2, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,1,6)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-1,6)
+    TNT1 A 0 A_PlaySound("doom2supershotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("doom2supershotgun/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (11.2, 7.1, 20, 5, "FDBulletPuff", FBF_USEAMMO)
+    DSSG R 1 Bright A_SetPitch (pitch - (1.6 * CallACS("FD_recoil")/65536.0))
+    DSSG R 1 Bright A_SetPitch (pitch - (1.1 * CallACS("FD_recoil")/65536.0))
+    DSSG S 1 Bright A_SetPitch (pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+    DSSG S 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    DSSG T 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    DSSG U 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    DSSG A 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Shells", 2, "GonnaReload")
+    DSSG A 1 A_SetPitch (pitch + (1.5 * CallACS("FD_recoil")/65536.0))
+    DSSG A 1 A_SetPitch (pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+    DSSG A 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    Goto Ready
+  GonnaReload:
+    DSSG B 1 A_SetPitch (pitch + (1.5 * CallACS("FD_recoil")/65536.0))
+    DSSG B 1 A_SetPitch (pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+    DSSG C 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    DSSG C 1
+    DSSG D 3
+    DSSG E 4
+    DSSG F 2
+    DSSG G 2
+    DSSG H 2
+    TNT1 A 0 A_PlaySound("doom2supershotgun/open", 5, 1, 0, 1.25)
+	TNT1 A 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 3)
+	TNT1 AA 0 A_FireCustomMissile ("FDShellCasingSpawner2", 0,0,frandom(-3.6,-3.2),-9, FPF_NOAUTOAIM)
+    DSSG I 2
+    DSSG J 2
+    DSSG K 3
+    TNT1 A 0 A_PlaySound("doom2supershotgun/load", 6, 1, 0, 1.25)
+    DSSG L 2
+    DSSG M 2
+	TNT1 A 2
+	TNT1 A 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_Refire ("QuickFire")
+	TNT1 A 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("doom2supershotgun/close", 5, 1, 0, 1.25)
+    DSSG N 2
+    TNT1 A 0 A_Refire ("Fire")
+    DSSG O 2
+    DSSG P 2
+    DSSG Q 2
+    DSSG A 1
+    DSSG AAAAA 1 A_Refire // Gun fires at a speed of 58 tics
+    Goto Ready
+  QuickFire:
+    TNT1 A 0 A_PlaySound("doom2supershotgun/close", 5, 1, 0, 1.25)
+	DSSG N 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	DSSG O 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    DSSG PQ 1 // Gun refires at a speed of 51 tics
+    Goto Fire
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}

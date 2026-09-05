@@ -1,0 +1,1 @@
+{"format":1,"name":"D4ImpBeingHold","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":1,"tics_max":1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":0,"spawn":0}}}

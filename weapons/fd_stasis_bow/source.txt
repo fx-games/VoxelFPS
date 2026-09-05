@@ -1,0 +1,278 @@
+ 
+ACTOR FDAliensChainsaw : FDWeapon
+{
+  Inventory.RestrictedTo "FDAliensPlayer"
+  Inventory.Icon "AACHAINS"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%k put %o in stasis and then promptly forgot about them."
+  Decal ""
+  Tag "Stasis Bow"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, 2)
+    TNT1 A 0 A_PlaySound("alienschainsaw/idle", 7, 1.0, 1, 1.5)
+    ASAW AABBCC 1 A_WeaponReady
+    Loop
+	
+  Select:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "SelectLoop")
+    TNT1 A 0 A_PlaySound("alienschainsaw/idle", 7, 1.0, 1, 1.5)
+  SelectLoop:
+    ASAW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    ASAW B 1 A_Raise
+    "####" "#" 0 A_Raise
+    ASAW C 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensBowUnloaded", 0, "DeselectLoaded")
+    TNT1 A 0 A_StopSound(7)
+    ASAW I 1 A_Lower
+    "####" "#" 0 A_Lower
+    ASAW H 1 A_Lower
+    "####" "#" 0 A_Lower
+    ASAW G 1 A_Lower
+    "####" "#" 0 A_Lower
+    ASAW F 1 A_Lower
+    "####" "#" 0 A_Lower
+  DeselectLoop:
+    ASAW E 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+  DeselectLoaded:
+    TNT1 A 0 A_StopSound(7)
+  DeselectLoadedLoop:
+    ASAW E 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Fire:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_PlaySound("alienschainsaw/fire", CHAN_WEAPON, 1.0, 0, 0.9)
+    TNT1 A 0 A_PlaySound("alienschainsaw/fire", 6, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireCustomMissile ("FDAliensStasisArrow", 0, 0)
+    ASAW D 1 A_SetPitch (pitch - (0.6 * CallACS("FD_recoil")/65536.0))
+    ASAW E 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    ASAW E 1 A_SetPitch (pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+    ASAW E 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_GiveInventory ("FDAliensBowUnloaded", 1)
+    ASAW EEEEEEEEEEEEEEE 1 A_WeaponReady (WRF_NOFIRE | WRF_NOBOB)
+    TNT1 A 0 A_TakeInventory ("FDAliensBowUnloaded", 0)
+    TNT1 A 0 A_PlaySound("alienschainsaw/charge", 5, 1.0, 0, 1.5)
+    ASAW F 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    ASAW F 1 A_SetPitch (pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    ASAW G 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    ASAW G 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    ASAW H 1 A_SetPitch (pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+    ASAW H 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    ASAW IABC 2
+    Goto Ready
+  }
+}
+
+Actor FDAliensBowUnloaded : FDBoolean {}
+
+ACTOR FDAliensStasisActive : Powerup
+{
+	+ADDITIVETIME
+	Powerup.Duration 105
+}
+
+ACTOR FDAliensStasisArrow : FastProjectile
+{
+  Radius 6
+  Height 6
+  Speed 45
+  Damage (1)
+  DamageType "Piercing"
+  +FORCEPAIN
+  +FORCEXYBILLBOARD
+  +HITTRACER
+  +BLOODLESSIMPACT
+  Projectile
+  RenderStyle Add
+  Alpha 1.0
+  States
+  {
+  Spawn:
+    AARR A 1 Bright Light("FDStasisArrow")
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (33ff33, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+    Loop
+	
+	// Any enemy struck with the bow will be stunned for a period
+	// Bosses cannot be stunned, but they will always flinch
+	// In Coop, hitting another player will give make them unkillable, but cannot be stacked like stasis
+	
+  Death:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "NoParticles")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (33ff33, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,25), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+  NoParticles:
+    TNT1 A 0 A_JumpIfHealthLower (1, "Ded", AAPTR_TRACER)
+    TNT1 A 0 A_CheckFlag ("BOSS", "Ded", AAPTR_TRACER)
+    TNT1 A 0 A_CheckFlag ("NOPAIN", "Ded", AAPTR_TRACER)
+    TNT1 A 0 A_JumpIf(CheckClass("ExplosiveBarrel", AAPTR_TRACER, TRUE), "Ded")
+  CheckTracerType:
+    TNT1 A 0 A_JumpIf(CheckClass("PlayerPawn", AAPTR_TRACER, TRUE), "HitPlayer")
+    TNT1 A 0 A_JumpIfInventory ("FDAliensStasisActive", 1, "ExtendStasis", AAPTR_TRACER)
+    TNT1 A 0 A_PlaySound("alienschainsaw/explosion", 6, 1.0, 0, 0.9)
+    TNT1 A 0 A_SpawnItemEx ("FDAliensStasisArrowImpact", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION, "StasisLoopStart", 0.5)
+    Stop
+  HitPlayer:
+    TNT1 A 0 A_JumpIfInventory ("PowerBuddha", 1, "ExtendStasisPlayer", AAPTR_TRACER)
+    TNT1 A 0 A_PlaySound("alienschainsaw/explosion", 6, 1.0, 0, 0.9)
+    TNT1 A 0 A_SpawnItemEx ("FDAliensStasisArrowImpact", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION, "StasisLoopStart", 0.5)
+    Stop
+	
+  ExtendStasis:
+    TNT1 A 0 A_PlaySound("aliens/stasisextend", 7, 1.0, 0, 0.8)
+    TNT1 A 0 A_GiveInventory ("FDAliensStasisActive", 1, AAPTR_TRACER)
+    Stop
+  ExtendStasisPlayer:
+    TNT1 A 0 A_PlaySound("aliens/stasisextend", 7, 1.0, 0, 0.8)
+    TNT1 A 0 A_GiveInventory ("FDAliensAntiStasisPlayer", 1, AAPTR_TRACER)
+    Stop
+  Ded:
+    TNT1 A 0 A_PlaySound("alienschainsaw/explosion", 6, 1.0, 0, 0.9)
+    TNT1 A 0 A_SpawnItemEx ("FDAliensStasisArrowImpact", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+	
+  StasisLoopStart:
+/*    TNT1 A 0 A_ChangeFlag ("NOEXPLODEFLOOR", 1)
+    TNT1 A 0 A_ChangeFlag ("NOCLIP", 1)
+    TNT1 A 0 A_ChangeFlag ("MISSILE", 0)
+    TNT1 A 0 A_PlaySound("aliens/stasis", CHAN_WEAPON, 1.0, 1, 0.9)
+    TNT1 A 0 A_JumpIf(CheckClass("PlayerPawn", AAPTR_TRACER, TRUE), 2)
+    TNT1 A 0 A_GiveInventory ("FDAliensStasisActive", 1, AAPTR_TRACER)
+	Goto StasisLoop
+    TNT1 A 0 A_GiveInventory ("FDAliensAntiStasisPlayer", 1, AAPTR_TRACER)
+	Goto StasisLoop
+  StasisLoop:
+//	TNT1 AAAAA 0 A_CustomRailgun (0, 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", 180, 90, random(24,96), 1, 0.2, 0, "None", 0) // Can't use because FUCKING AUTOAIM
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "StasisLoopParticles")
+	TNT1 AAAA 0 A_SpawnParticle (33ff33, SPF_FULLBRIGHT | SPF_RELATIVE, random(35,105), random(1,10), frandom(0,360), random(-50,50),random(-50,50),random(-50,50), 0,0,0, 0,0,frandom(-0.25,0.25), 0.5, -1)
+  StasisLoopParticles:
+    TNT1 A 0 A_JumpIf(CheckClass("PlayerPawn", AAPTR_TRACER, TRUE), 4)
+    TNT1 A 1 Light("FDStasisField") A_CustomMissile ("FDAliensStasisStunner", 0,0, 0, CMF_AIMDIRECTION | CMF_TRACKOWNER, 0, AAPTR_TRACER)
+    TNT1 A 0 A_JumpIfInventory ("FDAliensStasisActive", 1, "StasisLoopWarpCheck", AAPTR_TRACER)
+    TNT1 A 0 A_StopSound(CHAN_WEAPON)
+    Stop
+    TNT1 A 1 Light("FDStasisField")
+    TNT1 A 0 A_JumpIfInventory ("PowerBuddha", 1, "StasisLoopWarpCheck", AAPTR_TRACER)
+    TNT1 A 0 A_StopSound(CHAN_WEAPON)
+    Stop
+  StasisLoopWarpCheck:
+    TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION, "StasisLoop", 0.5)
+    TNT1 A 0 A_StopSound(CHAN_WEAPON)*/
+    TNT1 A 0 A_SpawnItemEx ("FDAliensStasisEffectThingo", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    Stop
+  }
+}
+
+actor FDAliensStasisEffectThingo
+{
+    Radius 6
+    Height 6
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+	+NOCLIP
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_PlaySound("aliens/stasis", CHAN_WEAPON, 1.0, 1, 0.9)
+		TNT1 A 0 A_JumpIf(CheckClass("PlayerPawn", AAPTR_TRACER, TRUE), 2)
+		TNT1 A 0 A_GiveInventory ("FDAliensStasisActive", 1, AAPTR_TRACER)
+		Goto StasisLoop
+		TNT1 A 0 A_GiveInventory ("FDAliensAntiStasisPlayer", 1, AAPTR_TRACER)
+		Goto StasisLoop
+    StasisLoop:
+		TNT1 A 0 A_CheckFlag ("NOPAIN", "StasisLoopDisrupted", AAPTR_TRACER)
+//		TNT1 AAAAA 0 A_CustomRailgun (0, 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", 180, 90, random(24,96), 1, 0.2, 0, "None", 0) // Can't use because FUCKING AUTOAIM
+		TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "StasisLoopParticles")
+		TNT1 AAAA 0 A_SpawnParticle (33ff33, SPF_FULLBRIGHT | SPF_RELATIVE, random(35,105), random(1,10), frandom(0,360), random(-50,50),random(-50,50),random(-50,50), 0,0,0, 0,0,frandom(-0.25,0.25), 0.5, -1)
+    StasisLoopParticles:
+		TNT1 A 0 A_JumpIf(CheckClass("PlayerPawn", AAPTR_TRACER, TRUE), 4)
+		TNT1 A 1 Light("FDStasisField") A_CustomMissile ("FDAliensStasisStunner", 0,0, 0, CMF_AIMDIRECTION | CMF_TRACKOWNER, 0, AAPTR_TRACER)
+		TNT1 A 0 A_JumpIfInventory ("FDAliensStasisActive", 1, "StasisLoopWarpCheck", AAPTR_TRACER)
+		TNT1 A 0 A_StopSound(CHAN_WEAPON)
+		Stop
+		TNT1 A 1 Light("FDStasisField")
+		TNT1 A 0 A_JumpIfInventory ("PowerBuddha", 1, "StasisLoopWarpCheck", AAPTR_TRACER)
+		TNT1 A 0 A_StopSound(CHAN_WEAPON)
+		Stop
+    StasisLoopWarpCheck:
+		TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION, "StasisLoop", 0.5)
+		TNT1 A 0 A_StopSound(CHAN_WEAPON)
+		Stop
+    StasisLoopDisrupted:
+		TNT1 A 0 A_StopSound(CHAN_WEAPON)
+		Stop
+    }
+}
+
+actor FDAliensStasisArrowImpact
+{
+    Radius 6
+    Height 6
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+		AARR B 3 Bright Light("FDStasisArrowImpact1")
+		AARR C 3 Bright Light("FDStasisArrowImpact2")
+		AARR D 3 Bright Light("FDStasisArrowImpact3")
+		AARR E 3 Bright Light("FDStasisArrowImpact4")
+		Stop
+    }
+}
+
+ACTOR FDAliensStasisStunner
+{
+  Radius 6
+  Height 6
+  Speed 5
+  Damage (0)
+  +FORCEPAIN
+  Projectile
+  States
+  {
+  Spawn:
+    TNT1 A 2
+    Loop
+  Death:
+    TNT1 A 4
+    Stop
+  }
+}
+
+actor FDAliensAntiStasisPlayer : PowerupGiver
+{
+  inventory.pickupmessage ""
+  inventory.maxamount 0
+  Powerup.Duration 105
+  Powerup.Color 0, 0, 0, 0
+  powerup.type "PowerBuddha"
+//  +INVENTORY.ADDITIVETIME
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.PickupSound ""
+  states
+  {
+  Spawn:
+    TNT1 A 0
+    Stop
+  }
+}

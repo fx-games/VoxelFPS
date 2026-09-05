@@ -1,0 +1,708 @@
+ 
+// NANOCORE EFFECTS
+// Increased impact damage
+
+ACTOR FDBTSXPistol : FDWeapon
+{
+  Inventory.RestrictedTo "FDBTSXPlayer"
+  Inventory.Icon "BXPISTOL"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDBTSXPistolCharge"
+  Weapon.AmmoUse 0
+  Weapon.SlotNumber 2
+  Obituary "%k was charged with shooting %o and was fined X dollars."
+  Decal ""
+  Tag "Charge Pistol"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_TakeInventory ("FDBTSXPistolCharge", 0)
+    XPIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_TakeInventory ("FDBTSXPistolCharge", 0)
+    XPIS A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_StopSound(5)
+    TNT1 A 0 A_StopSound(6)
+    TNT1 A 0 A_TakeInventory ("FDBTSXPistolCharge", 0)
+  DeselectLoop:
+    XPIS A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Fire:
+  FireLevel0:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, "FancyFire0")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FireLevel0X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FireLevel0X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectile0", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireNormalEnd
+  FireLevel0X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectileNano0", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireNormalEnd
+  FireNormalEnd:
+    TNT1 A 0 A_StopSound(5)
+    TNT1 A 0 A_StopSound(6)
+    TNT1 A 0 A_TakeInventory ("FDBTSXPistolCharge", 0)
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_PlaySound("btsxpistol/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("btsxpistol/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (0, 0, 1, 0, "FDHarmlessPuff", FBF_NORANDOM) // Used to trigger wall switches
+    XPIS B 1 Bright A_SetPitch (pitch - (0.6 * CallACS("FD_recoil")/65536.0))
+    XPIS B 1 Bright A_SetPitch (pitch - (0.01 * CallACS("FD_recoil")/65536.0))
+    XPIS C 1
+    XPIS C 1 A_SetPitch (pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    XPIS D 1 A_SetPitch (pitch + (0.02 * CallACS("FD_recoil")/65536.0))
+    XPIS D 1 A_SetPitch (pitch + (0.18 * CallACS("FD_recoil")/65536.0))
+    XPIS E 1 A_SetPitch (pitch + (0.26 * CallACS("FD_recoil")/65536.0))
+    XPIS E 1 A_SetPitch (pitch + (0.10 * CallACS("FD_recoil")/65536.0))
+    XPIS A 1 A_SetPitch (pitch + (0.04 * CallACS("FD_recoil")/65536.0))
+    XPIS A 1
+	Goto Ready
+  FireLevel1:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, "FancyFire1")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FireLevel1X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FireLevel1X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectile1", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FireLevel1X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectileNano1", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FireLevel2:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, "FancyFire2")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FireLevel2X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FireLevel2X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectile2", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FireLevel2X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXPistolProjectileNano2", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FireChargedEnd:
+    TNT1 A 0 A_StopSound(5)
+    TNT1 A 0 A_StopSound(6)
+    TNT1 A 0 A_TakeInventory ("FDBTSXPistolCharge", 0)
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("FlashCharge2")
+    TNT1 A 0 A_PlaySound("btsxpistol/chargedfire", CHAN_WEAPON, 1, 0, 0.5)
+    TNT1 A 0 A_PlaySound("btsxpistol/chargedfire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (0, 0, 1, 0, "FDHarmlessPuff", FBF_NORANDOM) // Used to trigger wall switches
+    XPIS S 1 Bright A_SetPitch (pitch - (1.4 * CallACS("FD_recoil")/65536.0))
+    XPIS S 1 Bright A_SetPitch (pitch - (0.01 * CallACS("FD_recoil")/65536.0))
+    XPIS T 1
+    XPIS T 1 A_SetPitch (pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    XPIS T 1 A_SetPitch (pitch + (0.17 * CallACS("FD_recoil")/65536.0))
+    XPIS T 1 A_SetPitch (pitch + (0.38 * CallACS("FD_recoil")/65536.0))
+    XPIS U 1 A_SetPitch (pitch + (0.66 * CallACS("FD_recoil")/65536.0))
+    XPIS U 1 A_SetPitch (pitch + (0.18 * CallACS("FD_recoil")/65536.0))
+    XPIS D 1 A_SetPitch (pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    XPIS D 1
+    XPIS E 2
+    XPIS A 2
+	Goto Ready
+	
+  AltFire: // Hold altfire to charge up a more powerful shot, fires on release
+    TNT1 A 0 A_PlaySound("btsxpistol/charge", 5, 1, 0, 1.25)
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXPistolChargeLight", 1,0,32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    XPIS FG 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+  ChargeLoop00:
+    XPIS H 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 50, "ChargeLoop1Start")
+    TNT1 A 0 A_Refire ("ChargeLoop01")
+    Goto FireLevel0
+  ChargeLoop01:
+    XPIS I 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 50, "ChargeLoop1Start")
+    TNT1 A 0 A_Refire ("ChargeLoop02")
+    Goto FireLevel0
+  ChargeLoop02:
+    XPIS J 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 50, "ChargeLoop1Start")
+    TNT1 A 0 A_Refire ("ChargeLoop00")
+    Goto FireLevel0
+  ChargeLoop1Start:
+    XPIS K 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+  ChargeLoop10:
+    XPIS L 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 0, "ChargeLoop2Start")
+    TNT1 A 0 A_Refire ("ChargeLoop11")
+    Goto FireLevel1
+  ChargeLoop11:
+    XPIS M 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 0, "ChargeLoop2Start")
+    TNT1 A 0 A_Refire ("ChargeLoop12")
+    Goto FireLevel1
+  ChargeLoop12:
+    XPIS N 1 Bright A_GiveInventory ("FDBTSXPistolCharge", 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 0, "ChargeLoop2Start")
+    TNT1 A 0 A_Refire ("ChargeLoop10")
+    Goto FireLevel1
+  ChargeLoop2Start:
+    TNT1 A 0 A_PlaySound("btsxpistol/chargeloop", 6, 1, 1, 1.25)
+    XPIS O 1 Bright
+  ChargeLoop20:
+    XPIS P 1 Bright
+    TNT1 A 0 A_Refire ("ChargeLoop21")
+    Goto FireLevel2
+  ChargeLoop21:
+    XPIS Q 1 Bright
+    TNT1 A 0 A_Refire ("ChargeLoop22")
+    Goto FireLevel2
+  ChargeLoop22:
+    XPIS R 1 Bright
+    TNT1 A 0 A_Refire ("ChargeLoop20")
+    Goto FireLevel2
+	
+  Flash:
+    TNT1 A 1 A_Light1
+    TNT1 A 1 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  FlashCharge1:
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light (4)
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  FlashCharge2:
+    TNT1 A 1 A_Light (4)
+    TNT1 A 1 A_Light (8)
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+	
+  FancyFire0:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FancyFire0X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FancyFire0X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectile0", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireNormalEnd
+  FancyFire0X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectileNano0", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireNormalEnd
+  FancyFire1:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FancyFire1X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FancyFire1X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectile1", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FancyFire1X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectileNano1", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FancyFire2:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "FancyFire2X")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "FancyFire2X")
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectile2", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  FancyFire2X:
+    TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyPistolProjectileNano2", frandom(-0.1,0.1), 0, 0, 6)
+	Goto FireChargedEnd
+  }
+}
+
+//------------------------------------------------------------------------------
+
+ACTOR FDBTSXPistolProjectile0 : FastProjectile
+{
+  Radius 4
+  Height 4
+  Speed 55
+  Damage (random(12,14))
+  DamageType "Pulse"
+  Decal "DoomImpScorch"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +BLOODLESSIMPACT
+  Projectile
+  RenderStyle Add
+  Alpha 1.0
+  Scale 0.22
+  States
+  {
+  Spawn:
+    TNT1 A 1 Light("FDChargePistolGlow")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+	
+  Death:
+    TNT1 A 0 A_SetScale (1.3) // set scale here to match the impact effect
+	TNT1 A 0 A_Jump(256, "DeathEffects")
+	Goto DeathEffects
+  DeathEffects:
+    TNT1 A 0 A_PlaySound("btsx/energyimpact", 7, 0.5, 0, 1.5)
+    TNT1 A 0 A_PlaySound("btsxpistol/hit", CHAN_WEAPON, 0.9, 0, 1.3)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "NoParticles")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,25), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+	TNT1 A 0 A_Jump(256, "NoParticles")
+    Goto NoParticles
+	
+  NoParticles: // Normal impact
+	XPIX J 1 Bright Light("FDRedGlowHit1")
+	XPIX K 1 Bright Light("FDRedGlowHit2")
+	XPIX L 1 Bright Light("FDRedGlowHit3")
+	XPIX M 1 Bright Light("FDRedGlowHit4")
+	XPIX N 1 Bright Light("FDRedGlowHit5")
+	XPIX O 1 Bright Light("FDRedGlowHit1")
+	Stop
+  BoomHit: // Max charge impact
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXPistolLightningField", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, 3)
+    TNT1 A 0 A_Quake (2, 7, 0, 256, "")
+    TNT1 A 0 A_Quake (1, 10, 0, 512, "")
+	XPIX B 1 Bright Light("FDChargePistolMaxHit1")
+	XPIX C 1 Bright Light("FDChargePistolMaxHit2")
+	XPIX D 1 Bright Light("FDChargePistolMaxHit3")
+	XPIX E 1 Bright Light("FDChargePistolMaxHit4")
+	XPIX F 1 Bright Light("FDChargePistolMaxHit5")
+	XPIX G 1 Bright Light("FDChargePistolMaxHit6")
+	XPIX H 1 Bright Light("FDChargePistolMaxHit7")
+	Stop
+  }
+}
+
+ACTOR FDBTSXPistolProjectile1 : FDBTSXPistolProjectile0
+{
+  Damage (random(36,42))
+  Scale 0.26
+  States
+  {
+  Spawn:
+    TNT1 A 1 Light("FDChargePistolGlow1")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  Death:
+    TNT1 A 0 A_SetScale (1.9) // set scale here to match the impact effect
+	TNT1 A 0 A_Jump(256, "DeathEffects")
+	Goto DeathEffects
+  }
+}
+
+ACTOR FDBTSXPistolProjectile2 : FDBTSXPistolProjectile0
+{
+  Damage (random(72,84))
+  +FORCEPAIN
+  Scale 0.30
+  Decal "Scorch"
+  States
+  {
+  Spawn:
+    TNT1 A 1 Light("FDChargePistolGlow2")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  Death:
+    TNT1 A 0 A_SetScale (1.2) // set scale here to match the impact effect
+	TNT1 A 0 A_Jump(256, "DeathEffects")
+	Goto DeathEffects
+  DeathEffects:
+    TNT1 A 0 A_PlaySound("btsx/heavyenergyimpact", 7, 0.7, 0, 1.3)
+    TNT1 A 0 A_PlaySound("btsxpistol/boom", CHAN_WEAPON, 0.9, 0, 0.8)
+    TNT1 A 0 A_Explode (20, 96, 0)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "NoParticles")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,25), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+	TNT1 A 0 A_Jump(256, "BoomHit")
+    Goto BoomHit
+  }
+}
+
+//------------------------------------------------------------------------------
+
+ACTOR FDBTSXPistolProjectileNano0 : FDBTSXPistolProjectile0
+{
+  Damage (random(24,28))
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXPistolProjectileNano1 : FDBTSXPistolProjectile1
+{
+  Damage (random(72,84))
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXPistolProjectileNano2 : FDBTSXPistolProjectile2
+{
+  Damage (random(144,168))
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXPistolProjectileMaxTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+//------------------------------------------------------------------------------
+
+ACTOR FDBTSXFancyPistolProjectile0 : FDBTSXPistolProjectile0
+{
+  Scale 0.06
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXFancyPistolProjectile1 : FDBTSXPistolProjectile1
+{
+  Damage (random(36,42))
+  Scale 0.08
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXFancyPistolProjectile2 : FDBTSXPistolProjectile2
+{
+  Damage (random(72,84))
+  Scale 0.10
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXFancyPistolProjectileNano0 : FDBTSXFancyPistolProjectile0
+{
+  Damage (random(24,28))
+  Scale 0.07
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXFancyPistolProjectileNano1 : FDBTSXPistolProjectileNano1
+{
+  Damage (random(72,84))
+  Scale 0.09
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+ACTOR FDBTSXFancyPistolProjectileNano2 : FDBTSXPistolProjectileNano2
+{
+  Damage (random(124,148))
+  Scale 0.11
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(0.5*momx)/-35.0, -(0.5*momy)/-35.0, 2+(0.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(1.5*momx)/-35.0, -(1.5*momy)/-35.0, 2+(1.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(2.5*momx)/-35.0, -(2.5*momy)/-35.0, 2+(2.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(3.5*momx)/-35.0, -(3.5*momy)/-35.0, 2+(3.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(4.5*momx)/-35.0, -(4.5*momy)/-35.0, 2+(4.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(5.5*momx)/-35.0, -(5.5*momy)/-35.0, 2+(5.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(6.5*momx)/-35.0, -(6.5*momy)/-35.0, 2+(6.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail",(7.5*momx)/-35.0, -(7.5*momy)/-35.0, 2+(7.5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyPistolProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+    Goto Spawn
+  }
+}
+
+//------------------------------------------------------------------------------
+
+actor FDBTSXPistolProjectileTrail
+{
+    Scale 0.08
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+        XPIX A 2 Bright
+        stop
+    }
+}
+
+actor FDBTSXPistolProjectileMaxTrail : FDBTSXPistolProjectileTrail
+{
+    States
+    {
+    Spawn:
+        XPIX I 2 Bright
+        stop
+    }
+}
+
+actor FDBTSXFancyPistolProjectileTrail : FDBTSXPistolProjectileTrail
+{
+    Scale 0.08
+    States
+    {
+    Spawn:
+        OGLP C 2 Bright
+        stop
+    }
+}
+
+Actor FDBTSXPistolChargeLight
+{ 
+  +THRUACTORS
+  +NOCLIP
+  +NOGRAVITY
+  Projectile
+  Radius 4
+  Height 4
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION, "MaxHax")
+	Goto LightIsOver
+  MaxHax:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 0, "LightTime3", AAPTR_MASTER)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 50, "LightTime2", AAPTR_MASTER)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXPistolCharge", 1, "LightTime1", AAPTR_MASTER)
+	Goto LightIsOver
+  LightTime1:
+    TNT1 A 1 Light("FDChargePistolChargeupGlow1")
+	Goto Spawn
+  LightTime2:
+    TNT1 A 1 Light("FDChargePistolChargeupGlow2")
+	Goto Spawn
+  LightTime3:
+    TNT1 A 1 Light("FDChargePistolChargeupGlow3")
+	Goto Spawn
+	
+  LightIsOver:
+    TNT1 A 0
+	Stop
+  }
+}
+
+actor FDBTSXPistolLightningField : FDBTSXPistolProjectileTrail
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_Jump (256, 1,2,3)
+		TNT1 AAAAA 0 A_CustomRailgun (0, 0, "None", "Red", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", frandom(0,359), frandom(-45,45), random(24,64), 1, 0.2, 0, "None", -4)
+        Stop
+    }
+}

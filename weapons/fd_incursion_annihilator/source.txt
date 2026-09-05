@@ -1,0 +1,151 @@
+ 
+ACTOR FDTNTBFG9000 : FDBFGWeapon
+{
+  Inventory.RestrictedTo "FDTNTPlayer"
+  Inventory.Icon "TNBFG900"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDTNTBFGCharge"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 7
+  Obituary "%o was zapped by %k."
+  Decal ""
+  Tag "Incursion Annihilator"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, 2)
+    TNT1 A 0 A_PlaySound("tntbfg9000/idle", 7, 1, 1, 1.3)
+    TBFG ABCD 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TBFG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    "####" "#" 0 A_StopSound(7)
+  DeselectLoop:
+    TBFG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TBFG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBFGCharge", 1, "ChargeStart")
+	Goto Dryfire
+    TNT1 A 0 A_JumpIfInventory ("FDTNTCell", 15, "ChargeStart")
+	Goto Dryfire
+	
+  ChargeStart:
+    TNT1 A 0 A_PlaySound("tntbfg9000/charge", 7, 1, 0, 0.8)
+    TNT1 A 0 A_AlertMonsters (random(256,400))
+    TBFG EEFFGG 5
+  BeginFire:
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBFGCharge", 1, 2)
+	Goto Cooldown
+    TNT1 A 0 A_JumpIfInventory ("FDTNTCell", 15, 1)
+	Goto Cooldown
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_TakeInventory ("FDTNTBFGCharge", 1, TIF_NOTAKEINFINITE)
+	Goto EMITRAY
+    TNT1 A 0 A_TakeInventory ("FDTNTCell", 15, TIF_NOTAKEINFINITE)
+	Goto EMITRAY
+  EMITRAY:
+    TNT1 A 0 A_FireCustomMissile ("FDTNTBFGRayEmitter", 0, 0)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBFGFiringCycle", 3, "FiringSound4")
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBFGFiringCycle", 2, "FiringSound3")
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBFGFiringCycle", 1, "FiringSound2")
+	Goto FiringSound1
+	
+  FiringSound1:
+    TNT1 A 0 A_GiveInventory ("FDTNTBFGFiringCycle", 1)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire1", CHAN_WEAPON, 1, 0, 0.2)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire1", 7, 1, 0, 0.8)
+	Goto FireAnimation
+  FiringSound2:
+    TNT1 A 0 A_GiveInventory ("FDTNTBFGFiringCycle", 1)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire2", 6, 1, 0, 0.2)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire2", 7, 1, 0, 0.8)
+	Goto FireAnimation
+  FiringSound3:
+    TNT1 A 0 A_GiveInventory ("FDTNTBFGFiringCycle", 1)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire3", 5, 1, 0, 0.2)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire3", 7, 1, 0, 0.8)
+	Goto FireAnimation
+  FiringSound4:
+    TNT1 A 0 A_TakeInventory ("FDTNTBFGFiringCycle", 0)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire4", CHAN_BODY, 1, 0, 0.2)
+    TNT1 A 0 A_PlaySound("tntbfg9000/fire4", 7, 1, 0, 0.8)
+	Goto FireAnimation
+  FireAnimation:
+    TBFG H 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 AA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG H 1 Bright A_SetPitch (pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+    TNT1 AAA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG I 1 Bright A_SetPitch (pitch - (1.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 AAAA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG I 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 AAAA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG J 1 Bright A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 AAA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG J 1 Bright A_SetPitch (pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    TNT1 AA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG K 1 Bright A_SetPitch (pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+    TNT1 AA 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG K 1 Bright A_SetPitch (pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_RailAttack (0, frandom(-3.0,3.0), 0, "None", "Green", RGF_SILENT | RGF_FULLBRIGHT, 10, "FDHarmlessPuff", 30,15, 128+random(0,64), 1, 0.5, 0.0, "None", 0)
+    TBFG L 1 Bright A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TBFG L 1 Bright A_SetPitch (pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TBFG M 1 A_SetPitch (pitch + (0.02 * CallACS("FD_recoil")/65536.0))
+    TBFG M 1
+    TBFG N 2
+    TBFG A 2
+    TBFG A 2 A_Refire ("BeginFire")
+  Cooldown:
+    TNT1 A 0 A_PlaySound("tntbfg9000/cooldown", 6, 1, 0, 0.8)
+    TBFG EFGGGFEEFGGGFEEFGGGFEEFGGGFEEFGGGFEEFGGGFE 1 A_WeaponReady (WRF_NOFIRE)
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light (3)
+    TNT1 A 2 A_Light (5)
+    TNT1 A 2 A_Light (3)
+    TNT1 A 2 A_Light2
+    TNT1 A 2 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+ACTOR FDTNTBFGRayEmitter
+{
+  Radius 4
+  Height 4
+  Speed 25
+  Damage 0
+  Projectile
+  +THRUACTORS
+  +NOCLIP
+  +THRUSPECIES
+  Species "Player"
+  States
+  {
+  Death:
+  Spawn:
+    TNT1 A 1
+    TNT1 A 10 A_BFGSpray ("FDTNTBFGRay", 50, 0, 70, 840, 64, 30)
+    Stop
+  }
+}
+
+Actor FDTNTBFGFiringCycle : FDCounter
+{
+inventory.maxamount 3
+}

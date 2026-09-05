@@ -1,0 +1,350 @@
+ 
+ACTOR FDAlienVendettaChainsaw : FDWeapon
+{
+  Inventory.RestrictedTo "FDAlienVendettaPlayer"
+  Inventory.Icon "AVCHAINS"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%k sent %o to train in 100x gravity."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Grav-Staff"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_PlaySound("alienvendettachainsaw/idle", 7, 0.15, 1, 1.5)
+    VSAW A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_PlaySound("alienvendettachainsaw/idle", 7, 0.15, 1, 1.5)
+  SelectLoop:
+    VSAW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_StopSound(7)
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "DeselectActive")
+  DeselectLoop:
+    VSAW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+  DeselectActive:
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    VSAW D 1 A_SetPitch(pitch - (0.04 * CallACS("FD_recoil")/65536.0))
+    VSAW C 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    VSAW B 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+	Goto DeselectLoop
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "Strike")
+    VSAW B 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    VSAW C 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    VSAW D 1 A_SetPitch(pitch - (0.04 * CallACS("FD_recoil")/65536.0))
+  Strike:
+    TNT1 A 0 A_GiveInventory ("FDWeaponAimState", 1)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 6, 0.6, 0, 1.5)
+    TNT1 A 0 A_PlaySound("alienvendettachainsaw/attack", 5, 1.0, 0, 1.2)
+    VSAW F 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    VSAW F 1 A_SetPitch(pitch - (0.01 * CallACS("FD_recoil")/65536.0))
+    VSAW G 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+    VSAW G 1 A_SetPitch(pitch - (0.03 * CallACS("FD_recoil")/65536.0))
+    VSAW H 1 A_SetPitch(pitch - (0.04 * CallACS("FD_recoil")/65536.0))
+    VSAW H 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "BerserkHit")
+    TNT1 A 0 A_CustomPunch (9*random(7,8), 1, CPF_NORANDOMPUFFZ, "FDAlienVendettaGravStaffPuff", 140)
+    Goto ImpactCheck
+  BerserkHit:
+    TNT1 A 0 A_CustomPunch (9*random(21,24), 1, CPF_NORANDOMPUFFZ, "FDAlienVendettaGravStaffBerserkPuff", 140)
+    Goto ImpactCheck
+  ImpactCheck:
+    TNT1 A 0 A_JumpIfInventory ("FDGravStaffSuccess", 1, "GravAttack")
+    VSAW I 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+    VSAW I 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    VSAW J 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    VSAW J 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    VSAW K 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    VSAW K 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    VSAW L 2
+	Goto AttackEnd
+  GravAttack:
+    TNT1 A 0 A_AlertMonsters (random(128,192))
+    TNT1 A 0 A_PlaySound("alienvendettachainsaw/gravity", CHAN_WEAPON, 0.8, 0, 0.9)
+    TNT1 A 0 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+    VSAW M 1 Bright// A_FireCustomMissile ("FDAlienVendettaGravityRing1", 0, 0)
+    TNT1 A 0 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    VSAW M 1 Bright// A_FireCustomMissile ("FDAlienVendettaGravityRing2", 0, 0)
+    TNT1 A 0 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    VSAW N 1 Bright// A_FireCustomMissile ("FDAlienVendettaGravityRing3", 0, 0)
+    TNT1 A 0 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    VSAW N 1 Bright// A_FireCustomMissile ("FDAlienVendettaGravityRing4", 0, 0)
+    TNT1 A 0 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    VSAW O 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    VSAW O 1
+    VSAW P 2
+	Goto AttackEnd
+	
+  AttackEnd:
+    VSAW EEE 2
+	TNT1 A 0 A_ReFire
+    VSAW EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE 1 A_WeaponReady (WRF_NOBOB)
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    VSAW D 1 A_SetPitch(pitch - (0.04 * CallACS("FD_recoil")/65536.0))
+    VSAW C 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    VSAW B 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    Goto Ready
+  }
+}
+
+ACTOR FDGravStaffSuccess : FDCooldown
+{
+	Powerup.Duration 3
+}
+
+ACTOR FDAlienVendettaGravityRing1 : FastProjectile
+{
+    Radius 3
+    Height 3
+    Speed 9
+	Damage 0
+	Scale 0.3
+	Alpha 0.3
+	RenderStyle Add
+    PROJECTILE
+    +FORCEXYBILLBOARD
+	+THRUACTORS
+	+NOCLIP
+	+NOINTERACTION
+    +BLOODLESSIMPACT
+	+PAINLESS
+    States
+    {
+        Spawn:
+            TNT1 A 0
+            TNT1 A 0 A_SetScale (scalex * 1.25)
+            XSSO A 1 Bright/* Light("FDMachreaperGlow1") */A_FadeTo (0, 0.05, 1)
+            TNT1 A 0 A_SetScale (scalex * 1.25)
+            XSSO B 1 Bright/* Light("FDMachreaperGlow2") */A_FadeTo (0, 0.05, 1)
+            TNT1 A 0 A_SetScale (scalex * 1.25)
+            XSSO C 1 Bright/* Light("FDMachreaperGlow3") */A_FadeTo (0, 0.05, 1)
+            TNT1 A 0 A_SetScale (scalex * 1.25)
+            XSSO D 1 Bright/* Light("FDMachreaperGlow4") */A_FadeTo (0, 0.05, 1)
+            loop
+        Death:
+            TNT1 A 1
+            Stop
+    }
+}
+
+ACTOR FDAlienVendettaGravityRing2 : FDAlienVendettaGravityRing1
+{
+	Scale 0.25
+}
+
+ACTOR FDAlienVendettaGravityRing3 : FDAlienVendettaGravityRing1
+{
+	Scale 0.2
+}
+
+ACTOR FDAlienVendettaGravityRing4 : FDAlienVendettaGravityRing1
+{
+	Scale 0.15
+}
+
+// Basically just copied my stuff from the Gravitic effect in LegenDoom, heh
+// yole is lazy
+
+ACTOR FDAlienVendettaGravStaffEffectCheckerSpawner : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravStaffEffectChecker", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravStaffEffectChecker
+{
+	+NOGRAVITY
+	+NONSHOOTABLE
+	+THRUACTORS
+	+NOTONAUTOMAP
+    +NOTIMEFREEZE
+	+NOCLIP
+    +DONTSPLASH
+    +NOTELEPORT
+  States
+  {
+  Spawn:
+    TNT1 A 1
+  SpawnLoop:
+	TNT1 A 0 A_JumpIfHealthLower (1, "Ded", AAPTR_MASTER)
+	TNT1 A 1 Light("FDAVGravityGlow") A_GiveInventory ("FDAlienVendettaGravStaffEffectVisualSpawner", 1, AAPTR_MASTER)
+	TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1, "WarpCheck", AAPTR_MASTER)
+	TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravStaffReset", 1, AAPTR_MASTER)
+    Stop
+  WarpCheck:
+    TNT1 A 0 A_Warp(AAPTR_MASTER, 0,0,8, 0, WARPF_NOCHECKPOSITION, "SpawnLoop", 0.5)
+	TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravStaffReset", 1, AAPTR_MASTER)
+    Stop
+  Ded:
+    TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravStaffReset", 1, AAPTR_MASTER)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravStaffEffectVisualSpawner : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0
+	TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1, "Check")
+    Stop
+  Check:
+	TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaGravityVisualCooldown", 1, "SpawnAfterimage")
+	TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravityVisualCooldown", 1)
+  SpawnEffect:
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 0, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 30, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 60, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 90, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 120, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 150, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 180, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 210, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 240, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 270, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 300, SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravityVisualEffect", radius*1.1,0,height*1.1, 0,0,-3.0, 330, SXF_NOCHECKPOSITION)
+  SpawnAfterimage:
+  PurpleAfterimage:
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "BlackAfterimage")
+    TNT1 A 0 A_GiveInventory ("FDWeaponAimState", 1)
+    TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravStaffAfterimage", -1,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME |  SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+	TNT1 AAA 0 A_SpawnParticle ("Purple", SPF_FULLBRIGHT | SPF_RELPOS, random(5,35), random(1,5), 0, frandom(-(radius*1.1),(radius*1.1)),frandom(-(radius*1.1),(radius*1.1)), frandom(0,(height*1.1)), 0,0,frandom(-1.8,-0.05), 0,0,-0.25, 0.8, -1)
+    Stop
+  BlackAfterimage:
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    TNT1 A 0 A_SpawnItemEx ("FDAlienVendettaGravStaffAfterimage2", -1,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME |  SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+	TNT1 AAA 0 A_SpawnParticle ("A081FE", SPF_FULLBRIGHT | SPF_RELPOS, random(5,35), random(1,5), 0, frandom(-(radius*1.1),(radius*1.1)),frandom(-(radius*1.1),(radius*1.1)), frandom(0,(height*1.1)), 0,0,frandom(-1.8,-0.05), 0,0,-0.25, 0.8, -1)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravityVisualEffect
+{   
+   -NOGRAVITY
+   +DONTSPLASH
+   +NOTELEPORT
+   +THRUACTORS
+   RenderStyle Translucent
+   Projectile
+   Alpha 0.35
+   Scale 1.0
+   States
+   {
+   Spawn:
+      TNT1 A 0
+      VSGX ABCDEF 3 Bright A_SetScale (ScaleX, ScaleY * 1.15)
+   SpawnLoop:
+      TNT1 A 0 A_FadeTo (0, 0.01, 1)
+      VSGX F 1 Bright A_SetScale (ScaleX, ScaleY * 1.05)
+      Loop
+   Death:
+      TNT1 A 0
+      Stop
+   }
+}
+
+ACTOR FDAlienVendettaGravStaffEffect : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0
+	TNT1 A 0 A_ChangeFlag ("NOGRAVITY", 0)
+	TNT1 A 0 A_ChangeFlag ("FLOAT", 0)
+	TNT1 A 0 A_SetSpeed (speed/4)
+	TNT1 A 0 A_TakeInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1)
+	TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravStaffExtender : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0
+	TNT1 A 0 A_TakeInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1)
+	TNT1 A 0 A_GiveInventory ("FDAlienVendettaGravStaffSpeedDebuff", 1)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravStaffReset : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+	TNT1 A 0 A_SetSpeed (speed*4)
+    Stop
+  }
+}
+
+ACTOR FDAlienVendettaGravStaffSpeedDebuff : FDCooldown
+{
+  Powerup.Duration -8
+}
+
+ACTOR FDAlienVendettaGravityVisualCooldown : FDCooldown
+{
+  Powerup.Duration -1
+}
+
+actor FDAlienVendettaGravStaffAfterimage
+{
+	Radius 16
+	Height 8
+    Scale 1.0
+    Alpha 1.0
+    RenderStyle AddStencil
+	StencilColor "A081FE"
+	+NOGRAVITY
+	+NONSHOOTABLE
+	+THRUACTORS
+	+NOTONAUTOMAP
+    +NOTIMEFREEZE
+    +DONTSPLASH
+    +NOTELEPORT
+    States
+    {
+    Spawn:
+	    "####" "#" 0 Bright
+	    "####" "#" 0 Bright A_FadeTo (alpha * 0.5, 1, 0)
+	    "####" "#" 0 Bright ThrustThingZ (0, 1, 1, 0)
+	    "####" "#" 0 A_Jump (256, "SpawnLoop")
+        Goto SpawnLoop
+    SpawnLoop:
+	    "####" "#" 0 Bright A_FadeTo (0, 0.12, 1)
+        "####" "#" 1 Bright A_SetScale (scalex, scaley*frandom(0.94,0.98))
+        Goto SpawnLoop
+    }
+}
+
+actor FDAlienVendettaGravStaffAfterimage2 : FDAlienVendettaGravStaffAfterimage
+{
+    RenderStyle Stencil
+	StencilColor "Black"
+    States
+    {
+    SpawnLoop:
+	    "####" "#" 0 Bright A_FadeTo (0, 0.12, 1)
+        "####" "#" 1 Bright A_SetScale (scalex, scaley*frandom(0.94,0.98))
+        Goto SpawnLoop
+    }
+}

@@ -1,0 +1,321 @@
+ 
+// NANOCORE EFFECTS
+// No charge time
+
+ACTOR FDBTSXBFG9000 : FDBFGWeapon
+{
+  Inventory.RestrictedTo "FDBTSXPlayer"
+  Inventory.Icon "BXBFG900"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDBTSXBFGCharge"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 7
+  Obituary "%o lost the spark of life after being zapped by %k."
+  Decal ""
+  Tag "X-Spark Cannon"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "ReadyNoSound")
+    TNT1 A 0 A_PlaySound("btsxbfg9000/idle", 7, 0.4, 1, 1.4)
+    XBFG A 1 A_WeaponReady
+    Loop
+  ReadyNoSound:
+    XBFG A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    XBFG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    "####" "#" 0 A_StopSound(7)
+  DeselectLoop:
+    XBFG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    XBFG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXBFGCharge", 1, "ChargeStart")
+	Goto Dryfire
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXCell", 250, "ChargeStart")
+	Goto Dryfire
+  QuickFire:
+    TNT1 A 0 A_PlaySound("btsxbfg9000/quickfire", 7, 1, 0, 0.8)
+	Goto ChargeDone
+	
+  ChargeStart:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "QuickFire")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "QuickFire")
+    TNT1 A 0 A_PlaySound("btsxbfg9000/charge", 7, 1, 0, 0.8)
+    TNT1 A 0 A_AlertMonsters (random(256,400))
+	XBFG A 15
+    TNT1 A 0 A_GunFlash ("FlashCharge", GFF_NOEXTCHANGE)
+	XBFG BCDEF 1 Bright
+	XBFG A 12
+    TNT1 A 0 A_GunFlash ("FlashCharge", GFF_NOEXTCHANGE)
+	XBFG BCDEF 1 Bright
+	XBFG A 8
+    TNT1 A 0 A_GunFlash ("FlashCharge", GFF_NOEXTCHANGE)
+	XBFG BCDEF 1 Bright
+	XBFG A 5
+    TNT1 A 0 A_GunFlash ("FlashCharge", GFF_NOEXTCHANGE)
+	XBFG BCDEF 1 Bright
+    TNT1 A 0 A_GunFlash ("FlashCharge", GFF_NOEXTCHANGE)
+	XBFG BCDEF 1 Bright
+  ChargeDone:
+    TNT1 A 0 A_GunFlash ("Flash")
+	XBFG G 2 Bright
+	TNT1 A 0 A_AlertMonsters
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_TakeInventory ("FDBTSXBFGCharge", 1, TIF_NOTAKEINFINITE)
+	Goto UNLEASHTHESPARK
+    TNT1 A 0 A_TakeInventory ("FDBTSXCell", 250, TIF_NOTAKEINFINITE)
+	Goto UNLEASHTHESPARK
+  UNLEASHTHESPARK:
+	TNT1 A 0 A_FireCustomMissile ("FDBTSXBFGBall", 0, 0, 0, 6)
+	// -3.25
+	XBFG H 1 Bright A_SetPitch(pitch - (2.75 * CallACS("FD_recoil")/65536.0))
+	XBFG H 1 Bright A_SetPitch(pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+	// 3.25
+	XBFG I 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	XBFG I 1 Bright A_SetPitch(pitch + (1.25 * CallACS("FD_recoil")/65536.0))
+	XBFG J 1 Bright A_SetPitch(pitch + (0.7 * CallACS("FD_recoil")/65536.0))
+	XBFG J 1 Bright A_SetPitch(pitch + (0.43 * CallACS("FD_recoil")/65536.0))
+	XBFG K 1 Bright A_SetPitch(pitch + (0.30 * CallACS("FD_recoil")/65536.0))
+	XBFG K 1 Bright A_SetPitch(pitch + (0.29 * CallACS("FD_recoil")/65536.0))
+	XBFG A 1 A_SetPitch(pitch + (0.18 * CallACS("FD_recoil")/65536.0))
+	XBFG A 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	XBFG AAAAAAAAAA 2 A_ReFire
+    Goto Ready
+	
+  Flash:
+	TNT1 A 2 A_Light2
+	TNT1 A 2 A_Light (10)
+	TNT1 A 2 A_Light (5)
+	TNT1 A 2 A_Light (3)
+	TNT1 A 2 A_Light1
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  FlashCharge:
+	TNT1 A 1 A_Light1
+	TNT1 A 1 A_Light2
+	TNT1 A 1 A_Light1
+	TNT1 A 1 A_Light2
+	TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  }
+}
+
+ // Hopefully, should never ever be resisted against
+DamageType XSpark
+{
+   Factor 1
+   ReplaceFactor
+   NoArmor
+}
+
+ACTOR FDBTSXBFGBall : BFGBall
+{
+  Obituary ""
+  Damage (250)
+  SeeSound ""
+  DeathSound ""
+  Decal "BigScorch"
+  Speed 45
+  Alpha 0.99
+  Scale 0.5
+  DamageType "XSpark"
+  Species "Player"
+  +THRUSPECIES
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  +SKYEXPLODE
+
+	var int user_sparkring;
+  States
+  {
+  Spawn:
+    TNT1 A 0 NoDelay A_PlaySound ("btsxbfg9000/loop", 7, 0.8, 1, 1.4)
+    XBFB A 1 Bright A_ScaleVelocity (0.95)
+    TNT1 A 1 A_ScaleVelocity (0.95)
+    XBFB B 1 Bright A_ScaleVelocity (0.95)
+    TNT1 A 1 A_ScaleVelocity (0.95)
+    XBFB C 1 Bright A_ScaleVelocity (0.95)
+    TNT1 A 1 A_ScaleVelocity (0.95)
+    TNT1 A 0 A_JumpIf(abs(velx) < 1 && abs(vely) < 1 && abs(velz) < 1, "Detonate")
+    Loop
+  Detonate:
+    TNT1 A 0 A_ChangeFlag ("THRUACTORS", 1)
+    TNT1 A 0 A_ChangeFlag ("NOCLIP", 1)
+    TNT1 A 0 A_Stop
+	Goto Death
+	
+  Death:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+	TNT1 A 0 A_SetUserVar("user_sparkring", 0)
+  DeathRing:
+	TNT1 A 0 A_SpawnParticle (c7c7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(40,46), random(8,10), user_sparkring, 0,0,0, frandom(25.8,26.2),0,0, 0,0,0, 0.98, -1)
+	TNT1 A 0 A_JumpIf (user_sparkring >= 360, "DeathRingDone")
+	TNT1 A 0 A_SetUserVar("user_sparkring", user_sparkring + 1)
+	Goto DeathRing
+  DeathRingDone:
+//	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAA 0 A_SpawnParticle (3737ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(30,70), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(25,60), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (c7c7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(20,50), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (e7e7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,4), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+	Goto QuakeTime
+  QuakeTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+    TNT1 A 0 A_Quake (3, 24, 0, 1536, "")
+    TNT1 A 0 A_Quake (7, 12, 0, 768, "")
+//	TNT1 A 0 A_JumpIf(CallACS("FD_DRLACheck"), 1)
+	Goto DeathAnimation
+//	TNT1 A 0 A_Explode (30000, 308, 0, 1, 308) // If run with DRLA Monsterpack, deal gigaton damage all at once instead, as bosses will otherwise laugh it off
+//	Goto DeathAnimation
+  DeathAnimation:
+    TNT1 A 0 A_PlaySound ("btsxbfg9000/explosion", 7, 1, 0, 0.4)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnItemEx("FDBTSXElectrofield", random(-radius*4,radius*4),random(-radius*4,radius*4),random(-height*4,height*4), random(10,15),0,random(-15,15), frandom(0.0,360.0), SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS | SXF_SETMASTER | SXF_ORIGINATOR)
+  DeathLoop:
+    TNT1 A 0
+    TNT1 A 0 A_Quake (1, 3, 0, 768, "")
+	TNT1 A 0 A_JumpIf (alpha <= 0.2, "SparkLevel4")
+	TNT1 A 0 A_JumpIf (alpha <= 0.4, "SparkLevel3")
+	TNT1 A 0 A_JumpIf (alpha <= 0.6, "SparkLevel2")
+	TNT1 A 0 A_JumpIf (alpha <= 0.8, "SparkLevel1")
+    TNT1 A 0 A_SetScale (frandom(7.5,8.5) * alpha)
+    XBFB A 1 Bright Light("FDBTSXSparkField1") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.5) * alpha)
+    XBFB B 1 Bright Light("FDBTSXSparkField1") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.5) * alpha)
+    XBFB C 1 Bright Light("FDBTSXSparkField1") A_FadeTo(0, 0.002, 1)
+    Goto DeathLoop
+  SparkLevel1:
+    TNT1 A 0 A_SetScale (frandom(7.5,8.3) * alpha)
+    XBFB A 1 Bright Light("FDBTSXSparkField2") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.3) * alpha)
+    XBFB B 1 Bright Light("FDBTSXSparkField2") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.3) * alpha)
+    XBFB C 1 Bright Light("FDBTSXSparkField2") A_FadeTo(0, 0.002, 1)
+    Goto DeathLoop
+  SparkLevel2:
+    TNT1 A 0 A_SetScale (frandom(7.5,8.1) * alpha)
+    XBFB A 1 Bright Light("FDBTSXSparkField3") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.1) * alpha)
+    XBFB B 1 Bright Light("FDBTSXSparkField3") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,8.1) * alpha)
+    XBFB C 1 Bright Light("FDBTSXSparkField3") A_FadeTo(0, 0.002, 1)
+    Goto DeathLoop
+  SparkLevel3:
+    TNT1 A 0 A_SetScale (frandom(7.5,7.9) * alpha)
+    XBFB A 1 Bright Light("FDBTSXSparkField4") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,7.9) * alpha)
+    XBFB B 1 Bright Light("FDBTSXSparkField4") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,7.9) * alpha)
+    XBFB C 1 Bright Light("FDBTSXSparkField4") A_FadeTo(0, 0.002, 1)
+    Goto DeathLoop
+  SparkLevel4:
+    TNT1 A 0 A_SetScale (frandom(7.5,7.7) * alpha)
+    XBFB A 1 Bright Light("FDBTSXSparkField5") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,7.7) * alpha)
+    XBFB B 1 Bright Light("FDBTSXSparkField5") A_FadeTo(0, 0.002, 1)
+    TNT1 A 0 A_SetScale (frandom(7.5,7.7) * alpha)
+    XBFB C 1 Bright Light("FDBTSXSparkField5") A_FadeTo(0, 0.002, 1)
+    Goto DeathLoop
+  }
+}
+
+const int btsxelectrosize = 200;
+
+ACTOR FDBTSXElectrofield
+{
+	Radius 5
+	Height 5
+	Renderstyle Add
+	DamageType "XSpark"
+	Speed 15
+	Alpha 0.99
+	Scale 0.4
+	+MISSILE
+	+NOINTERACTION
+    +FORCEXYBILLBOARD
+	+FORCERADIUSDMG
+	+BLOODLESSIMPACT
+	+NODAMAGETHRUST
+	+PAINLESS
+
+	var int user_blasttimer;
+	States
+	{
+		Spawn:
+			TNT1 AAAA 2 A_ScaleVelocity(0.5)
+		SpawnLoop:
+			TNT1 A 0 A_JumpIfTargetInLOS (1, 0, JLOSF_CHECKMASTER)
+			Stop
+			TNT1 A 1 A_FadeTo(0, 0.002, 1)
+			"####" "#" 0 A_ScaleVelocity(0.35)
+			"####" "#" 0 A_JumpIf (user_blasttimer <= 10, 3)
+			"####" "#" 0 A_Explode(10,256, 0, 0, 256)
+			"####" "#" 0 A_SetUserVar("user_blasttimer", 0)
+			Goto TimerSkip
+			"####" "#" 0 A_SetUserVar("user_blasttimer", user_blasttimer + 1)
+		TimerSkip:
+			"####" "#" 0 A_PlaySound("btsxbfg9000/zap",CHAN_AUTO, 0.1, 0, 1.3)
+//			"####" "#" 0 A_CustomRailgun (0, 0, "None", "LightBlue", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", frandom(0,359), frandom(-45,45), random(2,16), 1, 0.2, 0, "None", random(-16,16))
+			TNT1 A 0 A_JumpIf (alpha <= 0.1, "SparkLevel5")
+			TNT1 A 0 A_JumpIf (alpha <= 0.2, "SparkLevel4")
+			TNT1 A 0 A_JumpIf (alpha <= 0.4, "SparkLevel3")
+			TNT1 A 0 A_JumpIf (alpha <= 0.6, "SparkLevel2")
+			TNT1 A 0 A_JumpIf (alpha <= 0.8, "SparkLevel1")
+		SparkLevel0:
+			"####" "####" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+		SparkLevel1:
+			"####" "###" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+		SparkLevel2:
+			"####" "##" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+		SparkLevel3:
+			"####" "#" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+		SparkLevel4:
+			TNT1 A 0 A_Jump (64, 1)
+			Goto SpawnLoop
+			"####" "#" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+		SparkLevel5:
+			TNT1 A 0 A_Jump (16, 1)
+			Goto SpawnLoop
+			"####" "#" 0 A_SpawnItemEx("FDBTSXElectrofieldSpark", frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize),frandom(-btsxelectrosize,btsxelectrosize), cos(frandom(-btsxelectrosize,btsxelectrosize)),cos(frandom(-btsxelectrosize,btsxelectrosize)),sin(frandom(-btsxelectrosize,btsxelectrosize)), 0, SXF_NOCHECKPOSITION)
+			Goto SpawnLoop
+	}
+}
+
+ACTOR FDBTSXElectrofieldSpark
+{
+	Renderstyle Add
+	Scale 0.1
+    +FORCEXYBILLBOARD
+	+NOINTERACTION
+	States
+	{
+		Spawn:
+			TNT1 A 0 NoDelay A_SetScale (frandom(0.05,0.25))
+			XBFB ABC 1 Bright
+			Stop
+	}
+}

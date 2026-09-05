@@ -1,0 +1,330 @@
+ 
+ACTOR FDWhitemareRocketLauncher : FDWeapon
+{
+  Inventory.RestrictedTo "FDWhitemarePlayer"
+  Inventory.Icon "WMROCKET"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDWhitemareRocket"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 5
+  Obituary "%o was blasted by one of %k's burny boomers."
+  Decal ""
+  Tag "Firegrasp"
+  States
+  {
+  Ready:
+    WROK A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    WROK A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFireballCharge", 0)
+    TNT1 A 0 A_StopSound(CHAN_WEAPON)
+    TNT1 A 0 A_StopSound(7)
+  DeselectLoop:
+    WROK A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    WROK A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFireballCharge", 0)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareRocket", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/charge", CHAN_WEAPON, 1, 0, 1.0)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/chargeloop", 7, 0.7, 1, 1.5)
+	WROK B 1
+    TNT1 A 0 A_TakeInventory ("FDWhitemareRocket", 1)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFireballCharge", 1)
+	Goto Chargeup
+	
+  Chargeup:
+	WROK C 1 A_SpawnItemEx("FDWhitemareFiregraspChargeball", cos(pitch)*32, 0, ((height-19)+2) - sin(pitch)*32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETTARGET) // super mab math
+	TNT1 A 0 A_Refire ("Chargeup2")
+	Goto ChargeFinish
+  Chargeup2:
+	WROK D 1 A_SpawnItemEx("FDWhitemareFiregraspChargeball", cos(pitch)*32, 0, ((height-19)+2) - sin(pitch)*32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETTARGET) // super mab math
+	TNT1 A 0 A_Refire ("Chargeup3")
+	Goto ChargeFinish
+  Chargeup3:
+	WROK E 1 A_SpawnItemEx("FDWhitemareFiregraspChargeball", cos(pitch)*32, 0, ((height-19)+2) - sin(pitch)*32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETTARGET) // super mab math
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFireballCharge", 0, "ChargeUp")
+	TNT1 A 0 A_JumpIf(CallACS("FD_InfiniteAmmoCheck") == 1, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareRocket", 1, 1)
+	Goto ChargeUp
+    TNT1 A 0 A_TakeInventory ("FDWhitemareRocket", 1, TIF_NOTAKEINFINITE)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFireballCharge", 1)
+	TNT1 A 0 A_Refire ("Chargeup")
+	Goto ChargeFinish
+	
+  ChargeFinish:
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_AlertMonsters
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/fire", 7, 1, 0, 0.4)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFiregraspProjectile", frandom(-0.2,0.2), 0)
+//    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, 1)
+//	Goto FiringComplete
+//    TNT1 A 0 A_GiveInventory ("FDWhitemareHeatLevel", 30)
+	Goto FiringComplete
+  FiringComplete:
+	WROK F 1 Bright A_SetPitch(pitch - (2.75 * CallACS("FD_recoil")/65536.0))
+	WROK F 1 Bright A_SetPitch(pitch - (0.5 * CallACS("FD_recoil")/65536.0)) // 3.25
+	WROK G 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	WROK G 1 Bright A_SetPitch(pitch + (1.25 * CallACS("FD_recoil")/65536.0))
+	WROK H 1 Bright A_SetPitch(pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+	WROK H 1 Bright A_SetPitch(pitch + (0.39 * CallACS("FD_recoil")/65536.0))
+	WROK I 1 Bright A_SetPitch(pitch + (0.31 * CallACS("FD_recoil")/65536.0))
+	WROK I 1 Bright A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	WROK J 1 Bright A_SetPitch(pitch + (0.19 * CallACS("FD_recoil")/65536.0))
+	WROK J 1 Bright A_SetPitch(pitch + (0.13 * CallACS("FD_recoil")/65536.0))
+	WROK K 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	WROK K 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0)) // 3.25
+    WROK LLAAAAAAAA 1 A_Refire
+    Goto Ready
+	
+  Flash:
+	TNT1 A 2 A_Light1
+	TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  }
+}
+
+ACTOR FDWhitemareFiregraspProjectile
+{
+	var int user_fireballexplosion;
+	var int user_fireballdamage;
+	var int user_fireballsize;
+	var int user_spriteframe;
+	
+  Radius 11
+  Height 8
+  Speed 20
+  Scale 0.8
+  Damage (user_fireballdamage)
+  DamageType "Explosive"
+  Projectile
+  Alpha 0.98
+  RenderStyle "Add"
+  Decal "HugeFireScorch"
+  SeeSound "whitemarerocketlauncher/fireprojectile"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  States
+  {
+  Spawn:
+    TNT1 A 0 NoDelay A_SetUserVar("user_fireballdamage", CallACS("FDFiregraspFireballSize") * 32)
+    TNT1 A 0 A_SetUserVar("user_fireballexplosion", CallACS("FDFiregraspFireballSize") * 25)
+    TNT1 A 0 A_SetUserVar("user_fireballsize", CallACS("FDFiregraspFireballSize") * 0.25)
+    TNT1 A 0 A_SetScale(CallACS("FDFiregraspFireballSize") * 0.05 + 0.25)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFireballCharge", 0, 0, AAPTR_TARGET)
+    TNT1 A 0 A_Jump (256, "SpawnLoop")
+	Goto SpawnLoop
+  SpawnLoop:
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/loop", 7, 1, 1, 1.2)
+    TNT1 AAA 0 A_SpawnItemEx ("FDWhitemareFiregraspFlare", frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize), 0,0,frandom(-0.1,-0.05), 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "SpriteFrame")
+	TNT1 A 0 A_SpawnParticle (430000, 					SPF_RELATIVE, random(3,7), random(1,3), 0, frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.1, 0.98, -1)
+	TNT1 AA 0 A_SpawnParticle (bf0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,6), random(1,3), 0, frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.1, 0.98, -1)
+	TNT1 AA 0 A_SpawnParticle (eb6f0f, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,5), random(1,3), 0, frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.1, 0.98, -1)
+	TNT1 A 0 A_SpawnParticle (ffff00,  SPF_FULLBRIGHT | SPF_RELATIVE, random(3,4), random(1,3), 0, frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "SpriteFrame")
+	Goto SpriteFrame
+  SpriteFrame:
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 2, "SpriteFrameB")
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 4, "SpriteFrameC")
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 6, "SpriteFrameD")
+  SpriteFrameA:
+    WFRK A 1 Bright Light("FDWhitemareFiregraspGlow")
+    Goto SpriteFrameEnd
+  SpriteFrameB:
+    WFRK B 1 Bright Light("FDWhitemareFiregraspGlow")
+    Goto SpriteFrameEnd
+  SpriteFrameC:
+    WFRK C 1 Bright Light("FDWhitemareFiregraspGlow")
+    Goto SpriteFrameEnd
+  SpriteFrameD:
+    WFRK D 1 Bright Light("FDWhitemareFiregraspGlow")
+    Goto SpriteFrameEnd
+  SpriteFrameEnd:
+    TNT1 AAA 0 A_SpawnItemEx ("FDWhitemareFireballSmoke", frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize), 0,0,frandom(0.1,0.15), 0, SXF_NOCHECKPOSITION, 220)
+	TNT1 A 0 A_SetUserVar("user_spriteframe", user_spriteframe + 1)
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 8, "ResetFrame")
+    TNT1 A 0 A_Jump (256, "SpawnLoop")
+    Goto SpawnLoop
+	
+  ResetFrame:
+	TNT1 A 0 A_SetUserVar("user_spriteframe", 0)
+    TNT1 A 0 A_Jump (256, "SpawnLoop")
+    Goto SpawnLoop
+	
+  XDeath:
+  Crash:
+	TNT1 A 0
+	Goto IgniteDOT
+	
+	// This sequence is used to set enemies alight.
+  IgniteDOT:
+	TNT1 A 0 A_JumpIfInventory ("FDWhitemareFireDOTActive", 1, "GenerateDOTTime", AAPTR_TRACER)
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 1, "DOT1")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 2, "DOT2")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 3, "DOT3")
+  DOT0:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOT", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT1:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoSmoke", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT2:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTToaster", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT3:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoVisuals", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  GenerateDOTTime:
+	TNT1 AAAAAAAA 0 A_GiveInventory ("FDWhitemareFireDOTActive", 1, AAPTR_TRACER) // 8 seconds guaranteed burn
+	Goto Death
+	
+  FuckYouStopBreakingMyUserVars:
+//    TNT1 A 0 A_LogInt (user_fireballdamage)
+    TNT1 A 0 A_SetUserVar("user_fireballdamage", CallACS("FDFiregraspFireballSize") * 32)
+    TNT1 A 0 A_SetUserVar("user_fireballexplosion", CallACS("FDFiregraspFireballSize") * 25)
+    TNT1 A 0 A_SetUserVar("user_fireballsize", CallACS("FDFiregraspFireballSize") * 0.25)
+    TNT1 A 0 A_SetScale(CallACS("FDFiregraspFireballSize") * 0.05 + 0.25)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFireballCharge", 0, 0, AAPTR_TARGET)
+	Goto DeathExplosion
+	
+  Death:
+	TNT1 A 0 A_JumpIf (user_fireballexplosion == 0, "FuckYouStopBreakingMyUserVars")
+  DeathExplosion:
+    TNT1 A 0 A_Explode (user_fireballexplosion+10, user_fireballexplosion/5+128)
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFiregraspImpact", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    TNT1 A 0 A_Jump (256, "DeathParticles")
+	Goto DeathParticles
+  DeathParticles:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "DeathAnimation")
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAA 0 A_SpawnParticle (430000, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (bf0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAAAAAAA 0 A_SpawnParticle (eb6f0f, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAA 0 A_SpawnParticle (ffff00, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "QuakeTime")
+	Goto QuakeTime
+  QuakeTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+    TNT1 A 0 A_Quake (1, 12, 0, 1024, "")
+    TNT1 A 0 A_Quake (5, 8, 0, 512, "")
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+	TNT1 A 0 A_SetScale (scalex * randompick(-1, 1), scaley) // randomly flip the sprite horizontally
+	TNT1 A 0 A_SetScale (scalex * frandom(4.5,4.8))
+	TNT1 A 0 A_JumpIf(user_fireballdamage <= 160, 3)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/explosion", CHAN_WEAPON, 1, 0, 0.5)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/explosion", 7, 0.10, 0, 0.01)
+    TNT1 A 0 A_PlaySound("whitemarerocketlauncher/explosionsmall", 6, 0.8, 0, 0.8)
+    WFRK E 4 Bright Light("FDWhitemareFiregraspImpact1")
+    WFRK F 4 Bright Light("FDWhitemareFiregraspImpact2")
+    WFRK G 4 Bright Light("FDWhitemareFiregraspImpact3")
+    WFRK H 4 Bright Light("FDWhitemareFiregraspImpact4")
+    WFRK I 4 Bright Light("FDWhitemareFiregraspImpact5")
+    WFRK J 4 Bright Light("FDWhitemareFiregraspImpact6")
+    Stop
+  }
+}
+
+actor FDWhitemareFiregraspFlare : FDWhitemareFireballFlare
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetScale (scalex * frandom(0.95,1.05))
+		TNT1 A 0 A_SetScale (scalex * randompick(-1, 1), scaley) // randomly flip the sprite horizontally
+		WFRK EFGHIJ 1 Bright A_FadeTo (0, 0.15, 1)
+		Stop
+    }
+}
+
+actor FDWhitemareFiregraspImpact : FDWhitemareFireballFlare
+{
+    Alpha 0.95
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetScale (scalex * frandom(0.95,1.25))
+		TNT1 A 0 A_SetScale (scalex * randompick(-1, 1), scaley) // randomly flip the sprite horizontally
+    SpawnLoop:
+		WFRK K 1 Bright A_FadeTo (0, 0.08, 1)
+		TNT1 A 0 A_SetScale (scalex * 1.15)
+		Loop
+    }
+}
+
+ACTOR FDWhitemareFiregraspChargeball
+{
+  Radius 11
+  Height 8
+  Speed 0
+  Species "Player"
+  Alpha 0.98
+  RenderStyle "Add"
+  +THRUACTORS
+  +NOCLIP
+  +FORCEXYBILLBOARD
+  +NOINTERACTION
+  
+	var int user_fireballsize;
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_SetUserVar("user_fireballsize", CallACS("FDFiregraspFireballSize") * 0.25)
+    TNT1 A 0 A_SetScale(CallACS("FDFiregraspFireballSize") * 0.02 + 0.02)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (730000, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,2), frandom(0,360), 0,0,0, frandom(-2.5,2.5),frandom(-2.5,2.5),frandom(-2.5,2.5), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (ef0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,2), frandom(0,360), 0,0,0, frandom(-2.5,2.5),frandom(-2.5,2.5),frandom(-2.5,2.5), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (f37317, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,2), frandom(0,360), 0,0,0, frandom(-2.5,2.5),frandom(-2.5,2.5),frandom(-2.5,2.5), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (ffa35b, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,2), frandom(0,360), 0,0,0, frandom(-2.5,2.5),frandom(-2.5,2.5),frandom(-2.5,2.5), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,2), frandom(0,360), 0,0,0, frandom(-2.5,2.5),frandom(-2.5,2.5),frandom(-2.5,2.5), 0,0,-0.1, 0.98, -1)
+    TNT1 AAA 0 A_SpawnItemEx ("FDWhitemareFiregraspFlare", frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize),frandom(-user_fireballsize,user_fireballsize), 0,0,frandom(-0.1,-0.05), 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE, 160)
+    TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+  SpawnA:
+    WFRK A 1 Bright Light("FDWhitemareFiregraspChargeGlow") A_FadeTo (0, 0.33, 1)
+    Wait
+  SpawnB:
+    WFRK B 1 Bright Light("FDWhitemareFiregraspChargeGlow") A_FadeTo (0, 0.33, 1)
+    Wait
+  SpawnC:
+    WFRK C 1 Bright Light("FDWhitemareFiregraspChargeGlow") A_FadeTo (0, 0.33, 1)
+    Wait
+  SpawnD:
+    WFRK D 1 Bright Light("FDWhitemareFiregraspChargeGlow") A_FadeTo (0, 0.33, 1)
+    Wait
+  }
+}
+
+Actor FDWhitemareFireballCharge : FDCounter
+{
+inventory.maxamount 25
+}

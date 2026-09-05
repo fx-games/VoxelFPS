@@ -77,12 +77,16 @@ func Load(dir string) (*Library, error) {
 		return nil, fmt.Errorf("weapons: %w", err)
 	}
 
+	// Actors are shared between weapons and named by the hash of what is in
+	// them, so they are read once however many weapons point at one.
+	shared := newActorStore(filepath.Join(dir, ActorsDir))
+
 	var problems []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || entry.Name() == ActorsDir {
 			continue
 		}
-		weapon, actors, sprites, issues := loadWeapon(filepath.Join(dir, entry.Name()), entry.Name())
+		weapon, actors, sprites, issues := loadWeapon(filepath.Join(dir, entry.Name()), entry.Name(), shared)
 		problems = append(problems, issues...)
 		if weapon == nil {
 			continue
@@ -111,7 +115,34 @@ func Load(dir string) (*Library, error) {
 	return library, nil
 }
 
-func loadWeapon(dir, id string) (*Weapon, map[string]*Actor, []string, []string) {
+// actorStore reads the shared actor files, keeping what it has already read.
+type actorStore struct {
+	dir    string
+	loaded map[string]*Actor
+}
+
+func newActorStore(dir string) *actorStore {
+	return &actorStore{dir: dir, loaded: make(map[string]*Actor)}
+}
+
+// get reads one actor file, or hands back the copy already read.
+func (s *actorStore) get(file string) (*Actor, error) {
+	if actor, ok := s.loaded[file]; ok {
+		return actor, nil
+	}
+	var actor Actor
+	if err := readJSON(filepath.Join(s.dir, file), &actor); err != nil {
+		return nil, err
+	}
+	if actor.Format != Format {
+		return nil, fmt.Errorf("%s was built for format %d, this build reads %d",
+			file, actor.Format, Format)
+	}
+	s.loaded[file] = &actor
+	return &actor, nil
+}
+
+func loadWeapon(dir, id string, shared *actorStore) (*Weapon, map[string]*Actor, []string, []string) {
 	var problems []string
 	fail := func(format string, args ...any) (*Weapon, map[string]*Actor, []string, []string) {
 		return nil, nil, nil, append(problems, id+"/: "+fmt.Sprintf(format, args...))
@@ -129,16 +160,14 @@ func loadWeapon(dir, id string) (*Weapon, map[string]*Actor, []string, []string)
 		problems = append(problems, fmt.Sprintf("%s/: names itself %q", id, weapon.ID))
 	}
 
-	actorFile := ActorsFile
-	actors := Actors{Actors: map[string]*Actor{}}
-	if _, err := os.Stat(filepath.Join(dir, actorFile)); err == nil {
-		if err := readJSON(filepath.Join(dir, actorFile), &actors); err != nil {
-			return fail("%v", err)
+	actors := make(map[string]*Actor, len(weapon.Actors))
+	for name, file := range weapon.Actors {
+		actor, err := shared.get(file)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s/: %s: %v", id, name, err))
+			continue
 		}
-		if actors.Format != Format {
-			return fail("%s was built for format %d, this build reads %d",
-				actorFile, actors.Format, Format)
-		}
+		actors[strings.ToLower(name)] = actor
 	}
 
 	sprites, err := atlasFrames(filepath.Join(dir, AtlasFile))
@@ -150,17 +179,20 @@ func loadWeapon(dir, id string) (*Weapon, map[string]*Actor, []string, []string)
 		known[sprite] = true
 	}
 
-	problems = append(problems, checkStates(id, WeaponFile, weapon.States, known, actors.Actors, weapon.Sounds, dir)...)
-	for _, name := range sortedActorNames(actors.Actors) {
-		actor := actors.Actors[name]
+	problems = append(problems, checkStates(id, WeaponFile, weapon.States, known, actors, weapon.Sounds, dir)...)
+	for _, name := range sortedActorNames(actors) {
+		actor := actors[name]
+		if actor.Stock {
+			continue // the engine supplies it, so there are no states to check
+		}
 		problems = append(problems,
-			checkStates(id, actorFile+" "+actor.Name, actor.States, known, actors.Actors, weapon.Sounds, dir)...)
+			checkStates(id, "actor "+actor.Name, actor.States, known, actors, weapon.Sounds, dir)...)
 	}
 
 	if len(problems) > 0 {
 		return nil, nil, nil, problems
 	}
-	return &weapon, actors.Actors, sprites, nil
+	return &weapon, actors, sprites, nil
 }
 
 // checkStates walks one state machine: every jump lands on a label that exists,
@@ -200,7 +232,7 @@ func checkStates(id, what string, machine StateMachine, sprites map[string]bool,
 			}
 			if op.Actor != "" {
 				if _, ok := actors[strings.ToLower(op.Actor)]; !ok {
-					note("step %d spawns %q, which is not in %s", index, op.Actor, ActorsFile)
+					note("step %d spawns %q, which the weapon does not list", index, op.Actor)
 				}
 			}
 		}

@@ -1,0 +1,504 @@
+ 
+ACTOR FDHellboundBFG9000 : FDBFGWeapon
+{
+  Inventory.RestrictedTo "FDHellboundPlayer"
+  Inventory.Icon "HBBFG900"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDHellboundBFGCharge"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 7
+  Obituary "%k felt a small explosion wasn't good enough for %o."
+  Decal ""
+  Tag "Totenheim"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "ReadyNoSound")
+    TNT1 A 0 A_PlaySound("hellboundbfg9000/idle", 7, 0.4, 1, 1.4)
+    HBFG A 1 A_WeaponReady
+    Loop
+  ReadyNoSound:
+    HBFG A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    HBFG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    "####" "#" 0 A_StopSound(7)
+  DeselectLoop:
+    HBFG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    HBFG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundBFGCharge", 1, "ChargeStart")
+	Goto Dryfire
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundCell", 100, "ChargeStart")
+	Goto Dryfire
+	
+  ChargeStart:
+    TNT1 A 0 A_PlaySound("hellboundbfg9000/charge", 7, 1, 0, 0.8)
+    TNT1 A 0 A_AlertMonsters (random(256,400))
+	HBFG BCDEFGHI 2
+	HBFG A 1
+    TNT1 A 0 A_PlaySound("hellboundbfg9000/load", 5, 1, 0, 1.2)
+	HBFG JKLMNOPR 2
+	HBFG A 4
+    TNT1 A 0 A_GunFlash ("Flash")
+	HBFG S 3 Bright
+	TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_PlaySound("hellboundbfg9000/fire", CHAN_WEAPON, 1, 0, 0.8)
+	TNT1 A 0 A_PlaySound("hellboundbfg9000/firemain", 5, 1, 0, 1.2)
+	TNT1 A 0 A_Quake(6, 20, 0, 512, "")
+	TNT1 A 0 A_JumpIf(CallACS("FD_bfgammosystem") == 4, 2)
+    TNT1 A 0 A_TakeInventory ("FDHellboundBFGCharge", 1, TIF_NOTAKEINFINITE)
+	Goto NOOKULAAR
+    TNT1 A 0 A_TakeInventory ("FDHellboundCell", 100, TIF_NOTAKEINFINITE)
+	Goto NOOKULAAR
+  NOOKULAAR:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 0, "NOOKULAARY")
+	TNT1 A 0 A_FireCustomMissile ("FDHellboundTotenheimMissile", 0, 0)
+	Goto THEBOOMBOIHASBEENDEPLOYED
+  NOOKULAARY:
+	TNT1 A 0 A_FireCustomMissile ("FDHellboundSimpleTotenheimMissile", 0, 0)
+	Goto THEBOOMBOIHASBEENDEPLOYED
+  THEBOOMBOIHASBEENDEPLOYED:
+	// -3.25
+	HBFG T 1 Bright A_SetPitch(pitch - (2.75 * CallACS("FD_recoil")/65536.0))
+	HBFG T 1 Bright A_SetPitch(pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+	// 3.25
+	HBFG T 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	HBFG U 1 Bright A_SetPitch(pitch + (1.25 * CallACS("FD_recoil")/65536.0))
+	HBFG U 1 Bright A_SetPitch(pitch + (0.7 * CallACS("FD_recoil")/65536.0))
+	HBFG U 1 Bright A_SetPitch(pitch + (0.43 * CallACS("FD_recoil")/65536.0))
+	HBFG V 1 Bright A_SetPitch(pitch + (0.31 * CallACS("FD_recoil")/65536.0))
+	HBFG V 1 Bright A_SetPitch(pitch + (0.29 * CallACS("FD_recoil")/65536.0))
+	HBFG V 1 Bright A_SetPitch(pitch + (0.17 * CallACS("FD_recoil")/65536.0))
+	HBFG W 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	HBFG W 2
+	HBFG X 3
+	HBFG A 3
+	HBFG A 11 A_ReFire
+    Goto Ready
+	
+  Flash:
+	TNT1 A 3 A_Light2
+	TNT1 A 3 A_Light (5)
+	TNT1 A 3 A_Light2
+	TNT1 A 3 A_Light1
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  }
+}
+
+ACTOR FDHellboundTotenheimMissile : FastProjectile
+{
+  Radius 9
+  Height 12
+  MissileHeight 8
+  MissileType "FDHellboundTotenheimTrail"
+  Speed 30
+  Damage (500)
+  DamageType "Explosive"
+  SeeSound "hellboundbfg9000/fire"
+  Decal "TotenheimScorch"
+  Species "Player"
+  Projectile
+  +THRUSPECIES
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  +SKYEXPLODE
+  States
+  {
+  Spawn:
+    TNT1 A 0 NoDelay A_PlaySound ("hellboundbfg9000/loop", 7, 0.8, 1, 0.8) // they should hear it coming, hue.
+	TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimMissileFlare",0,0,0,0,0,0,0,SXF_SETMASTER|SXF_ORIGINATOR)
+    NKWH A 1 Bright Light("FDRocketPulse")
+    Wait
+  Death:
+    TNT1 A 0 A_Explode (512, 512, 0)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAA 0 A_SpawnParticle (730000, SPF_FULLBRIGHT | SPF_RELATIVE, random(30,70), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ef0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(25,60), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (f37317, SPF_FULLBRIGHT | SPF_RELATIVE, random(20,50), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ffa35b, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,4), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "QuakeTime")
+	Goto QuakeTime
+  QuakeTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathBoom")
+    TNT1 A 0 A_Quake (1, 48, 0, 2048, "")
+    TNT1 A 0 A_Quake (7, 32, 0, 1024, "")
+    TNT1 A 0 A_Quake (9, 24, 0, 768, "")
+    TNT1 A 0 A_Jump (256, "DeathBoom")
+	Goto DeathBoom
+  DeathBoom:
+	TNT1 A 0 A_KillChildren("Normal",KILS_KILLMISSILES)
+    TNT1 A 0 A_SetScale (7.0)
+    TNT1 A 0 A_SetTranslucent (0.98, 1)
+	TNT1 A 0 A_PlaySound ("hellboundbfg9000/explosionmain", 5, 1, 0, 0.25)
+    TNT1 A 0 A_PlaySound ("hellboundbfg9000/explosion", CHAN_WEAPON, 1, 0, 0.3)
+    TNT1 A 0 A_PlaySound ("hellboundbfg9000/far", 7, 1, 0, 0.01)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpotMain", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 256,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", -256,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 0,256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 0,-256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 256,256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 256,-256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", -256,256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", -256,-256,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 0,0,128, 0,0,0, 0, SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimRadiationSpot", 0,0,-128, 0,0,0, 0, SXF_TRANSFERPOINTERS)
+    TNT1 A 0 A_Jump (256, "TheBoomChamber")
+	Goto TheBoomChamber
+  TheBoomChamber:
+	TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimExplosionFlare", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimBlaster", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimShroomer", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+	MEXP A 4 Bright Light("FDHellBoundTotenheimExplosion1")
+	MEXP B 4 Bright Light("FDHellBoundTotenheimExplosion2")
+	MEXP C 3 Bright Light("FDHellBoundTotenheimExplosion3")
+	MEXP D 3 Bright Light("FDHellBoundTotenheimExplosion4")
+	MEXP E 2 Bright Light("FDHellBoundTotenheimExplosion5")
+	MEXP F 2 Bright Light("FDHellBoundTotenheimExplosion6")
+    Stop
+  }
+}
+
+ACTOR FDHellboundSimpleTotenheimMissile : FDHellboundTotenheimMissile
+{
+  MissileType "FDHellboundSimpleTotenheimTrail"
+
+  States
+  {
+  TheBoomChamber:
+	TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimExplosionFlare", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx("FDHellboundSimpleTotenheimBlaster", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_SpawnItemEx("FDHellboundSimpleTotenheimShroomer", 0,0,0, 0,0,0, 0, SXF_TRANSFERPOINTERS | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  }
+}
+
+actor FDHellboundTotenheimMissileFlare
+{
+	Renderstyle "Add"
+	Alpha 0.5
+	Scale 0.4
+	Projectile
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		OGLO A 1 Bright A_Warp(AAPTR_MASTER,-24,0,0,0,WARPF_INTERPOLATE)
+		Loop
+	Death:
+		TNT1 A 0
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimTrail
+{
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SpawnItemEx("FDHellboundTotenheimTrailSmoke", -28+frandom(3.0,-3.0),frandom(3.0,-3.0),2+frandom(3.0,-3.0), frandom(-0.4,0.4),frandom(-0.4,0.4),frandom(-0.2,0.5))
+		TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimTrailEmber", -28,0,0)
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimTrailSmoke
+{
+	Renderstyle "Translucent"
+	Alpha 0.3
+	Scale 0.2
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		SMOK AA 0 A_SetScale(scalex*random(1,-1),scalex)
+		SMOK ABCDEFGHIJKLMNOPQ 2 A_FadeOut(0.01)
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimTrailEmber
+{
+	Renderstyle "Add"
+	Scale 0.125
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		OGLO A 0
+		OGLO A 0 A_ChangeVelocity(frandom(0.1,-0.1),frandom(0.1,-0.1),frandom(0.1,-0.1))
+		OGLO A 1 Bright A_FadeOut(0.1)
+		OGLO A 0 A_SetScale(ScaleX * 0.96)
+		OGLO A 0 A_JumpIf(ScaleX <= 0.05, "Null")
+		Loop
+	}
+}
+
+// Kaboom
+actor FDHellboundTotenheimExplosionFlare
+{
+	Renderstyle "Add"
+	Alpha 0.6
+	Scale 22.0
+	Projectile
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		OGLO A 1 Bright A_SetScale(ScaleX * 0.98)
+		OGLO A 0 A_FadeOut(0.01)
+		OGLO A 0 A_JumpIf(ScaleX <= 0.05, "Null")
+		Loop
+	Death:
+		TNT1 A 0
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimShroomer
+{
+	+NOINTERACTION
+	var int user_c;
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SetUserVar("user_c",12)
+	Looplet:
+		TNT1 A random(2,5) A_SpawnItemEx("FDHellboundTotenheimShroom", 0,0,0, frandom(0.05,3.5),0,frandom(0.05,3.5), frandom(0.0,360.0))
+		TNT1 A 0 A_SetUserVar("user_c", user_c - 1)
+		TNT1 A 0 A_JumpIf(user_c <= 0, "Null")
+		Loop
+	}
+}
+
+actor FDHellboundTotenheimShroom
+{
+	Renderstyle "Add"
+	Alpha 0.8
+	Scale 8.0
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		TBST AA 0 A_SetScale(frandom(8.0,14.0))
+		TBST A 0 A_SetScale(scalex * random(1,-1), scalex)
+		
+		// you don't wanna apply this directly in previous thing,
+		// unless you wanna flip whole thing over either.
+		
+		TBST ABCDEFGHIJKLMNOPQR random(1,3) Bright
+		TBST STUVWXYZ random(1,3) A_FadeOut(0.05)
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimBlaster
+{
+	+NOINTERACTION
+	var int user_c;
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SetUserVar("user_c",300)
+	Looplet:
+		TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimBlast", 0,0,0, frandom(7.0,22.5),0,frandom(5.0,12.0)*frandom(1,-1), frandom(0.0,360.0), SXF_TRANSFERPOINTERS, 32)
+		TNT1 A 0 A_SetUserVar("user_c", user_c - 1)
+		TNT1 A 0 A_JumpIf(user_c <= 0, "Null")
+		Loop
+	}
+}
+
+actor FDHellboundTotenheimBlast
+{
+	Renderstyle "Add"
+	Alpha 0.7
+	Scale 2.0
+	+NOINTERACTION
+	+FORCERADIUSDMG
+	States
+	{
+	Spawn:
+		TBST AA 0 A_SetScale(frandom(2.0,2.5))
+		TBST A 0 A_SetScale(scalex*random(1,-1),scaley*random(1,-1))
+		TBSW AABBCCDDEEFFGGHHIIJJ random(2,3) Bright A_GiveInventory("FDHellboundTotenheimCompound")
+		TBSW KKKLLL 3 A_FadeOut(frandom(0.00,0.02))
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimCompound : CustomInventory // HAX.
+{
+	Inventory.MaxAmount 0
+	+INVENTORY.AUTOACTIVATE
+	+INVENTORY.ALWAYSPICKUP
+	States
+	{
+	Spawn:
+		TNT1 A 1
+		Stop
+	Pickup:
+		TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimSmoke", frandom(15.0,-15.0),frandom(15.0,-15.0),frandom(15.0,-15.0), frandom(0.2,0.4),0,frandom(0.2,0.4)*frandom(1,-1), frandom(0.0,360.0), 0, 230)
+		TNT1 A 0 A_Explode(20,128,0)
+		TNT1 A 0 A_FadeOut(frandom(0.00,0.02))
+		Stop
+	}
+}
+
+actor FDHellboundTotenheimSmoke
+{
+	Renderstyle "Translucent"
+	Alpha 0.3
+	Scale 2.0
+	+NOINTERACTION
+	States
+	{
+	Spawn:
+		TNT1 A random(5,8)
+		TBST AA 0 A_SetScale(frandom(2.0,2.5))
+		TBST A 0 A_SetScale(scalex*random(1,-1),scaley*random(1,-1))
+		SMOK ABCDEFGHIJKLMNOPQ random(5,8) A_FadeOut(0.02)
+		Stop
+	}
+}
+
+//------------------------------------------------------------------------------
+
+actor FDHellboundSimpleTotenheimTrail : FDHellboundTotenheimTrail
+{
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SpawnItemEx("FDTNTMissileTrail", -28+frandom(3.0,-3.0),frandom(3.0,-3.0),2+frandom(3.0,-3.0), frandom(-0.4,0.4),frandom(-0.4,0.4),frandom(-0.2,0.5))
+		Stop
+	}
+}
+
+actor FDHellboundSimpleTotenheimShroomer : FDHellboundTotenheimShroomer
+{
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SetUserVar("user_c",12)
+	Looplet:
+		TNT1 A random(2,5) A_SpawnItemEx("FDHellboundSimpleTotenheimShroom", 0,0,0, frandom(0.05,3.5),0,frandom(0.05,3.5), frandom(0.0,360.0))
+		TNT1 A 0 A_SetUserVar("user_c", user_c - 1)
+		TNT1 A 0 A_JumpIf(user_c <= 0, "Null")
+		Loop
+	}
+}
+
+actor FDHellboundSimpleTotenheimShroom : FDHellboundTotenheimShroom
+{
+	States
+	{
+	Spawn:
+		TBST AA 0 A_SetScale(frandom(8.0,14.0))
+		TBST A 0 A_SetScale(scalex * random(1,-1), scalex)
+		
+		// you don't wanna apply this directly in previous thing,
+		// unless you wanna flip whole thing over either.
+		
+		TBST ABCDEFGHIJKLMNOPQR random(1,3) Bright
+		TBST STUVWXYZ random(1,3) A_FadeOut(0.05)
+		Stop
+	}
+}
+
+actor FDHellboundSimpleTotenheimBlaster : FDHellboundTotenheimBlaster
+{
+	States
+	{
+	Spawn:
+		TNT1 AA 0 A_SetUserVar("user_c",300)
+	Looplet:
+		TNT1 A 0 A_SpawnItemEx("FDHellboundSimpleTotenheimBlast", 0,0,0, frandom(7.0,22.5),0,frandom(5.0,12.0)*frandom(1,-1), frandom(0.0,360.0), SXF_TRANSFERPOINTERS, 32)
+		TNT1 A 0 A_SetUserVar("user_c", user_c - 1)
+		TNT1 A 0 A_JumpIf(user_c <= 0, "Null")
+		Loop
+	}
+}
+
+actor FDHellboundSimpleTotenheimBlast : FDHellboundTotenheimBlast
+{
+	States
+	{
+	Spawn:
+		TBST AA 0 A_SetScale(frandom(2.0,2.5))
+		TBST A 0 A_SetScale(scalex*random(1,-1),scaley*random(1,-1))
+		TBSW AABBCCDDEEFFGGHHIIJJ random(2,3) Bright A_GiveInventory("FDHellboundSimpleTotenheimCompound")
+		TBSW KKKLLL 3 A_FadeOut(frandom(0.00,0.02))
+		Stop
+	}
+}
+
+actor FDHellboundSimpleTotenheimCompound : FDHellboundTotenheimCompound
+{
+	States
+	{
+	Pickup:
+//		TNT1 A 0 A_SpawnItemEx("FDHellboundTotenheimSmoke", frandom(15.0,-15.0),frandom(15.0,-15.0),frandom(15.0,-15.0), frandom(0.2,0.4),0,frandom(0.2,0.4)*frandom(1,-1), frandom(0.0,360.0), 0, 230)
+		TNT1 A 0 A_Explode(20, 128, 0)
+		TNT1 A 0 A_FadeOut(frandom(0.00,0.02))
+		Stop
+	}
+}
+
+//------------------------------------------------------------------------------
+
+ACTOR FDHellboundTotenheimGeigerSpawner : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundTotenheimGeigerCooldown", 1, "NoGeiger")
+    TNT1 A 0 A_GiveInventory ("FDHellboundTotenheimGeigerCooldown", 1)
+    TNT1 A 0 A_SpawnItemEx ("FDHellboundTotenheimGeigerSound", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  NoGeiger:
+    TNT1 A 0
+    Stop
+  }
+}
+
+actor FDHellboundTotenheimGeigerSound
+{
+	+NOINTERACTION
+	+NOCLIP
+	States
+	{
+	Spawn:
+		TNT1 A random(0,8)
+		TNT1 A 0 A_PlaySound ("effects/geigerburst", CHAN_WEAPON, 1, 0, 2.0)
+		TNT1 A 50
+		Stop
+	}
+}
+
+ACTOR FDHellboundTotenheimGeigerCooldown : FDCooldown
+{
+	Powerup.Duration 12
+}

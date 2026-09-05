@@ -1,0 +1,197 @@
+ 
+ACTOR FDHellboundChainsaw : FDWeapon
+{
+  Inventory.RestrictedTo "FDHellboundPlayer"
+  Inventory.Icon "HBCHAINS"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%o got %hself mauled into fine, grounded corpse by %k's Hammerite."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Hammerite"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_wannasledge") == 1, "ReadySledge")
+    HSAW A 1 A_WeaponReady
+    Loop
+	
+  Select:
+	TNT1 A 0 A_JumpIf(CallACS("FD_wannasledge") == 1, "SelectSledge")
+    HSAW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+	TNT1 A 0 A_JumpIfInventory ("FDHellboundHammerDown", 1, "DeselectAfterAttack")
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+	TNT1 A 0 A_JumpIf(CallACS("FD_wannasledge") == 1, "DeselectSledge")
+    HSAW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+  DeselectAfterAttack:
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+    TNT1 A 0 A_Lower
+    Loop
+	
+  Fire:
+	TNT1 A 0 A_JumpIfInventory ("FDHellboundHammerDown", 1, "ReadyUp")
+	TNT1 A 0 A_JumpIf(CallACS("FD_wannasledge") == 1, "FireSledge")
+	HSAW BCDEFG 1
+	TNT1 A 6
+	Goto ReadyUp
+  ReadyUp:
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+	TNT1 A 0 A_JumpIf(CallACS("FD_wannasledge") == 1, "ReadyUpSledge")
+	// -4.9
+	HSA2 A 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	HSA2 B 1 A_SetPitch(pitch - (0.03 * CallACS("FD_recoil")/65536.0))
+	HSA2 C 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	HSA2 D 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	HSA2 E 1 A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	HSA2 F 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	HSA2 G 1 A_SetPitch(pitch - (0.55 * CallACS("FD_recoil")/65536.0))
+	HSA2 H 1 A_SetPitch(pitch - (0.7 * CallACS("FD_recoil")/65536.0))
+	HSA2 I 1 A_SetPitch(pitch - (0.7 * CallACS("FD_recoil")/65536.0))
+	HSA2 J 1 A_SetPitch(pitch - (0.55 * CallACS("FD_recoil")/65536.0))
+	HSA2 K 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	HSA2 L 1 A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	HSA2 M 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	HSA2 N 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	HSA2 O 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	HSA2 P 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+  ReadyToSwing:
+	HSA2 P 1 A_WeaponReady(WRF_NOFIRE|WRF_NOSWITCH)
+	HSA2 P 0 A_ReFire("ReadyToSwing")
+  Swing:
+	TNT1 A 0 A_PlaySound("hellboundchainsaw/Swing", CHAN_WEAPON)
+	// 4.9
+	HSA3 A 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	HSA3 B 1 A_SetPitch(pitch + (2.0 * CallACS("FD_recoil")/65536.0))
+	HSA3 C 1 A_SetPitch(pitch + (1.6 * CallACS("FD_recoil")/65536.0))
+	HSA3 D 1 A_SetPitch(pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIfInventory("PowerStrength", 1, "BerserkHit")
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeritePuff",135)
+	Goto FinishSwing
+  BerserkHit:
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))* 2.5), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeriteZerkPuff",135)
+	Goto FinishSwing
+  FinishSwing:
+	// 1.5
+	HSA3 E 1 A_SetPitch(pitch + (0.8 * CallACS("FD_recoil")/65536.0))
+	HSA3 F 1 A_SetPitch(pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+	HSA3 G 1 A_SetPitch(pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+	HSA3 H 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 3
+	// -1.5
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 7
+	TNT1 A 0 A_GiveInventory ("FDHellboundHammerDown", 1)
+	TNT1 AAAAAAAAAA 1 A_WeaponReady (WRF_NOBOB | WRF_NOSECONDARY)
+	HSAW GFEDCB 1
+	HSAW A 4
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+	Goto Ready
+
+// oh hai slej	
+
+  ReadySledge:
+    HSXW A 1 A_WeaponReady
+    Loop
+  SelectSledge:
+    HSXW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  DeselectSledge:
+    HSXW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  FireSledge:
+	HSXW BCDEFG 1
+	TNT1 A 6
+	Goto ReadyUpSledge
+  ReadyUpSledge:
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+	HSX2 A 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	HSX2 B 1 A_SetPitch(pitch - (0.03 * CallACS("FD_recoil")/65536.0))
+	HSX2 C 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	HSX2 D 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	HSX2 E 1 A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	HSX2 F 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	HSX2 G 1 A_SetPitch(pitch - (0.55 * CallACS("FD_recoil")/65536.0))
+	HSX2 H 1 A_SetPitch(pitch - (0.7 * CallACS("FD_recoil")/65536.0))
+	HSX2 I 1 A_SetPitch(pitch - (0.7 * CallACS("FD_recoil")/65536.0))
+	HSX2 J 1 A_SetPitch(pitch - (0.55 * CallACS("FD_recoil")/65536.0))
+	HSX2 K 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	HSX2 L 1 A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	HSX2 M 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	HSX2 N 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	HSX2 O 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	HSX2 P 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+  ReadyToSwingSledge:
+	HSX2 P 1 A_WeaponReady(WRF_NOFIRE|WRF_NOSWITCH)
+	HSX2 P 0 A_ReFire("ReadyToSwingSledge")
+  SwingSledge:
+	TNT1 A 0 A_PlaySound("hellboundchainsaw/Swing", CHAN_WEAPON)
+	TNT1 A 0 A_PlaySound("aa/aa", 7, 0.3, 0, 0.9)
+	HSX3 A 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	HSX3 B 1 A_SetPitch(pitch + (2.0 * CallACS("FD_recoil")/65536.0))
+	HSX3 C 1 A_SetPitch(pitch + (1.6 * CallACS("FD_recoil")/65536.0))
+	HSX3 D 1 A_SetPitch(pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_Jump (60, "SwingSledgeFunny")
+	TNT1 A 0 A_JumpIfInventory("PowerStrength", 1, "BerserkHitSledge")
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeritePuff",135)
+	Goto FinishSwingSledge
+  BerserkHitSledge:
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))* 2.5), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeriteZerkPuff",135)
+	Goto FinishSwingSledge
+  FinishSwingSledge:
+	HSX3 E 1 A_SetPitch(pitch + (0.8 * CallACS("FD_recoil")/65536.0))
+	HSX3 F 1 A_SetPitch(pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+	HSX3 G 1 A_SetPitch(pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+	HSX3 H 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 3
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 7
+	TNT1 A 0 A_GiveInventory ("FDHellboundHammerDown", 1)
+	TNT1 AAAAAAAAAA 1 A_WeaponReady (WRF_NOBOB | WRF_NOSECONDARY)
+	HSXW GFEDCB 1
+	HSXW A 4
+	TNT1 A 0 A_TakeInventory ("FDHellboundHammerDown", 1)
+	Goto Ready
+  SwingSledgeFunny:
+	TNT1 A 0 A_JumpIfInventory("PowerStrength", 1, "BerserkHitSledgeFunny")
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeriteSledgePuff",135)
+	Goto FinishSwingSledge
+  BerserkHitSledgeFunny:
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))* 2.5), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeriteSledgeZerkPuff",135)
+	Goto FinishSwingSledge
+  }
+}
+
+Actor FDHellboundHammerDown : FDLevelLimit {}
+
+ // Used to stop screaming sounds
+ // It's fine don't worry bout it
+ACTOR FDHellboundSledgeSoundStopper : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0
+    TNT1 A 0 A_StopSound (7)
+    Stop
+  }
+}

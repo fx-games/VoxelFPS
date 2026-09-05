@@ -1,0 +1,1 @@
+{"format":1,"name":"AmmoShell","render":{"scale":[0.9,0.9],"alpha":1},"states":{"steps":[{"sprite":"SHELA0","tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

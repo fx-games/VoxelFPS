@@ -1,0 +1,318 @@
+ACTOR GrenadeLauncher : BrutalWeapon
+{
+	Weapon.AmmoUse 0
+	Weapon.AmmoGive1 1
+	Weapon.AmmoType1 "AmmoRocket"
+	Weapon.AmmoType2 "GLAmmo"
+    Inventory.PickupSound "Rocket/Draw"
+    +WEAPON.NOAUTOAIM
+	+WEAPON.NOAUTOFIRE
+	+WEAPON.EXPLOSIVE
+	Weapon.SelectionOrder 2600
+	Inventory.PickupMessage "$GOTGL"
+	Tag "Grenade Launcher"
+	Scale 0.8
+	DropItem "GrenadeLauncherSpawner"
+	States
+	{
+	KickFlash://18 tics
+		GRL2 QRS 1
+		GRL2 T 15
+		GRL2 SRQ 1
+		Stop
+
+	SlideFlashEnd://10 tics
+		GRL2 T 10
+		GRL2 SRQ 1
+		Stop
+
+	Ready:
+	Ready3:
+		GRLN A 1 A_WeaponReady(WRF_ALLOWRELOAD)
+		GRLN A 0 A_JumpIfInventory("Unloading", 1, "Unload")
+		GRLN A 0 A_JumpIfInventory("Reloading", 1, "Reload")
+        GRLN A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_JumpIfInventory("Salute1", 1, "Salute")
+		GRLN A 0 A_JumpIfInventory("Salute2", 1, "Salute")
+        GRLN A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+		GRLN A 0 A_JumpIfInventory("TossGrenade",1,"TossGrenade")
+		TNT1 A 0 A_JumpIfInventory("ExecuteDownedEnemy", 1, "DoExecution")
+		GRLN A 0 A_JumpIfInventory("IsRunning", 1, "StartSprint")
+        Goto Ready
+
+	Deselect:
+		RIFG A 0
+		RIFG A 0 A_Takeinventory("Zoomed",1)
+		RIFG A 0 A_Takeinventory("ADSmode",1)
+		RIFG A 0 A_TakeInventory("TossGrenade", 1)
+		RIFG A 0 A_TakeInventory("Kicking",1)
+        RIFG A 0 A_TakeInventory("Taunting",1)
+        RIFG A 0 A_TakeInventory("Reloading",1)
+		RIFG A 0 A_TakeInventory("Unloading",1)
+		RIFG A 0 A_TakeInventory("Salute1", 1)
+		RIFG A 0 A_TakeInventory("Salute2", 1)
+		RIFG A 0 A_Takeinventory("RifleSelected",1)
+		RIFG A 0 A_Takeinventory("RandomHeadExploder", 1)
+        RIFG A 0 A_ZoomFactor(1.0)
+		RIFG A 0 A_SetCrosshair(0)
+		GRL2 QRST 1
+		TNT1 AAAAAAAAAAAAAAAAAA 0 A_Lower
+		TNT1 A 1 A_Lower
+		Wait
+
+	Select:
+		GRLN A 0
+		GRLN A 0 A_Takeinventory("StartDualWield",1)
+		GRLN A 0 A_Giveinventory("GoSpecial",1)
+		TNT1 A 0 A_TakeInventory("FistsSelected", 1)
+		TNT1 A 0 A_TakeInventory("ShotgunSelected", 1)
+		TNT1 A 0 A_TakeInventory("MinigunSelected", 1)
+		TNT1 A 0 A_TakeInventory("SSGSelected", 1)
+		TNT1 A 0 A_TakeInventory("RocketLauncherSelected", 1)
+		TNT1 A 0 A_GiveInventory("GrenadeLauncherSelected", 1)
+		TNT1 A 0 A_TakeInventory("PlasmaGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("RailGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("RevenantLauncherSelected", 1)
+		TNT1 A 0 A_TakeInventory("SubMachineGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("BFG10KSelected", 1)
+		TNT1 A 0 A_TakeInventory("BFGSelected", 1)
+		TNT1 A 0 A_TakeInventory("FlameCannonSelected", 1)
+		TNT1 A 0 A_TakeInventory("SawSelected", 1)
+		GRLN A 0 A_Takeinventory("HasBarrel",1)
+		TNT1 A 0 A_TakeInventory("HasPlasmaWeapon",1)
+		GRLN A 0 A_GunFlash
+		TNT1 A 1 A_Raise
+		TNT1 AAAAAAAAAAAA 0 A_Raise
+		Goto SelectAnimation
+
+	SelectAnimation:
+		GRL2 MNOP 1 A_JumpIfInventory("GoFatality", 1, "Steady")
+		USAS A 0 A_PlaySound("Rocket/Draw", 5)
+		Goto Ready
+
+	Fire:
+		TNT1 A 0
+		TNT1 A 0 A_JumpIfInventory("GLAmmo", 1, 1)
+		Goto NoAmmo
+		TNT1 AAA 0
+		TNT1 A 0 A_TakeInventory("GLAmmo", 1)
+		GRLN B 1 A_FireCustomMissile("ShortGrenade", 0, 1, 0, 0)
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Fire")
+		GRLN A 0 A_FireCustomMissile("GrenadeMissileBreaksGlass", 0, 0, 0, 0)
+		GRLN A 0 A_SpawnItemEx("PlayerMuzzle2",32,0,28)
+		TNT1 A 0 A_ZoomFactor(0.98)
+		TNT1 AAAAAA 0 A_FireCustomMissile("ShotgunParticles", random(-16,16), 0, 0, 0, 0, random(-9,9))
+		RIFG A 0 A_JumpIfInventory("IsNOTTacticalClass", 1, 2)//tactical mode has muzzle climb
+		RIFG A 0 A_SetPitch(-1.0 + pitch)
+		GRLN A 0 A_SetPitch(-1.0 + pitch)
+		GRLN C 1 A_Recoil(1)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		GRLN DEAAA 1 A_SetPitch(0.2 + pitch)
+        Goto NoAmmo2
+
+	AltFire:
+		TNT1 A 0
+		TNT1 A 0 A_JumpIfInventory("GLAmmo", 1, 1)
+		Goto NoAmmo
+		TNT1 AAA 0
+		TNT1 A 0 A_TakeInventory("GLAmmo", 1)
+		GRLN B 1 A_FireCustomMissile("GrenadeMissile", 0, 1, 0, 0)
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Fire")
+		GRLN A 0 A_FireCustomMissile("GrenadeMissileBreaksGlass", 0, 0, 0, 0)
+		GRLN A 0 A_SpawnItemEx("PlayerMuzzle2",32,0,28)
+		TNT1 A 0 A_ZoomFactor(0.98)
+		TNT1 AAAAAA 0 A_FireCustomMissile("ShotgunParticles", random(-16,16), 0, 0, 0, 0, random(-9,9))
+		RIFG A 0 A_JumpIfInventory("IsNOTTacticalClass", 1, 2)//tactical mode has muzzle climb
+		RIFG A 0 A_SetPitch(-1.0 + pitch)
+		GRLN A 0 A_SetPitch(-1.0 + pitch)
+		GRLN C 1 A_Recoil(1)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		GRLN DEAAA 1 A_SetPitch(0.2 + pitch)
+        Goto NoAmmo2
+
+	Reload:
+		TNT1 A 0
+		GRLN A 0 A_Takeinventory("Reloading",1)
+		GRLN A 0 A_Takeinventory("ADSmode",1)
+		GRLN A 0 A_Takeinventory("Zoomed",1)
+		TNT1 A 0 A_JumpIfInventory("GLAmmo", 1, "Ready3")
+		TNT1 A 0 A_JumpIfInventory("AmmoRocket", 1, 1)
+		Goto Ready
+		TNT1 AAA 0
+		GRLN A 0 A_JumpIfInventory("GLUnloaded", 1, "ReloadEmpty")
+		GRLN FGH 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		GRLN A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN I 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		GRLN A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Open", 5)
+		TNT1 A 0 A_GiveInventory("GLUnloaded", 1)
+		GRLN JK 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_FireCustomMissile("SmokeSpawner",0,0,0,5)
+		GRLN L 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_FireCustomMissile("GrenadeCasing",random(120,140),0,-8,-8,0,random(40,60))
+		Goto PutMag
+
+	PutMag:
+		GRLN L 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_Takeinventory("GLUnloaded",1)
+		GRLN MNOPQRSTUV 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Load", 5)
+		TNT1 A 0 A_TakeInventory("AmmoRocket", 1)
+		TNT1 A 0 A_GiveInventory("GLAmmo", 1)
+		TNT1 A 0 A_TakeInventory("GLUnloaded", 1)
+		GRLN WX 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN Y 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN Z 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Close", 5)
+		GRLN "[]^" 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRL2 ABCDEFGHIJKL 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		Goto Ready
+
+	ReloadEmpty:
+		GRLN FGH 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		GRLN A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN I 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		GRLN A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Open", 5)
+		TNT1 A 0 A_GiveInventory("GLUnloaded", 1)
+		GRLN L 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		Goto PutMag
+
+	Unload:
+		GRLN A 1 A_WeaponReady
+		GRLN A 0 A_Takeinventory("Unloading",1)
+		GRLN A 0 A_Takeinventory("ADSmode",1)
+		GRLN A 0 A_Takeinventory("Zoomed",1)
+		GRLN A 0 A_ZoomFactor(1.0)
+		GRLN A 0 A_SetCrosshair(0)
+		TNT1 A 0 A_JumpIfInventory("GLAmmo", 1, 1)
+		Goto Ready
+		TNT1 AAA 0
+		GRL2 LKJIHGFEDCBA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Open", 5)
+		GRLN "^][" 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN Z 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN Y 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN XW 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Load", 5)
+		TNT1 A 0 A_GiveInventory("AmmoRocket", 1)
+		TNT1 A 0 A_TakeInventory("GLAmmo", 1)
+		TNT1 A 0 A_GiveInventory("GLUnloaded", 1)
+		GRLN VUTSRQPONM 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN L 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+
+		GRLN L 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN MNO 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 0 A_PlaySound("GrenadeLauncher/Close", 5)
+		GRLN "[]^" 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRL2 ABCDEFGHIJKL 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		Goto Ready
+
+	NoAmmo:
+		RIFG A 0
+		RIFG A 0 A_ZoomFactor(1.0)
+		RIFG A 0 A_Takeinventory("Zoomed",1)
+		RIFG A 0 A_Takeinventory("ADSmode",1)
+		TNT1 A 0 A_PlaySound("weapons/empty", 4)
+	NoAmmo2:
+		TNT1 A 0
+		TNT1 A 0 A_TakeInventory("Reloading", 1)
+		RIFG A 0 A_JumpIfInventory("TossGrenade",1,"TossGrenade")
+	    RIFG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+		RIFG A 0 A_JumpIfInventory("Salute1", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("Salute2", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("ExecuteDownedEnemy", 1, "DoExecution")
+		RIFG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		GRLN A 5 A_WeaponReady(WRF_ALLOWRELOAD | WRF_NOFIRE)
+		RIFG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+		TNT1 A 0 A_JumpIfInventory("NoAutoReload", 1, 2)
+		RIFG A 0 A_JumpIfInventory("AmmoRocket",1,"Reload")
+		RIFG A 0 A_JumpIfInventory("IsRunning",1,"StartSprint")
+		Goto Ready3
+
+	StartSprint:
+		GRL2 XYZ 1 A_WeaponReady(WRF_ALLOWRELOAD)
+		SHTN A 0 A_Takeinventory("Zoomed",1)
+        SHTN A 0 A_ZoomFactor(1.0)
+		SHTN A 0 A_Takeinventory("ADSmode",1)
+		RIFG A 0 A_SetCrosshair(0)
+		SHTN A 0 A_Giveinventory("GoSpecial",1)
+		TNT1 A 0 ACS_NamedExecuteAlways("BDSprint", 0, 0, 0, 0)//Makes player faster.
+
+	Sprinting:
+		GRL2 "[" 1 offset(-9,34) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(-6,36) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(-3,38) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(0,38) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(3,36) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(6,34) A_SetPitch(pitch -0.5)
+		GRL2 "[" 1 offset(9,32) A_SetPitch(pitch -0.5)
+		TNT1 A 0 A_GiveInventory("UsedStamina", 2)
+		SMGG A 0 A_WeaponReady(WRF_NOBOB)
+		SMGG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        SMGG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+        SMGG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+
+		GRL2 "[" 1 offset(9,34) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(6,36) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(3,38) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(0,38) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(-3,36) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(-6,34) A_SetPitch(pitch +0.5)
+		GRL2 "[" 1 offset(-9,32) A_SetPitch(pitch +0.5)
+		TNT1 A 0 A_GiveInventory("UsedStamina", 2)
+		SMGG A 0 A_WeaponReady(WRF_NOBOB)
+		SMGG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        SMGG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+        SMGG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+
+		PLAY A 0 ACS_NamedExecuteAlways("BDSprint", 0, 0, 0, 0)//Makes player faster.
+		SMGG A 0 A_JumpIfInventory("IsRunning", 1, "Sprinting")
+		Goto StopSprint
+
+	StopSprint:
+		GRL2 ZYX 1
+		GRL2 A 0 A_JumpIfInventory("PowerStrength", 1, 2)
+		GRL2 A 0 A_JumpIfInventory("UsedStamina", 100, "StopSprintTired")
+		GRL2 A 0 ACS_NamedExecuteAlways("BDTacticalSpeed", 0, 0, 0, 0)//Makes player slower.
+		Goto Ready
+
+	StopSprintTired:
+		GRL2 A 0 ACS_NamedExecuteAlways("BDTacticalSpeed", 0, 0, 0, 0)//Makes player slower.
+		GRL2 A 0 A_PlaySound("Tired", 2)
+		Goto Ready
+
+	Spawn:
+		GLAP A -1
+		Stop
+	}
+}
+
+ACTOR GLAmmo : Ammo
+{
+   Inventory.Amount 0
+   Inventory.MaxAmount 1
+   Ammo.BackpackAmount 0
+   Ammo.BackpackMaxAmount 1
+   Inventory.Icon "GLAPA0"
+}

@@ -1,0 +1,173 @@
+ 
+ACTOR FDWhitemareFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDWhitemarePlayer"
+  Inventory.Icon "WMFIST"
+  Weapon.UpSound "whitemarefist/select"
+  Weapon.SlotNumber 1
+  Obituary "%o was shanked by %k and burst into flames."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Blazeblade"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatReady")
+    WFIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatSelect")
+    WFIS A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+	
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatDeselect")
+    WFIS A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFire")
+	WFIS BCD 1
+    TNT1 A 1
+  Swing:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatSwing")
+    TNT1 A 0 A_PlaySound("whitemarefist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "BerserkSwing")
+    TNT1 A 1 A_FireBullets(0,0, -1, 0, "FDWhitemareHealthDetector", FBF_NOFLASH | FBF_NOPITCH | FBF_NORANDOMPUFFZ, 100)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareBlazeSwing", 1, "BlazeSwing")
+	WFIS EF 2
+    TNT1 A 0 A_CustomPunch (8*random(3,6), 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto FireFinish
+  BerserkSwing:
+    TNT1 A 1 A_FireBullets(0,0, -1, 0, "FDWhitemareHealthDetectorBerserk", FBF_NOFLASH | FBF_NOPITCH | FBF_NORANDOMPUFFZ, 100)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareBlazeSwing", 1, "BerserkBlazeSwing")
+	WFIS EF 2
+    TNT1 A 0 A_CustomPunch (8*random(12,24), 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto FireFinish
+  FireFinish:
+	WFIS G 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	WFIS G 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	WFIS H 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	WFIS H 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WFIS I 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	WFIS I 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 8
+	Goto AfterSwing
+	
+  BlazeSwing:
+    TNT1 A 0 A_PlaySound("whitemarefist/flames", 6, 1.0, 0, 1.0)
+	WFIS JK 2
+    TNT1 A 0 A_CustomPunch (48, 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto BlazeFireFinish
+  BerserkBlazeSwing:
+	WFIS JK 2
+    TNT1 A 0 A_CustomPunch (192, 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto BlazeFireFinish
+  BlazeFireFinish:
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -6, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -4, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -2, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 0, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 2, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 4, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 6, 0, 0, 0, 0, frandom(-0.8,0.8))
+	Goto BlazeHeatDone
+  BlazeHeatDone:
+	WFIS L 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	WFIS L 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	WFIS M 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	WFIS M 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WFIS N 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	WFIS N 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 8
+	Goto AfterSwing
+	
+  AfterSwing:
+	TNT1 AAAAA 1 A_ReFire ("Swing")
+	WFIS DCB 1
+    Goto Ready
+	
+// ============= THERMOCOAT ACTIVE =============================================
+	
+  ThermoCoatReady:
+    WFIW A 1 A_WeaponReady
+    Loop
+	
+  ThermoCoatSelect:
+    WFIW A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+  ThermoCoatDeselect:
+    WFIW A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  ThermoCoatFire:
+	WFIW BCD 1
+    TNT1 A 1
+  ThermoCoatSwing:
+    TNT1 A 0 A_PlaySound("whitemarefist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "ThermoCoatBerserkSwing")
+    TNT1 A 1 A_FireBullets(0,0, -1, 0, "FDWhitemareHealthDetector", FBF_NOFLASH | FBF_NOPITCH | FBF_NORANDOMPUFFZ, 100)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareBlazeSwing", 1, "ThermoCoatBlazeSwing")
+	WFIW EF 2
+    TNT1 A 0 A_CustomPunch (8*random(3,6), 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto ThermoCoatFireFinish
+  ThermoCoatBerserkSwing:
+    TNT1 A 1 A_FireBullets(0,0, -1, 0, "FDWhitemareHealthDetectorBerserk", FBF_NOFLASH | FBF_NOPITCH | FBF_NORANDOMPUFFZ, 100)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareBlazeSwing", 1, "ThermoCoatBerserkBlazeSwing")
+	WFIW EF 2
+    TNT1 A 0 A_CustomPunch (8*random(12,24), 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto ThermoCoatFireFinish
+  ThermoCoatFireFinish:
+	WFIW G 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	WFIW G 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	WFIW H 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	WFIW H 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WFIW I 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	WFIW I 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 8
+	Goto ThermoCoatAfterSwing
+	
+  ThermoCoatBlazeSwing:
+    TNT1 A 0 A_PlaySound("whitemarefist/flames", 6, 1.0, 0, 1.0)
+	WFIW JK 2
+    TNT1 A 0 A_CustomPunch (48, 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto ThermoCoatBlazeFireFinish
+  ThermoCoatBerserkBlazeSwing:
+	WFIW JK 2
+    TNT1 A 0 A_CustomPunch (192, 1, CPF_NORANDOMPUFFZ, "FDWhitemareMeleePuff", 100)
+    Goto ThermoCoatBlazeFireFinish
+  ThermoCoatBlazeFireFinish:
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -6, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -4, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", -2, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 0, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 2, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 4, 0, 0, 0, 0, frandom(-0.8,0.8))
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFistFireball", 6, 0, 0, 0, 0, frandom(-0.8,0.8))
+	Goto ThermoCoatBlazeHeatDone
+  ThermoCoatBlazeHeatDone:
+	WFIW L 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	WFIW L 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	WFIW M 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	WFIW M 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WFIW N 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	WFIW N 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 8
+	Goto ThermoCoatAfterSwing
+	
+  ThermoCoatAfterSwing:
+	TNT1 AAAAA 1 A_ReFire ("ThermoCoatSwing")
+	WFIW DCB 1
+    Goto ThermoCoatReady
+  }
+}
+
+ACTOR FDWhitemareBlazeSwing : Powerup
+{
+	Powerup.Duration 4
+}

@@ -1,0 +1,874 @@
+ 
+ACTOR FDJPCPFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDJPCPPlayer"
+  Inventory.Icon "JPFIST"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%o was eviscerated by %k."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Katana"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathed")
+    TNT1 A 1 A_WeaponReady (WRF_NOSECONDARY)
+    Loop
+  ReadyUnsheathed:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "ReadyUnsheathedEnergy")
+  ReadyUnsheathedLoop:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "ForcedSheathe")
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 3, "ReadyUnsheathedIdle")
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 2, "ReadyUnsheathedLoopAlt")
+    JFIS D 1 A_WeaponReady (WRF_NOSECONDARY)
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedLoop")
+    Goto Ready
+  ReadyUnsheathedLoopAlt:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "ForcedSheathe")
+    JFIS D 1 A_WeaponReady
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedLoopAlt")
+    Goto Ready
+  ReadyUnsheathedIdle:
+    TNT1 A 0 A_TakeInventory ("FDJPCPIdleTimer", 1)
+    TNT1 A 0 A_GiveInventory ("FDJPCPIdleTimer", 1) // reset the idle timer
+  ReadyUnsheathedLoopIdle:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "ForcedSheathe")
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPIdleTimer", 1, 1)
+    Goto ForcedSheathe
+    JFIS D 1 A_WeaponReady (WRF_NOSECONDARY)
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedLoopIdle")
+    Goto Ready
+	
+  Select:
+    TNT1 A 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "DeselectSheathe")
+    TNT1 A 0 A_StopSound(7)
+    TNT1 A 0 A_Lower
+    Loop
+  DeselectSheathe:
+    TNT1 A 0 A_TakeInventory ("FDJPCPSwordUnsheathed", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "DeselectSheatheEnergy")
+    TNT1 A 0 A_StopSound(7)
+	JIA1 FGH 2
+    TNT1 A 0 A_PlaySound("jpcpfist/sheathe", CHAN_WEAPON, 1.0, 0, 1.5)
+	JIA1 HIJ 2
+	JIA1 K 3
+	JIA1 L 8
+	JIA1 MN 2
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 1, "CancelDeselect")
+    TNT1 A 0 A_Lower
+    Wait
+  CancelDeselect:
+    TNT1 A 1 A_WeaponReady (WRF_NOFIRE | WRF_DISABLESWITCH | WRF_NOBOB)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "FireUnsheathed")
+  IaiSlash:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "IaiSlashEnergy")
+    TNT1 A 0 A_PlaySound("jpcpfist/iai", CHAN_WEAPON, 1.0, 0, 1.5)
+	JIA1 AB 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "IaiSlashBerserk")
+  IaiSlashNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 C 1 A_FireBullets (16, 8, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 D 1 A_FireBullets (0, 0, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 E 1 A_FireBullets (-16, -8, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, 20, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto IaiSlashFinish
+  IaiSlashBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 C 1 A_FireBullets (16, 8, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 D 1 A_FireBullets (0, 0, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA1 E 1 A_FireBullets (-16, -8, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, 60, "FDJPCPSwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto IaiSlashFinish
+  IaiSlashFinish:
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("SwitchToStandard")
+  ForcedSheathe:
+    TNT1 A 0 A_TakeInventory ("FDJPCPSwordUnsheathed", 1)
+	JIA1 FGH 2
+    TNT1 A 0 A_PlaySound("jpcpfist/sheathe", CHAN_WEAPON, 1.0, 0, 1.5)
+	JIA1 HIJ 2
+	JIA1 K 3
+	JIA1 L 8
+	JIA1 MN 2
+	Goto Ready
+	
+  SwitchToStandard:
+    TNT1 A 0 A_GiveInventory ("FDJPCPSwordUnsheathed", 1)
+	Goto LeftSlash
+	
+  FireUnsheathed:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "FireUnsheathedEnergy")
+	JFIS EF 1
+    TNT1 A 3
+	Goto LeftSlash
+  LeftSlash:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "LeftSlashEnergy")
+    TNT1 A 0 A_PlaySound("jpcpfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	JFIS G 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftSlashBerserk")
+  LeftSlashNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS H 1 A_FireBullets (-16, -8, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS I 1 A_FireBullets (0, 0, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS J 1 A_FireBullets (16, 8, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, randompick(6,8), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto LeftSlashFinish
+  LeftSlashBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS H 1 A_FireBullets (-16, -8, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS I 1 A_FireBullets (0, 0, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS J 1 A_FireBullets (16, 8, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash2", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, randompick(18,24), "FDJPCPSwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto LeftSlashFinish
+  LeftSlashFinish:
+	JFIS K 1
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("RightSlash")
+	JFIS ABC 2
+	Goto Ready
+	
+  RightSlash:
+    TNT1 A 0 A_JumpIfInventory ("FDGotChainsaw", 1, "RightSlashEnergy")
+    TNT1 A 0 A_PlaySound("jpcpfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	JFIS L 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightSlashBerserk")
+  RightSlashNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (24, -12, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS M 1 A_FireBullets (16, -8, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (8, -4, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS N 1 A_FireBullets (0, 0, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, 4, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS O 1 A_FireBullets (-16, 8, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, 12, -1, randompick(6,8), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto RightSlashFinish
+  RightSlashBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (24, -12, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS M 1 A_FireBullets (16, -8, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (8, -4, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS N 1 A_FireBullets (0, 0, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, 4, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JFIS O 1 A_FireBullets (-16, 8, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, 12, -1, randompick(18,24), "FDJPCPSwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto RightSlashFinish
+  RightSlashFinish:
+	JFIS P 1
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("LeftSlash")
+	JFIS ABC 2
+	Goto Ready
+
+//======================================================================================================================
+// NRG Katana
+
+  ReadyUnsheathedEnergy:
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 3, "ReadyUnsheathedEnergyIdle")
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 2, "ReadyUnsheathedEnergyAlt")
+    JSAW D 1 A_WeaponReady (WRF_NOSECONDARY)
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedEnergy")
+    Goto Ready
+  ReadyUnsheathedEnergyAlt:
+    JSAW D 1 A_WeaponReady
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedEnergyAlt")
+    Goto Ready
+  ReadyUnsheathedEnergyIdle:
+    TNT1 A 0 A_TakeInventory ("FDJPCPIdleTimer", 1)
+    TNT1 A 0 A_GiveInventory ("FDJPCPIdleTimer", 1) // reset the idle timer
+  ReadyUnsheathedEnergyLoopIdle:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPIdleTimer", 1, 1)
+    Goto ForcedSheatheEnergy
+    JSAW D 1 A_WeaponReady (WRF_NOSECONDARY)
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, "ReadyUnsheathedEnergyLoopIdle")
+    Goto Ready
+	
+  DeselectSheatheEnergy:
+	JIA2 FGH 2
+    TNT1 A 0 A_PlaySound("jpcpfist/sheathe", CHAN_WEAPON, 1.0, 0, 1.5)
+	JIA2 HIJ 2
+    TNT1 A 0 A_TakeInventory ("FDJPCPSwordUnsheathed", 1)
+    TNT1 A 0 A_TakeInventory ("FDJPCPEnergyKatanaUnsheathed", 1)
+    TNT1 A 0 A_StopSound(7)
+	JIA2 K 3
+	JIA2 L 8
+	JIA2 MN 2
+	TNT1 A 0 A_JumpIf(CallACS("FD_jpcpkatanasheathe") == 1, "CancelDeselect")
+    TNT1 A 0 A_Lower
+    Wait
+	
+  IaiSlashEnergy:
+    TNT1 A 0 A_GiveInventory ("FDJPCPSwordUnsheathed", 1)
+    TNT1 A 0 A_GiveInventory ("FDJPCPEnergyKatanaUnsheathed", 1)
+    TNT1 A 0 A_PlaySound("jpcpchainsaw/swingiai", CHAN_WEAPON, 1.0, 0, 1.5)
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, 2)
+    TNT1 A 0 A_PlaySound("jpcpchainsaw/idle", 7, 0.6, 1, 1.5)
+	JIA2 A 1
+    TNT1 A 0 A_SpawnItemEx ("FDJPCPKatanaLight", 1,0,32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETTARGET)
+	JIA2 B 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "IaiSlashEnergyBerserk")
+  IaiSlashEnergyNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 C 1 A_FireBullets (16, 8, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 D 1 A_FireBullets (0, 0, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 E 1 A_FireBullets (-16, -8, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, 30, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto IaiSlashEnergyFinish
+  IaiSlashEnergyBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 C 1 A_FireBullets (16, 8, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 D 1 A_FireBullets (0, 0, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JIA2 E 1 A_FireBullets (-16, -8, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, 90, "FDJPCPEnergySwordPuff3", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto IaiSlashEnergyFinish
+  IaiSlashEnergyFinish:
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("SwitchToStandard")
+  ForcedSheatheEnergy:
+	JIA2 FGH 2
+    TNT1 A 0 A_PlaySound("jpcpfist/sheathe", CHAN_WEAPON, 1.0, 0, 1.5)
+	JIA2 HIJ 2
+    TNT1 A 0 A_TakeInventory ("FDJPCPSwordUnsheathed", 1)
+    TNT1 A 0 A_TakeInventory ("FDJPCPEnergyKatanaUnsheathed", 1)
+    TNT1 A 0 A_StopSound(7)
+	JIA2 K 3
+	JIA2 L 8
+	JIA2 MN 2
+	Goto Ready
+	
+  FireUnsheathedEnergy:
+	JSAW EF 1
+    TNT1 A 3
+	Goto LeftSlashEnergy
+	
+  LeftSlashEnergy:
+    TNT1 A 0 A_PlaySound("jpcpchainsaw/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	JSAW G 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftSlashEnergyBerserk")
+  LeftSlashEnergyNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW H 1 A_FireBullets (-16, -8, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW I 1 A_FireBullets (0, 0, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW J 1 A_FireBullets (16, 8, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, randompick(12,14), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto LeftSlashEnergyFinish
+  LeftSlashEnergyBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, -12, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW H 1 A_FireBullets (-16, -8, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, -4, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW I 1 A_FireBullets (0, 0, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (8, 4, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW J 1 A_FireBullets (16, 8, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash4", 0, 0)
+    TNT1 A 0 A_FireBullets (24, 12, -1, randompick(36,42), "FDJPCPEnergySwordPuff2", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto LeftSlashEnergyFinish
+  LeftSlashEnergyFinish:
+	JSAW K 1
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("RightSlashEnergy")
+	JSAW ABC 2
+	Goto Ready
+	
+  RightSlashEnergy:
+    TNT1 A 0 A_PlaySound("jpcpchainsaw/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	JSAW L 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightSlashEnergyBerserk")
+  RightSlashEnergyNormal:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (24, -12, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW M 1 A_FireBullets (16, -8, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (8, -4, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW N 1 A_FireBullets (0, 0, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, 4, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW O 1 A_FireBullets (-16, 8, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, 12, -1, randompick(12,14), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto RightSlashEnergyFinish
+  RightSlashEnergyBerserk:
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (24, -12, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW M 1 A_FireBullets (16, -8, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (8, -4, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW N 1 A_FireBullets (0, 0, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (-8, 4, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    JSAW O 1 A_FireBullets (-16, 8, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPProjectileSlash3", 0, 0)
+    TNT1 A 0 A_FireBullets (-24, 12, -1, randompick(36,42), "FDJPCPEnergySwordPuff", FBF_EXPLICITANGLE | FBF_NORANDOM, 100)
+    Goto RightSlashEnergyFinish
+  RightSlashEnergyFinish:
+	JSAW P 1
+    TNT1 AAAAAAAA 1
+    TNT1 AAAAAAA 1 A_Refire ("LeftSlashEnergy")
+	JSAW ABC 2
+	Goto Ready
+	
+  Altfire:
+    "####" "#" 0 A_JumpIfInventory ("FDJPCPSwordUnsheathed", 1, 1)
+	Goto AltfireFail // Just in case you somehow break the damn thing
+    "####" "#" 0 A_JumpIfInventory ("FDGotChainsaw", 1, "ForcedSheatheEnergy")
+	Goto ForcedSheathe
+  AltfireFail:
+    "####" "#" 1
+	Goto Ready
+  }
+}
+
+ACTOR FDJPCPSwordUnsheathed : Powerup
+{
+	Powerup.Duration -0x7FFFFFFF
+}
+
+ACTOR FDJPCPEnergyKatanaUnsheathed : Powerup
+{
+	Powerup.Duration -0x7FFFFFFF
+}
+
+ACTOR FDJPCPSwordStrike : Powerup
+{
+	Powerup.Duration 5
+}
+
+ACTOR FDJPCPSwordFleshStrike : Powerup
+{
+	Powerup.Duration 5
+}
+
+ACTOR FDJPCPIdleTimer : Powerup
+{
+	Powerup.Duration 70
+}
+
+
+//==============================================================================
+
+ACTOR FDJPCPProjectileSlash
+{
+   Radius 4
+   Height 4
+   Speed 50
+   Mass 0x7fffffff
+   Species "Player"
+   Projectile
+   +NOCLIP
+   +THRUACTORS
+   +THRUSPECIES
+   +NOTONAUTOMAP
+   States
+   {
+   Spawn:
+   TNT1 A 0
+   TNT1 A 0 A_RadiusGive ("FDJPCPProjectileSlashCheck", 55, RGF_MISSILES, 1)
+   TNT1 A 1 A_Stop
+   Stop
+   Death:
+   TNT1 A 0
+   Stop
+   }
+}
+
+ACTOR FDJPCPProjectileSlash2 : FDJPCPProjectileSlash
+{
+   States
+   {
+   Spawn:
+   TNT1 A 0
+   TNT1 A 0 A_RadiusGive ("FDJPCPProjectileSlashCheck2", 55, RGF_MISSILES, 1)
+   TNT1 A 1 A_Stop
+   Stop
+   }
+}
+
+ACTOR FDJPCPProjectileSlash3 : FDJPCPProjectileSlash
+{
+   States
+   {
+   Spawn:
+   TNT1 A 0
+   TNT1 A 0 A_RadiusGive ("FDJPCPProjectileSlashCheck", 55, RGF_MISSILES, 1)
+   TNT1 A 1 Light("FDKatanaSmallLight") A_Stop
+   Stop
+   }
+}
+
+ACTOR FDJPCPProjectileSlash4 : FDJPCPProjectileSlash
+{
+   States
+   {
+   Spawn:
+   TNT1 A 0
+   TNT1 A 0 A_RadiusGive ("FDJPCPProjectileSlashCheck2", 55, RGF_MISSILES, 1)
+   TNT1 A 1 Light("FDKatanaSmallLight") A_Stop
+   Stop
+   }
+}
+
+Actor FDJPCPKatanaLight
+{ 
+  +THRUACTORS
+  +NOCLIP
+  +NOGRAVITY
+  Radius 4
+  Height 4
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION, "MaxHax")
+    TNT1 A 1 Light("FDKatanaBigLight2")
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION)
+    TNT1 A 1 Light("FDKatanaBigLight3")
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION)
+    TNT1 A 1 Light("FDKatanaBigLight4")
+	Stop
+  MaxHax:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPEnergyKatanaUnsheathed", 1, "LightTime", AAPTR_TARGET)
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION)
+    TNT1 A 1 Light("FDKatanaBigLight2")
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION)
+    TNT1 A 1 Light("FDKatanaBigLight3")
+    TNT1 A 0 A_Warp (AAPTR_TARGET, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION)
+    TNT1 A 1 Light("FDKatanaBigLight4")
+	Stop
+  LightTime:
+    TNT1 A 1 Light("FDKatanaBigLight")
+	Goto Spawn
+  }
+}
+
+//==============================================================================
+
+ACTOR FDJPCPProjectileSlashCheck : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0 A_CheckFlag ("NOCLIP", "IllegalThingo")
+    TNT1 A 0 A_CheckFlag ("THRUACTORS", "IllegalThingo")
+    TNT1 A 0 A_CheckFlag ("NOINTERACTION", "IllegalThingo")
+	// Can't cut down these, or you'll end up doing stupid shit
+	// Like say
+	// Cutting the dynamic light being emitted from the sword
+	
+    TNT1 A 0 A_JumpIf(CheckClass("ArachnotronPlasma", AAPTR_DEFAULT, TRUE), "DestroyArachnotronPlasma")
+    TNT1 A 0 A_JumpIf(CheckClass("BaronBall", AAPTR_DEFAULT, TRUE), "DestroyBaronBall")
+    TNT1 A 0 A_JumpIf(CheckClass("CacodemonBall", AAPTR_DEFAULT, TRUE), "DestroyCacodemonBall")
+    TNT1 A 0 A_JumpIf(CheckClass("BFGBall", AAPTR_DEFAULT, TRUE), "DestroyBFGBall")
+    TNT1 A 0 A_JumpIf(CheckClass("DoomImpBall", AAPTR_DEFAULT, TRUE), "DestroyDoomImpBall")
+    TNT1 A 0 A_JumpIf(CheckClass("FatShot", AAPTR_DEFAULT, TRUE), "DestroyFatShot")
+    TNT1 A 0 A_JumpIf(CheckClass("PlasmaBall", AAPTR_DEFAULT, TRUE), "DestroyPlasmaBall")
+    TNT1 A 0 A_JumpIf(CheckClass("RevenantTracer", AAPTR_DEFAULT, TRUE), "DestroyRevenantTracer")
+    TNT1 A 0 A_JumpIf(CheckClass("Rocket", AAPTR_DEFAULT, TRUE), "DestroyRocket")
+    TNT1 A 0 A_CheckFlag ("MISSILE", "GenericProjectile")
+    Stop
+	
+  GenericProjectile:
+    TNT1 A 0 A_ChangeFlag ("SHOOTABLE", 1)
+    TNT1 A 0 A_ChangeFlag ("THRUACTORS", 1) // Just in case it's still technically active so you don't run into it
+    TNT1 A 0 A_Die
+    Stop
+  IllegalThingo:
+    TNT1 A 0
+    Stop
+	
+  DestroyArachnotronPlasma:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDArachnotronPlasmaDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyBaronBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDBaronBallDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyCacodemonBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDCacodemonBallDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyBFGBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDBFGBallDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyDoomImpBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDDoomImpBallDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyFatShot:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDFatShotDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyPlasmaBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDPlasmaBallDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyRevenantTracer:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDRevenantTracerDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyRocket:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDRocketDestroyed", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  }
+}
+
+ACTOR FDJPCPProjectileSlashCheck2 : FDJPCPProjectileSlashCheck
+{
+  States
+  {
+  DestroyArachnotronPlasma:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDArachnotronPlasmaDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyBaronBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDBaronBallDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyCacodemonBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDCacodemonBallDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyBFGBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDBFGBallDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyDoomImpBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDDoomImpBallDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyFatShot:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDFatShotDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyPlasmaBall:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDPlasmaBallDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyRevenantTracer:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDRevenantTracerDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  DestroyRocket:
+    TNT1 A 0 Thing_Remove (0)
+    TNT1 A 0 A_SpawnItemEx ("FDRocketDestroyed2", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    Stop
+  }
+}
+
+actor FDProjectileDestroyed
+{
+	Radius 16
+	Height 8
+	+THRUACTORS
+	+NOCLIP
+    +FORCEXYBILLBOARD
+	+NOTONAUTOMAP
+    +DONTSPLASH
+	+NOTELEPORT
+	+NOGRAVITY
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    Animation:
+	    TNT1 A 0
+        Stop
+    }
+}
+
+actor FDArachnotronPlasmaDestroyed : FDProjectileDestroyed
+{
+	Radius 13
+	Height 8
+	RenderStyle Add
+	Alpha 0.75
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("baby/shotx", CHAN_WEAPON)
+	    JPSL JKL 3 Bright
+        Stop
+    }
+}
+
+actor FDBaronBallDestroyed : FDProjectileDestroyed
+{
+	Radius 6
+	Height 16
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("baron/shotx", CHAN_WEAPON)
+	    JPSL DEF 3 Bright
+        Stop
+    }
+}
+
+actor FDCacodemonBallDestroyed : FDProjectileDestroyed
+{
+	Radius 6
+	Height 8
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("caco/shotx", CHAN_WEAPON)
+	    JPSL MNO 3 Bright
+        Stop
+    }
+}
+
+actor FDBFGBallDestroyed : FDProjectileDestroyed
+{
+	Radius 13
+	Height 8
+	RenderStyle Add
+	Alpha 0.75
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("weapons/bfgx", CHAN_WEAPON)
+	    JPSL JKL 3 Bright
+        Stop
+    }
+}
+
+actor FDDoomImpBallDestroyed : FDProjectileDestroyed
+{
+	Radius 6
+	Height 8
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("imp/shotx", CHAN_WEAPON)
+	    JPSL ABC 3 Bright
+        Stop
+    }
+}
+
+actor FDFatShotDestroyed : FDProjectileDestroyed
+{
+	Radius 6
+	Height 8
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("fatso/shotx", CHAN_WEAPON)
+	    JPSL PQR 3 Bright
+        Stop
+    }
+}
+
+actor FDPlasmaBallDestroyed : FDProjectileDestroyed
+{
+	Radius 13
+	Height 8
+	RenderStyle Add
+	Alpha 0.75
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("weapons/plasmax", CHAN_WEAPON)
+	    JPSL MNO 3 Bright
+        Stop
+    }
+}
+
+actor FDRevenantTracerDestroyed : FDProjectileDestroyed
+{
+	Radius 11
+	Height 8
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("skeleton/tracex", CHAN_WEAPON)
+	    JPSL GHI 3 Bright
+        Stop
+    }
+}
+
+actor FDRocketDestroyed : FDProjectileDestroyed
+{
+	Radius 11
+	Height 8
+	RenderStyle Add
+    States
+    {
+    Animation:
+	    TNT1 A 0 A_PlaySound("weapons/rocklx", CHAN_WEAPON)
+	    JPSL STU 3 Bright
+        Stop
+    }
+}
+
+actor FDArachnotronPlasmaDestroyed2 : FDArachnotronPlasmaDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDBaronBallDestroyed2 : FDBaronBallDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDCacodemonBallDestroyed2 : FDCacodemonBallDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDBFGBallDestroyed2 : FDBFGBallDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDDoomImpBallDestroyed2 : FDDoomImpBallDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDFatShotDestroyed2 : FDFatShotDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDPlasmaBallDestroyed2 : FDPlasmaBallDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDRevenantTracerDestroyed2 : FDRevenantTracerDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}
+
+actor FDRocketDestroyed2 : FDRocketDestroyed
+{
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 A 0 A_SetScale(scalex - (scalex*2), scaley)
+	    TNT1 A 0 A_Jump (256, "Animation")
+		Goto Animation
+    }
+}

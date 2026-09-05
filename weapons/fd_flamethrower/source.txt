@@ -1,0 +1,597 @@
+ 
+ACTOR FDWhitemarePlasmaRifle : FDWeapon
+{
+  Inventory.RestrictedTo "FDWhitemarePlayer"
+  Inventory.Icon "WMPLASMA"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDWhitemareCell"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 6
+  Obituary "%o was covered in a stream of flames by %k."
+  Decal "Scorch"
+  Tag "Flamethrower"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatReady")
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "ReadyNoSound")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/idle", 7, 1, 1, 1.4)
+    WPLA A 1 A_WeaponReady
+    Loop
+  ReadyNoSound:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatReadyNoSound")
+    WPLA A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatSelect")
+    WPLA A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatDeselect")
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+  DeselectLoop:
+    WPLA A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  DryfireFiring:
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_StopSound (CHAN_WEAPON)
+    TNT1 A 0 A_StopSound (5)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+  Dryfire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatDryfire")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/dryfire", 5, 1, 0, 1.25)
+  DryfireLoop:
+    WPLA A 6
+    TNT1 A 0 A_JumpIfInventory ("FDSynthFireFire", 1, "DryfireLoop")
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFire")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "FireAmmoCheckDone")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareCell", 1, "FireAmmoConvert")
+	Goto Dryfire
+  FireAmmoCheckDone:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFireAmmoCheckDone")
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fire", 7, 1, 0, 1.2)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fire2", 5, 1, 0, 1.2)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireloop", CHAN_WEAPON, 1, 1, 1.1)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireloop2", 6, 1, 1, 0.7)
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlame", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameFancy", 0, 0)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerEfficiency", 1)
+	WPLA B 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+	Goto FireHeatLevelDone
+  FireHeatLevelDone:
+	TNT1 A 0 A_Refire ("FireLoop")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+	WPLA FG 2 Bright
+	WPLA A 2
+	Goto Ready
+	
+  FireLoop:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFireLoop")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "FireLoopAmmoCheckDone")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareCell", 1, "FireLoopAmmoConvert")
+	Goto DryfireFiring
+  FireLoopAmmoCheckDone:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFireLoopAmmoCheckDone")
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerEfficiency", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerFrame", 2, "FireLoopFrameE")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerFrame", 1, "FireLoopFrameD")
+	Goto FireLoopFrameC
+  FireLoopFrameC:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlame", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameFancy", 0, 0)
+	WPLA C 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerFrame", 1)
+	Goto FireLoopAnimationDone
+  FireLoopFrameD:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlow", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlowFancy", 0, 0)
+	WPLA D 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerFrame", 1)
+	Goto FireLoopAnimationDone
+  FireLoopFrameE:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlow", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlowFancy", 0, 0)
+	WPLA E 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+	Goto FireLoopAnimationDone
+  FireLoopAnimationDone:
+  FireLoopHeatLevelDone:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "FireLoop")
+	TNT1 A 0 A_Refire ("FireLoop")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+	WPLA FG 2 Bright
+	WPLA A 2
+	Goto Ready
+	
+  FireAmmoConvert: // Convert one flamethrower ammo into 8 flames
+    TNT1 A 0 A_TakeInventory ("FDWhitemareCell", 1, TIF_NOTAKEINFINITE)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerEfficiency", 4)
+	Goto FireAmmoCheckDone
+  FireLoopAmmoConvert:
+    TNT1 A 0 A_TakeInventory ("FDWhitemareCell", 1, TIF_NOTAKEINFINITE)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerEfficiency", 4)
+	Goto FireLoopAmmoCheckDone
+	
+  Flash:
+    TNT1 A 1 A_Light1
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light (3)
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+
+// ============= THERMOCOAT ACTIVE =============================================
+
+  ThermoCoatReady:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "ThermoCoatReadyNoSound")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/idle", 7, 1, 1, 1.4)
+    WPLW A 1 A_WeaponReady
+    Loop
+  ThermoCoatReadyNoSound:
+    WPLW A 1 A_WeaponReady
+    Loop
+	
+  ThermoCoatSelect:
+    WPLW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  ThermoCoatDeselect:
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+  ThermoCoatDeselectLoop:
+    WPLW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  ThermoCoatDryfireFiring:
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_StopSound (CHAN_WEAPON)
+    TNT1 A 0 A_StopSound (5)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+  ThermoCoatDryfire:
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/dryfire", 5, 1, 0, 1.25)
+  ThermoCoatDryfireLoop:
+    WPLW A 6
+    TNT1 A 0 A_JumpIfInventory ("FDSynthFireFire", 1, "ThermoCoatDryfireLoop")
+    Goto ThermoCoatReady
+	
+  ThermoCoatFire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "ThermoCoatFireAmmoCheckDone")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareCell", 1, "ThermoCoatFireAmmoConvert")
+	Goto ThermoCoatDryfire
+  ThermoCoatFireAmmoCheckDone:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fire", 7, 1, 0, 1.2)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fire2", 5, 1, 0, 1.2)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireloop", CHAN_WEAPON, 1, 1, 1.1)
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireloop2", 6, 1, 1, 0.7)
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlame", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameFancy", 0, 0)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerEfficiency", 1)
+	WPLW B 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+	Goto ThermoCoatFireHeatLevelDone
+  ThermoCoatFireHeatLevelDone:
+	TNT1 A 0 A_Refire ("ThermoCoatFireLoop")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+	WPLW FG 2 Bright
+	WPLW A 2
+	Goto ThermoCoatReady
+	
+  ThermoCoatFireLoop:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "ThermoCoatFireLoopAmmoCheckDone")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareCell", 1, "ThermoCoatFireLoopAmmoConvert")
+	Goto ThermoCoatDryfireFiring
+  ThermoCoatFireLoopAmmoCheckDone:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerEfficiency", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerFrame", 2, "ThermoCoatFireLoopFrameE")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerFrame", 1, "ThermoCoatFireLoopFrameD")
+	Goto ThermoCoatFireLoopFrameC
+  ThermoCoatFireLoopFrameC:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlame", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameFancy", 0, 0)
+	WPLW C 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerFrame", 1)
+	Goto ThermoCoatFireLoopAnimationDone
+  ThermoCoatFireLoopFrameD:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlow", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlowFancy", 0, 0)
+	WPLW D 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerFrame", 1)
+	Goto ThermoCoatFireLoopAnimationDone
+  ThermoCoatFireLoopFrameE:
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlow", 0, 0)
+	TNT1 A 0 A_Jump(256, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareFlamethrowerFlameNoGlowFancy", 0, 0)
+	WPLW E 1 Bright A_SpawnItemEx ("FDTinyRecoilHax", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+	Goto ThermoCoatFireLoopAnimationDone
+  ThermoCoatFireLoopAnimationDone:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareFlamethrowerEfficiency", 1, "ThermoCoatFireLoop")
+	TNT1 A 0 A_Refire ("ThermoCoatFireLoop")
+    TNT1 A 0 A_PlaySound("whitemareplasmarifle/fireend", CHAN_WEAPON, 1, 0, 1.2)
+    TNT1 A 0 A_TakeInventory ("FDWhitemareFlamethrowerFrame", 0)
+    TNT1 A 0 A_StopSound (6)
+    TNT1 A 0 A_StopSound (7)
+	WPLW FG 2 Bright
+	WPLW A 2
+	Goto ThermoCoatReady
+	
+  ThermoCoatFireAmmoConvert: // Convert one flamethrower ammo into 8 flames
+    TNT1 A 0 A_TakeInventory ("FDWhitemareCell", 1, TIF_NOTAKEINFINITE)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerEfficiency", 4)
+	Goto ThermoCoatFireAmmoCheckDone
+  ThermoCoatFireLoopAmmoConvert:
+    TNT1 A 0 A_TakeInventory ("FDWhitemareCell", 1, TIF_NOTAKEINFINITE)
+    TNT1 A 0 A_GiveInventory ("FDWhitemareFlamethrowerEfficiency", 4)
+	Goto ThermoCoatFireLoopAmmoCheckDone
+  }
+}
+
+Actor FDWhitemareFlamethrowerFlame
+{
+  Radius 9
+  Height 6
+  Speed 20
+  Damage (8)
+  DamageType "Fire"
+  Decal "FlamethrowerFireScorch"
+  Scale 0.3
+  Projectile
+  +THRUSPECIES
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  +HITTRACER
+  +BLOODLESSIMPACT
+  RenderStyle Add
+  Alpha 0.78
+//  SeeSound "whitemareplasmarifle/fire"
+  Species "Player"
+
+	var int user_flamecolor;
+  States
+  {
+  Spawn:
+    TNT1 A 0
+	TNT1 A 0 A_SetScale (scalex * randompick(-1, 1), scaley) // randomly flip the sprite horizontally
+    TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB")
+	Goto SpawnA
+  SpawnA:
+	WFX2 AA 1 Bright Light("FDWhitemareFlamethrowerBlueA") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 BB 1 Bright Light("FDWhitemareFlamethrowerBlueB") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 CC 1 Bright Light("FDWhitemareFlamethrowerBlueC") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 DD 1 Bright Light("FDWhitemareFlamethrowerBlueD") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 EE 1 Bright Light("FDWhitemareFlamethrowerBlueE") A_SetScale (scalex * frandom(1.01,1.07))
+	TNT1 A 0 A_SetUserVar("user_flamecolor", 1)
+	WFX1 FF 1 Bright Light("FDWhitemareFlamethrowerF") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 GG 1 Bright Light("FDWhitemareFlamethrowerG") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 HH 1 Bright Light("FDWhitemareFlamethrowerH") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 II 1 Bright Light("FDWhitemareFlamethrowerI") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 JJ 1 Bright Light("FDWhitemareFlamethrowerJ") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 KK 1 Bright Light("FDWhitemareFlamethrowerK") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 LL 1 Bright Light("FDWhitemareFlamethrowerL") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 MM 1 Bright Light("FDWhitemareFlamethrowerM") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 NN 1 Bright Light("FDWhitemareFlamethrowerN") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 OO 1 Bright Light("FDWhitemareFlamethrowerO") A_SetScale (scalex * frandom(1.12,1.19))
+    Stop
+  SpawnB:
+	WFX4 AA 1 Bright Light("FDWhitemareFlamethrowerBlueA") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 BB 1 Bright Light("FDWhitemareFlamethrowerBlueB") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 CC 1 Bright Light("FDWhitemareFlamethrowerBlueC") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 DD 1 Bright Light("FDWhitemareFlamethrowerBlueD") A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 EE 1 Bright Light("FDWhitemareFlamethrowerBlueE") A_SetScale (scalex * frandom(1.01,1.07))
+	TNT1 A 0 A_SetUserVar("user_flamecolor", 1)
+	WFX3 FF 1 Bright Light("FDWhitemareFlamethrowerF") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 GG 1 Bright Light("FDWhitemareFlamethrowerG") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 HH 1 Bright Light("FDWhitemareFlamethrowerH") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 II 1 Bright Light("FDWhitemareFlamethrowerI") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 JJ 1 Bright Light("FDWhitemareFlamethrowerJ") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 KK 1 Bright Light("FDWhitemareFlamethrowerK") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 LL 1 Bright Light("FDWhitemareFlamethrowerL") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 MM 1 Bright Light("FDWhitemareFlamethrowerM") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 NN 1 Bright Light("FDWhitemareFlamethrowerN") A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 OO 1 Bright Light("FDWhitemareFlamethrowerO") A_SetScale (scalex * frandom(1.12,1.19))
+    Stop
+	
+  XDeath:
+  Crash:
+	TNT1 A 0
+	Goto IgniteDOT
+	
+	// This sequence is used to set enemies alight.
+  IgniteDOT:
+	TNT1 A 0 A_Jump (120, "Death") // Medium chance to not ignite enemies.
+	TNT1 A 0 A_JumpIfInventory ("FDWhitemareFireDOTActive", 1, "GenerateDOTTime", AAPTR_TRACER)
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 1, "DOT1")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 2, "DOT2")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 3, "DOT3")
+  DOT0:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOT", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT1:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoSmoke", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT2:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTToaster", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT3:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoVisuals", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  GenerateDOTTime:
+	TNT1 AA 0 A_GiveInventory ("FDWhitemareFireDOTActive", 1, AAPTR_TRACER) // 2 seconds chance-based burn
+	Goto Death
+	
+  Death:
+	TNT1 A 0
+//	TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireballSmoke", frandom(-0.7,0.7),frandom(-0.7,0.7),frandom(1.7,3.4), 0,0,frandom(0.05,0.1), 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_JumpIf (user_flamecolor == 1, "NormalImpact")
+  BlueImpact:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "ImpactAnimationBlue")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAA 0 A_SpawnParticle (222ba2, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAA 0 A_SpawnParticle (4a5de7, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAAAAAA 0 A_SpawnParticle (b1c3ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "ImpactAnimationBlue")
+	Goto ImpactAnimationBlue
+  ImpactAnimationBlue:
+	TNT1 A 0 A_JumpIf (scalex >= 2.20, 2)
+	TNT1 A 0 A_SetScale (frandom(1.12,2.19))
+	WFX2 I 1 Bright Light("FDWhitemareFlamethrowerBlueI") A_FadeTo (0, 0.05, 1)
+	WFX2 J 1 Bright Light("FDWhitemareFlamethrowerBlueJ") A_FadeTo (0, 0.05, 1)
+	WFX2 K 1 Bright Light("FDWhitemareFlamethrowerBlueK") A_FadeTo (0, 0.05, 1)
+	WFX2 L 1 Bright Light("FDWhitemareFlamethrowerBlueL") A_FadeTo (0, 0.05, 1)
+	WFX2 M 1 Bright Light("FDWhitemareFlamethrowerBlueM") A_FadeTo (0, 0.05, 1)
+	WFX2 N 1 Bright Light("FDWhitemareFlamethrowerBlueN") A_FadeTo (0, 0.05, 1)
+	WFX2 O 1 Bright Light("FDWhitemareFlamethrowerBlueO") A_FadeTo (0, 0.05, 1)
+    Stop
+	
+  NormalImpact:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "ImpactAnimation")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAA 0 A_SpawnParticle (ef0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAA 0 A_SpawnParticle (f37317, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAAAAAAA 0 A_SpawnParticle (ffa35b, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(5,18), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "ImpactAnimation")
+	Goto ImpactAnimation
+  ImpactAnimation:
+	TNT1 A 0 A_JumpIf (scalex >= 1.50, 2)
+	TNT1 A 0 A_SetScale (frandom(1.12,1.49))
+	WFX1 I 1 Bright Light("FDWhitemareFlamethrowerI") A_FadeTo (0, 0.05, 1)
+	WFX1 J 1 Bright Light("FDWhitemareFlamethrowerJ") A_FadeTo (0, 0.05, 1)
+	WFX1 K 1 Bright Light("FDWhitemareFlamethrowerK") A_FadeTo (0, 0.05, 1)
+	WFX1 L 1 Bright Light("FDWhitemareFlamethrowerL") A_FadeTo (0, 0.05, 1)
+	WFX1 M 1 Bright Light("FDWhitemareFlamethrowerM") A_FadeTo (0, 0.05, 1)
+	WFX1 N 1 Bright Light("FDWhitemareFlamethrowerN") A_FadeTo (0, 0.05, 1)
+	WFX1 O 1 Bright Light("FDWhitemareFlamethrowerO") A_FadeTo (0, 0.05, 1)
+    Stop
+  }
+}
+
+Actor FDWhitemareFlamethrowerFlameNoGlow : FDWhitemareFlamethrowerFlame
+{
+  Decal ""
+  States
+  {
+  SpawnA:
+	WFX2 AA 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 BB 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 CC 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 DD 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX2 EE 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	TNT1 A 0 A_SetUserVar("user_flamecolor", 1)
+	WFX1 FF 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 GG 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 HH 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 II 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 JJ 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 KK 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 LL 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 MM 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 NN 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX1 OO 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+    Stop
+  SpawnB:
+	WFX4 AA 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 BB 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 CC 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 DD 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	WFX4 EE 1 Bright A_SetScale (scalex * frandom(1.01,1.07))
+	TNT1 A 0 A_SetUserVar("user_flamecolor", 1)
+	WFX3 FF 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 GG 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 HH 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 II 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 JJ 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 KK 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 LL 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 MM 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 NN 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+	WFX3 OO 1 Bright A_SetScale (scalex * frandom(1.12,1.19))
+    Stop
+	
+  ImpactAnimationBlue:
+	TNT1 A 0 A_JumpIf (scalex >= 2.20, 2)
+	TNT1 A 0 A_SetScale (frandom(1.12,2.19))
+	WFX2 I 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 J 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 K 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 L 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 M 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 N 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX2 O 1 Bright A_FadeTo (0, 0.05, 1)
+    Stop
+	
+  ImpactAnimation:
+	TNT1 A 0 A_JumpIf (scalex >= 1.50, 2)
+	TNT1 A 0 A_SetScale (frandom(1.12,1.49))
+	WFX1 I 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 J 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 K 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 L 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 M 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 N 1 Bright A_FadeTo (0, 0.05, 1)
+	WFX1 O 1 Bright A_FadeTo (0, 0.05, 1)
+    Stop
+  }
+}
+
+Actor FDWhitemareFlamethrowerFlameFancy : FDWhitemareFlamethrowerFlame
+{
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFlamethrowerFlameGlow", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER | SXF_ORIGINATOR)
+    TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB")
+	Goto SpawnA
+  }
+}
+
+Actor FDWhitemareFlamethrowerFlameNoGlowFancy : FDWhitemareFlamethrowerFlameNoGlow
+{
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFlamethrowerFlameGlow", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER | SXF_ORIGINATOR)
+    TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB")
+	Goto SpawnA
+  }
+}
+
+Actor FDWhitemareFlamethrowerFlameGlow
+{
+    Radius 6
+    Height 6
+    RenderStyle Add
+    Alpha 0.02
+	Scale 0.28
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+
+	var int user_glowtimer;
+    States
+    {
+    Spawn:
+		TNT1 A 0
+    SpawnLoop:
+		TNT1 A 0 A_JumpIf (user_glowtimer >= 10, "SpawnLoopGreater")
+		OGLP F 1 Bright A_SetScale (scalex * frandom(1.06,1.09))
+		TNT1 A 0 A_FadeTo (0.1, 0.003, 0)
+		TNT1 A 0 A_SetUserVar("user_glowtimer", user_glowtimer + 1)
+		TNT1 A 0 A_Warp (AAPTR_MASTER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION | WARPF_COPYVELOCITY, "SpawnLoop")
+		Goto Impact
+    SpawnLoopGreater:
+		OGLP F 1 Bright A_SetScale (scalex * frandom(1.14,1.17))
+		TNT1 A 0 A_FadeTo (0.0, 0.02, 1)
+		TNT1 A 0 A_Warp (AAPTR_MASTER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION | WARPF_COPYVELOCITY, "SpawnLoopGreater")
+		Goto Impact
+		
+    Impact:
+		TNT1 A 0 A_Stop
+    ImpactLoop:
+		OGLP F 1 Bright A_FadeTo (0.0, 0.05, 1)
+		TNT1 A 0 A_SetScale (scalex * frandom(0.3,0.5))
+		Loop
+    }
+}
+
+// oh no not durla hax
+actor FDTinyRecoilHax
+{
+	+NOGRAVITY
+	+THRUACTORS
+	+NOTONAUTOMAP
+    +NOTIMEFREEZE
+	+NOCLIP
+    States
+    {
+    Spawn:
+	    TNT1 A 0
+	    TNT1 AAA 0 A_GiveInventory ("FDRecoilHaxUp", 1, AAPTR_MASTER)
+	    TNT1 A 1
+	    TNT1 AAA 0 A_GiveInventory ("FDRecoilHaxDown", 1, AAPTR_MASTER)
+	    TNT1 A 1
+        Stop
+    }
+}
+
+ACTOR FDRecoilHaxUp : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0 A_SetPitch(pitch - (0.01 * CallACS("FD_recoil")/65536.0))
+    Stop
+  }
+}
+
+ACTOR FDRecoilHaxDown : FDCustomFunction
+{
+  States
+  {
+  Pickup:
+    TNT1 A 0 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+    Stop
+  }
+}
+
+Actor FDWhitemareFlamethrowerEfficiency : FDCounter
+{
+inventory.maxamount 4
+}
+
+Actor FDWhitemareFlamethrowerFrame : FDCounter
+{
+inventory.maxamount 2
+}

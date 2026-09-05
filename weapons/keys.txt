@@ -1,1 +1,9 @@
 1: small_gun
+2: fd_the_vendetta_machine
+3: fd_tornado_battery
+4: fd_grav_staff
+5: fd_melee
+6: fd_precision_pistol
+7: fd_phased_tachyon_cannon
+8: fd_mini_missile_launcher
+9: fd_drum_shotgun

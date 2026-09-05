@@ -1,0 +1,1 @@
+{"format":1,"name":"ShakeYourAss","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"quake","args":[2,7,0,2]}]},{"tics":10,"tics_max":10},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}},"no_gravity":true}

@@ -1,0 +1,67 @@
+ 
+ACTOR FDPlutFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDPlutPlayer"
+  Inventory.Icon "PLFIST"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%o was clobbered by %k."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Melee"
+  States
+  {
+  Ready:
+    PFIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    PFIS A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+  Deselect:
+    PFIS A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  Fire:
+    PFIS B 2
+  LeftSwing:
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    PFIS CD 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftSwingBerserk")
+    TNT1 A 0 A_CustomPunch (5*random(5,10), 1, CPF_NORANDOMPUFFZ, "FDFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingBerserk:
+    TNT1 A 0 A_CustomPunch (5*random(25,50), 1, CPF_NORANDOMPUFFZ, "FDFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingFinish:
+    PFIS E 1
+    PFIS FGHI 2
+    TNT1 A 0 A_Refire ("RightSwing")
+    Goto FireEnd
+  RightSwing:
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    PFIS JK 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightSwingBerserk")
+    TNT1 A 0 A_CustomPunch (5*random(5,10), 1, CPF_NORANDOMPUFFZ, "FDFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingBerserk:
+    TNT1 A 0 A_CustomPunch (5*random(25,50), 1, CPF_NORANDOMPUFFZ, "FDFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingFinish:
+    PFIS L 1
+    PFIS MNOP 2
+    TNT1 A 0 A_Refire ("LeftSwing")
+    Goto FireEnd
+	
+  FireEnd:
+    TNT1 A 4
+    PFIS B 2
+    Goto Ready
+  }
+}

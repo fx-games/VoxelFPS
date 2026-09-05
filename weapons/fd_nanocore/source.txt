@@ -1,0 +1,210 @@
+ 
+// NANOCORE EFFECTS
+// It turns off, stupid
+
+ACTOR FDBTSXChainsaw : FDWeapon
+{
+  Inventory.RestrictedTo "FDBTSXPlayer"
+  Inventory.Icon "BXCHAINS"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Weapon.SlotPriority 0
+  Obituary "%o wonders how the fuck %k killed them."
+  Decal ""
+  Tag "NanoCore"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "ReadyActive")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "ReadyActive")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdriveLimit", 1, "ReadyAlreadyUsed")
+    TNT1 A 0 A_JumpIfHealthLower (5, "ReadyLowHealth")
+    XSAW A 3
+    TNT1 A 0 A_PlaySound("btsxchainsaw/on", 7, 1.0, 0, 1.5)
+    TNT1 A 0 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW B 1
+    TNT1 A 0 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW CD 1
+  ReadyToGo:
+    XSAW D 1 A_WeaponReady
+    TNT1 A 0 A_JumpIfHealthLower (5, "ReadyClose")
+    Loop
+  ReadyActive:
+    TNT1 A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAlreadyUsed:
+    XSAW A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+	
+  ReadyClose:
+    XSAW CB 1 A_WeaponReady (WRF_NOFIRE)
+    Goto ReadyLowHealth
+  ReadyLowHealth:
+    XSAW A 1 A_WeaponReady (WRF_NOFIRE)
+    TNT1 A 0 A_JumpIfHealthLower (5, "ReadyLowHealth")
+    Goto Ready
+	
+  Select:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "SelectInstant")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "SelectInstant")
+    XSAW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  SelectInstant:
+    TNT1 A 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "DeselectInstant")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "DeselectInstant")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdriveLimit", 1, "DeselectLoop")
+    TNT1 A 0 A_JumpIfHealthLower (5, "DeselectLoop")
+    TNT1 A 0 A_PlaySound("btsxchainsaw/off", 7, 1.0, 0, 1.5)
+    TNT1 A 0 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW T 1 A_Lower
+    "####" "#" 0 A_Lower
+    TNT1 A 0 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW T 1 A_Lower
+    "####" "#" 0 A_Lower
+  DeselectLoop:
+    XSAW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+  DeselectInstant:
+    TNT1 A 0 A_Lower
+    Loop
+	
+  TooWeak:
+    TNT1 A 0 A_Print ("You are too weak to use this", 1)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfHealthLower (5, "TooWeak")
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    XSAW E 1 A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+    XSAW F 1 A_SetPitch(pitch - (0.45 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_AlertMonsters (100)
+    TNT1 A 0 A_PlaySound("btsxchainsaw/impact", CHAN_WEAPON, 1.0, 0, 1.2)
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, 2)
+    TNT1 A 0 A_Quake (1, 2, 0, 24, "")
+    XSAW G 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW G 1 A_SetPitch(pitch + (0.50 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("btsxchainsaw/beep", 7, 1.0, 0, 1.5)
+	TNT1 A 0 A_JumpIf(CallACS("FD_btsxnanotype") == 1, "TimerBased")
+	Goto BufferBased
+  BufferBased:
+    TNT1 A 0 A_GiveInventory ("FDBTSXOverdrivePower", 1)
+    TNT1 A 0 ACS_NamedExecuteWithResult ("FDBTSXOverdrive") // If you take more than 1/4 of your current health after this point, the effect is lost.
+	Goto ActivateAnimation
+  TimerBased:
+    TNT1 A 0 ACS_NamedExecuteWithResult ("FDBTSXOverdriveAlt") // Gives you time equivalent to how much health you currently have.
+	Goto ActivateAnimation
+  ActivateAnimation:
+    TNT1 A 0 A_GiveInventory ("FDBTSXOverdriveLimit", 1)
+	TNT1 A 0 A_JumpIf(CallACS("FD_btsxnanovisuals") == 0, 3)
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXOverdriveLight", 1,0,32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+	TNT1 A 0 A_Jump (256, 2)
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXOverdriveNoLight", 1,0,32, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_SETMASTER)
+    XSAW H 1 A_SetPitch(pitch + (0.20 * CallACS("FD_recoil")/65536.0))
+    XSAW H 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    XSAW I 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    XSAW I 1
+    XSAW JKLM 2
+    TNT1 A 0 A_PlaySound("btsxchainsaw/zap", 6, 1.0, 0, 1.2)
+    XSAW NO 2
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, 2)
+    TNT1 A 0 A_Quake (1, 6, 0, 24, "")
+    XSAW P 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+    XSAW P 1 A_SetPitch(pitch + (0.10 * CallACS("FD_recoil")/65536.0))
+    XSAW Q 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    XSAW Q 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    XSAW R 1 A_SetPitch(pitch - (0.10 * CallACS("FD_recoil")/65536.0))
+    XSAW R 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    XSAW S 2
+    TNT1 A 0 A_PlaySound("btsxchainsaw/off", 7, 1.0, 0, 1.5)
+    XSAW T 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    XSAW T 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_SelectWeapon ("FDBTSXFist")
+    Goto DeselectLoop
+  }
+}
+
+Actor FDBTSXOverdrivePower : FDLevelLimit {}
+Actor FDBTSXOverdriveLimit : FDLevelLimit {}
+
+ACTOR FDBTSXOverdrivePowerAlt : Powerup
+{
+	Powerup.Duration -1
+	+ADDITIVETIME
+}
+
+actor FDBTSXOverdrivePowerAltGiver : PowerupGiver
+{
+  powerup.duration -1
+  powerup.type "FDBTSXOverdrivePowerAlt"
+  +ADDITIVETIME
+  +INVENTORY.AUTOACTIVATE
+  -INVENTORY.INVBAR
+}
+
+Actor FDBTSXOverdriveLight
+{ 
+  +THRUACTORS
+  +NOCLIP
+  +NOGRAVITY
+  Projectile
+  Radius 4
+  Height 4
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_Warp (AAPTR_MASTER, 1,0,32, 0, WARPF_NOCHECKPOSITION | WARPF_COPYINTERPOLATION, "MaxHax")
+	Goto LightIsOver
+  MaxHax:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "ParticleTime", AAPTR_MASTER)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "ParticleTime", AAPTR_MASTER)
+	Goto LightIsOver
+  ParticleTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "LightTime")
+    TNT1 A 0 A_SpawnParticle (e80de0, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(12,16), random(1,3), 0, frandom(-16.0,16.0),frandom(-16.0,16.0),frandom(-24.0,24.0), frandom(-0.1,0.1),frandom(-0.1,0.1),frandom(-0.1,0.1), 0,0,0, 0.9, -1)
+	TNT1 A 0 A_Jump (256, "LightTime")
+	Goto LightTime
+  LightTime:
+    TNT1 A 1 Light("FDBTSXOverdriveGlow")
+	Goto Spawn
+	
+  LightIsOver:
+    TNT1 A 0 A_PlaySound("btsxchainsaw/zapoff", 6, 1.0, 0, 1.2)
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, 2)
+    TNT1 A 0 A_Quake (1, 3, 0, 24, "")
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "LightIsOverContinue")
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (e80de0, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,3), frandom(0,360), 0,0,frandom(-24.0,24.0), frandom(2.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+	TNT1 A 0 A_Jump (256, "LightIsOverContinue")
+	Goto LightIsOverContinue
+  LightIsOverContinue:
+    TNT1 A 4 Light("FDBTSXOverdriveGlowEnd1")
+    TNT1 A 8 Light("FDBTSXOverdriveGlowEnd2")
+    TNT1 A 12 Light("FDBTSXOverdriveGlowEnd3")
+    TNT1 A 16 Light("FDBTSXOverdriveGlowEnd4")
+    TNT1 A 20 Light("FDBTSXOverdriveGlowEnd5")
+	Stop
+  }
+}
+
+Actor FDBTSXOverdriveNoLight : FDBTSXOverdriveLight
+{ 
+  States
+  {
+  MaxHax:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "LightTime", AAPTR_MASTER)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "LightTime", AAPTR_MASTER)
+	Goto LightIsOver
+  LightTime:
+    TNT1 A 1
+	Goto Spawn
+	
+  LightIsOverContinue:
+    TNT1 A 10
+	Stop
+  }
+}

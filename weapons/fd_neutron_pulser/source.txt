@@ -1,0 +1,360 @@
+ 
+ACTOR FDJPCPShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDJPCPPlayer"
+  Inventory.Icon "JPSHOTGU"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDJPCPShells"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 3
+  Obituary "%o was pulsed apart by %k."
+  Decal ""
+  Tag "Neutron Pulser"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPShells", 1, "ReadyAmmo")
+    JSHT A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    JSHT A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    JSHT A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    JSHT A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    JSHT A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDJPCPShells", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_PlaySound("jpcpshotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPNeutronCore", 0, 1, 0, 6)
+    TNT1 A 0 A_FireCustomMissile ("FDJPCPNeutronWave", 0, 0, 0, 6)
+    JSHT B 1 Bright A_SetPitch (pitch - (0.8 * CallACS("FD_recoil")/65536.0))
+    JSHT C 1 Bright A_SetPitch (pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+    JSHT D 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    JSHT E 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    JSHT A 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    JSHT A 1 A_SetPitch (pitch + (1.05 * CallACS("FD_recoil")/65536.0))
+    JSHT A 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+  GonnaReload:
+    JSHT F 1
+    JSHT G 1
+	JSHT H 2
+	JSHT I 3
+    TNT1 A 0 A_PlaySound("jpcpshotgun/pumpdown", 5, 1, 0, 1.25)
+	JSHT J 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	JSHT K 1 A_SetPitch(pitch + (0.23 * CallACS("FD_recoil")/65536.0))
+	JSHT K 1 A_SetPitch(pitch + (0.08 * CallACS("FD_recoil")/65536.0))
+	JSHT K 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("jpcpshotgun/pumpup", 6, 1, 0, 1.25)
+	JSHT L 1 A_SetPitch(pitch - (0.28 * CallACS("FD_recoil")/65536.0))
+	JSHT L 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	JSHT MNIHGF 2
+	JSHT A 5
+	JSHT AAAAAAA 1 A_Refire // Gun fires at a speed of 37 tics
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+ACTOR FDJPCPNeutronCore
+{
+  Radius 4
+  Height 4
+  Speed 26
+  Damage (7 * random(9,15))
+  DamageType "Neutron"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +BLOODLESSIMPACT
+  Decal "DoomImpScorch"
+  Projectile
+  RenderStyle Add
+  Alpha 0.99
+  Scale 1.0
+  
+  var int user_gonnafadenow;
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_SetUserVar("user_gonnafadenow", 35)
+  SpawnLoop:
+    TNT1 A 1 Light("FDNeutronRedGlow")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail",  (0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (12 *momx)/-35.0, -(12 *momy)/-35.0, 2+(12 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail2", (16 *momx)/-35.0, -(16 *momy)/-35.0, 2+(16 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail2", (20 *momx)/-35.0, -(20 *momy)/-35.0, 2+(20 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail3", (24 *momx)/-35.0, -(24 *momy)/-35.0, 2+(24 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail3", (28 *momx)/-35.0, -(28 *momy)/-35.0, 2+(28 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail4", (32 *momx)/-35.0, -(32 *momy)/-35.0, 2+(32 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail4", (36 *momx)/-35.0, -(36 *momy)/-35.0, 2+(36 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail5", (40 *momx)/-35.0, -(40 *momy)/-35.0, 2+(40 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail5", (44 *momx)/-35.0, -(44 *momy)/-35.0, 2+(44 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SetUserVar("user_gonnafadenow", user_gonnafadenow - 1)
+    TNT1 A 0 A_JumpIf (user_gonnafadenow <= 0, "Dissipate")
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "SpawnLoop")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "SpawnLoop")
+	Goto SpawnLoop
+	
+  Dissipate:
+    TNT1 A 0 A_ChangeFlag ("THRUACTORS", 1)
+  DissipateLoop:
+    TNT1 A 1 A_FadeTo (0, 0.1, 1)
+	TNT1 A 0 A_Jump(256, "DissipateTrail")
+	Goto DissipateTrail
+  DissipateTrail:
+	TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail",  (0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail", (12 *momx)/-35.0, -(12 *momy)/-35.0, 2+(12 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail2", (16 *momx)/-35.0, -(16 *momy)/-35.0, 2+(16 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail2", (20 *momx)/-35.0, -(20 *momy)/-35.0, 2+(20 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail3", (24 *momx)/-35.0, -(24 *momy)/-35.0, 2+(24 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail3", (28 *momx)/-35.0, -(28 *momy)/-35.0, 2+(28 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail4", (32 *momx)/-35.0, -(32 *momy)/-35.0, 2+(32 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail4", (36 *momx)/-35.0, -(36 *momy)/-35.0, 2+(36 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail5", (40 *momx)/-35.0, -(40 *momy)/-35.0, 2+(40 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronCoreTrail5", (44 *momx)/-35.0, -(44 *momy)/-35.0, 2+(44 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERALPHA)
+	TNT1 A 0 A_Jump(256, "DissipateLoop")
+	Goto DissipateLoop
+	
+  Death:
+    TNT1 A 0 A_CheckFlag ("THRUACTORS", "DeathFaded")
+    TNT1 A 0 A_PlaySound("jpcpshotgun/hit", CHAN_WEAPON, 1, 0, 0.8)
+    TNT1 A 0 A_PlaySound("jpcpshotgun/hit", 7, 0.10, 0, 0.01)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "DeathAnimation")
+    TNT1 A 0 A_Jump (256, 1,3,6,9)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(70,140), random(1,3), frandom(0,360), 0,0,0, frandom(0.0,4.0),frandom(-0.2,0.2),frandom(-4.0,4.0), frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), 0.98, -1)
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+    NEUT J 3 Bright Light("FDRedGlowHit1")
+    NEUT K 3 Bright Light("FDRedGlowHit2")
+    NEUT L 3 Bright Light("FDRedGlowHit3")
+    NEUT M 3 Bright Light("FDRedGlowHit4")
+    NEUT N 3 Bright Light("FDRedGlowHit5")
+	Stop
+  DeathFaded:
+    TNT1 A 5
+	Stop
+  }
+}
+
+ACTOR FDJPCPNeutronCoreSuper : FDJPCPNeutronCore
+{
+  States
+  {
+  Death:
+    TNT1 A 0 A_CheckFlag ("THRUACTORS", "DeathFaded")
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "DeathAnimation")
+    TNT1 A 0 A_Jump (256, 1,3,6,9)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ff0000, SPF_FULLBRIGHT | SPF_RELATIVE, random(70,140), random(1,3), frandom(0,360), 0,0,0, frandom(0.0,4.0),frandom(-0.2,0.2),frandom(-4.0,4.0), frandom(-0.2,0.2),frandom(-0.2,0.2),frandom(-0.2,0.2), 0.98, -1)
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  }
+}
+
+actor FDJPCPNeutronCoreTrail
+{
+    Scale 0.15
+    RenderStyle Add
+    Alpha 0.75
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetTranslucent (alpha * 0.75, 1)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD", "SpawnE")
+    SpawnA:
+        NEUT A 1 Bright
+        stop
+    SpawnB:
+        NEUT B 1 Bright
+        stop
+    SpawnC:
+        NEUT C 1 Bright
+        stop
+    SpawnD:
+        NEUT D 1 Bright
+        stop
+    SpawnE:
+        NEUT E 1 Bright
+        stop
+    }
+}
+
+actor FDJPCPNeutronCoreTrail2 : FDJPCPNeutronCoreTrail
+{
+    Alpha 0.65
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetTranslucent (alpha * 0.65, 1)
+        NEUT F 1 Bright
+        stop
+    }
+}
+
+actor FDJPCPNeutronCoreTrail3 : FDJPCPNeutronCoreTrail
+{
+    Alpha 0.50
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetTranslucent (alpha * 0.5, 1)
+        NEUT G 1 Bright
+        stop
+    }
+}
+
+actor FDJPCPNeutronCoreTrail4 : FDJPCPNeutronCoreTrail
+{
+    Alpha 0.35
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetTranslucent (alpha * 0.35, 1)
+        NEUT H 1 Bright
+        stop
+    }
+}
+
+actor FDJPCPNeutronCoreTrail5 : FDJPCPNeutronCoreTrail
+{
+    Alpha 0.20
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_SetTranslucent (alpha * 0.2, 1)
+        NEUT I 1 Bright
+        stop
+    }
+}
+
+ACTOR FDJPCPNeutronWave
+{
+  Radius 4
+  Height 4
+  Speed 26
+  Damage (1)
+  DamageType "Plasma"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +BLOODLESSIMPACT
+  +RIPPER
+  Decal ""
+  Projectile
+  RenderStyle Add
+  Alpha 0.99
+  Scale 1.5
+  
+  var int user_gonnafadenow;
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 0 A_SetUserVar("user_gonnafadenow", 25)
+  SpawnLoop:
+    TNT1 A 1 Light("FDNeutronBlueGlow")
+    TNT1 A 0 A_SetUserVar("user_gonnafadenow", user_gonnafadenow - 1)
+    TNT1 A 0 A_JumpIf (user_gonnafadenow <= 0, "Dissipate")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDJPCPNeutronWaveTrail", 0,0,0, 0,0,0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_ORIGINATOR | SXF_SETTRACER)
+	TNT1 A 0 A_Jump(256, "SpawnLoop")
+	Goto SpawnLoop
+  Dissipate:
+    TNT1 A 0 A_ChangeFlag ("THRUACTORS", 1)
+    TNT1 A 0 A_ChangeFlag ("RIPPER", 0)
+  DissipateLoop:
+    TNT1 A 1
+	Loop
+	
+  Death:
+    TNT1 A 5
+	Stop
+  }
+}
+
+actor FDJPCPNeutronWaveTrail
+{
+    Radius 6
+    Height 6
+    RenderStyle Add
+	Scale 0.2
+    Alpha 0.03
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+		TNT1 A 0
+		TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, 1, 0.5)
+    SpawnLoop:
+		NEUB A 1 Bright A_FadeTo (1, 0.05, 0)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_JumpIf(alpha >= 0.2, "FadeOut")
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, "SpawnLoopB", 0.5)
+		Goto FadeOut
+    SpawnLoopB:
+		NEUB B 1 Bright A_FadeTo (1, 0.05, 0)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_JumpIf(alpha >= 0.2, "FadeOut")
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, "SpawnLoopC", 0.5)
+		Goto FadeOut
+    SpawnLoopC:
+		NEUB C 1 Bright A_FadeTo (1, 0.05, 0)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_JumpIf(alpha >= 0.2, "FadeOut")
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, "SpawnLoop", 0.5)
+		Goto FadeOut
+    FadeOut:
+		TNT1 A 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, 1, 0.5)
+		NEUB A 1 Bright A_FadeTo (0, 0.03, 1)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, 1, 0.5)
+		NEUB B 1 Bright A_FadeTo (0, 0.03, 1)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, 1, 0.5)
+		NEUB C 1 Bright A_FadeTo (0, 0.03, 1)
+		"####" "#" 0 A_SetScale (scalex * 1.14)
+		"####" "#" 0 A_Warp (AAPTR_TRACER, 0,0,0, 0, WARPF_NOCHECKPOSITION | WARPF_INTERPOLATE | WARPF_COPYINTERPOLATION, "FadeOut", 0.5)
+		Loop
+    }
+}

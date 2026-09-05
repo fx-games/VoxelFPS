@@ -39,7 +39,17 @@ func main() {
 	dry := flag.Bool("dry", false, "compile but write nothing, to see what a mod would need")
 	prefix := flag.String("prefix", "", "prepend this to every weapon's folder name")
 	scan := flag.Bool("scan", false, "lower every actor in the mod and report the whole vocabulary it needs")
+	prune := flag.Bool("prune", false, "delete shared actor files no weapon points at any more, and stop")
 	flag.Parse()
+
+	if *prune {
+		removed, err := pruneActors(*outDir)
+		if err != nil {
+			fail("%v", err)
+		}
+		fmt.Fprintf(os.Stderr, "removed %d actor file(s) nothing points at\n", removed)
+		return
+	}
 
 	if *source == "" {
 		fail("no -source given. Point it at a .pk3 or at a checkout of the mod.")
@@ -397,6 +407,42 @@ func hashFile(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// pruneActors removes the shared actor files no weapon names any more. They
+// are left behind when a weapon is re-migrated or removed, and they cost disk
+// and nothing else, so sweeping them is a thing you ask for rather than
+// something that happens while you are trying to build something.
+func pruneActors(weaponsDir string) (int, error) {
+	library, err := wep.Load(weaponsDir)
+	if err != nil {
+		return 0, err
+	}
+	wanted := make(map[string]bool)
+	for _, weapon := range library.Weapons {
+		for _, file := range weapon.Actors {
+			wanted[file] = true
+		}
+	}
+	store := filepath.Join(weaponsDir, wep.ActorsDir)
+	entries, err := os.ReadDir(store)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() || wanted[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(store, entry.Name())); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 // uniqueID keeps two weapons out of one folder.

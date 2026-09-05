@@ -1,0 +1,264 @@
+ 
+ACTOR FDAliensRocketLauncher : FDWeapon
+{
+  Inventory.RestrictedTo "FDAliensPlayer"
+  Inventory.Icon "AAROCKET"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDAliensRocket"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 5
+  Obituary "%k made sure %o saw the light."
+  Decal ""
+  Tag "Photon Scepter"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, 2)
+    TNT1 A 0 A_PlaySound("aliensrocketlauncher/idle", 7, 1.0, 1, 1.5)
+    ARO2 AABBCCDDEEFF 1 A_WeaponReady
+    Loop
+	
+  Select:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, 2)
+    TNT1 A 0 A_PlaySound("aliensrocketlauncher/idle", 7, 1.0, 1, 1.5)
+    AROK T 1 A_Raise
+    "####" "#" 0 A_Raise
+    AROK T 1 A_Raise
+    "####" "#" 0 A_Raise
+  SelectLoop:
+    AROK U 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_StopSound(7)
+    AROK U 1 A_Lower
+    "####" "#" 0 A_Lower
+    AROK U 1 A_Lower
+    "####" "#" 0 A_Lower
+  DeselectLoop:
+    AROK T 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TNT1 A 0 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    AROK TUCCBABCCUT 1
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensRocket", 1, 1)
+	Goto Dryfire
+	AROK RSD 1
+	AROK EFG 2
+    TNT1 A 0 A_GunFlash ("Flash", GFF_NOEXTCHANGE)
+	TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_PlaySound("aliensrocketlauncher/charge", CHAN_WEAPON, 1, 0, 1.2)
+	AROK HIJK 1 Bright
+    TNT1 A 0 A_GunFlash ("FlashFire")
+//    TNT1 A 0 A_PlaySound("aliensrocketlauncher/fire", CHAN_WEAPON, 1, 0, 0.7)
+//    TNT1 A 0 A_PlaySound("aliensrocketlauncher/fire", 7, 1, 0, 0.4)
+	TNT1 A 0 A_FireCustomMissile ("FDAliensPhotonProjectile", 0, 1)
+	AROK L 1 A_SetPitch(pitch - (1.65 * CallACS("FD_recoil")/65536.0))
+	AROK L 1 A_SetPitch(pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+	AROK L 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	AROK L 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	AROK M 1 A_SetPitch(pitch + (0.5 * CallACS("FD_recoil")/65536.0))
+	AROK M 1 A_SetPitch(pitch + (0.39 * CallACS("FD_recoil")/65536.0))
+	AROK N 1 A_SetPitch(pitch + (0.31 * CallACS("FD_recoil")/65536.0))
+	AROK N 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	AROK O 1 A_SetPitch(pitch + (0.19 * CallACS("FD_recoil")/65536.0))
+	AROK O 1 A_SetPitch(pitch + (0.13 * CallACS("FD_recoil")/65536.0))
+	AROK P 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	AROK P 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+	AROK Q 2
+    ARO2 AABBCCDDEEFF 1 A_WeaponReady (WRF_NOBOB)
+    Goto Ready
+	
+  Flash:
+	TNT1 AAAA 1 A_Light (random(1,4))
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  FlashFire:
+	TNT1 A 1 A_Light (20)
+	TNT1 A 1 A_Light (10)
+	TNT1 A 1 A_Light (5)
+	TNT1 A 1 A_Light (2)
+	TNT1 A 1 A_Light (1)
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  }
+}
+
+ACTOR FDAliensPhotonProjectile
+{
+  Radius 6
+  Height 6
+  Speed 40
+  Projectile
+  Damage (300 * scalex)
+  DamageType "AlienExplosive"
+  Scale 0.2
+  RenderStyle Add
+  Alpha 1.0
+  Decal "BigScorch"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  States
+  {
+  Spawn:
+    TNT1 A 0 NoDelay A_PlaySound("aliensrocketlauncher/fire", CHAN_WEAPON, 1, 0, 0.6)
+  SpawnLoop:
+	TNT1 A 0 A_JumpIf (scalex >= 4.0, 2)
+	TNT1 A 0 A_SetScale (scalex * 1.02)
+    TNT1 A 1 Light("FDPhotonPulse")
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual1",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual2",(5*momx)/-35.0, -(5*momy)/-35.0, 2+(5*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual3", (10 *momx)/-35.0, -(10 *momy)/-35.0, 2+(10 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual4",(15*momx)/-35.0, -(15*momy)/-35.0, 2+(15*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual5", (20 *momx)/-35.0, -(20 *momy)/-35.0, 2+(20 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual6",(25*momx)/-35.0, -(25*momy)/-35.0, 2+(25*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual5", (30 *momx)/-35.0, -(30 *momy)/-35.0, 2+(30 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual4",(35*momx)/-35.0, -(35*momy)/-35.0, 2+(35*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual3", (40 *momx)/-35.0, -(40 *momy)/-35.0, 2+(40 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual2",(45*momx)/-35.0, -(45*momy)/-35.0, 2+(45*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+	TNT1 A 0 A_SpawnItemEx("FDAliensPhotonVisual1", (50 *momx)/-35.0, -(50 *momy)/-35.0, 2+(50 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION | SXF_TRANSFERSCALE)
+    Goto SpawnLoop
+	
+  Death:
+    TNT1 A 0 A_Explode (400 * scalex, 160, 0, 1, 160)
+    TNT1 A 0 A_Explode (100 * scalex, 160)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "QuakeTime")
+	Goto QuakeTime
+  QuakeTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+    TNT1 A 0 A_Quake (1, 4, 0, 1024, "")
+    TNT1 A 0 A_Quake (5, 2, 0, 256, "")
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+    TNT1 A 1 A_SetScale (scalex * 1.5)
+    TNT1 A 0 A_PlaySound("aliensrocketlauncher/explosion", CHAN_WEAPON, 1, 0, 0.5)
+    TNT1 A 0 A_PlaySound("aliensrocketlauncher/explosion", 7, 0.10, 0, 0.01)
+  DeathAnimationLoop:
+    TNT1 A 0 A_FadeTo (0, 0.1, 1)
+    TNT1 A 0 A_SetScale (scalex * 1.1)
+    APHO E 1 Bright Light("FDPhotonImpactWhite") A_SpawnItemEx ("FDAliensPhotonShockwaveAfterimage", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME | SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_FadeTo (0, 0.1, 1)
+    TNT1 A 0 A_SetScale (scalex * 1.1)
+    APHO F 1 Bright Light("FDPhotonImpactGreen") A_SpawnItemEx ("FDAliensPhotonShockwaveAfterimage", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME | SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_FadeTo (0, 0.1, 1)
+    TNT1 A 0 A_SetScale (scalex * 1.1)
+    APHO G 1 Bright Light("FDPhotonImpactPurple") A_SpawnItemEx ("FDAliensPhotonShockwaveAfterimage", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME | SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+    TNT1 A 0 A_FadeTo (0, 0.1, 1)
+    TNT1 A 0 A_SetScale (scalex * 1.1)
+    APHO H 1 Bright Light("FDPhotonImpactYellow") A_SpawnItemEx ("FDAliensPhotonShockwaveAfterimage", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME | SXF_TRANSFERSCALE | SXF_TRANSFERALPHA)
+    Loop
+  }
+}
+
+actor FDAliensPhotonShockwaveAfterimage
+{
+    Radius 6
+    Height 6
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+		"####" "#" 1  A_FadeTo (0, 0.03, 1)
+		Loop
+    }
+}
+
+actor FDAliensPhotonVisual1
+{
+    Radius 6
+    Height 6
+    Scale 0.55
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.5)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    SpawnA:
+		APHO A 1 Bright
+		stop
+    SpawnB:
+		APHO B 1 Bright
+		stop
+    SpawnC:
+		APHO C 1 Bright
+		stop
+    SpawnD:
+		APHO D 1 Bright
+		stop
+    }
+}
+
+actor FDAliensPhotonVisual2 : FDAliensPhotonVisual1
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.5)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    }
+}
+
+actor FDAliensPhotonVisual3 : FDAliensPhotonVisual1
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.65)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    }
+}
+
+actor FDAliensPhotonVisual4 : FDAliensPhotonVisual1
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.8)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    }
+}
+
+actor FDAliensPhotonVisual5 : FDAliensPhotonVisual1
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.9)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    }
+}
+
+actor FDAliensPhotonVisual6 : FDAliensPhotonVisual1
+{
+    States
+    {
+    Spawn:
+		TNT1 A 0 NoDelay A_SetScale (scalex * 0.95)
+		TNT1 A 0 A_Jump (256, "SpawnA", "SpawnB", "SpawnC", "SpawnD")
+		Goto SpawnA
+    }
+}

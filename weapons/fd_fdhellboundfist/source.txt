@@ -1,0 +1,167 @@
+ 
+ACTOR FDHellboundFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDHellboundPlayer"
+  Inventory.Icon "HBFIST"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Obituary "%o was smashed down by %k."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Melee"
+  States
+  {
+  Ready:
+    HFIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    HFIS A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+  Deselect:
+    HFIS A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  Fire:
+    HFIS B 2
+  PunchTime:
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundFistToken", 1, "RightSwing")
+  LeftSwing:
+    TNT1 A 0 A_GiveInventory ("FDHellboundFistToken", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundFistComboTwo", 1, "LeftKick")
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    HFIS CD 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftSwingBerserk")
+    TNT1 A 0 A_CustomPunch (2*random(10,20), 1, CPF_NORANDOMPUFFZ, "FDHellboundFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingBerserk:
+    TNT1 A 0 A_CustomPunch (2*random(50,100), 1, CPF_NORANDOMPUFFZ, "FDHellboundFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingFinish:
+    HFIS E 1
+    HFIS FGHIJ 2
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  LeftKick:
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundChainsaw", 1, 1)
+	Goto LeftKickNoHammer
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "HammerStrike")
+  LeftKickNoHammer:
+    HFI4 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI4 A 1 A_SetPitch (pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    HFI4 B 1 A_SetPitch (pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    HFI4 B 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI4 C 1 A_SetPitch (pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+    HFI4 D 1 A_SetPitch (pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_TakeInventory ("FDHellboundFistComboTwo", 1)
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftKickBerserk")
+    Goto LeftKickFinish
+  LeftKickBerserk:
+    TNT1 A 0 A_CustomPunch (300, 1, CPF_NORANDOMPUFFZ, "FDHellboundKickPuff", 120)
+    Goto LeftKickFinish
+  LeftKickFinish:
+    TNT1 A 0 A_CustomPunch (100, 1, CPF_NORANDOMPUFFZ, "FDHellboundKickPuff", 120)
+    HFI4 E 1 A_SetPitch (pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    HFI4 F 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    HFI4 F 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI4 G 1
+    HFI4 G 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI4 H 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    HFI4 I 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    HFI4 J 1
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  RightSwing:
+    TNT1 A 0 A_TakeInventory ("FDHellboundFistToken", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundFistComboTwo", 1, "RightKick")
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    HFI2 CD 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightSwingBerserk")
+    TNT1 A 0 A_CustomPunch (2*random(10,20), 1, CPF_NORANDOMPUFFZ, "FDHellboundFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingBerserk:
+    TNT1 A 0 A_CustomPunch (2*random(50,100), 1, CPF_NORANDOMPUFFZ, "FDHellboundFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingFinish:
+    HFI2 E 1
+    HFI2 FGHIJ 2
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  RightKick:
+    TNT1 A 0 A_JumpIfInventory ("FDHellboundChainsaw", 1, 1)
+	Goto RightKickNoHammer
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "HammerStrike")
+  RightKickNoHammer:
+    HFI3 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI3 A 1 A_SetPitch (pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    HFI3 B 1 A_SetPitch (pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    HFI3 B 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI3 C 1 A_SetPitch (pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+    HFI3 D 1 A_SetPitch (pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_TakeInventory ("FDHellboundFistComboTwo", 1)
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightKickBerserk")
+    Goto RightKickFinish
+  RightKickBerserk:
+    TNT1 A 0 A_CustomPunch (300, 1, CPF_NORANDOMPUFFZ, "FDHellboundKickPuff", 120)
+    Goto RightKickFinish
+  RightKickFinish:
+    TNT1 A 0 A_CustomPunch (100, 1, CPF_NORANDOMPUFFZ, "FDHellboundKickPuff", 120)
+    HFI3 E 1 A_SetPitch (pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    HFI3 F 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    HFI3 F 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI3 G 1
+    HFI3 G 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    HFI3 H 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    HFI3 I 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    HFI3 J 1
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  HammerStrike:
+	TNT1 A 1 A_SetPitch(pitch - 3.2)
+	TNT1 A 1 A_SetPitch(pitch - 1.6)
+	TNT1 A 0 A_PlaySound("hellboundchainsaw/Swing",1)
+	HFI5 A 1 A_SetPitch(pitch + 0.2)
+	HFI5 B 1 A_SetPitch(pitch + 2.0)
+	HFI5 C 1 A_SetPitch(pitch + 1.6)
+	HFI5 D 1 A_SetPitch(pitch + 1.0)
+    TNT1 A 0 A_TakeInventory ("FDHellboundFistComboTwo", 1)
+	TNT1 A 0 A_JumpIfInventory("PowerStrength", 1, "BerserkHammerStrike")
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeritePuff",175)
+	Goto HammerStrikeFinish
+  BerserkHammerStrike:
+	TNT1 A 0 A_CustomPunch((150 + (20 * random(0,2))* 2.5), 1, CPF_NORANDOMPUFFZ, "FDHellboundHammeriteZerkPuff",175)
+	Goto HammerStrikeFinish
+  HammerStrikeFinish:
+	HFI5 E 1 A_SetPitch(pitch + 0.8)
+	HFI5 F 1 A_SetPitch(pitch + 0.4)
+	TNT1 A 1 A_SetPitch(pitch + 0.2)
+	TNT1 A 1 A_SetPitch(pitch + 0.1)
+	TNT1 A 1
+	TNT1 A 1 A_SetPitch(pitch - 0.2)
+	TNT1 A 1 A_SetPitch(pitch - 0.8)
+	TNT1 A 1 A_SetPitch(pitch - 0.5)
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  FireEnd:
+    TNT1 A 4
+    HFIS B 2
+    Goto Ready
+  }
+}
+
+Actor FDHellboundFistToken	: FDBoolean {}

@@ -13,7 +13,10 @@ const Format = 1
 // File names inside a weapon's folder.
 const (
 	WeaponFile = "weapon.json"
-	ActorsFile = "actors.json"
+	// ActorsDir holds every actor any weapon spawns, one file each, named by
+	// the hash of its content. 867 distinct actors were being stored 13710
+	// times when each weapon kept its own copy.
+	ActorsDir  = "_actors"
 	AtlasFile  = "sprites.png"
 	SoundsDir  = "sounds"
 	SourceFile = "source.txt"
@@ -313,7 +316,13 @@ type Provenance struct {
 
 // Actor is something a weapon puts into the world: a muzzle smoke puff, an
 // ejected shell casing, the puff a hitscan leaves where it lands.
+//
+// Actors live in their own files, shared between the weapons that spawn them
+// and named by the hash of what is in them. Two weapons that spawn the same
+// smoke point at the same file, and because the name is the content, they
+// cannot disagree about what it holds and there is no order to load them in.
 type Actor struct {
+	Format int          `json:"format"`
 	Name   string       `json:"name"`
 	Render Render       `json:"render"`
 	Speed  float64      `json:"speed,omitempty"`
@@ -349,6 +358,9 @@ type Weapon struct {
 
 	// Sounds maps a cue name to its file, relative to the weapon folder.
 	Sounds map[string]string `json:"sounds,omitempty"`
+	// Actors maps a lowercased actor name to the file holding it, under the
+	// weapons folder's shared actor directory.
+	Actors map[string]string `json:"actors,omitempty"`
 
 	Provenance Provenance `json:"provenance"`
 	// Dropped lists the DECORATE calls the policy deliberately did not compile,

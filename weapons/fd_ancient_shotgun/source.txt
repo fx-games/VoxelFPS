@@ -1,0 +1,82 @@
+ 
+ACTOR FDAliensShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDAliensPlayer"
+  Inventory.Icon "AASHOTGU"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDAliensShells"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 3
+  Obituary "%o fell victim to a relic of %k's past."
+  Decal "BulletChip"
+  Tag "Ancient Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensShells", 1, "ReadyAmmo")
+    ASHT A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    ASHT A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    ASHT A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    ASHT A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    ASHT A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensShells", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,4)
+    TNT1 A 0 A_PlaySound("aliensshotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("aliensshotgun/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (6.5, 2.5, 12, 3, "FDBulletPuff", FBF_USEAMMO)
+    TNT1 A 0 A_FireBullets (0, 0, -1, randompick(6,12,18), "FDBulletPuff", FBF_NORANDOM | FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (1, 0, -1, randompick(4,8,12), "FDBulletPuff", FBF_NORANDOM | FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (-1, 0, -1, randompick(4,8,12), "FDBulletPuff", FBF_NORANDOM | FBF_EXPLICITANGLE)
+    ASHT B 1 Bright A_SetPitch (pitch - (0.8 * CallACS("FD_recoil")/65536.0))
+    ASHT B 1 Bright A_SetPitch (pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+    ASHT C 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    ASHT C 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    ASHT D 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    ASHT D 1 A_SetPitch (pitch + (1.05 * CallACS("FD_recoil")/65536.0))
+    ASHT A 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+  GonnaReload:
+    ASHT A 1
+    ASHT E 1
+	ASHT F 2
+	ASHT G 3
+	ASHT H 4
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDShellCasingSpawner", 0,0,-14,-6, FPF_NOAUTOAIM)
+    TNT1 A 0 A_PlaySound("aliensshotgun/pump", 5, 1, 0, 1.25)
+	ASHT I 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	ASHT I 1 A_SetPitch(pitch + (0.23 * CallACS("FD_recoil")/65536.0))
+	ASHT J 1 A_SetPitch(pitch + (0.08 * CallACS("FD_recoil")/65536.0))
+	ASHT J 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+	ASHT J 1 A_SetPitch(pitch - (0.28 * CallACS("FD_recoil")/65536.0))
+	ASHT J 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	ASHT HGFEA 2
+	ASHT A 3
+	ASHT AAAAAAA 1 A_Refire // Gun fires at a speed of 37 tics
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}

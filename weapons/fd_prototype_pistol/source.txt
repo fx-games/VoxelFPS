@@ -1,0 +1,175 @@
+ 
+ACTOR FDTNTPistol : FDWeapon
+{
+  Inventory.RestrictedTo "FDTNTPlayer"
+  Inventory.Icon "TNPISTOL"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDTNTPistolAmmo"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 2
+  Obituary "%o lost a duel to %k."
+  Decal "BulletChip"
+  Tag "Prototype Pistol"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_ClearRefire
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTPistolAmmo", 0, "ReadyFull")
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolreload") >= 1, "ReadyFull")
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, "ReadyUseAmmo")
+    TPIS A 1 A_WeaponReady
+    Loop
+  ReadyFull:
+    TPIS A 1 A_WeaponReady (WRF_NOSECONDARY)
+    Goto Ready
+	
+  ReadyUseAmmo: // Used with the pistol ammo cvar
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBullets", 1, 1)
+	Goto ReadyFull
+    TPIS A 1 A_WeaponReady
+    Goto Ready
+	
+  Select:
+    TPIS A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    TPIS A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "DryFire2")
+    TPIS A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+  Dryfire2:
+    TPIS B 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+	Goto CrimeForReloading
+
+// aaaagh
+// next person who asks for yet another pistol cvar gets fucking shanked
+
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "Hold")
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolreload") >= 1, "FireNoReload") // If reloading is disabled, we need to go to dryfire, not altfire
+    TNT1 A 0 A_JumpIfNoAmmo ("AltFire")
+    Goto FireNoAmmoCheckDone
+  FireNoReload:
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, 2) // If ammo is also enabled, we gotta check for the base bullet ammo for that gun
+    TNT1 A 0 A_JumpIfNoAmmo ("Dryfire")
+    Goto FireNoAmmoCheckDone
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBullets", 1, "FireNoAmmoCheckDone")
+    Goto Dryfire
+	
+  FireNoAmmoCheckDone:
+    TNT1 A 0 A_PlaySound("tntpistol/aim", 5, 1, 0, 1.25)
+    TPIS FEB 1
+    TNT1 A 0 A_GiveInventory ("FDWeaponAimState", 1)
+	Goto Hold
+	
+  Hold:
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolreload") >= 1, "HoldNoReload") // If reloading is disabled, we need to go to dryfire, not altfire
+    TNT1 A 0 A_JumpIfNoAmmo ("AltFire")
+    Goto HoldNoAmmoCheckDone
+  HoldNoReload:
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, 2) // If ammo is also enabled, we gotta check for the base bullet ammo for that gun
+    TNT1 A 0 A_JumpIfNoAmmo ("Dryfire2")
+    Goto HoldNoAmmoCheckDone
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBullets", 1, "HoldNoAmmoCheckDone")
+    Goto Dryfire2
+	
+  FireNoMagConsumption: // These states are for when reloading is disabled
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolreload") == 2, "FireNoMagConsumptionBalanced")
+    TNT1 A 0 A_FireBullets (1.5, 1.0, -1, randompick(7,8,9), "FDBulletPuff", FBF_NORANDOM)
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, "FireNoMagButAmmo") // If ammo is enabled and reload is disabled, gotta take bullets directly
+    Goto FireComplete
+  FireNoMagConsumptionBalanced: // This attack has reduced damage to compensate for not needing to reload
+    TNT1 A 0 A_FireBullets (1.5, 1.0, -1, randompick(3,4,5), "FDBulletPuff", FBF_NORANDOM)
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, "FireNoMagButAmmo") // If ammo is enabled and reload is disabled, gotta take bullets directly
+    Goto FireComplete
+  FireNoMagButAmmo: // eat pant
+    TNT1 A 0 A_TakeInventory ("FDTNTBullets", 1, TIF_NOTAKEINFINITE)
+    Goto FireComplete
+	
+  HoldNoAmmoCheckDone:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("tntpistol/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("tntpistol/fire", 7, 0.05, 0, 0.20)
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolreload") >= 1, "FireNoMagConsumption") // No reload means no mag consumption
+    TNT1 A 0 A_FireBullets (1.5, 1.0, -1, randompick(7,8,9), "FDBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+  FireComplete:
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDTNTCasingSpawner", 0,0,frandom(0.5,0.6),-1, FPF_NOAUTOAIM)
+    TPIS C 1 Bright A_SetPitch (pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+    TPIS C 1 Bright A_SetPitch (pitch - (0.07 * CallACS("FD_recoil")/65536.0))
+    TPIS D 1 A_SetPitch (pitch - (0.03 * CallACS("FD_recoil")/65536.0))
+    TPIS D 1 A_SetPitch (pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+    TPIS B 1 A_SetPitch (pitch + (0.08 * CallACS("FD_recoil")/65536.0))
+    TPIS B 1 A_SetPitch (pitch + (0.02 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfNoAmmo ("CeaseFire")
+	Goto CrimeForReloading
+  CeaseFire:
+    TPIS BB 1 A_Refire("Hold")
+  CeaseFire2:
+    TPIS EE 1 A_Refire("CeaseFire")
+  CeaseFire3:
+    TPIS FF 1 A_Refire("CeaseFire2")
+    TNT1 A 0 A_ClearRefire
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    Goto Ready
+	
+  AltFire:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTPistolAmmo", 0, "ReadyReset")
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 0, "Reloadery")
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBullets", 1, "Reloadery")
+	Goto DryFire // Normally we'd return to Ready, but we disable altfire if full anyway, so we can go to dryfire without problems
+  Reloadery:
+    TNT1 A 0 A_JumpIfInventory ("FDWeaponAimState", 1, "HoldToReload")
+  Reloadery2:
+    TPIS GH 2
+    TNT1 A 0 A_PlaySound("tntpistol/unload", 6, 1, 0, 1.25)
+    TPIS RRRRR 2
+    TPIS SI 2
+	TNT1 A 0 A_JumpIf(CallACS("FD_pistolammo") == 1, "ReloadUseAmmo")
+    TNT1 A 0 A_GiveInventory ("FDTNTPistolAmmo", 17)
+	Goto ReloadFinish
+  ReloadUseAmmo: // Used with the pistol ammo cvar
+    TNT1 A 0 A_JumpIfInventory ("FDTNTPistolAmmo", 0, "ReloadFinish")
+    TNT1 A 0 A_JumpIfInventory ("FDTNTBullets", 1, 1)
+	Goto ReloadFinish
+    TNT1 A 0 A_GiveInventory ("FDTNTPistolAmmo", 1)
+    TNT1 A 0 A_TakeInventory ("FDTNTBullets", 1)
+	Goto ReloadUseAmmo
+  ReloadFinish:
+    TNT1 A 0 A_PlaySound("tntpistol/load", 5, 1, 0, 1.25)
+    TPIS JKLMNOPQ 2
+    Goto Ready
+	
+  HoldToReload:
+    TPIS BEF 1
+    TNT1 A 0 A_ClearRefire
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    Goto Reloadery2
+  ReadyReset:
+    TPIS BEF 1
+    TNT1 A 0 A_ClearRefire
+    TNT1 A 0 A_TakeInventory ("FDWeaponAimState", 1)
+    Goto Ready
+	
+  Flash:
+    TNT1 A 1 A_Light1
+    TNT1 A 1 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+	
+	// no don't look it's crime
+  CrimeForReloading:
+    TPIS BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB 1 A_WeaponReady (WRF_NOBOB)
+	Goto CeaseFire
+  }
+}

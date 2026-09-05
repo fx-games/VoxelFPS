@@ -1,0 +1,129 @@
+ 
+ACTOR FDTNTSuperShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDTNTPlayer"
+  Inventory.Icon "TNSUPERS"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDTNTShells"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 3
+  Obituary "%o was burst apart by %k's burst shotgun."
+  Decal "BulletChip"
+  Tag "Burst Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTShells", 1, "ReadyAmmo")
+    TSSG A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+	TNT1 A 0 A_JumpIf(CallACS("FD_tntburstshotgun") == 2, "IdleReady")
+	TNT1 A 0 A_JumpIf(CallACS("FD_tntburstshotgun") == 3, 2)
+    TSSG A 1 A_WeaponReady (WRF_NOSECONDARY)
+    Loop
+    TSSG A 1 A_WeaponReady
+    Loop
+  IdleReady:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunBurst", 1, 1)
+	Goto ReadyAmmo+1
+    TNT1 A 0 A_TakeInventory ("FDTNTSuperShotgunIdleTimer", 1)
+    TNT1 A 0 A_GiveInventory ("FDTNTSuperShotgunIdleTimer", 1) // reset the idle timer
+  IdleReadyLoop:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunIdleTimer", 1, 1)
+    Goto GonnaReload
+    TSSG A 1 A_WeaponReady (WRF_NOSECONDARY)
+    Goto IdleReadyLoop
+	
+  Select:
+    TSSG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+	TNT1 A 0 A_JumpIf(CallACS("FD_tntburstshotgun") == 0, 1)
+	Goto DeselectLoop
+    TNT1 A 0 A_TakeInventory ("FDTNTSuperShotgunBurst", 0)
+	Goto DeselectLoop
+  DeselectLoop:
+    TSSG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TSSG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTShells", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("tntsupershotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("tntsupershotgun/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (6, 4, 2, 3, "FDBulletPuff", FBF_USEAMMO)
+    TNT1 A 0 A_FireBullets (6, 4, 10, 3, "FDPainlessBulletPuff", 0)
+    TNT1 A 0 A_GiveInventory ("FDTNTSuperShotgunBurst", 1)
+    TSSG B 1 Bright A_SetPitch (pitch - (1.1 * CallACS("FD_recoil")/65536.0))
+    TSSG C 1 Bright A_SetPitch (pitch - (0.3 * CallACS("FD_recoil")/65536.0))
+    TSSG D 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    TSSG E 1 A_SetPitch (pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+    TSSG F 1 A_SetPitch (pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+    TSSG G 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunBurst", 0, "GonnaReload")
+    TSSG A 2
+	Goto AfterFiring
+  GonnaReload:
+    TSSG A 4
+    TNT1 A 0 A_PlaySound("plutsupershotgun/open", 5, 1, 0, 1.25)
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, "SUDDENLYOVERHERE")
+  VentingLoop:
+    TNT1 A 0 A_TakeInventory ("FDTNTSuperShotgunBurst", 1)
+	TSSG H 1 A_FireCustomMissile ("FDTNTShellCasingSpawner2", 0,0,frandom(7.6,7.2),-2, FPF_NOAUTOAIM)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunBurst", 1, "VentingLoop")
+  ShellsVented:
+    TSSG I 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TSSG I 1 A_SetPitch (pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+    TSSG J 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TSSG J 1 A_SetPitch (pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TSSG K 1 A_SetPitch (pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+    TSSG K 1 A_SetPitch (pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("plutsupershotgun/close", 6, 1, 0, 1.25)
+    TSSG L 1 A_SetPitch (pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+    TSSG L 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    TSSG A 4
+	Goto AfterFiring
+  SUDDENLYOVERHERE:
+	TSSG H 1 A_TakeInventory ("FDTNTSuperShotgunBurst", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunBurst", 1, "SUDDENLYOVERHERE")
+	Goto ShellsVented
+	
+  AfterFiring:
+	TNT1 A 0 A_JumpIf(CallACS("FD_tntburstshotgun") == 3, "AfterFiringManual")
+    TSSG AAAAAAAAAAAAAAAAAA 1 A_WeaponReady (WRF_NOBOB | WRF_NOSECONDARY)
+    Goto Ready
+  AfterFiringManual:
+    TSSG AAAAAAAAAAAAAAAAAA 1 A_WeaponReady (WRF_NOBOB)
+    Goto Ready
+	
+  AltFire:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTSuperShotgunBurst", 1, "GonnaReload")
+	Goto Ready+1
+	
+  Flash:
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+Actor FDTNTSuperShotgunBurst : FDCounter
+{
+inventory.maxamount 4
+}
+
+ACTOR FDTNTSuperShotgunIdleTimer : Powerup
+{
+	Powerup.Duration 70
+}

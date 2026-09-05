@@ -1,0 +1,245 @@
+ 
+ACTOR FDWhitemareSuperShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDWhitemarePlayer"
+  Inventory.Icon "WMSUPERS"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDWhitemareShells"
+  Weapon.AmmoUse 2
+  Weapon.SlotNumber 3
+  Obituary "%o got burnt to a crisp by %k's wall of fireballs."
+  Decal "BulletChip"
+  Tag "Dragon King Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatReady")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, "ReadyAmmo")
+    WSSG A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatReadyAmmo")
+    WSSG A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatSelect")
+    WSSG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatDeselect")
+    WSSG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatDryfire")
+    WSSG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatFire")
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,1,6)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-1,6)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/fire", 7, 0.05, 0, 0.20)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", 0, 1, -3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", 0, 0, 3)
+	TNT1 AAAAAAAA 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", frandom(-7.2,7.2), 0, 0, 0, 0, frandom(-3.1,3.1))
+	Goto FiringComplete
+  FiringComplete:
+    WSSG B 1 Bright A_SetPitch (pitch - (1.6 * CallACS("FD_recoil")/65536.0))
+    WSSG B 1 Bright A_SetPitch (pitch - (1.1 * CallACS("FD_recoil")/65536.0))
+    WSSG C 1 Bright A_SetPitch (pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+    WSSG C 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    WSSG D 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    WSSG D 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSG E 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    WSSG E 1 A_SetPitch (pitch + (1.5 * CallACS("FD_recoil")/65536.0))
+    WSSG F 1 A_SetPitch (pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+    WSSG F 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, "GonnaReload")
+    Goto Ready
+  GonnaReload:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareChainsaw", 1, "ThermoCoatGonnaReload")
+    WSSG G 2
+    WSSG H 2
+    WSSG I 1
+    WSSG I 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    WSSG J 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    WSSG J 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSG J 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/open", 5, 1, 0, 1.25)
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 3)
+	TNT1 AA 0 A_FireCustomMissile ("FDWhitemareShellCasingSpawner2", 0,0,frandom(-3.6,-3.2),-9, FPF_NOAUTOAIM)
+	WSSG K 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSG K 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSG L 3
+    WSSG M 4
+    WSSG N 3
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/load", 6, 1, 0, 1.25)
+    WSSG O 2
+	WSSG P 2
+	WSSG Q 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	WSSG Q 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSG R 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+	WSSG R 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/close", 5, 1, 0, 1.25)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/hiss", 6, 1, 0, 1.75)
+	WSSG I 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSG I 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSG H 3
+    WSSG G 4
+    WSSG F 3
+    WSSG A 1
+    WSSG AAAAA 1 A_Refire // Gun fires at a speed of 51 tics
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+
+// ============= THERMOCOAT ACTIVE =============================================
+	
+  ThermoCoatReady:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, "ThermoCoatReadyAmmo")
+    WSSW A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ThermoCoatReadyAmmo:
+    WSSW A 1 A_WeaponReady
+    Loop
+	
+  ThermoCoatSelect:
+    WSSW A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  ThermoCoatDeselect:
+    WSSW A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  ThermoCoatDryfire:
+    WSSW A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto ThermoCoatReady
+	
+  ThermoCoatFire:
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, 1)
+	Goto ThermoCoatDryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 3)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,1,6)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-1,6)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/fire", 7, 0.05, 0, 0.20)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", 0, 1, -3)
+	TNT1 A 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", 0, 0, 3)
+	TNT1 AAAAAAAA 0 A_FireCustomMissile ("FDWhitemareSuperShotgunFireball", frandom(-7.2,7.2), 0, 0, 0, 0, frandom(-3.1,3.1))
+	Goto ThermoCoatFiringComplete
+  ThermoCoatFiringComplete:
+    WSSW B 1 Bright A_SetPitch (pitch - (1.6 * CallACS("FD_recoil")/65536.0))
+    WSSW B 1 Bright A_SetPitch (pitch - (1.1 * CallACS("FD_recoil")/65536.0))
+    WSSW C 1 Bright A_SetPitch (pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+    WSSW C 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    WSSW D 1 A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    WSSW D 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSW E 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    WSSW E 1 A_SetPitch (pitch + (1.5 * CallACS("FD_recoil")/65536.0))
+    WSSW F 1 A_SetPitch (pitch + (1.0 * CallACS("FD_recoil")/65536.0))
+    WSSW F 1 A_SetPitch (pitch + (0.2 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDWhitemareShells", 2, "ThermoCoatGonnaReload")
+    Goto ThermoCoatReady
+  ThermoCoatGonnaReload:
+    WSSW G 2
+    WSSW H 2
+    WSSW I 1
+    WSSW I 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    WSSW J 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    WSSW J 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSW J 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/open", 5, 1, 0, 1.25)
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 3)
+	TNT1 AA 0 A_FireCustomMissile ("FDWhitemareShellCasingSpawner2", 0,0,frandom(-3.6,-3.2),-9, FPF_NOAUTOAIM)
+	WSSW K 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSW K 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSW L 3
+    WSSW M 4
+    WSSW N 3
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/load", 6, 1, 0, 1.25)
+    WSSW O 2
+	WSSW P 2
+	WSSW Q 1 A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	WSSW Q 1 A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSW R 1 A_SetPitch(pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+	WSSW R 1 A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/close", 5, 1, 0, 1.25)
+    TNT1 A 0 A_PlaySound("whitemaresupershotgun/hiss", 6, 1, 0, 1.75)
+	WSSW I 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	WSSW I 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    WSSW H 3
+    WSSW G 4
+    WSSW F 3
+    WSSW A 1
+    WSSW AAAAA 1 A_Refire // Gun fires at a speed of 51 tics
+    Goto ThermoCoatReady
+  }
+}
+
+ACTOR FDWhitemareSuperShotgunFireball : FDWhitemareShotgunFireball
+{
+  Damage (10*random(1,3))
+  Gravity 0.5
+  States
+  {
+  ResetFrame:
+	TNT1 A 0 A_SetUserVar("user_spriteframe", 0)
+    TNT1 A 0 A_ChangeFlag ("NOGRAVITY", 0)
+    TNT1 A 0 A_Jump (256, "SpawnLoop")
+    Goto SpawnLoop
+	
+  XDeath:
+  Crash:
+    TNT1 A 0
+    TNT1 A 0 A_ChangeFlag ("NOGRAVITY", 1)
+    TNT1 A 0 A_Stop
+	Goto IgniteDOT
+	
+	// This sequence is used to set enemies alight.
+  IgniteDOT:
+	TNT1 A 0 A_Jump (200, "DeathParticles") // High chance to not ignite enemies.
+	TNT1 A 0 A_JumpIfInventory ("FDWhitemareFireDOTActive", 1, "GenerateDOTTime", AAPTR_TRACER)
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 1, "DOT1")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 2, "DOT2")
+	TNT1 A 0 A_JumpIf(CallACS("FD_enemyeffects") == 3, "DOT3")
+  DOT0:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOT", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT1:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoSmoke", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT2:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTToaster", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  DOT3:
+    TNT1 A 0 A_SpawnItemEx ("FDWhitemareFireDOTNoVisuals", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERPOINTERS)
+	Goto GenerateDOTTime
+  GenerateDOTTime:
+	TNT1 AAAA 0 A_GiveInventory ("FDWhitemareFireDOTActive", 1, AAPTR_TRACER) // 4 seconds chance-based burn
+	Goto Death
+	
+  Death:
+    TNT1 A 0
+    TNT1 A 0 A_ChangeFlag ("NOGRAVITY", 1)
+    TNT1 A 0 A_Stop
+    TNT1 A 0 A_Jump (256, "DeathParticles")
+	Goto DeathParticles
+  }
+}

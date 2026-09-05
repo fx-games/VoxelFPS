@@ -1,0 +1,1 @@
+{"format":1,"name":"AutoCannonTracerTrail9","render":{"scale":[0.8,0.8],"alpha":0.5,"style":"add"},"states":{"steps":[{"tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

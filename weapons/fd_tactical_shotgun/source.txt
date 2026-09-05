@@ -1,0 +1,84 @@
+ 
+ACTOR FDTNTShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDTNTPlayer"
+  Inventory.Icon "TNSHOTGU"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDTNTShells"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 3
+  Obituary "%o couldn't weave between %k's fixed shrapnel."
+  Decal "BulletChip"
+  Tag "Tactical Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTShells", 1, "ReadyAmmo")
+    TSHT A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    TSHT A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TSHT A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TSHT A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    TSHT A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTShells", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("tntshotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("tntshotgun/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (0, 0, -1, 15, "FDBulletPuff", FBF_NORANDOM | FBF_EXPLICITANGLE | FBF_USEAMMO)
+    TNT1 A 0 A_FireBullets (2.5, 0, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (-2.5, 0, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (1.25, 1.25, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (-1.25, 1.25, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (1.25, -1.25, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TNT1 A 0 A_FireBullets (-1.25, -1.25, -1, 5, "FDBulletPuff", FBF_EXPLICITANGLE)
+    TSHT B 1 Bright A_SetPitch (pitch - (0.8 * CallACS("FD_recoil")/65536.0))
+    TSHT B 1 Bright A_SetPitch (pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+    TSHT C 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    TSHT C 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    TSHT D 1 A_SetPitch (pitch + (0.5 * CallACS("FD_recoil")/65536.0))
+    TSHT D 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TSHT E 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TSHT E 1 A_SetPitch (pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+    TSHT A 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+  GonnaReload:
+    TSHT FGHIJ 2
+    TNT1 A 0 A_PlaySound("tntshotgun/pump", 5, 1, 0, 1.25)
+	TSHT K 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	TSHT K 1 A_SetPitch(pitch + (0.23 * CallACS("FD_recoil")/65536.0))
+	TSHT K 1 A_SetPitch(pitch + (0.08 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDTNTShellCasingSpawner", 0,0,frandom(-7.6,-7.2),-2, FPF_NOAUTOAIM)
+	TSHT L 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+	TSHT L 1 A_SetPitch(pitch - (0.28 * CallACS("FD_recoil")/65536.0))
+	TSHT J 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	TSHT J 1
+    TSHT IHGFM 2
+    TSHT A 1
+    TSHT A 7 A_Refire // Gun fires at a speed of 37 tics
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}

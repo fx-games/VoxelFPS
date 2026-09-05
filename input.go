@@ -122,6 +122,15 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.reloadPressed = true
 	}
 
+	// Nine number keys against a hundred and forty migrated weapons, so , and .
+	// walk through the whole folder.
+	if key == glfw.KeyComma {
+		g.cycleWeapon(-1)
+	}
+	if key == glfw.KeyPeriod {
+		g.cycleWeapon(1)
+	}
+
 	if key == glfw.KeyEscape {
 		g.openEscapeMenu()
 	}

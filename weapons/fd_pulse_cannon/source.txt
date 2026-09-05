@@ -1,0 +1,327 @@
+
+// NANOCORE EFFECTS
+// Increased impact damage and charge speed
+
+ACTOR FDBTSXRocketLauncher : FDWeapon
+{
+  Inventory.RestrictedTo "FDBTSXPlayer"
+  Inventory.Icon "BXROCKET"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDBTSXRocket"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 5
+  Obituary "%o was repulsed by %k."
+  Decal ""
+  Tag "Pulse Cannon"
+  States
+  {
+  Ready:
+    XROK A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    XROK A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    XROK A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    XROK A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXRocket", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_PlaySound("btsxrocketlauncher/charge", 6, 1, 0, 1.25)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, "OverdriveCharge")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, "OverdriveCharge")
+	XROK BCDEFGH 2
+  ChargeDone:
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_AlertMonsters
+//    TNT1 A 0 A_PlaySound("btsxrocketlauncher/fire", CHAN_WEAPON, 1, 0, 0.7)
+//    TNT1 A 0 A_PlaySound("btsxrocketlauncher/fire", 7, 1, 0, 0.4)
+	TNT1 A 0 A_JumpIf(CallACS("FD_fancyprojectiles") == 1, "FancyFire")
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDBTSXRocketProjectile", 0, 1)
+	Goto FireFinish
+	TNT1 A 0 A_FireCustomMissile ("FDBTSXOverdriveRocketProjectile", 0, 1)
+	Goto FireFinish
+  FireFinish:
+	// -2.25
+	XROK I 1 Bright A_SetPitch(pitch - (1.75 * CallACS("FD_recoil")/65536.0))
+	XROK I 1 Bright A_SetPitch(pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+	// 2.25
+	XROK J 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	XROK J 1 Bright A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	XROK K 1 Bright A_SetPitch(pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+	XROK K 1 Bright A_SetPitch(pitch + (0.39 * CallACS("FD_recoil")/65536.0))
+	XROK L 1 Bright A_SetPitch(pitch + (0.31 * CallACS("FD_recoil")/65536.0))
+	XROK L 1 Bright A_SetPitch(pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+	XROK M 1 Bright A_SetPitch(pitch + (0.19 * CallACS("FD_recoil")/65536.0))
+	XROK M 1 Bright A_SetPitch(pitch + (0.13 * CallACS("FD_recoil")/65536.0))
+	XROK C 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	XROK C 1 A_SetPitch(pitch + (0.01 * CallACS("FD_recoil")/65536.0))
+	XROK A 2
+    XROK AAAAAAAAAA 1 A_Refire
+    Goto Ready
+  OverdriveCharge:
+	XROK BCDEFGH 1
+	Goto ChargeDone
+	
+  Flash:
+	TNT1 A 2 A_Light (7)
+	TNT1 A 2 A_Light (4)
+	TNT1 A 2 A_Light (3)
+	TNT1 A 2 A_Light2
+	TNT1 A 2 A_Light1
+    TNT1 A 0 A_Light0
+    Goto LightDone
+	
+  FancyFire:
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePowerAlt", 1, 3)
+    TNT1 A 0 A_JumpIfInventory ("FDBTSXOverdrivePower", 1, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDBTSXFancyRocketProjectile", 0, 1)
+	Goto FireFinish
+	TNT1 A 0 A_FireCustomMissile ("FDBTSXOverdriveFancyRocketProjectile", 0, 1)
+	Goto FireFinish
+  }
+}
+
+ACTOR FDBTSXRocketProjectile
+{
+  Radius 4
+  Height 4
+  Speed 50
+  Damage (randompick(160,180))
+  DamageType "EnergyExplosive"
+  Species "Player"
+  +THRUSPECIES
+  +THRUGHOST
+  +FORCEXYBILLBOARD
+  +BLOODLESSIMPACT
+  SeeSound "btsxrocketlauncher/fire"
+  Decal "BigScorch"
+  Projectile
+  RenderStyle Add
+  Alpha 1.0
+  Scale 0.28
+  States
+  {
+  Spawn:
+    TNT1 A 1 Light("FDPulseCannonBlueGlow")
+	TNT1 A 0 A_Jump(256, "SpawnTrail")
+	Goto SpawnTrail
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (9 *momx)/-35.0, -(9 *momy)/-35.0, 2+(9 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (10 *momx)/-35.0, -(10 *momy)/-35.0, 2+(10 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (11 *momx)/-35.0, -(11 *momy)/-35.0, 2+(11 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (12 *momx)/-35.0, -(12 *momy)/-35.0, 2+(12 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (13 *momx)/-35.0, -(13 *momy)/-35.0, 2+(13 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (14 *momx)/-35.0, -(14 *momy)/-35.0, 2+(14 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (15 *momx)/-35.0, -(15 *momy)/-35.0, 2+(15 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (16 *momx)/-35.0, -(16 *momy)/-35.0, 2+(16 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (17 *momx)/-35.0, -(17 *momy)/-35.0, 2+(17 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (18 *momx)/-35.0, -(18 *momy)/-35.0, 2+(18 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (19 *momx)/-35.0, -(19 *momy)/-35.0, 2+(19 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (20 *momx)/-35.0, -(20 *momy)/-35.0, 2+(20 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (21 *momx)/-35.0, -(21 *momy)/-35.0, 2+(21 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (22 *momx)/-35.0, -(22 *momy)/-35.0, 2+(22 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (23 *momx)/-35.0, -(23 *momy)/-35.0, 2+(23 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (24 *momx)/-35.0, -(24 *momy)/-35.0, 2+(24 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (25 *momx)/-35.0, -(25 *momy)/-35.0, 2+(25 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (26 *momx)/-35.0, -(26 *momy)/-35.0, 2+(26 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (27 *momx)/-35.0, -(27 *momy)/-35.0, 2+(27 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (28 *momx)/-35.0, -(28 *momy)/-35.0, 2+(28 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (29 *momx)/-35.0, -(29 *momy)/-35.0, 2+(29 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXRocketProjectileTrail", (30 *momx)/-35.0, -(30 *momy)/-35.0, 2+(30 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+	Goto Spawn
+	
+  Death:
+    TNT1 A 0 A_Explode (60, 128, 0, 1, 128)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "QuakeTime")
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAA 0 A_SpawnParticle (3737ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(30,70), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(25,60), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (c7c7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(20,50), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,5,10)
+	TNT1 AAAAAAAAAAAAAAAAAAAAAAA 0 A_SpawnParticle (e7e7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(15,40), random(1,10), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,4), frandom(0,360), 0,0,0, frandom(0.2,12.0),frandom(-0.2,0.2),frandom(-6.0,6.0), 0,0,0, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "QuakeTime")
+	Goto QuakeTime
+  QuakeTime:
+	TNT1 A 0 A_JumpIf(CallACS("FD_quakes") == 0, "DeathAnimation")
+    TNT1 A 0 A_Quake (1, 12, 0, 1024, "")
+    TNT1 A 0 A_Quake (5, 8, 0, 512, "")
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXRocketProjectileWave", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx ("FDBTSXRocketProjectileLightningField", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SetScale (1.8)
+    TNT1 A 0 A_SetTranslucent (0.98, 1)
+    TNT1 A 0 A_PlaySound("btsxrocketlauncher/explosion", CHAN_WEAPON, 1, 0, 0.5)
+    TNT1 A 0 A_PlaySound("btsxrocketlauncher/explosion", 7, 0.10, 0, 0.01)
+    XRKP G 3 Bright Light("FDBlueExplosion1")
+    XRKP H 3 Bright Light("FDBlueExplosion2")
+    XRKP I 3 Bright Light("FDBlueExplosion3")
+    XRKP J 3 Bright Light("FDBlueExplosion4")
+    XRKP K 3 Bright Light("FDBlueExplosion5")
+    XRKP L 3 Bright Light("FDBlueExplosion6")
+    Stop
+  }
+}
+
+ACTOR FDBTSXOverdriveRocketProjectile : FDBTSXRocketProjectile
+{
+  Damage (randompick(200,220))
+  Scale 0.38
+}
+
+ACTOR FDBTSXFancyRocketProjectile : FDBTSXRocketProjectile
+{
+  Scale 0.28
+  States
+  {
+  SpawnTrail:
+	TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail",(0.01*momx)/-35.0, -(0.01*momy)/-35.0, 2+(0.01*momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (1 *momx)/-35.0, -(1 *momy)/-35.0, 2+(1 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (2 *momx)/-35.0, -(2 *momy)/-35.0, 2+(2 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (3 *momx)/-35.0, -(3 *momy)/-35.0, 2+(3 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (4 *momx)/-35.0, -(4 *momy)/-35.0, 2+(4 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (5 *momx)/-35.0, -(5 *momy)/-35.0, 2+(5 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (6 *momx)/-35.0, -(6 *momy)/-35.0, 2+(6 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (7 *momx)/-35.0, -(7 *momy)/-35.0, 2+(7 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (8 *momx)/-35.0, -(8 *momy)/-35.0, 2+(8 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (9 *momx)/-35.0, -(9 *momy)/-35.0, 2+(9 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (10 *momx)/-35.0, -(10 *momy)/-35.0, 2+(10 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (11 *momx)/-35.0, -(11 *momy)/-35.0, 2+(11 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (12 *momx)/-35.0, -(12 *momy)/-35.0, 2+(12 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (13 *momx)/-35.0, -(13 *momy)/-35.0, 2+(13 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (14 *momx)/-35.0, -(14 *momy)/-35.0, 2+(14 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (15 *momx)/-35.0, -(15 *momy)/-35.0, 2+(15 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (16 *momx)/-35.0, -(16 *momy)/-35.0, 2+(16 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (17 *momx)/-35.0, -(17 *momy)/-35.0, 2+(17 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (18 *momx)/-35.0, -(18 *momy)/-35.0, 2+(18 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (19 *momx)/-35.0, -(19 *momy)/-35.0, 2+(19 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (20 *momx)/-35.0, -(20 *momy)/-35.0, 2+(20 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (21 *momx)/-35.0, -(21 *momy)/-35.0, 2+(21 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (22 *momx)/-35.0, -(22 *momy)/-35.0, 2+(22 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (23 *momx)/-35.0, -(23 *momy)/-35.0, 2+(23 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (24 *momx)/-35.0, -(24 *momy)/-35.0, 2+(24 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (25 *momx)/-35.0, -(25 *momy)/-35.0, 2+(25 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (26 *momx)/-35.0, -(26 *momy)/-35.0, 2+(26 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (27 *momx)/-35.0, -(27 *momy)/-35.0, 2+(27 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (28 *momx)/-35.0, -(28 *momy)/-35.0, 2+(28 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (29 *momx)/-35.0, -(29 *momy)/-35.0, 2+(29 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+    TNT1 A 0 A_SpawnItemEx("FDBTSXFancyRocketProjectileTrail", (30 *momx)/-35.0, -(30 *momy)/-35.0, 2+(30 *momz)/-35.0, 0, 0, 0, 0, SXF_ABSOLUTEANGLE | SXF_NOCHECKPOSITION)
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "Spawn")
+    TNT1 A 0 A_Jump (256, 1,3,6)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE | SPF_RELANG, random(8,16), random(2,3), 0, frandom(-16.0,16.0),frandom(-4.2,4.2),frandom(-4.2,4.2), 0,0,0, 0,0,0, 0.5, -1)
+	TNT1 A 0 A_Jump(256, "Spawn")
+	Goto Spawn
+  }
+}
+
+ACTOR FDBTSXOverdriveFancyRocketProjectile : FDBTSXFancyRocketProjectile
+{
+  Damage (randompick(200,220))
+  Scale 0.38
+}
+
+actor FDBTSXRocketProjectileTrail
+{
+	Radius 4
+	Height 4
+    Scale 0.9
+    RenderStyle Add
+    Alpha 0.95
+    +FORCEXYBILLBOARD
+    +NOINTERACTION
+    States
+    {
+    Spawn:
+        XRKP A 2 Bright
+        Stop
+    }
+}
+
+actor FDBTSXFancyRocketProjectileTrail : FDBTSXRocketProjectileTrail
+{
+    Scale 0.18
+    States
+    {
+    Spawn:
+        OGLP B 2 Bright
+        Stop
+    }
+}
+
+actor FDBTSXRocketProjectileWave : FDBTSXRocketProjectileTrail
+{
+    Scale 4.0
+    Alpha 0.25
+    States
+    {
+    Spawn:
+        XRKP BCDEF 2 Bright
+        Stop
+    }
+}
+
+actor FDBTSXRocketProjectileLightningField : FDBTSXRocketProjectileTrail
+{
+    Scale 3.5
+    Alpha 0.85
+  
+	var int user_lightningtimer;
+    States
+    {
+    Spawn:
+		TNT1 A 0
+        SLGW B 1 Bright
+        SLGW B 1 Bright A_SetScale (2.5)
+        SLGW B 1 Bright A_SetScale (1.5)
+		TNT1 A 0 A_SetUserVar("user_lightningtimer", random(25,70))
+    EmitLightning:
+		TNT1 A 0 A_SetScale (frandom(0.15,0.35))
+        TNT1 A 0 A_Jump (220, "NoEmit")
+		TNT1 A 0 A_PlaySound("btsxbfg9000/zap",CHAN_AUTO, 0.3, 0, 1.8)
+        TNT1 A 0 A_Jump (192, 2,3,4)
+		TNT1 AAAAAA 0 A_CustomRailgun (0, 0, "None", "White", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", frandom(0,359), frandom(-45,45), random(64,128), 1, 0.2, 0, "None", -8)
+		SLGW B 1 Bright Light("FDBlueExplosion1") A_CustomRailgun (0, 0, "None", "White", RGF_SILENT | RGF_FULLBRIGHT, 0, 25, "FDHarmlessPuff", frandom(0,359), frandom(-45,45), random(64,128), 1, 0.2, 0, "None", -8)
+        Goto Loopery
+    NoEmit:
+        TNT1 A 1
+        Goto Loopery
+    Loopery:
+        TNT1 A 0
+		TNT1 A 0 A_SetUserVar("user_lightningtimer", user_lightningtimer - 1)
+		TNT1 A 0 A_JumpIf (user_lightningtimer <= 0, "NoMoreLightning")
+        Goto EmitLightning
+		
+    NoMoreLightning:
+        TNT1 A 0
+        Stop
+    }
+}

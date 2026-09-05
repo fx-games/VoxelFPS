@@ -1,0 +1,84 @@
+ 
+ACTOR FDAliensFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDAliensPlayer"
+  Inventory.Icon "AAFIST"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Weapon.Kickback 10
+  Obituary "%o had a trench carved into them by %k."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Trench Knife"
+  States
+  {
+  Ready:
+    AFIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    AFIS A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_TakeInventory ("FDAliensKnifeToken", 0)
+    AFIS A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  Fire:
+	AFIS BC 1
+  Hold:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensKnifeGOTTAKNIFEFAST", 1, 2)
+    TNT1 A 2
+    TNT1 A 0 A_JumpIfInventory ("FDAliensKnifeToken", 1, "FireAlt")
+    TNT1 A 0 A_GiveInventory ("FDAliensKnifeToken", 1)
+    TNT1 A 0 A_PlaySound("aliensfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	AFIS DE 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "BerserkHit")
+    TNT1 A 0 A_CustomPunch (randompick(20,22), 1, CPF_NORANDOMPUFFZ, "FDAliensKnifePuff", 80)
+    Goto FireFinish
+  BerserkHit:
+    TNT1 A 0 A_CustomPunch (randompick(60,66), 1, CPF_NORANDOMPUFFZ, "FDAliensKnifePuff", 80)
+    Goto FireFinish
+  FireFinish:
+	AFIS F 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	AFIS G 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	AFIS H 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 5 A_ReFire ("SwingFinished")
+    TNT1 A 0 A_TakeInventory ("FDAliensKnifeToken", 0)
+	AFIS CB 1
+    Goto Ready
+	
+  FireAlt:
+    TNT1 A 0 A_TakeInventory ("FDAliensKnifeToken", 0)
+    TNT1 A 0 A_PlaySound("aliensfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+	AFIS IJ 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "BerserkHitAlt")
+    TNT1 A 0 A_CustomPunch (randompick(20,22), 1, CPF_NORANDOMPUFFZ, "FDAliensKnifePuff", 80)
+    Goto FireFinishAlt
+  BerserkHitAlt:
+    TNT1 A 0 A_CustomPunch (randompick(60,66), 1, CPF_NORANDOMPUFFZ, "FDAliensKnifePuff", 80)
+    Goto FireFinishAlt
+  FireFinishAlt:
+	AFIS K 1 A_SetPitch(pitch - (0.65 * CallACS("FD_recoil")/65536.0))
+	AFIS L 1 A_SetPitch(pitch + (0.3 * CallACS("FD_recoil")/65536.0))
+	AFIS M 1 A_SetPitch(pitch + (0.15 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 5 A_ReFire ("SwingFinished")
+    TNT1 A 0 A_TakeInventory ("FDAliensKnifeToken", 0)
+	AFIS CB 1
+    Goto Ready
+  SwingFinished:
+    TNT1 A 0 A_JumpIfInventory ("FDAliensKnifeGOTTAKNIFEFAST", 1, "Hold")
+    TNT1 A 10
+    Goto Hold
+  }
+}
+
+Actor FDAliensKnifeToken : FDBoolean {}

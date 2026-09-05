@@ -1,0 +1,227 @@
+ 
+ACTOR FDAlienVendettaChaingun : FDWeapon
+{
+  Inventory.RestrictedTo "FDAlienVendettaPlayer"
+  Inventory.Icon "AVCHAING"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDAlienVendettaBullets"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 4
+  Obituary "%o was battered into bits by %k."
+  Decal "BulletChip"
+  Tag "Tornado Battery"
+  States
+  {
+  Ready:
+    VCHG A 1 A_WeaponReady
+    Loop
+  ReadyNoBob:
+    VCHG AAAAAAAAAA 1 A_WeaponReady (WRF_NOBOB)
+    Goto Ready
+	
+  Select:
+    VCHG A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_StopSound(CHAN_WEAPON)
+    TNT1 A 0 A_StopSound(7)
+    VCHG A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    VCHG A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, "StartBarrelLeft")
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 1, "StartFinalBarrelLeft")
+	Goto Dryfire
+	
+  StartBarrelLeft:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireloop", CHAN_WEAPON, 1, 1, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireloop", 7, 0.05, 1, 0.20)
+    TNT1 A 0 A_FireBullets (2, 0, -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG B 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG C 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 2)
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 1, "FinalBarrelLeftToMiddle")
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,3)
+    TNT1 A 0 A_FireBullets (0, 0, -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG D 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-4, FPF_NOAUTOAIM)
+    VCHG E 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelMiddleToRight
+    TNT1 A 0 A_Refire ("StartBurstEnd")
+	Goto FinalBarrelMiddleToRight
+  StartBurstEnd:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,2,3)
+    TNT1 A 0 A_FireBullets (-2, 0, -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG F 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-4, FPF_NOAUTOAIM)
+    VCHG G 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelRightToMiddle
+    TNT1 A 0 A_Refire ("SequenceTwo")
+	Goto FinalBarrelRightToMiddle
+	
+  SequenceTwo:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,3)
+    TNT1 A 0 A_FireBullets (frandom(-2.0,2.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG H 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-4, FPF_NOAUTOAIM)
+    VCHG E 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelMiddleToLeft
+    TNT1 A 0 A_Refire ("SequenceTwoSecond")
+	Goto FinalBarrelMiddleToLeft
+  SequenceTwoSecond:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-2,3)
+    TNT1 A 0 A_FireBullets (frandom(0.0,4.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG L 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG C 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelLeftToMiddle
+    TNT1 A 0 A_Refire ("SequenceThree")
+	Goto FinalBarrelLeftToMiddle
+	
+  SequenceThree:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,3)
+    TNT1 A 0 A_FireBullets (frandom(-2.0,2.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG D 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-4, FPF_NOAUTOAIM)
+    VCHG E 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelMiddleToRight
+    TNT1 A 0 A_Refire ("SequenceThreeSecond")
+	Goto FinalBarrelMiddleToRight
+  SequenceThreeSecond:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,2,3)
+    TNT1 A 0 A_FireBullets (frandom(-4.0,0.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG F 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG G 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaBullets", 2, 1)
+	Goto FinalBarrelRightToMiddle
+    TNT1 A 0 A_Refire ("SequenceTwo")
+	Goto FinalBarrelRightToMiddle
+	
+// aaaaaaueegghhhhh
+// this gun was a nightmare to make
+
+  StartFinalBarrelLeft:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (2, 0, -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG B 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG C 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    VCHG K 1
+	Goto ReadyNoBob
+	
+  FinalBarrelMiddleToLeft:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (frandom(0.0,4.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG L 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG C 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    VCHG K 1
+	Goto ReadyNoBob
+	
+  FinalBarrelMiddleToRight:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,-2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (frandom(-4.0,0.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG F 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG G 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    VCHG I 1
+	Goto ReadyNoBob
+	
+  FinalBarrelRightToMiddle:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (frandom(-2.0,2.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG H 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG E 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    VCHG J 1
+	Goto ReadyNoBob
+	
+  FinalBarrelLeftToMiddle:
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,2,3)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("alienvendettachaingun/fireend", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (frandom(-2.0,2.0), frandom(-0.8,0.8), -1, randompick(10,12), "FDBulletPuff", FBF_EXPLICITANGLE | FBF_NORANDOM | FBF_USEAMMO)
+    VCHG D 1 Bright A_SetPitch(pitch - (0.35 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmSmallCasingSpawner", 0,0,frandom(4.6,4.2),-7, FPF_NOAUTOAIM)
+    VCHG E 1 A_SetPitch(pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    VCHG J 1
+	Goto ReadyNoBob
+	
+  Flash:
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+    Goto LightDone
+  }
+}

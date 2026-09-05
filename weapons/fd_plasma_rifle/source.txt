@@ -1,0 +1,193 @@
+ 
+ACTOR FDDoom2PlasmaRifle : FDWeapon
+{
+  Inventory.RestrictedTo "FDDoom2Player"
+  Inventory.Icon "D2PLASMA"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDDoom2Cell"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 6
+  Obituary "%o was melted by %k."
+  Decal "PlasmaScorch"
+  Tag "Plasma Rifle"
+  States
+  {
+  Ready:
+    DPLA A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    DPLA A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    DPLA A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    DPLA A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Cell", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_FireCustomMissile ("FDDoom2PlasmaBall")
+	DPLA H 1 Bright A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+	DPLA I 1 Bright A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Cell", 1, 2)
+	DPLA H 1 Bright A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+	Goto Cooldown
+	TNT1 A 0 A_Refire ("FireCycle1")
+	Goto Cooldown
+  FireCycle1:
+	DPLA J 1 Bright A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+	Goto FireCycle2
+  FireCycle2:
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_AlertMonsters
+	TNT1 A 0 A_FireCustomMissile ("FDDoom2PlasmaBall")
+    DPLA K 1 Bright A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    DPLA J 1 Bright A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    DPLA I 1 Bright A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Cell", 1, 1)
+	Goto Cooldown
+	TNT1 A 0 A_Refire ("FireCycle3")
+	Goto Cooldown
+  FireCycle3:
+    TNT1 A 0 A_GunFlash ("Flash")
+	TNT1 A 0 A_AlertMonsters
+	TNT1 A 0 A_FireCustomMissile ("FDDoom2PlasmaBall")
+    DPLA H 1 Bright A_SetPitch(pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    DPLA I 1 Bright A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+    DPLA J 1 Bright A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDDoom2Cell", 1, 1)
+	Goto Cooldown
+	TNT1 A 0 A_Refire ("FireCycle2")
+	Goto Cooldown
+	
+  Cooldown:
+    TNT1 A 0 A_PlaySound("doom2plasmarifle/cooldown", CHAN_WEAPON, 1, 0, 1.5)
+	DPLA B 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	DPLA D 1 A_SetPitch(pitch + (0.27 * CallACS("FD_recoil")/65536.0))
+	DPLA E 1 A_SetPitch(pitch + (0.38 * CallACS("FD_recoil")/65536.0))
+	DPLA F 1 A_SetPitch(pitch + (0.16 * CallACS("FD_recoil")/65536.0))
+	DPLA G 1 A_SetPitch(pitch + (0.04 * CallACS("FD_recoil")/65536.0))
+	DPLA G 4
+	DPLA G 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	DPLA F 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+	DPLA F 1 A_SetPitch(pitch - (0.10 * CallACS("FD_recoil")/65536.0))
+	DPLA E 1 A_SetPitch(pitch - (0.12 * CallACS("FD_recoil")/65536.0))
+	DPLA E 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	DPLA D 1 A_SetPitch(pitch - (0.15 * CallACS("FD_recoil")/65536.0))
+	DPLA D 1 A_SetPitch(pitch - (0.12 * CallACS("FD_recoil")/65536.0))
+	DPLA C 1 A_SetPitch(pitch - (0.10 * CallACS("FD_recoil")/65536.0))
+	DPLA C 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+	DPLA B 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+	DPLA A 1
+	TNT1 A 0 A_ReFire
+    Goto Ready
+	
+  Flash:
+    TNT1 A 1 A_Light1
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light (3)
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+ACTOR FDDoom2PlasmaBall
+{
+  Radius 13
+  Height 8
+  Speed 25
+  Damage 5
+  DamageType "Plasma"
+  Scale 0.6
+  Projectile
+  +THRUSPECIES
+  +FORCEXYBILLBOARD
+  +EXPLODEONWATER
+  RenderStyle Add
+  Alpha 0.98
+  SeeSound "doom2plasmarifle/fire"
+  Decal "PlasmaScorch"
+  Species "Player"
+
+	var int user_spriteframe;
+  States
+  {
+  Spawn:
+	TNT1 A 0
+	TNT1 A 0 A_SetUserVar("user_spriteframe", 0)
+  SpawnLoop:
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "SpawnLoopFrame")
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,3), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.01, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AA 0 A_SpawnParticle (8f8fff, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,3), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.01, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3,4)
+	TNT1 AAA 0 A_SpawnParticle (c7c7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,3), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.01, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2)
+	TNT1 A 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(3,8), random(1,3), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.01, 0.98, -1)
+  SpawnLoopFrame:
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 6, "SpawnFrameB")
+    Goto SpawnFrameA
+  SpawnFrameA:
+    D2PL A 1 Bright Light("FDPlasmaBall1") A_SpawnItemEx ("FDDoom2PlasmaBallTrail", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME)
+	Goto SpawnLoopEnd
+  SpawnFrameB:
+    D2PL B 1 Bright Light("FDPlasmaBall2") A_SpawnItemEx ("FDDoom2PlasmaBallTrail", 0,0,0, 0,0,0, 0, SXF_NOCHECKPOSITION | SXF_TRANSFERSPRITEFRAME)
+	Goto SpawnLoopEnd
+  SpawnLoopEnd:
+	TNT1 A 0 A_SetUserVar("user_spriteframe", user_spriteframe+1)
+	TNT1 A 0 A_JumpIf (user_spriteframe >= 12, "Spawn")
+	Goto SpawnLoop
+	
+  Death:
+    TNT1 A 0
+	TNT1 A 0 A_JumpIf(CallACS("FD_particles") == 0, "DeathAnimation")
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAA 0 A_SpawnParticle (7373ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAAAAA 0 A_SpawnParticle (8f8fff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAAAAAAA 0 A_SpawnParticle (c7c7ff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, 1,2,3)
+	TNT1 AAAAAA 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,30), random(1,7), frandom(90,270), 0,0,0, frandom(0.2,6.0),frandom(-0.2,0.2),frandom(-3.0,3.0), 0,0,-0.1, 0.98, -1)
+    TNT1 A 0 A_Jump (256, "DeathAnimation")
+	Goto DeathAnimation
+  DeathAnimation:
+	TNT1 A 0 A_SetScale (1.0)
+    TNT1 A 0 A_PlaySound ("weapons/plasmax", 7, 1, 0, 1.2)
+    D2PL C 4 Bright Light("FDPlasmaImpact1")
+    D2PL D 4 Bright Light("FDPlasmaImpact2")
+    D2PL E 4 Bright Light("FDPlasmaImpact3")
+    D2PL F 4 Bright Light("FDPlasmaImpact4")
+    D2PL G 4 Bright Light("FDPlasmaImpact5")
+    Stop
+  }
+}
+
+ACTOR FDDoom2PlasmaBallTrail
+{
+  Radius 4
+  Height 4
+  RenderStyle Translucent
+  Alpha 0.4
+  +NOGRAVITY
+  +NOINTERACTION
+  +FORCEXYBILLBOARD
+  States
+  {
+  Spawn:
+	"####" "#" 0
+	"####" "#" 0 A_SetScale (scalex - frandom(0.03,0.08))
+	"####" "#" 1 A_FadeTo (0, frandom(0.08,0.14), 1)
+    Loop
+  }
+}

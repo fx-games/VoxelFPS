@@ -101,7 +101,7 @@ func TestWriteIsByteIdenticalBetweenRuns(t *testing.T) {
 	first, _ := writeTestShotgun(t)
 	second, _ := writeTestShotgun(t)
 
-	for _, name := range []string{wep.WeaponFile, wep.ActorsFile, wep.AtlasFile} {
+	for _, name := range []string{wep.WeaponFile, wep.AtlasFile} {
 		a, err := os.ReadFile(filepath.Join(first, "test_shotgun", name))
 		require.NoError(t, err)
 		b, err := os.ReadFile(filepath.Join(second, "test_shotgun", name))
@@ -160,4 +160,47 @@ func TestLoadRejectsAStaleFormat(t *testing.T) {
 	_, err = wep.Load(dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "this build reads")
+}
+
+// Two weapons that spawn the same actor share one file, because the file is
+// named by what is in it. This is what took a whole mod's weapons folder from
+// 356 megabytes to 43, so it is worth a test that would notice it stopping.
+func TestActorsAreSharedBetweenWeapons(t *testing.T) {
+	dir := t.TempDir()
+
+	// The same mod compiled twice under two ids, standing in for two weapons
+	// that reach the same smoke.
+	for _, id := range []string{"first_gun", "second_gun"} {
+		result := compileTestShotgun(t)
+		result.Weapon.ID = id
+		src := modWithAssets(t, result.Sprites)
+		require.NoError(t, Write(result, NewAssetIndex(src), src, dir))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, wep.KeyMapFile),
+		[]byte("1: first_gun\n2: second_gun\n"), 0o644))
+
+	store, err := os.ReadDir(filepath.Join(dir, wep.ActorsDir))
+	require.NoError(t, err)
+	assert.Len(t, store, 1, "one actor between them, so one file")
+
+	library, err := wep.Load(dir)
+	require.NoError(t, err)
+	require.Len(t, library.Weapons, 2)
+
+	// Both weapons resolve it, and to the very same actor.
+	first := library.Actors["first_gun"]["testsmoke"]
+	second := library.Actors["second_gun"]["testsmoke"]
+	require.NotNil(t, first)
+	assert.Same(t, first, second, "read once, however many weapons want it")
+
+	// And a weapon that no longer exists leaves its actor file behind rather
+	// than taking a sibling's with it. The key map is the player's, so it has
+	// to let go of the weapon too; loading says so if it does not.
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "second_gun")))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, wep.KeyMapFile),
+		[]byte("1: first_gun\n"), 0o644))
+	library, err = wep.Load(dir)
+	require.NoError(t, err)
+	assert.Len(t, library.Weapons, 1)
+	assert.NotNil(t, library.Actors["first_gun"]["testsmoke"])
 }

@@ -1,0 +1,1 @@
+{"format":1,"name":"FDBTSXPlasmaProjectileTrail","render":{"scale":[0.58,0.58],"alpha":0.99,"style":"add"},"states":{"steps":[{"sprite":"XPSGA0","tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

@@ -1,0 +1,1 @@
+{"format":1,"name":"CellSpawner","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"spawn_item","actor":"AmmoCell"}]},{"tics":0,"ops":[{"op":"spawn_item","actor":"CellPurist"}]},{"tics":1,"tics_max":1},{"tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

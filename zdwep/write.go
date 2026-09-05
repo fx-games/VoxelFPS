@@ -8,7 +8,6 @@ import (
 	_ "image/jpeg"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +24,9 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if err := writeActors(result, weaponsDir); err != nil {
+		return err
+	}
 
 	if err := writeAtlas(result, assets, filepath.Join(dir, wep.AtlasFile)); err != nil {
 		return err
@@ -39,13 +41,6 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 	if err := wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), result.Weapon); err != nil {
 		return err
 	}
-	if err := wep.WriteJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
-		Format: wep.Format,
-		Actors: result.Actors,
-	}); err != nil {
-		return err
-	}
-
 	// The script the weapon was compiled from, so a re-migration diff says
 	// whether upstream moved or the compiler did.
 	script, err := source.ReadFile(result.SourceScript)
@@ -53,6 +48,54 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 		return fmt.Errorf("reading %s: %w", result.SourceScript, err)
 	}
 	return os.WriteFile(filepath.Join(dir, wep.SourceFile), script, 0o644)
+}
+
+// writeActors puts each actor in the shared store, under the hash of what is in
+// it, and notes on the weapon which files it needs. Two weapons that spawn the
+// same smoke write the same bytes to the same name, so the second write is a
+// no-op and the two cannot drift apart.
+//
+// The verbatim DECORATE line comes off an actor's ops on the way. It is kept on
+// a weapon, which is what somebody reads against the script, and an actor is
+// bulk: leaving it on cost another two thirds again across the shared store.
+func writeActors(result *Result, weaponsDir string) error {
+	if len(result.Actors) == 0 {
+		return nil
+	}
+	store := filepath.Join(weaponsDir, wep.ActorsDir)
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		return err
+	}
+	result.Weapon.Actors = make(map[string]string, len(result.Actors))
+	for name, actor := range result.Actors {
+		actor.Format = wep.Format
+		stripSource(&actor.States)
+		file, data, err := wep.HashJSON(actor)
+		if err != nil {
+			return err
+		}
+		result.Weapon.Actors[name] = file
+		path := filepath.Join(store, file)
+		if _, err := os.Stat(path); err == nil {
+			continue // the same content is already there, by definition
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func stripSource(machine *wep.StateMachine) {
+	for i := range machine.Steps {
+		for j := range machine.Steps[i].Ops {
+			// A dropped call keeps its line: that one is a decision, and the
+			// whole point of recording it is being able to read it back.
+			if machine.Steps[i].Ops[j].Op != wep.OpNop {
+				machine.Steps[i].Ops[j].Source = ""
+			}
+		}
+	}
 }
 
 // writeAtlas packs every frame the weapon and its actors ask for into one PNG,
@@ -124,7 +167,7 @@ func writeSounds(result *Result, assets *AssetIndex, dir string) (map[string]str
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return nil, err
 			}
-			if err := writeSound(converted, file, target, extension); err != nil {
+			if err := os.WriteFile(target, converted, 0o644); err != nil {
 				return nil, err
 			}
 			if index == 0 {
@@ -139,69 +182,59 @@ func writeSounds(result *Result, assets *AssetIndex, dir string) (map[string]str
 	return sounds, nil
 }
 
-// soundBytes decides what a sound becomes on the way out. An ogg is copied
-// through untouched, and a Doom sound lump is repackaged as a WAV, which is
-// arithmetic rather than transcoding and needs nothing installed. Anything else
-// is handed to ffmpeg.
+// soundBytes decides what a sound becomes on the way out.
+//
+// What it is, not what it is called: a mod stores sounds as lumps with no
+// extension, and Final Doomer's are a mix of Doom's own format and ogg files
+// under names that say nothing. So the first few bytes decide.
+//
+// A sound already in a form the player reads is copied through untouched. A
+// Doom lump becomes a WAV by arithmetic. Anything else goes through ffmpeg, and
+// comes out as a WAV rather than an ogg: which vorbis encoder an ffmpeg build
+// has varies, one common build has none and quietly falls back to opus, and the
+// player reads neither opus nor a mystery. Uncompressed and correct beats
+// compressed and silent.
 func soundBytes(data []byte, sourceName string) (out []byte, extension string, err error) {
-	if strings.EqualFold(path.Ext(sourceName), ".ogg") {
+	switch {
+	case bytes.HasPrefix(data, []byte("OggS")):
 		return data, ".ogg", nil
-	}
-	if strings.EqualFold(path.Ext(sourceName), ".wav") {
+	case bytes.HasPrefix(data, []byte("RIFF")):
 		return data, ".wav", nil
-	}
-	if IsDMX(data) {
-		wav, err := DMXToWAV(data)
+	case IsDMX(data):
+		converted, err := DMXToWAV(data)
 		if err != nil {
 			return nil, "", fmt.Errorf("%s: %w", sourceName, err)
 		}
-		return wav, ".wav", nil
+		return converted, ".wav", nil
 	}
-	return data, ".ogg", nil
-}
-
-// writeSound puts the bytes where they go, running ffmpeg only for a format
-// nothing here understands.
-func writeSound(data []byte, sourceName, target, extension string) error {
-	if extension == ".wav" || strings.EqualFold(path.Ext(sourceName), ".ogg") {
-		return os.WriteFile(target, data, 0o644)
+	converted, err := convertToWAV(data, sourceName)
+	if err != nil {
+		return nil, "", err
 	}
-	return convertToOgg(data, sourceName, target)
+	return converted, ".wav", nil
 }
 
-// vorbisEncoders are the ways an ffmpeg build might be able to write vorbis.
-// Which one a given build has varies, and the common one on macOS has neither
-// libvorbis nor a default, so they are tried in turn.
-var vorbisEncoders = [][]string{
-	{"-c:a", "libvorbis"},
-	{"-c:a", "vorbis", "-strict", "-2"},
-	{"-c:a", "libopus"},
-}
-
-// convertToOgg turns a sound the mod ships in some format we do not read into
-// one the player does. ffmpeg does it when it is installed; when it is not, the
-// migration says so and gives the command to run, rather than quietly dropping
-// the sound.
-func convertToOgg(data []byte, sourceName, target string) error {
+// convertToWAV hands a sound in some format we do not read to ffmpeg. It is
+// only reached for the handful a mod ships as mp3 or flac; when ffmpeg is not
+// installed the migration says so and gives the command to run, rather than
+// quietly dropping the sound.
+func convertToWAV(data []byte, sourceName string) ([]byte, error) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
-		return fmt.Errorf("%s needs converting and ffmpeg is not installed; "+
-			"convert it yourself with: ffmpeg -i %s %s", sourceName, sourceName, target)
+		return nil, fmt.Errorf("%s is in a format this migration does not read "+
+			"and ffmpeg is not installed to convert it", sourceName)
 	}
-	var lastErr error
-	for _, encoder := range vorbisEncoders {
-		arguments := append([]string{"-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0"}, encoder...)
-		command := exec.Command(ffmpeg, append(arguments, "-f", "ogg", target)...)
-		command.Stdin = bytes.NewReader(data)
-		var stderr bytes.Buffer
-		command.Stderr = &stderr
-		if err := command.Run(); err == nil {
-			return nil
-		} else {
-			lastErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
-		}
+	command := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
+		"-y", "-i", "pipe:0", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1")
+	command.Stdin = bytes.NewReader(data)
+	var out, stderr bytes.Buffer
+	command.Stdout = &out
+	command.Stderr = &stderr
+	if err := command.Run(); err != nil {
+		return nil, fmt.Errorf("converting %s: %w: %s",
+			sourceName, err, strings.TrimSpace(stderr.String()))
 	}
-	return fmt.Errorf("converting %s: %w", sourceName, lastErr)
+	return out.Bytes(), nil
 }
 
 // FFmpegVersion reports the ffmpeg the migration would use, for the lock file.

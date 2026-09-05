@@ -2,6 +2,8 @@ package wep
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"image/png"
 	"os"
@@ -29,12 +31,26 @@ func WriteAtlas(images []tpack.NamedImage, path string) error {
 	return png_chunks.InjectChunkIntoPNG(&encoded, out, AtlasChunk, metadata.Bytes())
 }
 
-// WriteJSON writes one of the folder's JSON files, indented so a re-migration
-// diffs a line at a time.
+// WriteJSON writes one of the folder's JSON files.
+//
+// Compact rather than indented: these are generated, and a whole mod's worth of
+// them came to 356 megabytes with indentation and 150 without. What makes a
+// re-migration reviewable is weapons.lock, which says which files moved.
 func WriteJSON(path string, value any) error {
-	data, err := json.MarshalIndent(value, "", "  ")
+	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// HashJSON encodes a value and names it by the hash of the result, which is how
+// a shared actor gets a file name that cannot collide or disagree.
+func HashJSON(value any) (name string, data []byte, err error) {
+	data, err = json.Marshal(value)
+	if err != nil {
+		return "", nil, err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]) + ".json", append(data, '\n'), nil
 }

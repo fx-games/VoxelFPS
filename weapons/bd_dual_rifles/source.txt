@@ -1,0 +1,547 @@
+ACTOR DualRifles : BrutalWeapon
+{
+	Weapon.AmmoUse1 0
+	Weapon.AmmoGive1 0
+	Weapon.AmmoUse2 0
+	Weapon.AmmoGive2 0
+	Weapon.SelectionOrder 900
+	Weapon.AmmoType1 "Clip2"
+	Weapon.AmmoType2 "DoubleRifleAmmo"
+	Obituary "%o was shot down by %k's assault rifle."
+    AttackSound "None"
+    Inventory.PickupSound "Rifle/Select"
+	Inventory.Pickupmessage "You got dual rifles! (Slot 2)"
+    +WEAPON.NOAUTOAIM
+	+WEAPON.NO_AUTO_SWITCH
+	Tag "Dual Rifles"
+	DropItem "RifleSpawner"
+	States
+	{
+	KickFlash://18 tics
+		DURR EFG 1
+		DURR H 15
+		DURR GFE 1
+		Stop
+
+	SlideFlashEnd://10 tics
+		DURR H 10
+		DURR GFE 1
+		Stop
+
+	StartSprint:
+		DURR ABC 1 A_WeaponReady(WRF_ALLOWRELOAD)
+		SHTN A 0 A_Takeinventory("Zoomed",1)
+        SHTN A 0 A_ZoomFactor(1.0)
+		SHTN A 0 A_Takeinventory("ADSmode",1)
+		RIFG A 0 A_SetCrosshair(0)
+		SHTN A 0 A_Giveinventory("GoSpecial",1)
+		TNT1 A 0 ACS_NamedExecuteAlways("BDSprint", 0, 0, 0, 0)//Makes player faster.
+
+	Sprinting:
+		DURR D 1 offset(-9,34) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(-6,36) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(-3,38) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(0,38) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(3,36) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(6,34) A_SetPitch(pitch -0.5)
+		DURR D 1 offset(9,32) A_SetPitch(pitch -0.5)
+		TNT1 A 0 A_GiveInventory("UsedStamina", 3)
+		SMGG A 0 A_WeaponReady(WRF_NOBOB)
+		SMGG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        SMGG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+        SMGG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+
+		DURR D 1 offset(9,34) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(6,36) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(3,38) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(0,38) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(-3,36) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(-6,34) A_SetPitch(pitch +0.5)
+		DURR D 1 offset(-9,32) A_SetPitch(pitch +0.5)
+		TNT1 A 0 A_GiveInventory("UsedStamina", 3)
+		SMGG A 0 A_WeaponReady(WRF_NOBOB)
+		SMGG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        SMGG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+        SMGG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+
+		PLAY A 0 ACS_NamedExecuteAlways("BDSprint", 0, 0, 0, 0)//Makes player faster.
+		SMGG A 0 A_JumpIfInventory("IsRunning", 1, "Sprinting")
+		Goto StopSprint
+
+	StopSprint:
+		DURR CBA 1
+		DURI A 0 A_JumpIfInventory("PowerStrength", 1, 2)
+		DURI A 0 A_JumpIfInventory("UsedStamina", 100, "StopSprintTired")
+		DURI A 0 ACS_NamedExecuteAlways("BDTacticalSpeed", 0, 0, 0, 0)//Makes player slower.
+		Goto Ready
+
+	StopSprintTired:
+		DURI A 0 ACS_NamedExecuteAlways("BDTacticalSpeed", 0, 0, 0, 0)//Makes player slower.
+		DURI A 0 A_PlaySound("Tired", 2)
+		Goto Ready
+
+	Deselect:
+		DURI A 0
+		DURI A 0 A_Takeinventory("Zoomed",1)
+		DURI A 0 A_Takeinventory("ADSmode",1)
+		DURI A 0 A_TakeInventory("TossGrenade", 1)
+		DURI A 0 A_TakeInventory("Kicking",1)
+        DURI A 0 A_TakeInventory("Taunting",1)
+        DURI A 0 A_TakeInventory("Reloading",1)
+		DURI A 0 A_TakeInventory("Unloading",1)
+		DURI A 0 A_TakeInventory("Salute1", 1)
+		DURI A 0 A_TakeInventory("Salute2", 1)
+		DURI A 0 A_Takeinventory("RifleSelected",1)
+		MGN1 A 0 A_TakeInventory("RandomHeadExploder", 1)
+        DURI A 0 A_ZoomFactor(1.0)
+		DURR ABCD 1
+		TNT1 AAAAAAAAAAAAAAAAAA 0 A_Lower
+		TNT1 A 1 A_Lower
+		Wait
+
+	Select:
+		DURI A 0 A_Giveinventory("GoSpecial",1)
+		TNT1 A 0 A_GiveInventory("HasDualRifle",1)
+		TNT1 A 0 A_TakeInventory("FistsSelected", 1)
+		TNT1 A 0 A_TakeInventory("ShotgunSelected", 1)
+		TNT1 A 0 A_TakeInventory("MinigunSelected", 1)
+		TNT1 A 0 A_TakeInventory("SSGSelected", 1)
+		TNT1 A 0 A_TakeInventory("RocketLauncherSelected", 1)
+		TNT1 A 0 A_TakeInventory("GrenadeLauncherSelected", 1)
+		TNT1 A 0 A_TakeInventory("PlasmaGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("RailGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("RevenantLauncherSelected", 1)
+		TNT1 A 0 A_TakeInventory("SubMachineGunSelected", 1)
+		TNT1 A 0 A_TakeInventory("BFG10KSelected", 1)
+		TNT1 A 0 A_TakeInventory("BFGSelected", 1)
+		TNT1 A 0 A_TakeInventory("FlameCannonSelected", 1)
+		TNT1 A 0 A_TakeInventory("SawSelected", 1)
+		DURI A 0 A_Takeinventory("HasBarrel",1)
+		TNT1 A 0 A_TakeInventory("HasPlasmaWeapon",1)
+		DURI A 0 A_TakeInventory("TossGrenade", 1)
+		DURI A 0 A_TakeInventory("Rifle", 1)
+		MGN1 A 0 A_GiveInventory("RandomHeadExploder", 1)
+		DURI A 0 A_Takeinventory("StartDualWield",1)
+		DURI A 0 A_GunFlash
+		TNT1 A 1 A_Raise
+		TNT1 AAAAAAAAAAAA 0 A_Raise
+		Goto SelectAnimation
+
+	SelectAnimation:
+		DURR DCBA 1 A_JumpIfInventory("GoFatality", 1, "Steady")
+        RIFG A 0 A_PlaySound("Rifle/Select")
+		Goto Ready
+
+	Ready:
+	Ready3:
+		DURI A 0
+		RIFG A 0 A_JumpIfInventory("TossGrenade",1,"TossGrenade")
+		RIFG A 0 A_JumpIfInventory("Salute1", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("Salute2", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		TNT1 A 0 A_JumpIfInventory("ExecuteDownedEnemy", 1, "DoExecution")
+	    RIFG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+		DURI A 1 A_WeaponReady(WRF_ALLOWRELOAD)
+        RIFG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+		RIFG A 0 A_JumpIfInventory("Unloading",1,"Unload")
+		RIFG A 0 A_JumpIfInventory("StartDualWield",1,"DualWield")
+		RIFG A 0 A_JumpIfInventory("IsRunning",1,"StartSprint")
+		Loop
+
+	DualWield:
+		DURI A 1
+		DURI A 0 A_GiveInventory("Rifle",1)
+		DURI A 0 A_Takeinventory("StartDualWield",1)
+		DURI A 0 A_SelectWEapon("Rifle")
+		Goto Ready
+
+    Fire:
+        TNT1 A 0
+		DRUI A 0 A_JumpIfInventory("RifleAmmo",1,1)
+		Goto FireLeft
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 1)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,6,28)
+		DURI B 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("RifleAmmo",1)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI C 2 A_FireCustomMissile("RifleCaseSpawn",5,0,24,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+        Goto NoAmmo
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 6)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,-6,28)
+		DURI D 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,-8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI E 2 A_FireCustomMissile("RifleCaseSpawn",5,0,-12,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		DURI J 1 A_JumpIfInventory("FiredPrimary",1,1)
+		Goto Ready
+        TNT1 AAA 0
+		DRUI A 0 A_JumpIfInventory("RifleAmmo",1,1)
+		Goto FireLeft
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 1)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,6,28)
+		DURI F 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("RifleAmmo",1)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI G 2 A_FireCustomMissile("RifleCaseSpawn",5,0,24,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+        Goto NoAmmo
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 6)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,-6,28)
+		DURI H 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,-8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI I 2 A_FireCustomMissile("RifleCaseSpawn",5,0,-12,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		DURI J 1 A_Refire
+		Goto Ready
+
+	FireLeft:
+        TNT1 A 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+        Goto NoAmmo
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 6)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,-6,28)
+		DURI D 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,-8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI E 4 A_FireCustomMissile("RifleCaseSpawn",5,0,-12,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		DURI J 1 A_JumpIfInventory("FiredPrimary",1,1)
+		Goto Ready
+        TNT1 AAA 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+        Goto NoAmmo
+        TNT1 AAA 0
+		RIFF A 0 A_FireCustomMissile("DistantFireSoundRifle", random(-1,1), 0, 0, -12, 0, random(-1,1))
+        DURI A 0 A_PlaySound("Rifle/Fire", 6)
+		DURI A 0 A_SpawnItemEx("PlayerMuzzle1",32,-6,28)
+		DURI H 1 BRIGHT A_FireBullets (1.6, 1.2, -1, 18, "HitPuff", FBF_NORANDOM)
+		TNT1 A 0 A_ZoomFactor(0.99)
+        TNT1 A 0 A_FireCustomMissile("DecorativeTracer",random(-1,1),0,-8,0,0,random(-1,1))
+        DURI A 0 A_SetPitch(-0.4 + pitch)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI I 4 A_FireCustomMissile("RifleCaseSpawn",5,0,-12,-8)
+		TNT1 A 0 A_ZoomFactor(1.0)
+		DURI J 1 A_Refire
+		Goto Ready
+
+	NoAmmo:
+		DURI A 0
+		RIFG A 0 A_ZoomFactor(1.0)
+		RIFG A 0 A_Takeinventory("Zoomed",1)
+		RIFG A 0 A_Takeinventory("ADSmode",1)
+		RIFG A 0 A_JumpIfInventory("TurboReload",1,"TurboReload")
+		TNT1 A 0 A_PlaySound("weapons/empty", 4)
+		NoAmmo2:
+		RIFG A 0 A_JumpIfInventory("TossGrenade",1,"TossGrenade")
+	    RIFG A 0 A_JumpIfInventory("Taunting",1,"Taunt")
+		RIFG A 0 A_JumpIfInventory("Salute1", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("Salute2", 1, "Salute")
+		RIFG A 0 A_JumpIfInventory("ExecuteDownedEnemy", 1, "DoExecution")
+		RIFG A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		DURI A 4 A_WeaponReady(WRF_ALLOWRELOAD | WRF_NOFIRE)
+		RIFG A 0 A_JumpIfInventory("Reloading",1,"Reload")
+		RIFG A 0 A_JumpIfInventory("TurboReload",1,"TurboReload")
+		TNT1 A 0 A_JumpIfInventory("NoAutoReload", 1, 2)
+		RIFG A 0 A_JumpIfInventory("Clip2",1,"Reload")
+		RIFG A 0 A_JumpIfInventory("IsRunning",1,"StartSprint")
+		Goto Ready3
+
+    Reload://round in chamber
+		DURI A 1
+		DURI A 0 A_ZoomFactor(1.0)
+		DURI A 0 A_Takeinventory("Reloading",1)
+		DURI A 0 A_Takeinventory("ADSmode",1)
+		DURI A 0 A_Takeinventory("Zoomed",1)
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",62,"Ready")
+        DURI A 0 A_JumpIfInventory("Clip2",1,1)
+        Goto Ready
+        TNT1 AAA 0
+		DURI A 0 A_JumpIfInventory("TurboReload",1,"TurboReload")
+		RIFG A 0 A_JumpIfInventory("RifleUnloaded", 1, "PutMag2")
+		PIST E 0 A_JumpIfInventory("RifleAmmo",31,"ReloadLeft")//right mag is full
+		PIST E 0 A_JumpIfInventory("RifleAmmo",1,1)
+		Goto Reload2//Reload empty chamber right
+		TNT1 AAA 0
+		DURR BD 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR AC 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR ZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+        RIFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_JumpIfInventory("RifleAmmo",2,"PutMag")//If mag is not empty then retain it
+		RIFG A 0 A_FireCustomMissile("EmptyClipSpawn",0,0,10,-20)
+		RIFG A 0 A_GiveInventory("RifleUnloaded",1)
+
+	PutMag:
+		RIFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR IJKMO 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR A 0 A_PlaySound("Rifle/Reload2")
+		RIFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR SUWYZ 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR CA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+
+	ReloadLeft:
+		SMGG A 0 A_JumpIfInventory("DualRifleUnloaded", 1, "PutMagLeft2")
+		4IFR ABZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+		4IFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_JumpIfInventory("DoubleRifleAmmo",4,"PutMagLeft")//If mag is not empty then retain it
+		RIFG A 0 A_FireCustomMissile("EmptyClipSpawn",225,0,-10,-20)
+		RIFG A 0 A_GiveInventory("DualRifleUnloaded",1)
+
+	PutMagLeft:
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR IJKMO 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR A 0 A_PlaySound("Rifle/Reload2")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR SUWYZ 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR BA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		Goto FinishReloading
+
+	FinishReloading:
+		DURR DCBA 1
+		DURI A 0 A_Takeinventory("RifleUnloaded",1)
+		RIFG A 0 A_Takeinventory("DualRifleUnloaded",1)
+		Goto InsertBullets//60+2
+
+	TurboReload:
+		DURI A 0 A_Takeinventory("RifleUnloaded",1)
+		DURI A 0 A_JumpIfInventory("Clip2",1,1)
+		Goto Ready
+		TNT1 AAA 0
+        Goto InsertBullets
+
+	InsertBullets://60+2
+		TNT1 A 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",62,8)
+		DURI A 0 A_JumpIfInventory("Clip2",1,1)
+		Goto Ready
+        TNT1 AAA 0
+		DURI A 0 A_Giveinventory("RifleAmmo",1)
+		DURI A 0 A_Giveinventory("DoubleRifleAmmo",1)
+		DURI A 0 A_Takeinventory("Clip2",1)
+		Goto InsertBullets
+		TNT1 AAA 0
+		DURI A 0 A_Takeinventory("Reloading",1)
+		DURI A 0 A_JumpIfInventory("FiredPrimary",1,"Fire")
+        Goto Ready
+
+	Reload2:
+		DURR BD 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR AC 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR ZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_GiveInventory("RifleUnloaded",1)
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+        RIFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_FireCustomMissile("EmptyClipSpawn",0,0,10,-20)
+
+	PutMag2:
+		RIFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR IKMO 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR A 0 A_PlaySound("Rifle/Reload2")
+		RIFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFR SUWYZ 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR CA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+
+	Reload2Left:
+		SMGG A 0 A_JumpIfInventory("DualRifleUnloaded", 1, "PutMagLeft2")
+		4IFR ABZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_GiveInventory("DualRifleUnloaded",1)
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+		4IFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_JumpIfInventory("DoubleRifleAmmo",4,"PutMagLeft2")//If mag is not empty then retain it
+		RIFG A 0 A_FireCustomMissile("EmptyClipSpawn",225,0,-10,-20)
+
+	PutMagLeft2:
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR IKMO 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR A 0 A_PlaySound("Rifle/Reload2")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR SUWYZ 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR BA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		Goto FinishReloading2
+
+	FinishReloading2:
+		DURR DCBA 1
+		DURI A 0 A_Takeinventory("RifleUnloaded",1)
+		RIFG A 0 A_Takeinventory("DualRifleUnloaded",1)
+		Goto InsertBullets2//60
+
+	InsertBullets2://60
+		TNT1 A 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",60,8)
+		DURI A 0 A_JumpIfInventory("Clip2",1,1)
+		Goto Ready
+        TNT1 AAA 0
+		DURI A 0 A_Giveinventory("RifleAmmo",1)
+		DURI A 0 A_Giveinventory("DoubleRifleAmmo",1)
+		DURI A 0 A_Takeinventory("Clip2",1)
+		Goto InsertBullets2
+		TNT1 AAA 0
+		DURI A 0 A_Takeinventory("Reloading",1)
+		DURI A 0 A_JumpIfInventory("FiredPrimary",1,"Fire")
+        Goto Ready
+
+	Unload:
+		DURI A 1 A_WeaponReady
+		DURI A 0 A_ZoomFactor(1.0)
+		DURI A 0 A_Takeinventory("Unloading",1)
+		DURI A 0 A_Takeinventory("ADSmode",1)
+		DURI A 0 A_Takeinventory("Zoomed",1)
+        DURI A 0 A_JumpIfInventory("RifleAmmo",1,1)
+        Goto UnloadLeft
+		TNT1 AAA 0
+		DURR BD 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR AC 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR ZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+        RIFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+        RIFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		3IFR FDB 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+
+		4IFR ABZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+		4IFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR FDB 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		DURR CA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_GiveInventory("RifleUnloaded",1)
+		RIFG A 0 A_GiveInventory("DualRifleUnloaded",1)
+		Goto RemoveBullets
+
+	UnloadLeft:
+		TNT1 A 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+        Goto Ready
+		TNT1 AAA 0
+		4IFR ABZYWUS 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR Q 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_PlaySound("Rifle/Reload1")
+		4IFR OMKI 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR H 4 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		4IFR FDB 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		DURR CA 1 A_WeaponReady(WRF_NOBOB | WRF_NOFIRE)
+		A12R A 0 A_JumpIfInventory("Kicking",1,"DoKick")
+		RIFG A 0 A_GiveInventory("DualRifleUnloaded",1)
+		Goto RemoveBullets
+
+	RemoveBullets:
+		TNT1 A 0
+		DURI A 0 A_JumpIfInventory("DoubleRifleAmmo",1,1)
+		Goto Ready
+        TNT1 AAA 0
+		DURI A 0 A_Takeinventory("RifleAmmo",1)
+		DURI A 0 A_Takeinventory("DoubleRifleAmmo",1)
+		DURI A 0 A_Giveinventory("Clip2",1)
+		Goto RemoveBullets
+
+ 	Spawn:
+		RIFL A -1
+		Stop
+	}
+}
+
+ACTOR DoubleRifleAmmo : Ammo
+{
+   Inventory.Amount 0
+   Inventory.MaxAmount 62
+   Ammo.BackpackAmount 0
+   Ammo.BackpackMaxAmount 62
+   Inventory.Icon "RIFLB0"
+}

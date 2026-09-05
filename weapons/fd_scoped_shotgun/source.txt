@@ -1,0 +1,80 @@
+ 
+ACTOR FDPlutShotgun : FDWeapon
+{
+  Inventory.RestrictedTo "FDPlutPlayer"
+  Inventory.Icon "PLSHOTGU"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDPlutShells"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 3
+  Obituary "%o couldn't escape %k's sight."
+  Decal "BulletChip"
+  Tag "Scoped Shotgun"
+  States
+  {
+  Ready:
+    TNT1 A 0 A_JumpIfInventory ("FDPlutShells", 1, "ReadyAmmo")
+    PSHT A 1 A_WeaponReady (WRF_NOFIRE)
+    Loop
+  ReadyAmmo:
+    PSHT A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    PSHT A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    PSHT A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    PSHT A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDPlutShells", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("plutshotgun/fire", CHAN_WEAPON, 1, 0, 0.7)
+    TNT1 A 0 A_PlaySound("plutshotgun/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_FireBullets (3, 1.5, 9, 5, "FDBulletPuff", FBF_USEAMMO)
+    PSHT B 1 Bright A_SetPitch (pitch - (0.8 * CallACS("FD_recoil")/65536.0))
+    PSHT B 1 Bright A_SetPitch (pitch - (0.4 * CallACS("FD_recoil")/65536.0))
+    PSHT C 1 Bright A_SetPitch (pitch - (0.2 * CallACS("FD_recoil")/65536.0))
+    PSHT C 1 Bright A_SetPitch (pitch - (0.1 * CallACS("FD_recoil")/65536.0))
+    PSHT D 1 A_SetPitch (pitch + (0.5 * CallACS("FD_recoil")/65536.0))
+    PSHT D 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    PSHT A 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    PSHT A 1 A_SetPitch (pitch + (0.4 * CallACS("FD_recoil")/65536.0))
+    PSHT A 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+  GonnaReload:
+    PSHT EF 2
+	PSHT G 1 A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	PSHT G 1 A_SetPitch(pitch + (0.23 * CallACS("FD_recoil")/65536.0))
+	PSHT G 1 A_SetPitch(pitch + (0.08 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("plutshotgun/pumpdown", 5, 1, 0, 1.25)
+    PSHT HI 2
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDShellCasingSpawner", 0,0,frandom(-7.6,-7.2),-2, FPF_NOAUTOAIM)
+    PSHT J 2
+	PSHT K 1 A_SetPitch(pitch - (0.06 * CallACS("FD_recoil")/65536.0))
+	PSHT K 1 A_SetPitch(pitch - (0.28 * CallACS("FD_recoil")/65536.0))
+	PSHT K 1 A_SetPitch(pitch - (0.02 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_PlaySound("plutshotgun/pumpup", 6, 1, 0, 1.25)
+    PSHT HGFE 2
+    PSHT A 4
+    PSHT A 7 A_Refire // Gun fires at a speed of 37 tics
+    Goto Ready
+	
+  Flash:
+    TNT1 A 2 A_Light1
+    TNT1 A 2 A_Light2
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}

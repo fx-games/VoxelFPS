@@ -1,0 +1,1 @@
+{"format":1,"name":"DetectCeilCraterSmall","render":{"scale":[2,2],"alpha":0.9,"style":"shaded"},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"thrust","args":[0,35,0,1]}]},{"tics":2,"tics_max":2},{"tics":0,"ops":[{"op":"stop"}]},{"tics":1000,"tics_max":1000},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":4,"spawn":0}},"no_gravity":true}

@@ -1,0 +1,100 @@
+ 
+ACTOR FDPlutPlasmaRifle : FDWeapon
+{
+  Inventory.RestrictedTo "FDPlutPlayer"
+  Inventory.Icon "PLPLASMA"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDPlutCell"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 6
+  Obituary "%o was shredded by %k."
+  Decal "BulletChip"
+  Tag "Heavy Machine Gun"
+  States
+  {
+  Ready:
+    PPLA A 1 A_WeaponReady
+    TNT1 A 0 A_TakeInventory ("FDPlutMachinegunInaccuracy", 1)
+    Loop
+	
+  Select:
+    PPLA A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    TNT1 A 0 A_TakeInventory ("FDPlutMachinegunInaccuracy", 50)
+    PPLA A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    PPLA A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDPlutCell", 1, 1)
+	Goto Dryfire
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+	TNT1 A 0 A_JumpIf(CallACS("FD_gunsmoke") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FDGunSmokeSpawner", 0,0,0,6)
+    TNT1 A 0 A_PlaySound("plutplasmarifle/fire", CHAN_WEAPON, 1, 0, 0.5)
+    TNT1 A 0 A_PlaySound("plutplasmarifle/fire", 7, 0.05, 0, 0.20)
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 40, "Fire7")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 30, "Fire6")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 25, "Fire5")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 20, "Fire4")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 15, "Fire3")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 10, "Fire2")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 5, "Fire2")
+    TNT1 A 0 A_JumpIfInventory ("FDPlutMachinegunInaccuracy", 1, "Fire1")
+  Fire0:
+    TNT1 A 0 A_FireBullets (0, 0, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire1:
+    TNT1 A 0 A_FireBullets (0.2, 0.2, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire2:
+    TNT1 A 0 A_FireBullets (1.2, 0.7, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire3:
+    TNT1 A 0 A_FireBullets (2.2, 1.2, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire4:
+    TNT1 A 0 A_FireBullets (3.2, 1.7, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire5:
+    TNT1 A 0 A_FireBullets (4.2, 2.2, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire6:
+    TNT1 A 0 A_FireBullets (5.2, 2.7, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+  Fire7:
+    TNT1 A 0 A_FireBullets (6.2, 3.2, -1, 5*random(4,9), "FDGibBulletPuff", FBF_NORANDOM | FBF_USEAMMO)
+	Goto FireEnd
+	
+  FireEnd:
+    TNT1 A 0 A_GiveInventory ("FDPlutMachinegunInaccuracy", 1)
+    PPLA B 1 Bright A_SetPitch (pitch - (0.8 * CallACS("FD_recoil")/65536.0))
+	TNT1 A 0 A_JumpIf(CallACS("FD_guncasings") == 0, 2)
+	TNT1 A 0 A_FireCustomMissile ("FD556mmCasingSpawner", 0,0,frandom(4.6,4.2),-4, FPF_NOAUTOAIM)
+    PPLA C 1 Bright A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+    PPLA D 1 Bright A_SetPitch (pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+    PPLA E 1 A_SetPitch (pitch + (0.1 * CallACS("FD_recoil")/65536.0))
+//    PPLA A 1 A_SetPitch (pitch+0.1 * CallACS("FD_recoil")/65536.0))
+    Goto Ready
+	
+  Flash:
+    TNT1 A 1 A_Light1
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light (3)
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+Actor FDPlutMachinegunInaccuracy : FDCounter
+{
+inventory.maxamount 50
+}

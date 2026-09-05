@@ -1,0 +1,1 @@
+{"format":1,"name":"RocketFlare","render":{"scale":[0.6,0.6],"alpha":1,"style":"add"},"states":{"steps":[{"tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}},"no_gravity":true}

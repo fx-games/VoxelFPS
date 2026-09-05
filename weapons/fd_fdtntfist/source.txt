@@ -1,0 +1,170 @@
+ 
+ACTOR FDTNTFist : FDWeapon
+{
+  Inventory.RestrictedTo "FDTNTPlayer"
+  Inventory.Icon "TNFIST"
+  Weapon.UpSound ""
+  Weapon.SlotNumber 1
+  Weapon.SlotPriority 1
+  Obituary "%o had their jaw broken by %k."
+  Decal ""
+  +WEAPON.MELEEWEAPON
+  Tag "Melee"
+  States
+  {
+  Ready:
+    TFIS A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TFIS A 1 A_Raise
+    "####" "##" 0 A_Raise
+    Loop
+  Deselect:
+    TFIS A 1 A_Lower
+    "####" "##" 0 A_Lower
+    Loop
+	
+  Fire:
+    TFIS B 2
+  PunchTime:
+    TNT1 A 0 A_JumpIfInventory ("FDTNTFistToken", 1, "RightSwing")
+  LeftSwing:
+    TNT1 A 0 A_GiveInventory ("FDTNTFistToken", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTFistComboTwo", 1, "LeftUppercut")
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TFIS CD 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftSwingBerserk")
+    TNT1 A 0 A_CustomPunch (2*random(10,20), 1, CPF_NORANDOMPUFFZ, "FDTNTFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingBerserk:
+    TNT1 A 0 A_CustomPunch (2*random(50,100), 1, CPF_NORANDOMPUFFZ, "FDTNTFistPuff", 80)
+    Goto LeftSwingFinish
+  LeftSwingFinish:
+    TFIS E 1
+    TFIS FGHI 2
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  LeftUppercut:
+    TNT1 A 0 A_GiveInventory ("FDTNTUppercutResistanceGiver", 1)
+    TNT1 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (6.0 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.45 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 3
+    TNT1 A 0 A_TakeInventory ("FDTNTFistComboTwo", 1)
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TFIS J 1 A_SetPitch (pitch - (0.75 * CallACS("FD_recoil")/65536.0))
+    TFIS K 1 A_SetPitch (pitch - (7.0 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "LeftUppercutBerserk")
+    TNT1 A 0 A_CustomPunch (100, 1, CPF_NORANDOMPUFFZ, "FDTNTUpperCutPuff", 90)
+    Goto LeftUppercutFinish
+  LeftUppercutBerserk:
+    TNT1 A 0 A_CustomPunch (500, 1, CPF_NORANDOMPUFFZ, "FDTNTBerserkUpperCutPuff", 90)
+    Goto LeftUppercutFinish
+  LeftUppercutFinish:
+    TFIS L 1 A_SetPitch (pitch - (0.75 * CallACS("FD_recoil")/65536.0))
+    TFIS M 1 A_SetPitch (pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+    TFIS M 1 A_SetPitch (pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    TFIS N 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    TFIS N 1
+    TFIS O 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TFIS O 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    TFIS P 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    TFIS P 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  RightSwing:
+    TNT1 A 0 A_TakeInventory ("FDTNTFistToken", 1)
+    TNT1 A 0 A_JumpIfInventory ("FDTNTFistComboTwo", 1, "RightUppercut")
+    TNT1 A 4
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TFI2 CD 1
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightSwingBerserk")
+    TNT1 A 0 A_CustomPunch (2*random(10,20), 1, CPF_NORANDOMPUFFZ, "FDTNTFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingBerserk:
+    TNT1 A 0 A_CustomPunch (2*random(50,100), 1, CPF_NORANDOMPUFFZ, "FDTNTFistPuff", 80)
+    Goto RightSwingFinish
+  RightSwingFinish:
+    TFI2 E 1
+    TFI2 FGHI 2
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  RightUppercut:
+    TNT1 A 0 A_GiveInventory ("FDTNTUppercutResistanceGiver", 1)
+    TNT1 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.35 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (6.0 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.45 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.25 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 3
+    TNT1 A 0 A_TakeInventory ("FDTNTFistComboTwo", 1)
+    TNT1 A 0 A_PlaySound("plutfist/swing", CHAN_WEAPON, 1.0, 0, 1.5)
+    TNT1 A 0 A_PlaySound("melee/whoosh", 7, 1.0, 0, 1.5)
+    TFI2 J 1 A_SetPitch (pitch - (0.75 * CallACS("FD_recoil")/65536.0))
+    TFI2 K 1 A_SetPitch (pitch - (7.0 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("PowerStrength", 1, "RightUppercutBerserk")
+    TNT1 A 0 A_CustomPunch (100, 1, CPF_NORANDOMPUFFZ, "FDTNTUpperCutPuff", 90)
+    Goto RightUppercutFinish
+  RightUppercutBerserk:
+    TNT1 A 0 A_CustomPunch (500, 1, CPF_NORANDOMPUFFZ, "FDTNTBerserkUpperCutPuff", 90)
+    Goto RightUppercutFinish
+  RightUppercutFinish:
+    TFI2 L 1 A_SetPitch (pitch - (0.75 * CallACS("FD_recoil")/65536.0))
+    TFI2 M 1 A_SetPitch (pitch - (0.5 * CallACS("FD_recoil")/65536.0))
+    TFI2 M 1 A_SetPitch (pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+    TFI2 N 1 A_SetPitch (pitch - (0.05 * CallACS("FD_recoil")/65536.0))
+    TFI2 N 1
+    TFI2 O 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TFI2 O 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    TFI2 P 1 A_SetPitch (pitch + (0.75 * CallACS("FD_recoil")/65536.0))
+    TFI2 P 1 A_SetPitch (pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_Refire ("PunchTime")
+    Goto FireEnd
+	
+  FireEnd:
+    TNT1 A 4
+    TFIS B 2
+    Goto Ready
+  }
+}
+
+Actor FDTNTFistToken	: FDBoolean {}
+
+actor FDTNTUppercutResistance : PowerProtection
+{
+   powerup.Duration 12
+//   powerup.Color 0, 255, 0, 0.125
+   damagefactor "Normal", 0.33
+}
+
+actor FDTNTUppercutResistanceGiver : PowerupGiver
+{
+  inventory.pickupmessage ""
+  inventory.maxamount 0
+  Powerup.Duration 12
+  powerup.type "FDTNTUppercutResistance"
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  +INVENTORY.ADDITIVETIME
+  Inventory.PickupSound ""
+  states
+  {
+  Spawn:
+    TNT1 A 0
+    Stop
+  }
+}

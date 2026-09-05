@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
-	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
@@ -23,6 +23,14 @@ type Weapon struct {
 	Actors map[string]*wep.Actor
 	Atlas  *glhf.TextureAtlasPacked
 
+	// atlasPath and soundsPath are where this weapon's pictures and sounds
+	// are, loaded the first time it is drawn rather than at startup. A migrated
+	// mod brings well over a hundred weapons, and uploading every atlas and
+	// decoding every sound before the first frame took minutes.
+	atlasPath  string
+	soundsPath string
+	game       *Game
+
 	// spriteIndex turns a step's frame name into its place in the atlas.
 	spriteIndex map[string]int
 
@@ -35,28 +43,40 @@ type Weapon struct {
 	uiScale mgl32.Vec2
 }
 
-// NewWeapon wires a loaded weapon to its atlas.
-func NewWeapon(data *wep.Weapon, actors map[string]*wep.Actor, atlas *glhf.TextureAtlasPacked, uiScale mgl32.Vec2) *Weapon {
-	indices := make(map[string]int)
-	for i := 0; i <= atlas.LastValidIndex(); i++ {
-		indices[atlas.NameOfFrame(i)] = i
-	}
+// NewWeapon wires a loaded weapon to where its pictures and sounds are. They
+// are not read until the weapon is first held.
+func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlasPath, soundsPath string) *Weapon {
 	weapon := &Weapon{
-		Data:        data,
-		Actors:      actors,
-		Atlas:       atlas,
-		spriteIndex: indices,
-		runtime:     wep.NewRuntime(data, rand.New(rand.NewSource(1))),
-		uiScale:     uiScale,
+		Data:       data,
+		Actors:     actors,
+		atlasPath:  atlasPath,
+		soundsPath: soundsPath,
+		game:       game,
+		runtime:    wep.NewRuntime(data, rand.New(rand.NewSource(1))),
+		uiScale:    game.UIScale,
 	}
 	weapon.cursor = wep.NewCursor(&data.States, "Ready")
 	return weapon
+}
+
+// load reads the weapon's atlas and sounds, once.
+func (w *Weapon) load() {
+	if w.Atlas != nil {
+		return
+	}
+	w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
+	w.spriteIndex = make(map[string]int)
+	for i := 0; i <= w.Atlas.LastValidIndex(); i++ {
+		w.spriteIndex[w.Atlas.NameOfFrame(i)] = i
+	}
+	w.game.loadWeaponSounds(w)
 }
 
 func (w *Weapon) DisplayName() string { return w.Data.Tag }
 
 // Equip puts the weapon in hand, running its raise animation when it has one.
 func (w *Weapon) Equip() {
+	w.load()
 	w.flash = nil
 	if w.cursor.Goto("Select") {
 		w.cursor.StartRaise()
@@ -108,7 +128,7 @@ func (w *Weapon) Draw(screenWidth, screenHeight int32) {
 
 func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32) {
 	step := cursor.Step()
-	if step == nil || step.Sprite == "" {
+	if step == nil || step.Sprite == "" || w.Atlas == nil {
 		return // a frame that shows nothing, which is most of a firing state
 	}
 	index, known := w.spriteIndex[step.Sprite]
@@ -139,19 +159,9 @@ func (g *Game) LoadWeapons(dir string) error {
 	if err != nil {
 		return err
 	}
-	var soundProblems []string
 	for _, data := range library.Ordered() {
-		atlas := g.LoadPackedAtlasWithBatch(library.AtlasPath(data.ID))
-		g.weapons = append(g.weapons, NewWeapon(data, library.Actors[data.ID], atlas, g.UIScale))
-		if err := g.loadWeaponSounds(library, data); err != nil {
-			soundProblems = append(soundProblems, err.Error())
-		}
-	}
-	if len(soundProblems) > 0 {
-		// Every problem, then refuse, the same way wep.Load reports the folder
-		// itself. One weapon's unreadable sounds must not hide the next one's.
-		return fmt.Errorf("weapons: %d sound problem(s)\n  %s",
-			len(soundProblems), strings.Join(soundProblems, "\n  "))
+		g.weapons = append(g.weapons, NewWeapon(g, data,
+			library.Actors[data.ID], library.AtlasPath(data.ID), library.SoundsPath(data.ID)))
 	}
 	g.weaponKeys = library.Keys
 	g.weaponByID = make(map[string]int, len(g.weapons))
@@ -167,9 +177,9 @@ func (g *Game) LoadWeapons(dir string) error {
 // loadWeaponSounds hands the weapon's sounds to the player under the names its
 // ops play them by. The migration writes them in the layout the cue names
 // imply, so this needs no mapping of its own.
-func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) error {
-	if len(data.Sounds) == 0 {
-		return nil
+func (g *Game) loadWeaponSounds(weapon *Weapon) {
+	if len(weapon.Data.Sounds) == 0 {
+		return
 	}
 	if g.audio == nil {
 		g.audio = audio.NewPlayer(audioSampleRate)
@@ -177,15 +187,32 @@ func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) error {
 	// Cue names are the names the ops play by, which the migration wrote the
 	// folder to match, so no mapping is needed here. Two weapons that play the
 	// same ZDoom sound share the cue, which is what sharing a name means.
-	if err := g.audio.LoadCueTree(library.SoundsPath(data.ID)); err != nil {
-		return fmt.Errorf("%s: %w", data.ID, err)
+	//
+	// A sound that will not decode is reported and the weapon keeps working;
+	// what makes a weapon refuse to load is checked at load, and a broken cue
+	// is not worth taking the game down for while it is being played.
+	if err := g.audio.LoadCueTree(weapon.soundsPath); err != nil {
+		log.Printf("[weapons] %s: %v", weapon.Data.ID, err)
 	}
 	g.audio.SoundsLoaded()
-	return nil
 }
 
 // audioSampleRate is what the speaker runs at.
 const audioSampleRate = 44100
+
+// cycleWeapon moves to the next weapon in the folder, or the previous one. The
+// key map only reaches nine, and a migrated mod brings a hundred, so this is
+// how the rest are reachable at all.
+func (g *Game) cycleWeapon(step int) {
+	if len(g.weapons) < 2 {
+		return
+	}
+	next := (g.currentWeaponIndex + step) % len(g.weapons)
+	if next < 0 {
+		next += len(g.weapons)
+	}
+	g.selectWeapon(next)
+}
 
 // selectWeaponByKey puts the weapon bound to a number key in the player's
 // hands. An unbound key does nothing.

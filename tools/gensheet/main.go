@@ -68,10 +68,6 @@ func main() {
 	must(wep.WriteAtlas(images, filepath.Join(dir, wep.AtlasFile)))
 	weapon := buildWeapon(*id, *tag, names, *tics, *scale, *damage, *sheet)
 	must(wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), weapon))
-	must(wep.WriteJSON(filepath.Join(dir, wep.ActorsFile), wep.Actors{
-		Format: wep.Format,
-		Actors: map[string]*wep.Actor{},
-	}))
 	fmt.Fprintf(os.Stderr, "wrote %s: %d frames\n", dir, len(names))
 }
 

@@ -1,0 +1,184 @@
+ 
+ACTOR FDAlienVendettaPlasmaRifle : FDWeapon
+{
+  Inventory.RestrictedTo "FDAlienVendettaPlayer"
+  Inventory.Icon "AVPLASMA"
+  Weapon.UpSound ""
+  Weapon.AmmoType "FDAlienVendettaCell"
+  Weapon.AmmoUse 1
+  Weapon.SlotNumber 6
+  Obituary "%o's atoms were accelerated everywhere by %k."
+  Decal "TachyonScorch"
+  Tag "Phased-tachyon Cannon"
+  States
+  {
+  Ready:
+	TNT1 A 0 A_JumpIf(CallACS("FD_weaponambience") == 0, "ReadyNoSound")
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/idle", 6, 0.9, 1, 1.4)
+    VPLA A 1 A_WeaponReady
+    Loop
+  ReadyNoSound:
+    VPLA A 1 A_WeaponReady
+    Loop
+	
+  Select:
+    TNT1 A 0 A_TakeInventory ("FDAlienVendettaPlasmaRifleState", 1)
+    VPLA A 1 A_Raise
+    "####" "#" 0 A_Raise
+    Loop
+  Deselect:
+    "####" "#" 0 A_StopSound(6)
+  DeselectLoop:
+    VPLA A 1 A_Lower
+    "####" "#" 0 A_Lower
+    Loop
+	
+  Dryfire:
+    VPLA A 6 A_PlaySound("weapons/dryfire1", 5, 1, 0, 1.25)
+    Goto Ready
+	
+  Refiring:
+    TNT1 A 0 A_GiveInventory ("FDAlienVendettaPlasmaRifleState", 1)
+  Fire:
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaCell", 1, 1)
+	Goto Dryfire
+    VPLA A 1 A_FireBullets (0,0, -1, 0, "FDAutoAimRailgunPuff", FBF_NOFLASH) // SHENANIGANS DOING THINGS THE ENGINE SHOULD ALREADY DO
+	TNT1 A 0 A_FireBullets (0,0, -1, 0, "FDAlienVendettaBeamVisualPuff", FBF_NOFLASH)
+	TNT1 A 0 A_FireBullets (0,0, -1, 0, "FDAlienVendettaBeamVisualPuff2", FBF_NOFLASH)
+    TNT1 A 0 A_AlertMonsters
+    TNT1 A 0 A_GunFlash
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/fire", CHAN_WEAPON, 1, 0, 0.65)
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/fire", CHAN_BODY, 1, 0, 0.65)
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/fire", 7, 0.1, 0, 0.20)
+    TNT1 A 0 A_TakeInventory ("FDAlienVendettaCell", 1, TIF_NOTAKEINFINITE)
+	TNT1 A 0 A_JumpIf(CallACS("FD_AutoaimCheck") == 0, 3) // Uses the normal firing method if autoaim is completely disabled. They're basically identical, but whatever
+    TNT1 A 0 A_RailAttack (260+(10*random(1,8)), 0, 0, "None", White, RGF_SILENT | RGF_FULLBRIGHT | RGF_EXPLICITANGLE, 0, "FDAlienVendettaBeamImpactPuff", 0, CallACS("FDRail_GetRelativePitch") / 65536, 0, 1, 10, 1, "FDAlienVendettaBeamCore", -2)
+    TNT1 A 0 A_Jump(256, 2)
+    TNT1 A 0 A_RailAttack (260+(10*random(1,8)), 0, 0, "None", White, RGF_SILENT | RGF_FULLBRIGHT, 0, "FDAlienVendettaBeamImpactPuff", 0, 0, 0, 1, 10, 1, "FDAlienVendettaBeamCore", -2)
+	VPLA B 1 Bright A_SetPitch(pitch - (2.75 * CallACS("FD_recoil")/65536.0))
+	VPLA B 1 Bright A_SetPitch(pitch - (0.25 * CallACS("FD_recoil")/65536.0))
+	VPLA C 1 Bright A_SetPitch(pitch + (0.05 * CallACS("FD_recoil")/65536.0))
+	VPLA C 1 Bright A_SetPitch(pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+	VPLA D 1 Bright A_SetPitch(pitch + (1.65 * CallACS("FD_recoil")/65536.0))
+	VPLA D 1 Bright A_SetPitch(pitch + (0.6 * CallACS("FD_recoil")/65536.0))
+	VPLA E 1 A_SetPitch(pitch + (0.07 * CallACS("FD_recoil")/65536.0))
+	VPLA E 1 A_SetPitch(pitch + (0.03 * CallACS("FD_recoil")/65536.0))
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaPlasmaRifleState", 1, "NoRefiring")
+	VPLA FG 2
+	VPLA A 16
+    TNT1 A 0 A_JumpIfInventory ("FDAlienVendettaCell", 1, 1)
+	Goto NoRefiring
+	VPLA AAAAAAAAAAAAAAA 1 A_Refire ("Refiring")
+	Goto Ready
+  NoRefiring:
+	VPLA FGAA 2
+    TNT1 A 0 A_TakeInventory ("FDAlienVendettaPlasmaRifleState", 1)
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/open", 5, 1.0, 0, 1.8)
+	VPLA H 2
+	VPLA I 2
+	VPLA J 2
+	VPLA KLMKLMKLMKLMKLM 2
+	VPLA N 2
+    TNT1 A 0 A_PlaySound("alienvendettaplasmarifle/open", 5, 1.0, 0, 1.8)
+	VPLA O 2
+	VPLA P 2
+	VPLA Q 2
+	VPLA AAAAAAAAAAAAAAA 1 A_Refire ("Fire")
+	Goto Ready
+	
+  Flash:
+    TNT1 A 1 A_Light (20)
+    TNT1 A 1 A_Light (5)
+    TNT1 A 1 A_Light2
+    TNT1 A 1 A_Light1
+    TNT1 A 0 A_Light0
+	Goto LightDone
+  }
+}
+
+Actor FDAlienVendettaPlasmaRifleState : FDLevelLimit {}
+
+ACTOR FDAlienVendettaBeamCore
+{   
+   +NOINTERACTION
+   +NOGRAVITY
+   RenderStyle ADD
+   Alpha 0.75
+   Scale 0.85
+   States
+   {
+   Spawn:
+      TNT1 A 0
+      APPX A 0 A_Jump (256, "FrameChoose")
+      APPX B 0
+   FrameChoose:
+      "####" "##" 1 Bright
+      "####" "#" 0 A_Jump (96, "Particles")
+	  Goto Particles
+	  
+   Particles:
+      "####" "#" 0 A_Jump (96, "SpawnLoop")
+      "####" "#" 0 A_SpawnItemEx ("FDAlienVendettaBeamSmoke", frandom(-4,4),frandom(-4,4),frandom(-4,4), 0,0,0, 0, SXF_NOCHECKPOSITION)
+	  "####" "#" 0 A_JumpIf(CallACS("FD_particles") == 0, "SpawnLoop")
+      "####" "#" 0 A_Jump (256, 1,2,3)
+	  "####" "###" 0 A_SpawnParticle (3c0074, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,70), random(1,3), frandom(0,360), frandom(-2.0,2.0),frandom(-2.0,2.0),frandom(-2.0,2.0), frandom(0.2,0.4),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.02, 0.98, -1)
+      "####" "#" 0 A_Jump (256, 1,2,3)
+	  "####" "#####" 0 A_SpawnParticle (7c00f0, SPF_FULLBRIGHT | SPF_RELATIVE, random(35,105), random(2,4), frandom(0,360), frandom(-1.0,1.0),frandom(-1.0,1.0),frandom(-1.0,1.0), frandom(0.2,0.4),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.02, 0.98, -1)
+      "####" "#" 0 A_Jump (256, 1,2,3)
+	  "####" "#####" 0 A_SpawnParticle (a23fff, SPF_FULLBRIGHT | SPF_RELATIVE, random(35,105), random(2,4), frandom(0,360), frandom(-1.0,1.0),frandom(-1.0,1.0),frandom(-1.0,1.0), frandom(0.2,0.4),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.02, 0.98, -1)
+      "####" "#" 0 A_Jump (256, 1,2,3)
+	  "####" "##" 0 A_SpawnParticle (ffffff, SPF_FULLBRIGHT | SPF_RELATIVE, random(10,70), random(1,3), frandom(0,360), 0,0,0, frandom(0.2,0.4),frandom(-0.2,0.2),frandom(-0.2,0.2), 0,0,-0.02, 0.98, -1)
+      "####" "#" 0
+   SpawnLoop:
+      "####" "#" 1 Bright A_FadeTo (0, 0.15, 1)
+      "####" "#" 0 Bright A_SetScale (scalex * 1.02)
+      Loop
+   }
+}
+
+ACTOR FDAlienVendettaBeamSmoke
+{   
+   +NOINTERACTION
+   +NOGRAVITY
+   +DONTSPLASH
+   +NOTELEPORT
+   RenderStyle Translucent
+   Alpha 0.15
+   Scale 0.3
+   States
+   {
+   Spawn:
+      TNT1 A 0
+      APPX CDEFGHI 3 A_SetScale (ScaleX * 1.25)
+      Stop
+   }
+}
+
+// Unused
+
+ACTOR FDAlienVendettaTachyonEffect
+{
+  Radius 6
+  Height 6
+  Speed 0
+  Damage (200)
+  DamageType "Tachyon"
+  Projectile
+  Species "Player"
+  +THRUSPECIES
+  +NODAMAGETHRUST
+  +NOCLIP
+  +THRUACTORS
+  +BLOODLESSIMPACT
+  +DONTSPLASH
+  States
+  {
+  Spawn:
+    TNT1 A 0
+    TNT1 A 1
+    Stop
+  Death:
+    TNT1 A 4
+    Stop
+  }
+}
