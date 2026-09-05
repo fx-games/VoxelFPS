@@ -552,7 +552,7 @@ func ParseActorScript(fileData string) (DoomWeapon, error) {
 			continue
 		}
 		if isReadingStates && currentState != "" {
-			stateLine, valid := parseStateLine(line)
+			stateLine, valid := parseLegacyStateLine(line)
 			if valid {
 				commandsInCurrentState = append(commandsInCurrentState, stateLine)
 			}
@@ -566,7 +566,7 @@ func ParseActorScript(fileData string) (DoomWeapon, error) {
 }
 
 // SPRT AV 5 A_Explode;
-func parseStateLine(line string) (WeaponState, bool) {
+func parseLegacyStateLine(line string) (WeaponState, bool) {
 	for _, keyword := range []string{"goto", "stop", "loop", "wait", "fail"} {
 		if strings.HasPrefix(strings.ToLower(line), keyword) {
 			return WeaponState{
