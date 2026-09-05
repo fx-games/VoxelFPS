@@ -1,0 +1,39 @@
+actor SilencedPistol : Weapon 
+{
+  Weapon.AmmoUse 1
+  Weapon.AmmoGive 20
+  Weapon.AmmoType "Clip"
+  Weapon.SlotNumber 2
+  Obituary "%o was killed by %k's Silent killer."
+  +NOALERT
+  Decal BulletChip
+  AttackSound "Weapon/SPIFIR"
+  Inventory.Pickupmessage "Picked up a Silenced Pistol."
+  States
+  {
+  Ready:
+    SPIL A 1 A_WeaponReady
+    Loop
+  Deselect:
+    SPIL A 1 A_Lower
+    Loop
+  Select:
+    SPIL A 1 A_Raise
+    Loop
+  Fire:
+	SPIL A 0
+	SPIL A 3 A_FireBullets(5.2,1,1,7)
+	SPIL B 2
+	SPIL C 1
+	SPIL D 1
+	SPIL E 2
+	SPIL B 4 A_ReFire
+    Goto Ready
+  Flash:
+    SPIL A 3 Bright A_Light1
+    Goto LightDone
+  Spawn:
+    SPIP A -1
+    Stop
+  }
+}

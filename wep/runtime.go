@@ -237,6 +237,13 @@ type Runtime struct {
 
 // Var reads one of the actor's values, which is what a shipped expression does.
 func (r *Runtime) Var(name string) (float64, bool) {
+	// CountInv("Item") in a script's own expression compiles to this rather
+	// than a dedicated op, because it can appear anywhere a number can - the
+	// inventory itself already has the answer, unlike an ACS script or a
+	// class check, which read as zero until there is something to ask.
+	if item, ok := strings.CutPrefix(name, "inv:"); ok {
+		return float64(r.Inventory[item]), true
+	}
 	value, known := r.Vars[name]
 	return value, known
 }

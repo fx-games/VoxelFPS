@@ -497,7 +497,7 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 	} else {
 		puffActor = ""
 	}
-	return []wep.Op{{
+	ops := []wep.Op{{
 		Op:        wep.OpFireBullets,
 		Count:     count,
 		SpreadH:   spreadH.Range.Value(),
@@ -506,7 +506,29 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 		Puff:      impact,
 		PuffActor: puffActor,
 		Source:    call.Raw,
-	}}, nil
+	}}
+	// A_FireBullets plays the weapon's own AttackSound on CHAN_WEAPON itself,
+	// unconditionally, regardless of any flags the call carries - GZDoom's
+	// own A_FireBullets does `if (weapon != NULL) A_StartSound(weapon.
+	// AttackSound, CHAN_WEAPON)` before ever looking at what was asked for.
+	// A weapon that already plays its own sound explicitly and never set
+	// AttackSound is untouched; one that only ever set the property and never
+	// called A_PlaySound - the older, simpler way to write one - was
+	// otherwise silent.
+	if sound, ok := c.mergedProperty(c.actorName, "attacksound"); ok {
+		sound = strings.Trim(sound, `"`)
+		if sound != "" {
+			c.needSound(sound)
+			ops = append([]wep.Op{{
+				Op:      wep.OpPlaySound,
+				Sound:   sound,
+				Channel: 1, // CHAN_WEAPON
+				Volume:  1,
+				Source:  "AttackSound (implicit, from A_FireBullets)",
+			}}, ops...)
+		}
+	}
+	return ops, nil
 }
 
 // A_FireCustomMissile(type, angle, useammo, spawnofs_xy, spawnheight, flags, pitch).

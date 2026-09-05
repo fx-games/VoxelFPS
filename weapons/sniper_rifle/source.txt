@@ -1,0 +1,85 @@
+ACTOR UACSniperRifle : DoomWeapon
+{
+Weapon.SlotNumber 3
+Weapon.AmmoType "Shell"
+Weapon.AmmoGive 8
+Weapon.AmmoUse 1
++WEAPON.NOALERT
+Inventory.PickupMessage "You got a UAC Sniper Rifle!"
+Obituary "o% got their brains blasted by %k."
+AttackSound "weapons/sniper_fire"
+Tag "Sniper Rifle"
+Decal "BulletChip"
+States
+	{
+	Spawn:
+		SRIL A -1
+		Stop
+	Select:
+		SPRF A 1 A_Raise
+		Loop
+	Deselect:
+		SPRF A 0 A_JumpIfInventory("UACZoom",1,"ScopedDeselect")
+		SPRF A 1 A_Lower
+		Loop
+	ScopedDeselect:
+		SPRF A 0 A_TakeInventory("UACZoom",1)
+		SPRF A 2 A_ZoomFactor(1.0)
+		SPRF A 1 A_Lower
+		Goto ScopedDeselect+2
+	Ready:
+		TNT1 A 0 A_JumpIfInventory("UACZoom", 1, "ScopedReady")
+		SPRF A 1 A_WeaponReady
+		Loop
+	ScopedReady:
+		SNPS A 1 A_WeaponReady(1)
+		Loop
+	Fire:
+		SPRF A 0 A_JumpIfInventory("UACZoom", 1, "ScopedFire")
+		TNT1 A 0 A_GunFlash
+		TNT1 A 0 A_AlertMonsters
+		SRIF A 3 Bright A_FireBullets (0, 0, 1, 35, "BulletPuff")
+		SRIF B 2 Bright
+		SPRF A 3
+		SPRF BC 3
+		TNT1 A 0 A_PlaySound ("weapons/sniper_bolt", CHAN_AUTO)
+		SPRF DE 3
+		SPRF F 5
+		SPRF EDG 3
+		SPRF CB 3
+		SPRF A 3
+		SPRF A 0 A_ReFire
+		Goto Ready
+	ScopedFire:
+		TNT1 A 0 A_GunFlash
+		TNT1 A 0 A_AlertMonsters
+		SNPS A 3 A_FireBullets (0, 0, 1, 35, "BulletPuff")
+		SNPS A 4
+		SPRF A 1 A_ZoomFactor(1.0)
+		SPRF BC 3
+		TNT1 A 0 A_PlaySound ("weapons/sniper_bolt", CHAN_AUTO)
+		SPRF DE 3
+		SPRF F 5
+		SPRF EDG 3
+		SPRF CB 3
+		SPRF A 3
+		SNPS A 2 A_ZoomFactor(6.0)
+		SNPS A 0
+		Goto Ready
+	AltFire:
+		TNT1 A 0 A_JumpIfInventory("UACZoom", 1, "ZoomOut")
+		TNT1 A 0 A_GiveInventory("UACZoom", 1)
+		SNPS A 8 A_ZoomFactor(6.0)
+		Goto Ready
+	ZoomOut:
+		TNT1 A 0 A_TakeInventory("UACZoom", 1)
+		SPRF A 8 A_ZoomFactor(1.0)
+		Goto Ready
+	Flash:
+		TNT1 A 2 A_Light2
+		TNT1 A 2 A_Light1
+		Goto LightDone
+	}
+}
+
+ACTOR UACZoom : Inventory { Inventory.MaxAmount 1 }

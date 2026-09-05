@@ -1,0 +1,37 @@
+ACTOR Reaper : Weapon 6021
+{
+   Inventory.PickupMessage "You got the Reaper"
+   Weapon.SelectionOrder 1900
+   Inventory.Amount 8
+   Inventory.MaxAmount 200
+   Weapon.AmmoUse1 1
+   Weapon.Kickback 2
+   weapon.ammotype "Clip"
+   Weapon.SlotNumber 2
+   +Weapon.NoAutoFire
+   +Weapon.NoAlert
+   obituary "%o Didn't hear %k's Bullets coming."
+   AttackSound "SCOLTFIR"
+   States
+   {
+  Spawn:
+    SOLT A -1
+    Stop
+   Ready: 
+     COLT  A 1 A_WeaponReady
+      LOOP
+   Deselect:
+      COLT A 1 A_Lower
+      Loop
+   Select:
+      COLT A 1 A_Raise
+      LOOP
+   Fire:
+    COLT A 2
+    COLT B 2 A_FireBullets(2,2,1,7,"BulletPuff",1)
+    COLT C 1
+    COLT A 0
+    COLT B 0 A_WeaponReady
+    Goto Ready
+   } 
+}

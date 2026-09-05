@@ -28,10 +28,20 @@ const (
 	postEnd = 0xFF
 )
 
-// openWAD reads an IWAD or PWAD as a source. Only its sprites are exposed,
-// under the sprites/ prefix the rest of the migration expects, because the
-// stock sounds are in a format nothing here decodes and a mod that wants one
-// ships its own.
+// pngMagic is how a graphic lump saved as a PNG rather than the legacy
+// picture format announces itself, whatever a WAD editor chose to name it.
+var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+
+// openWAD reads an IWAD or PWAD as a source. An IWAD is asked for only its
+// sprites, under the sprites/ prefix the rest of the migration expects - a
+// mod takes its stock sounds for granted the way it takes stock sprites for
+// granted, and if it wants one it ships its own. A standalone weapon WAD (the
+// pre-pk3 way of shipping a single weapon) is a mod in its own right: its
+// DECORATE, SNDINFO and every other lump outside the sprite markers are
+// exposed too, under their own bare name and, for anything that is not a
+// picture, under sounds/ as well - a WAD lump carries no file extension to
+// tell a sound from a script by, so both prefixes point at the same bytes and
+// whichever one gets read decides what it turns out to be.
 func openWAD(location string) (*Source, error) {
 	data, err := os.ReadFile(location)
 	if err != nil {
@@ -50,12 +60,23 @@ func openWAD(location string) (*Source, error) {
 		return nil, fmt.Errorf("%s: its directory runs off the end", location)
 	}
 
-	lumps := make(map[string][]byte, count)
+	sprites := make(map[string][]byte, count)
+	other := make(map[string][]byte, count)
 	palette := paletteFrom(nil)
 	source := newSource(func() error { return nil })
 
+	add := func(store map[string][]byte, path string, body []byte) {
+		if _, taken := store[path]; taken {
+			return // a later wad's lump wins in Doom; the first wins here
+		}
+		store[path] = body
+		source.note(path)
+	}
+
 	// Sprites sit between marker lumps. Everything outside them is map data,
-	// music, wall textures and the like, which the weapons do not reach for.
+	// music, wall textures and the weapon's own DECORATE, SNDINFO and sounds
+	// - a standalone weapon WAD has no sprite markers at all beyond its own,
+	// so that is everything else in one of these.
 	inSprites := false
 	for i := 0; i < count; i++ {
 		entry := data[directory+i*wadEntrySize:]
@@ -78,28 +99,42 @@ func openWAD(location string) (*Source, error) {
 			inSprites = false
 			continue
 		}
-		if !inSprites || size == 0 {
+		if size == 0 {
 			continue
 		}
-		path := "sprites/" + name
-		if _, taken := lumps[path]; taken {
-			continue // a later wad's lump wins in Doom; the first wins here
+		if inSprites {
+			add(sprites, "sprites/"+name, body)
+			continue
 		}
-		lumps[path] = body
-		source.note(path)
+		// A lump out here carries no extension to say whether it is a script
+		// or a sound, so it is offered both ways: DECORATE and SNDINFO are
+		// found by their bare name, and a sound SNDINFO points at - CLANG,
+		// HUNTRIF1, whatever this WAD happened to call it - is found the same
+		// way a pk3's sounds/ folder would hold it.
+		add(other, name, body)
+		add(other, "sounds/"+name, body)
 	}
 
 	source.layers = []func(string) (io.ReadCloser, error){
 		func(real string) (io.ReadCloser, error) {
-			body, ok := lumps[real]
-			if !ok {
-				return nil, fmt.Errorf("%s: no such lump", real)
+			if body, ok := sprites[real]; ok {
+				// A lump SLADE saved as a PNG is already what everything
+				// downstream wants; only the legacy column-of-posts format
+				// needs converting. GZDoom reads a graphic lump either way,
+				// by its own bytes rather than by where it sits in the wad.
+				if bytes.HasPrefix(body, pngMagic) {
+					return io.NopCloser(bytes.NewReader(body)), nil
+				}
+				encoded, err := pictureToPNG(body, palette)
+				if err != nil {
+					return nil, fmt.Errorf("%s: %w", real, err)
+				}
+				return io.NopCloser(bytes.NewReader(encoded)), nil
 			}
-			encoded, err := pictureToPNG(body, palette)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", real, err)
+			if body, ok := other[real]; ok {
+				return io.NopCloser(bytes.NewReader(body)), nil
 			}
-			return io.NopCloser(bytes.NewReader(encoded)), nil
+			return nil, fmt.Errorf("%s: no such lump", real)
 		},
 	}
 	return source, nil

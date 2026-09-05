@@ -112,6 +112,20 @@ func (c *Compiler) resolveName(name string, args []Arg) (Resolution, bool) {
 		return Resolution{Var: "class:" + strings.ToLower(args[0].Str)}, true
 	}
 
+	// CountInv reads how many of an item the actor is carrying, which the
+	// engine's own inventory already has an answer for, unlike CallACS or
+	// CheckClass - it ships as a runtime read rather than reading as zero.
+	if strings.EqualFold(name, "CountInv") && len(args) == 1 && args[0].IsStr {
+		// Kept in the case the script itself wrote it in, the same as every
+		// other inventory-item reference here (A_GiveInventory, A_TakeInven
+		// tory): Inventory is a plain map keyed by that spelling, and
+		// lowercasing only this one path would read as always empty against
+		// an AmmoType1 or a Give/Take spelled with any capital in it.
+		item := args[0].Str
+		c.needItem(item)
+		return Resolution{Var: "inv:" + item}, true
+	}
+
 	// A mod script called for its answer, in an expression. We have no ACS, so
 	// the engine answers it.
 	if strings.HasPrefix(lower, "acs_named") && len(args) >= 1 && args[0].IsStr {
@@ -164,6 +178,12 @@ func zdoomConstant(name string) (float64, bool) {
 		return 3, true
 	case "chan_body":
 		return 4, true
+	case "chan_5":
+		return 5, true
+	case "chan_6":
+		return 6, true
+	case "chan_7":
+		return 7, true
 	case "attn_none":
 		return 0, true
 	case "attn_norm":
@@ -492,14 +512,32 @@ func (c *Compiler) lowerFlowLine(line StateLine) (wep.Step, error) {
 	return step, nil
 }
 
-// lowerAction turns a frame's action call into ops, through the policy.
+// lowerAction turns a frame's action call, or its brace-wrapped sequence of
+// several, into ops, through the policy. All of them land on the one step
+// this frame becomes, the same as GZDoom running them the instant it enters.
 func (c *Compiler) lowerAction(line StateLine) ([]wep.Op, error) {
-	if strings.TrimSpace(line.Action) == "" {
-		return nil, nil
+	actions := line.Actions
+	if len(actions) == 0 {
+		if strings.TrimSpace(line.Action) == "" {
+			return nil, nil
+		}
+		actions = []string{line.Action}
 	}
-	call, ok := ParseCall(line.Action)
+	var ops []wep.Op
+	for _, action := range actions {
+		lowered, err := c.lowerOneAction(action)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, lowered...)
+	}
+	return ops, nil
+}
+
+func (c *Compiler) lowerOneAction(action string) ([]wep.Op, error) {
+	call, ok := ParseCall(action)
 	if !ok {
-		return nil, fmt.Errorf("cannot read the action %q", line.Action)
+		return nil, fmt.Errorf("cannot read the action %q", action)
 	}
 	lowering, known := c.policy.Functions[strings.ToLower(call.Name)]
 	if !known {

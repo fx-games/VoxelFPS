@@ -377,6 +377,143 @@ ACTOR SomeAmmo : Ammo {}
 	assert.Equal(t, "brutal_shotgun", result.Weapon.ID)
 }
 
+// GZDoom's own A_FireBullets (wadsrc/static/zscript/actors/inventory/
+// stateprovider.zs) always runs `if (weapon != NULL) A_StartSound(weapon.
+// AttackSound, CHAN_WEAPON)`, with no flag that turns it off - a weapon
+// whose script never calls A_PlaySound itself, an older and simpler way to
+// write one, still has a gunshot in real GZDoom, which a migration that
+// skips this would leave silent.
+func TestFireBulletsPlaysAttackSoundImplicitly(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestQuietWeapon : Weapon
+{
+  AttackSound "weapon/testfire"
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 1 A_FireBullets(5.6, 0, 1, 5)
+    Goto Ready
+  }
+}
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestQuietWeapon")
+	require.NoError(t, err)
+
+	ops := stepOpsWith(t, result.Weapon.States, wep.OpFireBullets)
+	require.Len(t, ops, 2, "the implicit sound and the shot itself")
+	assert.Equal(t, wep.OpPlaySound, ops[0].Op)
+	assert.Equal(t, "weapon/testfire", ops[0].Sound)
+	assert.Equal(t, 1, ops[0].Channel, "CHAN_WEAPON")
+	assert.Equal(t, wep.OpFireBullets, ops[1].Op)
+	assert.Contains(t, result.Sounds, "weapon/testfire")
+}
+
+// A weapon that already plays its own sound is untouched: doubling it would
+// be wrong for every mod already migrated that scripts its own gunshot.
+func TestFireBulletsLeavesAnExplicitSoundAlone(t *testing.T) {
+	result := compileTestShotgun(t)
+	// TestShotgun sets no AttackSound, so the step A_FireBullets landed on
+	// carries nothing implicit - just the shot itself, the way it already
+	// did before AttackSound was read at all.
+	ops := stepOpsWith(t, result.Weapon.States, wep.OpFireBullets)
+	assert.Equal(t, []wep.Op{ops[0]}, ops)
+	assert.Equal(t, wep.OpFireBullets, ops[0].Op)
+}
+
+// stepOpsWith finds the one step carrying this op and returns everything on
+// it, so a test can see what landed alongside it.
+func stepOpsWith(t *testing.T, machine wep.StateMachine, op string) []wep.Op {
+	t.Helper()
+	for _, step := range machine.Steps {
+		for _, candidate := range step.Ops {
+			if candidate.Op == op {
+				return step.Ops
+			}
+		}
+	}
+	require.Fail(t, "no step carries op %q", op)
+	return nil
+}
+
+// GZDoom's ParseActions (thingdef_states.cpp) treats a frame's action as
+// either one call or, in braces, a `;`-separated sequence that all run the
+// instant the frame is entered - `SOCO A 1 { A_WeaponReady(...);
+// A_FireBullets(...); }`, a real line from a published weapon mod, whose
+// braces were previously read as part of the first call's own name and
+// dropped both actions with no error at all: a weapon that would never
+// signal it was ready for input.
+func TestBraceWrappedActionsAllRunOnTheSameFrame(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestBraceWeapon : Weapon
+{
+  States
+  {
+  Ready:
+    TNT1 A 1 { A_WeaponReady(WRF_ALLOWRELOAD); A_FireBullets(0,0,1,0,"RedDot"); }
+    Loop
+  }
+}
+ACTOR RedDot { States { Spawn: TNT1 A -1 Stop } }
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestBraceWeapon")
+	require.NoError(t, err)
+
+	ops := opsAt(t, result.Weapon.States, "Ready")
+	require.Len(t, ops, 2, "both calls in the braces, on the one frame")
+	assert.Equal(t, wep.OpWeaponReady, ops[0].Op)
+	assert.True(t, ops[0].AllowFire)
+	assert.Equal(t, wep.OpFireBullets, ops[1].Op)
+}
+
+// CountInv reads the very item NewRuntime pre-fills to capacity -
+// Weapon.AmmoType1 - so it has to read it back under the same spelling that
+// filled it. A mismatched case (one lowercased, one not) means the map
+// lookup misses and Inventory reads as permanently empty: a real published
+// weapon whose ammo is spelled "BTLoaded" jumped to its own Reload state on
+// the very first tic, forever, because CountInv looked for "btloaded".
+func TestCountInvMatchesTheItemsOwnCase(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestCasedAmmo : Ammo { Inventory.MaxAmount 20 }
+ACTOR TestCaseSensitiveWeapon : Weapon
+{
+  Weapon.AmmoType1 "TestCasedAmmo"
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_JumpIf(CountInv("TestCasedAmmo") == 0, "Empty")
+    TNT1 A 1 A_FireBullets(0, 0, 1, 5)
+    Goto Ready
+  Empty:
+    TNT1 A 1
+    Goto Ready
+  }
+}
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestCaseSensitiveWeapon")
+	require.NoError(t, err)
+
+	runtime := wep.NewRuntime(result.Weapon, nil)
+	cursor := wep.NewCursor(&result.Weapon.States, "Fire")
+	fired := false
+	for i := 0; i < 5 && !fired; i++ {
+		for _, op := range cursor.Update(runtime, 1.0/wep.TicRate) {
+			if op.Op == wep.OpFireBullets {
+				fired = true
+			}
+		}
+	}
+	assert.True(t, fired, "a freshly loaded weapon should not read its own full magazine as empty")
+}
+
 // A_SpawnItemEx orders its numbers nothing like A_SpawnItem or
 // A_CustomMissile: three separate offsets and a separate velocity triple,
 // not one "sideways offset, height, angle" triple with a different member

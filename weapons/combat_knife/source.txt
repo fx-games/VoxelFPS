@@ -1,0 +1,228 @@
+actor CombatKnife : Weapon
+{
+  Weapon.SelectionOrder 3700
+  Tag "Combat Knife"
+  Weapon.Kickback 100
+  Weapon.SlotNumber 1
+  +NoAutoAim
+  +WEAPON.WIMPY_WEAPON
+  +WEAPON.MELEEWEAPON
+  +NOEXTREMEDEATH
+  +WEAPON.NOALERT
+  +INVENTORY.UNDROPPABLE
+  Scale 0.5
+  Inventory.PickupMessage "Picked up a combat knife."
+  Obituary "%o was carved by %k's knife."
+  States
+  {
+  Spawn:
+    KNFP A -1
+    loop
+  Ready:
+    KNFM A 1 A_WeaponReady
+    loop
+  Deselect:
+    KNFM A 1 A_Lower
+	NULL AA 0 A_Lower
+    loop
+  Select: 
+    KNFM A 1 A_Raise
+	NULL AA 0 A_Raise
+    loop
+  Fire:
+    KNFL A 0 A_JumpIfInventory("PowerStrength",1,"ZerkFire")
+    KNFM BCD 1
+	TNT1 A 8
+  Hold:
+	LeftFire:
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW1")
+	KNFL AB 1
+	KNFL C 1 A_CustomPunch (Random(1, 5),0,0,"KnifePuff2")
+	KNFL DEF 1
+	TNT1 A 4
+	TNT1 A 0 A_ReFire("RightFire")
+	Goto KnifeRaise
+	RightFire:
+	KNFR A 0 A_PlayWeaponSound("DSKNFSW2")
+	KNFR AB 1
+	KNFR C 1 A_CustomPunch (Random(1, 5),0,0,"KnifePuff2")
+	KNFR DEF 1
+	TNT1 A 4
+	TNT1 A 0 A_ReFire("LeftFire")
+	Goto KnifeRaise
+	KnifeRaise:
+	TNT1 A 8
+	KNFM EDCB 1
+    goto Ready
+  ZerkFire:
+    KNFM BCD 1
+	TNT1 A 3
+   ZerkHold:
+	ZerkLeft:
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW1")
+	KNFL AB 1
+	KNFL C 1 A_CustomPunch (Random(1, 5) * 2,0,0,"KnifePuff")
+	KNFL DEF 1
+	TNT1 A 2
+	TNT1 A 0 A_ReFire("ZerkRight")
+	Goto ZerkRaise
+	ZerkRight:
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW2")
+	KNFR AB 1
+	KNFR C 1 A_CustomPunch (Random(1, 5) * 2,0,0,"KnifePuff")
+	KNFR DEF 1
+	TNT1 A 2
+	TNT1 A 0 A_ReFire("ZerkLeft")
+	Goto ZerkRaise
+	ZerkRaise:
+	TNT1 A 4
+	KNFM EDCB 1
+    goto Ready
+  AltFire:
+    KNFM BCD 1
+	TNT1 A 8
+	TNT1 A 0 A_Refire("AltHold")
+	Goto WeakStab
+  AltHold:
+	KNFA AB 1
+	KNFA CD 2
+	KNFA A 0 A_Refire("AltHold2")
+	Goto NormalRelease
+  AltHold2:
+	KNFA EDFD 1
+	KNFA A 0 A_Refire("AltHold3")
+	Goto StrongRelease
+  AltHold3:
+	KNFA GDHD 1
+	KNFA A 0 A_Refire("AltHold2")
+	Goto StrongRelease
+  WeakStab:
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW1")
+	KNFS BC 1
+    KNFL A 0 A_JumpIfInventory("PowerStrength",1,"ZerkWeakStab")
+	KNFS F 1 A_CustomPunch (Random(5, 10),0,0,"KnifePuff3")
+	KNFS EDCBA 1
+	TNT1 A 2
+	Goto KnifeRaise
+  ZerkWeakStab:
+	KNFS F 1 A_CustomPunch (Random(5, 10) * 2,0,0,"KnifePuff4")
+	KNFS EDCBA 1
+	TNT1 A 1
+	Goto ZerkRaise
+  NormalRelease:
+    KNFA DB 1
+	TNT1 A 1
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW1")
+	KNFS BC 1
+	MGNF B 0 A_Recoil(-5)
+    KNFL A 0 A_JumpIfInventory("PowerStrength",1,"ZerkNormalStab")
+	KNFS F 2 A_CustomPunch (Random(15, 20),0,0,"KnifePuff5")
+	KNFS ED 2
+	KNFS CBA 1
+	TNT1 A 3
+	Goto KnifeRaise
+  ZerkNormalStab:
+	KNFS F 2 A_CustomPunch (Random(15, 20) * 2,0,0,"KnifePuff6")
+	KNFS E 2
+	KNFS DCBA 1
+	TNT1 A 2
+	Goto ZerkRaise
+  StrongRelease:
+    KNFA DCBA 1
+	TNT1 A 1
+	MGNF B 0 A_Recoil(-10)
+	KNFL A 0 A_PlayWeaponSound("DSKNFSW1")
+	KNFS BC 1
+    KNFL A 0 A_JumpIfInventory("PowerStrength",1,"ZerkStrongStab")
+	KNFS F 2 A_CustomPunch (Random(20, 25),0,0,"KnifePuff5")
+	KNFS EDCBA 2
+	TNT1 A 4
+	Goto KnifeRaise
+  ZerkStrongStab:
+	KNFS F 2 A_CustomPunch (Random(20, 25) * 2,0,0,"KnifePuff6")
+	KNFS ED 2
+	KNFS CBA 1
+	TNT1 A 3
+	Goto ZerkRaise
+	}
+}
+
+ACTOR KnifePuff
+{
+  +NOBLOCKMAP
+  +NOGRAVITY
+  +ALLOWPARTICLES
+  +RANDOMIZE
+  +HITTRACER
+  +FLOORCLIP
+  +FORCEXYBILLBOARD
+  +PUFFONACTORS
+  DamageType "Knife"
+  RenderStyle Translucent
+  Alpha 0.6
+  VSpeed 1
+  States
+  {
+	Spawn:
+		TNT1 A 0
+	Death:
+	Crash:
+		TNT1 A 0
+	ObjectTarget:
+    	TNT1 A 0 A_PlaySound("DSKNFMIS")
+		PUFF BCD 4
+		Stop
+	XDeath:
+		TNT1 A 0 A_CheckFlag("OLDRADIUSDMG","ObjectTarget",AAPTR_TRACER)
+		TNT1 A 0 A_CheckFlag("NOBLOOD","ObjectTarget",AAPTR_TRACER)
+	EnemyTarget:
+ 	    TNT1 A 0 A_PlaySound("DSKNFHIT")
+		TNT1 AA 4
+		Stop
+  }
+}
+
+ACTOR KnifePuff2 : KnifePuff
+{
++NOEXTREMEDEATH
+}
+
+ACTOR KnifePuff3 : KnifePuff
+{
++NOEXTREMEDEATH
+States
+{
+XDeath:
+	TNT1 A 0 A_CheckFlag("OLDRADIUSDMG","ObjectTarget",AAPTR_TRACER)
+	TNT1 A 0 A_CheckFlag("NOBLOOD","ObjectTarget",AAPTR_TRACER)
+EnemyTarget:
+    TNT1 A 0 A_PlaySound("DSSTBHI1")
+	TNT1 AA 4
+	Stop
+  }
+}
+
+ACTOR KnifePuff4 : KnifePuff3
+{
+-NOEXTREMEDEATH
+}
+
+ACTOR KnifePuff5 : KnifePuff
+{
++NOEXTREMEDEATH
+States
+{
+XDeath:
+	TNT1 A 0 A_CheckFlag("OLDRADIUSDMG","ObjectTarget",AAPTR_TRACER)
+	TNT1 A 0 A_CheckFlag("NOBLOOD","ObjectTarget",AAPTR_TRACER)
+EnemyTarget:
+    TNT1 A 0 A_PlaySound("DSSTBHI2")
+	TNT1 AA 4
+	Stop
+  }
+}
+
+ACTOR KnifePuff6 : KnifePuff5
+{
+-NOEXTREMEDEATH
+}

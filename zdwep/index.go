@@ -28,6 +28,13 @@ type StateLine struct {
 	// Action is the call written after the frame, verbatim, eg.
 	// `A_FireBullets (4, 0.5, 10, 5, "FDBulletPuff", 0)`.
 	Action string
+	// Actions is set instead of Action when the frame writes more than one
+	// call in braces - `SOCO A 1 { A_WeaponReady(...); A_FireBullets(...); }`
+	// - GZDoom's own anonymous action sequence. All of them run the moment
+	// this one frame is entered, the same as if a script had written them as
+	// separate zero-tic frames right after it, which is how every other
+	// multi-action frame in this file already compiles.
+	Actions []string
 	// Flow is the lowercased control flow keyword on a line that carries one:
 	// goto, loop, stop, wait or fail. Frames leave it empty.
 	Flow string
@@ -417,6 +424,16 @@ func splitBraces(line string) []string {
 		}
 		return []string{line}
 	}
+	// A frame's own brace - `SOCO A 1 { A_WeaponReady(...); A_FireBullets
+	// (...); }`, GZDoom's anonymous sequence of actions that all run the
+	// instant the frame is entered - is not a block opening the way an
+	// actor or a States body is; parseStateLine reads the whole thing itself
+	// and splits the calls apart. Splitting the braces off here first would
+	// leave "SOCO A 1" with no action at all and the calls as an orphan line
+	// nothing recognises, both silently dropped rather than reported.
+	if head := stateHeadRegexp.FindStringSubmatch(line); head != nil && strings.Contains(head[4], "{") {
+		return []string{line}
+	}
 	var pieces []string
 	var current strings.Builder
 	flush := func() {
@@ -600,10 +617,58 @@ func parseStateLine(fileName string, lineNumber int, line string) (StateLine, bo
 			rest = strings.TrimSpace(rest[len(match[0]):])
 		case lightRegexp.MatchString(rest):
 			rest = strings.TrimSpace(rest[len(lightRegexp.FindString(rest)):])
+		case strings.HasPrefix(rest, "{"):
+			state.Actions = splitActionBlock(rest)
+			rest = ""
 		default:
 			state.Action = strings.TrimSuffix(strings.TrimSpace(rest), ";")
 			rest = ""
 		}
 	}
 	return state, true
+}
+
+// splitActionBlock reads GZDoom's brace form of a frame's action - a
+// sequence of calls separated by `;`, all of which run the instant the frame
+// is entered - into the individual calls ParseCall already knows how to
+// read. It only splits on a `;` outside of quotes and brackets, so a string
+// argument or a nested call carrying its own `;` (none of this mod set's
+// calls do, but a mod's own could) survives whole.
+func splitActionBlock(rest string) []string {
+	inner := strings.TrimSpace(rest)
+	inner = strings.TrimPrefix(inner, "{")
+	if end := strings.LastIndex(inner, "}"); end >= 0 {
+		inner = inner[:end]
+	}
+
+	var actions []string
+	var current strings.Builder
+	depth := 0
+	inQuote := false
+	for _, r := range inner {
+		switch {
+		case r == '"':
+			inQuote = !inQuote
+			current.WriteRune(r)
+		case inQuote:
+			current.WriteRune(r)
+		case r == '(':
+			depth++
+			current.WriteRune(r)
+		case r == ')':
+			depth--
+			current.WriteRune(r)
+		case r == ';' && depth == 0:
+			if piece := strings.TrimSpace(current.String()); piece != "" {
+				actions = append(actions, piece)
+			}
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if piece := strings.TrimSpace(current.String()); piece != "" {
+		actions = append(actions, piece)
+	}
+	return actions
 }

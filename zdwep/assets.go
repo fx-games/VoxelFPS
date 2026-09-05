@@ -114,6 +114,12 @@ func (a *AssetIndex) Sounds(name string) ([]string, bool) {
 	return files, len(files) > 0
 }
 
+// unquote strips a pair of matching double quotes SNDINFO sometimes wraps a
+// name in, which strings.Fields itself does not touch.
+func unquote(field string) string {
+	return strings.Trim(field, `"`)
+}
+
 // readSndInfoFrom reads the mod's SNDINFO, which maps the names scripts play to
 // the lumps that hold them.
 //
@@ -145,7 +151,7 @@ func readSndInfoFrom(src *Source) map[string][]string {
 				body = strings.TrimSuffix(strings.TrimSpace(body), "}")
 				randomLists = append(randomLists, [2]string{name, body})
 			case strings.EqualFold(fields[0], "$alias") && len(fields) >= 3:
-				mapping[strings.ToLower(fields[1])] = []string{fields[2]}
+				mapping[strings.ToLower(unquote(fields[1]))] = []string{unquote(fields[2])}
 			}
 			continue
 		}
@@ -153,7 +159,7 @@ func readSndInfoFrom(src *Source) map[string][]string {
 		if len(fields) < 2 {
 			continue
 		}
-		mapping[strings.ToLower(fields[0])] = []string{fields[1]}
+		mapping[strings.ToLower(unquote(fields[0]))] = []string{unquote(fields[1])}
 	}
 
 	// The lists are resolved afterwards, because a $random can name sounds

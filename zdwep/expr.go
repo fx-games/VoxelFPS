@@ -110,6 +110,10 @@ func EvalExpr(text string, env Env) (Value, error) {
 	return value, nil
 }
 
+func isHexDigit(r rune) bool {
+	return unicode.IsDigit(r) || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+}
+
 func tokenizeExpr(text string) []string {
 	var tokens []string
 	runes := []rune(text)
@@ -124,6 +128,16 @@ func tokenizeExpr(text string) []string {
 				end++
 			}
 			if end < len(runes) {
+				end++
+			}
+			tokens = append(tokens, string(runes[i:end]))
+			i = end
+		case c == '0' && i+1 < len(runes) && (runes[i+1] == 'x' || runes[i+1] == 'X'):
+			// DECORATE writes flag masks in hex - 0x7FFFFFFF for "as much as
+			// an int holds" is the usual one. isHex covers what strconv's
+			// base 0 parsing of a 0x literal accepts.
+			end := i + 2
+			for end < len(runes) && isHexDigit(runes[end]) {
 				end++
 			}
 			tokens = append(tokens, string(runes[i:end]))
@@ -344,6 +358,12 @@ func (p *exprParser) parsePrimary() (Value, error) {
 		}
 		p.pos++
 		return value, nil
+	}
+	if strings.HasPrefix(token, "0x") || strings.HasPrefix(token, "0X") {
+		if value, err := strconv.ParseUint(token[2:], 16, 64); err == nil {
+			p.pos++
+			return folded(constant(float64(value))), nil
+		}
 	}
 	if number, err := strconv.ParseFloat(token, 64); err == nil {
 		p.pos++

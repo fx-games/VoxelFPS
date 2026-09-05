@@ -74,7 +74,41 @@ reports one event for the surface that was actually hit (see Physics below).
   is read and checked at startup and a folder that does not load stops the game with
   every problem it found listed. A weapon's pictures and sounds are read the first time
   it is held, not at startup.
-- 125 weapons are migrated from Final Doomer and Brutal Doom Community Expansion.
+- WADs carry their own DECORATE too, not just IWADs' stock sprites: `openWAD`
+  exposes every lump outside the sprite markers under its own bare name (for
+  `DECORATE`, `SNDINFO` and the like) and under `sounds/` (for whatever SNDINFO
+  points at, which carries no file extension to say what it is), and a
+  graphic lump already saved as a PNG - what a modern WAD editor writes - is
+  passed through rather than misread as the legacy column-of-posts format.
+  ZScript is not DECORATE and still is not read at all; a mod written purely
+  in ZScript (no `DECORATE` lump at all) fails to migrate rather than
+  half-compiling.
+- A frame writing more than one action in braces - `SOCO A 1 { A_WeaponReady
+  (...); A_FireBullets(...); }`, GZDoom's anonymous action sequence - used to
+  have its braces split off by the same pass that splits an actor's own body
+  braces, leaving the frame with no action at all and the calls as an orphan
+  line nothing recognised: both silently dropped, no error, a weapon that
+  never signalled it was ready for input. `splitBraces` now recognises a
+  frame head ahead of a `{` and leaves the whole line for `parseStateLine`,
+  which reads the sequence itself.
+- `A_FireBullets` plays the weapon's own `AttackSound` on `CHAN_WEAPON`
+  itself, unconditionally - real GZDoom's own implementation does exactly
+  this before it ever looks at the call's arguments. A migration that only
+  acted on an explicit `A_PlaySound` left every weapon written the older,
+  simpler way - set `AttackSound`, never call `A_PlaySound` at all - silent.
+- `CountInv("Item")`, used inside a general expression rather than through
+  `A_JumpIfInventory`, reads the same Inventory map A_GiveInventory/
+  A_TakeInventory already use, kept in the exact case the script wrote the
+  item's name in - lowercasing it, as a first pass did, reads as permanently
+  empty against an item named with any capital letter, which is why one
+  weapon jumped to its own Reload state on the very first tic, forever.
+- Hex literals (`0x7FFFFFFF`, the usual way to write "as much as an int
+  holds") tokenize as themselves now rather than as a number and a separate,
+  unrecognised identifier glued together. `CHAN_5`/`CHAN_6`/`CHAN_7`, the
+  generic extra sound channels past the five named ones, are recognised.
+- 136 weapons are migrated: 125 from Final Doomer and Brutal Doom Community
+  Expansion, plus ten single-weapon community mods brought in afterwards
+  (see `README.md`) that forced the four fixes above them.
   Brutal Doom's vehicles (the mech, the tank, the bike, the turrets), its meat-shield
   grab-and-throw, its play-as-monster mode and its classic-mode weapon swap all satisfy
   `IsWeapon` the same way a real weapon does - something the player "holds" while it
@@ -88,7 +122,7 @@ reports one event for the surface that was actually hit (see Physics below).
   `A_FireCustomMissile`'s order, which is why a spawned smoke trail could show up
   hundreds of units above the gun that spawned it. A second, real ammo pool
   (`Weapon.AmmoType2`, the loaded rounds next to the reserve `AmmoType1` draws from) is
-  now filled to capacity the same way the first one always was. 86 of 125 fire when
+  now filled to capacity the same way the first one always was. 96 of 136 fire when
   tapped like a player taps a trigger, not held forever - some of Brutal Doom's melee
   reads a continuous hold as "still charging" and only swings on release. The rest are
   each their own scripted mechanic (a charge gauge, a heat gauge, a remote detonator)

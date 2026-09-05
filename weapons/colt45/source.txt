@@ -1,0 +1,36 @@
+actor Colt45 : Weapon 5757
+{
+	Weapon.SlotNumber 2
+	Weapon.SelectionOrder 1900
+	Weapon.AmmoUse 1
+	Weapon.AmmoGive 20
+	Weapon.AmmoType "Clip"
+	AttackSound "Weapon/COLTFIRE"
+	Obituary "%o was killed by %k's Colt45."
+	+WEAPON.WIMPY_WEAPON
+	Inventory.Pickupmessage "Picked up a Colt45."
+	Decal "BulletChip"
+	States
+	{
+	Ready:
+		COLT A 1 A_WeaponReady
+		Loop
+	Deselect:
+		COLT A 1 A_Lower
+		Loop
+	Select:
+		COLT A 1 A_Raise
+		Loop
+	Fire:
+		COLT F 1 A_FireBullets(5.2,1,1,7)
+		COLT F 1 A_Light2
+		COLT F 1 A_Light1
+		COLT B 3 A_Light0
+		COLT CDE 3
+		COLT B 3 A_ReFire
+		Goto Ready
+	Spawn:
+		COLT P -1
+		Stop
+	}
+}

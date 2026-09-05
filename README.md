@@ -134,8 +134,13 @@ weapons/
 Everything in the folder is checked at startup; a folder that does not load stops
 the game with every problem it found, listed.
 
-146 weapons are in there, migrated from Final Doomer and Brutal Doom Community
-Expansion.
+136 weapons are in there: 125 migrated from Final Doomer and Brutal Doom Community
+Expansion, plus ten single-weapon community mods (Axe, Reaper, a Colt45, a
+silenced pistol, a hunting rifle with its own scoped alt-fire weapon, a UAC
+sniper rifle, dual Berettas, a combat knife, and the Blacktail 51 'Connector')
+- some shipped as pk3s and some as the older, pre-pk3 way of shipping a single
+weapon: a WAD carrying its own DECORATE, SNDINFO and sprites alongside no map
+at all.
 
 Porting out of a ZDoom mod:
 
