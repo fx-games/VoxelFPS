@@ -154,7 +154,13 @@ func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32)
 		float32(screenWidth)/2 + float32(step.OffsetX)*scale.X(),
 		float32(screenHeight) + swap + float32(w.Data.Render.YAdjust+step.OffsetY)*scale.Y(),
 	}
-	source, destination := w.Atlas.GetSourceAndDestRects(index, position, mgl32.Vec2{0.5, 1}, scale)
+	// Anchored on the picture's own hotspot, not a fixed corner or center: a
+	// recoil or a swing is often carried entirely in how a weapon's frames
+	// move that hotspot from one to the next, nothing the state script itself
+	// writes. A frame with no hotspot of its own (an unannotated PNG) falls
+	// back to vanilla Doom's own convention, centered and bottom-anchored,
+	// which is what every frame was drawn at before this was read at all.
+	source, destination := w.Atlas.GetSourceAndDestRects(index, position, w.Atlas.NormalizedHotspot(index), scale)
 	w.Atlas.GetSpriteBatch().DrawTextured(source, destination, mgl32.Vec4{1, 1, 1, 1})
 }
 

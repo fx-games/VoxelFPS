@@ -93,6 +93,40 @@ func (t *TextureAtlasPacked) LastValidIndex() int {
 func (t *TextureAtlasPacked) NameOfFrame(index int) string {
 	return t.packedInfo.Name(index)
 }
+
+// PivotFromCenter is a frame's hotspot the way a world sprite's quad wants
+// it: an offset from that quad's own center, in fractions of its trimmed
+// (visible) size rather than of the picture's full untrimmed layout - the
+// convention SpriteComponent.PivotOverride and comp_sprite's two fixed
+// origins already share. A hotspot that fell inside the padding this frame
+// had trimmed away lands outside the quad's own box, which is right: the
+// picture's anchor was never on top of its visible pixels to begin with.
+func (t *TextureAtlasPacked) PivotFromCenter(index int) mgl32.Vec2 {
+	trimWidth, trimHeight := t.packedInfo.UVSize(index)
+	if trimWidth <= 0 || trimHeight <= 0 {
+		return mgl32.Vec2{0, 0}
+	}
+	trimOffsetX, trimOffsetY := t.packedInfo.PositionOffsetForLayout(index)
+	hotspotX, hotspotY := t.packedInfo.Hotspot(index)
+	fracX := float32(hotspotX-trimOffsetX) / float32(trimWidth)
+	fracY := float32(hotspotY-trimOffsetY) / float32(trimHeight)
+	return mgl32.Vec2{fracX - 0.5, fracY - 0.5}
+}
+
+// NormalizedHotspot is where this frame's own picture says to anchor it, as a
+// fraction of its full (untrimmed) size - the same space GetSourceAndDestRects
+// already takes normalizedOrigin in, so a caller uses this in place of a
+// fixed pivot to draw a frame exactly where its own artist put it, rather
+// than at a corner or a center that is only right for a picture with no
+// transparent padding trimmed off it.
+func (t *TextureAtlasPacked) NormalizedHotspot(index int) mgl32.Vec2 {
+	width, height := t.packedInfo.SizeForLayout(index)
+	if width <= 0 || height <= 0 {
+		return mgl32.Vec2{0.5, 1}
+	}
+	hotspotX, hotspotY := t.packedInfo.Hotspot(index)
+	return mgl32.Vec2{float32(hotspotX) / float32(width), float32(hotspotY) / float32(height)}
+}
 func (t *TextureAtlasPacked) extractNamedImages() []tpack.NamedImage {
 	var images []tpack.NamedImage
 	for i := 0; i <= t.LastValidIndex(); i++ {
@@ -109,9 +143,12 @@ func (t *TextureAtlasPacked) extractNamedImages() []tpack.NamedImage {
 		dstRect := image.Rect(drawOffsetX, drawOffsetY, drawOffsetX+w, drawOffsetY+h)
 
 		draw.Draw(destImage, dstRect, sourceImage, image.Point{}, draw.Src)
+		hotspotX, hotspotY := t.packedInfo.Hotspot(i)
 		images = append(images, tpack.NamedImage{
-			Name:  t.packedInfo.Name(i),
-			Image: destImage,
+			Name:    t.packedInfo.Name(i),
+			Image:   destImage,
+			OffsetX: hotspotX,
+			OffsetY: hotspotY,
 		})
 	}
 	return images

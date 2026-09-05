@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/memmaker/goray/png_chunks"
 )
 
 // A mod takes the game's own data for granted: Final Doomer's weapons spawn
@@ -167,6 +169,12 @@ func pictureToPNG(lump []byte, palette color.Palette) ([]byte, error) {
 	if width <= 0 || height <= 0 || width > 4096 || height > 4096 {
 		return nil, fmt.Errorf("%dx%d is not a picture", width, height)
 	}
+	// LeftOffset and TopOffset are the picture's own hotspot: where a weapon's
+	// grip or a monster's feet sit, relative to its top-left corner. A PNG
+	// carries the same thing in a grAb chunk; encoding it here means a WAD's
+	// pictures and a pk3's PNGs read the same way once they are both PNG.
+	leftOffset := int(int16(binary.LittleEndian.Uint16(lump[4:6])))
+	topOffset := int(int16(binary.LittleEndian.Uint16(lump[6:8])))
 	if len(lump) < 8+width*4 {
 		return nil, fmt.Errorf("its column table runs off the end")
 	}
@@ -197,8 +205,12 @@ func pictureToPNG(lump []byte, palette color.Palette) ([]byte, error) {
 		}
 	}
 
+	var plain bytes.Buffer
+	if err := png.Encode(&plain, img); err != nil {
+		return nil, err
+	}
 	var out bytes.Buffer
-	if err := png.Encode(&out, img); err != nil {
+	if err := png_chunks.InjectGrabChunk(&plain, &out, leftOffset, topOffset); err != nil {
 		return nil, err
 	}
 	return out.Bytes(), nil

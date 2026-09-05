@@ -10,6 +10,27 @@ import (
 	"os"
 )
 
+// clampInt16 matches GZDoom's own tolerance for a grAb chunk's numbers: it
+// reads them as 32 bit and zeroes anything outside int16 range rather than
+// letting a corrupt or hand-edited chunk wrap into something nonsensical.
+func clampInt16(v int) int16 {
+	if v < -32768 || v > 32767 {
+		return 0
+	}
+	return int16(v)
+}
+
+// OffsetsFromPNG reads a picture's own hotspot out of its grAb chunk, falling
+// back to the vanilla Doom convention - centered horizontally, anchored at
+// the bottom - for a picture that never had one set, which keeps a plain
+// unannotated PNG looking exactly as it did before this was read at all.
+func OffsetsFromPNG(data []byte, width, height int) (x, y int) {
+	if grabX, grabY, ok := png_chunks.ReadGrabOffset(bytes.NewReader(data)); ok {
+		return grabX, grabY
+	}
+	return width / 2, height
+}
+
 func writeImageToPNG(image image.Image, dstPath string) error {
 	outFile, err := os.Create(dstPath)
 	if err != nil {

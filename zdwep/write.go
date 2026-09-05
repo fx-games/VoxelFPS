@@ -195,7 +195,9 @@ func writeAtlas(result *Result, assets *AssetIndex, outPath string) error {
 		if err != nil {
 			return err
 		}
-		images = append(images, tpack.NamedImage{Image: decoded, Name: name})
+		bounds := decoded.Bounds()
+		offsetX, offsetY := tpack.OffsetsFromPNG(data, bounds.Dx(), bounds.Dy())
+		images = append(images, tpack.NamedImage{Image: decoded, Name: name, OffsetX: offsetX, OffsetY: offsetY})
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("%s needs sprites this mod does not have: %s",

@@ -58,16 +58,17 @@ func BuildSharedAtlas(weaponsDir string) (SharedAtlas, error) {
 
 	images := make([]tpack.NamedImage, 0, len(names))
 	for _, name := range names {
-		file, err := os.Open(filepath.Join(store, name+".png"))
+		data, err := os.ReadFile(filepath.Join(store, name+".png"))
 		if err != nil {
 			return SharedAtlas{}, err
 		}
-		decoded, _, err := image.Decode(file)
-		file.Close()
+		decoded, _, err := image.Decode(bytes.NewReader(data))
 		if err != nil {
 			return SharedAtlas{}, fmt.Errorf("%s: %w", name, err)
 		}
-		images = append(images, tpack.NamedImage{Image: decoded, Name: name})
+		bounds := decoded.Bounds()
+		offsetX, offsetY := tpack.OffsetsFromPNG(data, bounds.Dx(), bounds.Dy())
+		images = append(images, tpack.NamedImage{Image: decoded, Name: name, OffsetX: offsetX, OffsetY: offsetY})
 	}
 
 	if err := WriteAtlasWithKey(images, atlasPath, key); err != nil {

@@ -294,7 +294,10 @@ func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComp
 	model := sprite.Transform(observer)
 
 	originOffset := mgl32.Vec2{0, 0} // offset zero = center of sprite
-	if sprite.Origin() == SpriteOriginBottomCenter {
+	switch {
+	case sprite.PivotOverride != nil:
+		originOffset = *sprite.PivotOverride
+	case sprite.Origin() == SpriteOriginBottomCenter:
 		originOffset = mgl32.Vec2{0, 0.5}
 	}
 	leftU, topV, rightU, bottomV := sprite.AtlasTexture.GetUV(int(texIndex))

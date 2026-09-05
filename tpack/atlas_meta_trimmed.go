@@ -54,3 +54,10 @@ func (a TrimmedAtlasMetadata) SizeForLayout(index int) (int, int) {
 func (a TrimmedAtlasMetadata) PositionOffsetForLayout(index int) (int, int) {
 	return int(a[index].TrimRectX), int(a[index].TrimRectY)
 }
+
+// Hotspot is where the picture's own artist put its anchor, in the same
+// top-left-of-the-untrimmed-picture space SizeForLayout describes: how far
+// right and down from that corner a weapon's grip, or a monster's feet, sit.
+func (a TrimmedAtlasMetadata) Hotspot(index int) (int, int) {
+	return int(a[index].OffsetX), int(a[index].OffsetY)
+}

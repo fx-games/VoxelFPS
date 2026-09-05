@@ -7,6 +7,7 @@ type PackedInfo interface {
 	UV(index int) (minU int, minV int, maxU int, maxV int)
 	SizeForLayout(index int) (int, int)
 	PositionOffsetForLayout(index int) (int, int)
+	Hotspot(index int) (int, int)
 	HasIndex(index int) bool
 	LastValidIndex() int
 	Name(index int) string

@@ -69,6 +69,39 @@ reports one event for the surface that was actually hit (see Physics below).
 
 ## Weapons
 
+- Every picture carries its own hotspot, and until now nothing here read it.
+  GZDoom's own PNG loader (`pngtexture.cpp`) reads a private `grAb` chunk -
+  two big-endian ints, X and Y from the top-left corner - and its legacy WAD
+  picture format has the same two numbers in its header; `A_FireBullets`,
+  the weapon HUD renderer (`hw_weapon.cpp`) and the world sprite renderer
+  (`hw_sprites.cpp`) all draw a picture anchored on that point, not on its
+  center or a corner. A chainsaw's whole swing, or a pistol's whole kick, is
+  frequently carried entirely in how each frame's hotspot moves relative to
+  the last - nothing the state script itself writes down - and every one of
+  those 136 weapons' pictures has one (checked: 40 of 41 sampled from Final
+  Doomer, all of BDCE's own). Migrating with a fixed pivot instead read as
+  the state script working, every frame in the right place, and every weapon
+  looking wrong the same way: recoil, sway and swing baked into the art
+  simply never happened.
+  - `png_chunks.ReadGrabOffset`/`InjectGrabChunk` read and write the chunk.
+    `zdwep/wad.go`'s legacy-picture path now writes one from the WAD header's
+    LeftOffset/TopOffset, so a WAD-sourced sprite and a pk3's PNG read the
+    same way downstream.
+  - `tpack.NamedImage` carries `OffsetX`/`OffsetY`; both atlas builders
+    (`zdwep/write.go`'s per-weapon atlas, `wep.BuildSharedAtlas`'s shared
+    one) read them from the source PNG before packing, and
+    `TrimmedAtlasEntry` carries them through into the packed atlas file
+    itself, in the same untrimmed-picture space `SizeForLayout` already
+    describes. A picture with no `grAb` at all falls back to vanilla Doom's
+    own default - centered, bottom-anchored - which is what a fixed pivot
+    already assumed, so nothing regresses for a plain unannotated PNG.
+  - The weapon HUD (`weapon.go`) anchors each frame on
+    `TextureAtlasPacked.NormalizedHotspot`, in place of a flat `{0.5, 1}`.
+    A world actor (`world_actor.go`) does the same through
+    `SpriteComponent.PivotOverride`, set every frame from
+    `PivotFromCenter` - a muzzle flash or an ejected shell now sits where its
+    own picture says to put it relative to where it spawned, not at a fixed
+    center or corner.
 - Weapons are data. `weapons/` holds one folder per weapon plus `_actors/`, the shared
   store, and `keys.txt` binding the number keys; `,` and `.` walk the rest. Everything
   is read and checked at startup and a folder that does not load stops the game with

@@ -138,6 +138,8 @@ func PackImagesIntoAtlasTrimmed(images []NamedImage) (*image.RGBA, TrimmedAtlasM
 			TrimRectHeight: uint16(rect.Height),
 			TrimRectX:      uint16(trimRect.Min.X),
 			TrimRectY:      uint16(trimRect.Min.Y),
+			OffsetX:        clampInt16(sprite.OffsetX),
+			OffsetY:        clampInt16(sprite.OffsetY),
 		})
 		draw.Draw(dst, rect.ToImageRect(), nrgba, trimRect.Min, draw.Src)
 	}

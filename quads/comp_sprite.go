@@ -17,6 +17,14 @@ type SpriteComponent struct {
 	// says otherwise, which is what a sprite out of a packed atlas needs: its
 	// frames are all different sizes and the quad has to match.
 	Size mgl32.Vec2
+	// PivotOverride, when set, is where this sprite anchors on its transform,
+	// as an offset from the frame's own center in fractions of Size - the
+	// same convention SpriteOrigin's two fixed choices already use, just not
+	// limited to them. A world actor sets this every frame from its picture's
+	// own hotspot, because a spawned effect's whole sense of motion is often
+	// carried entirely in where each frame's art puts that point, not in
+	// anything the script itself says to do.
+	PivotOverride *mgl32.Vec2
 	// Hidden keeps a sprite out of the pass without taking it out of the world.
 	// A script has frames that show nothing, and a spawned thing that is
 	// between pictures still has to go on running.

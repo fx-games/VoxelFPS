@@ -455,6 +455,12 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 		float32(right-left) / spritePixelsPerUnit * live.scale.X(),
 		float32(bottom-top) / spritePixelsPerUnit * live.scale.Y(),
 	}
+	// Anchored on the picture's own hotspot rather than its geometric center:
+	// a muzzle flash or a burst of smoke is drawn where its own art says to
+	// put it relative to where it spawned, not wherever its visible pixels
+	// happen to be centered once padding is trimmed off.
+	pivot := g.sharedAtlas.PivotFromCenter(index)
+	live.sprite.PivotOverride = &pivot
 }
 
 // apply is what one of these asks the world for. It is a smaller set than a
