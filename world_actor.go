@@ -176,6 +176,9 @@ func (g *Game) spawnPosition(origin, direction mgl32.Vec3, op wep.Op) mgl32.Vec3
 // goes where the player is looking; anything else drifts, so that smoke does
 // not sit in a rigid dot.
 func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3) mgl32.Vec3 {
+	if velocity, ok := explicitVelocity(op, direction); ok {
+		return velocity
+	}
 	if actor.Speed > 0 {
 		angled := direction
 		if op.Angle != 0 {
@@ -188,6 +191,36 @@ func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3)
 		float32(rand.Float64()) * driftSpeed,
 		float32(rand.NormFloat64()) * driftSpeed,
 	}
+}
+
+// explicitVelocity is A_SpawnItemEx's own xvel/yvel/zvel: a real push the
+// script hands the spawn, rather than the drift or facing-speed every other
+// spawner falls back to. Each axis is rolled once here the same way
+// SpawnOffset already is, not folded to a fixed number at migration time, so
+// a scatter of pickups actually scatters. X is along the direction it
+// spawned facing, Y sideways across it, Z straight up.
+func explicitVelocity(op wep.Op, direction mgl32.Vec3) (mgl32.Vec3, bool) {
+	if op.VelX == 0 && op.VelXTo == 0 && op.VelY == 0 && op.VelYTo == 0 && op.VelZ == 0 && op.VelZTo == 0 {
+		return mgl32.Vec3{}, false
+	}
+	forward := rollRange(op.VelX, op.VelXTo)
+	sideways := rollRange(op.VelY, op.VelYTo)
+	up := rollRange(op.VelZ, op.VelZTo)
+	side := direction.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+	velocity := direction.Mul(float32(forward)).
+		Add(side.Mul(float32(sideways))).
+		Add(mgl32.Vec3{0, float32(up), 0})
+	return velocity.Mul(float32(worldUnitsPerDoomUnit * wep.TicRate)), true
+}
+
+// rollRange picks a value the way a compiled frandom(min, max) is meant to:
+// once per call, not once at migration time. A plain number compiles with
+// its "to" equal to itself, so this still returns it exactly.
+func rollRange(min, max float64) float64 {
+	if max > min {
+		return min + rand.Float64()*(max-min)
+	}
+	return min
 }
 
 func rotateAroundY(direction mgl32.Vec3, degrees float64) mgl32.Vec3 {

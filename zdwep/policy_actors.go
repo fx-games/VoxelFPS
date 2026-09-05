@@ -50,7 +50,7 @@ func actorFunctions() map[string]Lowering {
 		// Putting things into the world and taking them out again.
 		"a_custommissile":  lowerSpawnMissile,
 		"a_spawnitem":      lowerSpawnItem,
-		"a_spawnitemex":    lowerSpawnItem,
+		"a_spawnitemex":    lowerSpawnItemEx,
 		"a_spawnparticle":  lowerSpawnParticle,
 		"a_killchildren":   args(wep.OpKillChildren),
 		"a_removemaster":   args(wep.OpRemove),
@@ -385,9 +385,68 @@ func lowerSpawnMissile(c *Compiler, call Call) ([]wep.Op, error) {
 	return c.spawn(call, wep.OpFireProjectile, 3, 2, 1)
 }
 
-// A_SpawnItem(actor, distance, height) and A_SpawnItemEx(actor, x, y, z, ...).
+// A_SpawnItem(actor, distance, height, angle).
 func lowerSpawnItem(c *Compiler, call Call) ([]wep.Op, error) {
 	return c.spawn(call, wep.OpSpawnItem, 3, 1, 2)
+}
+
+// A_SpawnItemEx(itemtype, xofs, yofs, zofs, xvel, yvel, zvel, angle, flags,
+// chance, tid, spawnofs_z). It only shares its name with A_SpawnItem - three
+// separate offsets and a separate velocity triple, not the one
+// "sideways offset, height, angle" shape spawn() knows, so it gets its own
+// lowering rather than being squeezed through the same three argument slots.
+//
+// xofs/yofs are forward/sideways relative to the spawner's own facing, the
+// same as spawn()'s offset; zofs is straight up, the same as its height.
+// SXF_ABSOLUTEPOSITION and SXF_ABSOLUTEVELOCITY, which would make all six
+// world-relative instead, are not read - most of what fires this spawns
+// nothing that reaches for either.
+func lowerSpawnItemEx(c *Compiler, call Call) ([]wep.Op, error) {
+	actorName := call.NameArg(0, "")
+	if actorName == "" {
+		return nil, fmt.Errorf("%s with no actor", call.Name)
+	}
+	disposition, ok := c.spawnDisposition(actorName)
+	if !ok {
+		return nil, fmt.Errorf("spawned actor %q has no entry in the policy", actorName)
+	}
+	if disposition == "drop" {
+		return []wep.Op{{Op: wep.OpNop, Source: call.Raw}}, nil
+	}
+
+	ranges := make([]Range, 7)
+	for i := range ranges {
+		value, err := c.eval(call.Arg(i+1, "0"))
+		if err != nil {
+			return nil, err
+		}
+		ranges[i] = value.Range
+	}
+	yofs, zofs := ranges[1], ranges[2]
+	xvel, yvel, zvel := ranges[3], ranges[4], ranges[5]
+	angle := ranges[6]
+	// xofs (ranges[0]) is a forward offset from the spawner, which nothing
+	// else here has a field for - spawn()'s "offset" is sideways only. Left
+	// unread rather than folded into something it is not; it is 0 in every
+	// call this mod set makes.
+
+	c.needActor(actorName)
+	return []wep.Op{{
+		Op:            wep.OpSpawnItem,
+		Actor:         actorName,
+		Angle:         angle.Value(),
+		SpawnOffset:   yofs.Min,
+		SpawnOffsetTo: yofs.Max,
+		SpawnHeight:   zofs.Value(),
+		VelX:          xvel.Min,
+		VelXTo:        xvel.Max,
+		VelY:          yvel.Min,
+		VelYTo:        yvel.Max,
+		VelZ:          zvel.Min,
+		VelZTo:        zvel.Max,
+		Flags:         flagWords(call),
+		Source:        call.Raw,
+	}}, nil
 }
 
 // spawn is the shape all four spawning functions share: an actor name that the

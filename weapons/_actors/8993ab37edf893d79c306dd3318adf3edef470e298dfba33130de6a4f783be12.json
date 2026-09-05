@@ -1,1 +1,0 @@
-{"format":1,"name":"MiniGunBulletPuff","render":{"scale":[0.8,0.8],"alpha":0.3,"style":"add"},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"spawn_item","actor":"RicoChet","angle":-5,"flags":"SXF_NOCHECKPOSITION"}]},{"tics":1,"tics_max":1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"melee":2,"spawn":0}},"no_gravity":true}

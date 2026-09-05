@@ -99,6 +99,23 @@ type Op struct {
 	// sideways offset, as the shell casings do.
 	SpawnOffsetTo float64 `json:"spawn_offset_to,omitempty"`
 	SpawnHeight   float64 `json:"spawn_height,omitempty"`
+	// VelX, VelY and VelZ are A_SpawnItemEx's own xvel/yvel/zvel, in Doom
+	// units a tic, relative to the direction the spawn faces: X forward, Y
+	// sideways, Z up. A spawned thing with no Speed of its own otherwise
+	// just drifts at random; a script that hands it a real velocity - a
+	// pickup that pops and scatters rather than sitting still - means that.
+	//
+	// A *To field above its own axis means the script wrote a range
+	// (frandom(-2.5, 2.5), say) rather than one number, the same as
+	// SpawnOffset/SpawnOffsetTo: rolled once per spawn, not folded to a
+	// fixed midpoint at migration time, which is what a scatter needs to
+	// look like more than one thing landed.
+	VelX   float64 `json:"vel_x,omitempty"`
+	VelXTo float64 `json:"vel_x_to,omitempty"`
+	VelY   float64 `json:"vel_y,omitempty"`
+	VelYTo float64 `json:"vel_y_to,omitempty"`
+	VelZ   float64 `json:"vel_z,omitempty"`
+	VelZTo float64 `json:"vel_z_to,omitempty"`
 
 	// flash_light and recoil.
 	Level int     `json:"level,omitempty"`

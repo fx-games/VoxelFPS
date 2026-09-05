@@ -376,3 +376,67 @@ ACTOR SomeAmmo : Ammo {}
 	require.NoError(t, err)
 	assert.Equal(t, "brutal_shotgun", result.Weapon.ID)
 }
+
+// A_SpawnItemEx orders its numbers nothing like A_SpawnItem or
+// A_CustomMissile: three separate offsets and a separate velocity triple,
+// not one "sideways offset, height, angle" triple with a different member
+// first each time. Mirrors a real call Brutal Doom's chainsaw execution
+// makes, spawning a health bonus that pops up and scatters rather than
+// landing exactly where the kill did.
+func TestSpawnItemExReadsItsOwnArgumentOrder(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestSpawnWeapon : Weapon
+{
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_SpawnItemEx("TestBonus", 0, 0, 24, frandom(-2.5, 2.5), frandom(-2.5, 2.5), 5)
+    Goto Ready
+  }
+}
+
+ACTOR TestBonus
+{
+  States
+  {
+  Spawn:
+    BON1 A 4
+    Loop
+  }
+}
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestSpawnWeapon")
+	require.NoError(t, err)
+
+	ops := opsAt(t, result.Weapon.States, "Fire")
+	require.Len(t, ops, 1)
+	op := ops[0]
+
+	assert.Equal(t, wep.OpSpawnItem, op.Op)
+	assert.Equal(t, "TestBonus", op.Actor)
+	assert.Equal(t, 0.0, op.Angle, "no angle argument was given")
+
+	// yofs is a plain 0, not a range: sideways offset and its "to" land equal.
+	assert.Equal(t, 0.0, op.SpawnOffset)
+	assert.Equal(t, 0.0, op.SpawnOffsetTo)
+	// zofs 24 is the height, not folded into the angle A_CustomMissile would
+	// have put in this same argument slot.
+	assert.Equal(t, 24.0, op.SpawnHeight)
+
+	// xvel and yvel are frandom(-2.5, 2.5): a range, rolled at runtime, not a
+	// number fixed at migration time.
+	assert.Equal(t, -2.5, op.VelX)
+	assert.Equal(t, 2.5, op.VelXTo)
+	assert.Equal(t, -2.5, op.VelY)
+	assert.Equal(t, 2.5, op.VelYTo)
+	// zvel 5 is a plain number: both ends of its range are 5.
+	assert.Equal(t, 5.0, op.VelZ)
+	assert.Equal(t, 5.0, op.VelZTo)
+
+	_, needed := result.Actors["testbonus"]
+	assert.True(t, needed, "the spawned actor is compiled and carried")
+}
