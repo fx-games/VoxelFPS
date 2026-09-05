@@ -123,6 +123,11 @@ func (c *Compiler) evalInt(text string) (int, error) {
 	return int(value.Value()), nil
 }
 
+// engineLabels are state labels GZDoom provides itself, which no DECORATE file
+// defines and every mod jumps to. LightDone ends a weapon's flash overlay, and
+// Null removes an actor; both mean the layer is finished, which is a Stop.
+var engineLabels = map[string]bool{"lightdone": true, "null": true}
+
 // jumpTarget turns a jump's destination into a label name. A number is an
 // offset in frames from the frame being lowered, which becomes a label we
 // invent for the frame it lands on.
@@ -139,6 +144,9 @@ func (c *Compiler) jumpTarget(text string) (string, error) {
 	// overrode it, which is a distinction no weapon here relies on.
 	if index := strings.LastIndex(text, "::"); index >= 0 {
 		text = text[index+2:]
+	}
+	if engineLabels[strings.ToLower(text)] {
+		return engineStopLabel, nil
 	}
 	if plus := strings.IndexByte(text, '+'); plus >= 0 {
 		name := strings.TrimSpace(text[:plus])
@@ -278,6 +286,7 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 		machine.Labels[lower] = lineSteps[index]
 	}
 
+	c.addEngineStop(&machine)
 	if err := c.resolveJumps(&machine); err != nil {
 		problems = append(problems, err.Error())
 	}
@@ -363,6 +372,30 @@ func (c *Compiler) lowerAction(line StateLine) ([]wep.Op, error) {
 		}
 	}
 	return ops, nil
+}
+
+// engineStopLabel is where a jump to one of GZDoom's own end-of-layer labels
+// goes: a step of our own that stops the layer.
+const engineStopLabel = "@enginestop"
+
+// addEngineStop appends the step a jump to LightDone or Null lands on, if
+// anything asked for it.
+func (c *Compiler) addEngineStop(machine *wep.StateMachine) {
+	if _, wanted := machine.Labels[engineStopLabel]; wanted {
+		return
+	}
+	for _, step := range machine.Steps {
+		for _, op := range step.Ops {
+			if op.To == engineStopLabel {
+				machine.Labels[engineStopLabel] = len(machine.Steps)
+				machine.Steps = append(machine.Steps, wep.Step{
+					Tics: 0,
+					Ops:  []wep.Op{{Op: wep.OpStop, Source: "Goto LightDone"}},
+				})
+				return
+			}
+		}
+	}
 }
 
 // resolveJumps turns the labels invented for relative jumps into real entries,

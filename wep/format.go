@@ -87,6 +87,14 @@ type Op struct {
 	// make_noise.
 	Radius float64 `json:"radius,omitempty"`
 
+	// jump_random: the chance out of 256 that the jump is taken, ZDoom's scale.
+	Chance int `json:"chance,omitempty"`
+	// Targets is where jump_random may go; one of them is picked.
+	Targets []string `json:"targets,omitempty"`
+
+	// print.
+	Text string `json:"text,omitempty"`
+
 	// Source is the DECORATE call this op came from, kept so a compiled weapon
 	// can be read against the script it was made from without opening both.
 	Source string `json:"source,omitempty"`
@@ -101,11 +109,15 @@ const (
 	OpTake            = "take"
 	OpTakeAmmo        = "take_ammo"
 	OpJumpIfInventory = "jump_if_inventory"
+	OpJumpIfNoAmmo    = "jump_if_no_ammo"
+	OpJumpRandom      = "jump_random"
 	OpRefire          = "refire"
 	OpFireBullets     = "fire_bullets"
 	OpFireProjectile  = "fire_projectile"
 	OpSpawnActor      = "spawn_actor"
 	OpPlaySound       = "play_sound"
+	OpStopSound       = "stop_sound"
+	OpPrint           = "print"
 	OpGunFlash        = "gun_flash"
 	OpFlashLight      = "flash_light"
 	OpRecoil          = "recoil"
@@ -124,9 +136,10 @@ const (
 var KnownOps = map[string]bool{
 	OpWeaponReady: true, OpRaise: true, OpLower: true,
 	OpGive: true, OpTake: true, OpTakeAmmo: true,
-	OpJumpIfInventory: true, OpRefire: true,
+	OpJumpIfInventory: true, OpJumpIfNoAmmo: true, OpJumpRandom: true, OpRefire: true,
 	OpFireBullets: true, OpFireProjectile: true, OpSpawnActor: true,
-	OpPlaySound: true, OpGunFlash: true, OpFlashLight: true,
+	OpPlaySound: true, OpStopSound: true, OpPrint: true,
+	OpGunFlash: true, OpFlashLight: true,
 	OpRecoil: true, OpMakeNoise: true,
 	OpGoto: true, OpLoop: true, OpStop: true, OpWait: true, OpNop: true,
 }

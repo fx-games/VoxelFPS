@@ -114,6 +114,9 @@ func compileTestShotgun(t *testing.T) *Result {
 	policy := DefaultPolicy()
 	policy.Puffs["testpuff"] = "bullet"
 	policy.Spawns["testsmoke"] = "sprite"
+	// What a real mod's CVARINFO would say: full recoil, gun smoke on.
+	policy.Settings.ACS["fd_recoil"] = 65536
+	policy.Settings.ACS["fd_gunsmoke"] = 1
 
 	result, err := CompileWeapon(idx, policy, "TestShotgun")
 	require.NoError(t, err)

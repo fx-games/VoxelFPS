@@ -335,6 +335,25 @@ func builtinExpr(name string, args []Arg) (Range, bool) {
 			}
 			return Range{low, high}, true
 		}
+	case "randompick", "frandompick":
+		// One of the listed values, so the range spans them all.
+		low, high := 0.0, 0.0
+		for i, arg := range args {
+			if arg.IsStr {
+				return Range{}, false
+			}
+			value := arg.Value.Value()
+			if i == 0 || value < low {
+				low = value
+			}
+			if i == 0 || value > high {
+				high = value
+			}
+		}
+		if len(args) == 0 {
+			return Range{}, false
+		}
+		return Range{low, high}, true
 	case "true":
 		return constant(1), true
 	case "false":

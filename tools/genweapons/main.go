@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +34,9 @@ func main() {
 	lockPath := flag.String("lock", "weapons.lock", "where to write the hashes of what was built")
 	revision := flag.String("revision", "", "the source's revision, recorded for provenance")
 	list := flag.Bool("list", false, "list the weapons in the mod and stop")
+	all := flag.Bool("all", false, "migrate every weapon that compiles, and report the rest")
+	dry := flag.Bool("dry", false, "compile but write nothing, to see what a mod would need")
+	prefix := flag.String("prefix", "", "prepend this to every weapon's folder name")
 	flag.Parse()
 
 	if *source == "" {
@@ -76,29 +80,62 @@ func main() {
 	}
 
 	wanted := flag.Args()
+	if *all {
+		wanted = zdwep.Weapons(index)
+	}
 	if len(wanted) == 0 {
-		fail("name at least one weapon to migrate, or pass -list to see what there is.")
+		fail("name at least one weapon to migrate, or pass -all, or -list to see what there is.")
 	}
 
 	assets := zdwep.NewAssetIndex(src)
 	policy := zdwep.DefaultPolicy()
+	// The mod's own CVARINFO says what its options default to, so its scripts
+	// are read with the author's values rather than ours.
+	policy.Settings = zdwep.LoadSettings(src)
+	fmt.Fprintf(os.Stderr, "read %d settings from CVARINFO\n", len(policy.Settings.ACS))
 
-	var built []string
+	// Migrating a whole mod is a triage loop: most weapons compile, the rest
+	// name what the policy has not decided about yet. Failing the run on the
+	// first one would hide the other twenty, so they are collected and counted.
+	gaps := newGapReport()
+	var built, skipped []string
+
 	for _, name := range wanted {
 		result, err := zdwep.CompileWeapon(index, policy, name)
 		if err != nil {
-			fail("%v", err)
+			if !*all {
+				fail("%v", err)
+			}
+			gaps.add(name, err)
+			skipped = append(skipped, name)
+			continue
 		}
 		result.Weapon.Provenance.Source = *source
 		result.Weapon.Provenance.Revision = *revision
 		result.Weapon.Provenance.Credit = credit(src)
 
+		result.Weapon.ID = *prefix + result.Weapon.ID
+
 		if missing := assets.MissingAssets(result); len(missing) > 0 {
-			fail("%s is missing assets in this mod:\n  %s",
-				result.Weapon.ID, strings.Join(missing, "\n  "))
+			if !*all {
+				fail("%s is missing assets in this mod:\n  %s",
+					result.Weapon.ID, strings.Join(missing, "\n  "))
+			}
+			gaps.addAssets(name, missing)
+			skipped = append(skipped, name)
+			continue
+		}
+		if *dry {
+			built = append(built, result.Weapon.ID)
+			continue
 		}
 		if err := zdwep.Write(result, assets, src, *outDir); err != nil {
-			fail("%v", err)
+			if !*all {
+				fail("%v", err)
+			}
+			gaps.add(name, err)
+			skipped = append(skipped, name)
+			continue
 		}
 		built = append(built, result.Weapon.ID)
 		fmt.Fprintf(os.Stderr, "built %s: %d steps, %d sprites, %d sounds, %d actors\n",
@@ -109,6 +146,14 @@ func main() {
 		}
 	}
 
+	if len(skipped) > 0 {
+		gaps.report(os.Stderr, skipped)
+	}
+	fmt.Fprintf(os.Stderr, "\n%d weapon(s) migrated, %d skipped\n", len(built), len(skipped))
+
+	if *dry {
+		return
+	}
 	if err := updateKeyMap(*outDir, built); err != nil {
 		fail("%v", err)
 	}
@@ -116,6 +161,67 @@ func main() {
 		fail("%v", err)
 	}
 	fmt.Fprintf(os.Stderr, "wrote %s\n", *lockPath)
+}
+
+// gapReport gathers what a whole-mod run could not decide, so one pass over the
+// mod produces one list of decisions rather than one weapon's worth at a time.
+type gapReport struct {
+	// counts maps a problem, with the line number stripped off, to how many
+	// weapons hit it.
+	counts map[string]int
+	byGap  map[string]string
+}
+
+func newGapReport() *gapReport {
+	return &gapReport{counts: map[string]int{}, byGap: map[string]string{}}
+}
+
+var lineNumberPrefix = regexp.MustCompile(`^[^:]+:\d+: `)
+
+func (g *gapReport) add(weapon string, err error) {
+	seen := map[string]bool{}
+	for _, line := range strings.Split(err.Error(), "\n") {
+		line = lineNumberPrefix.ReplaceAllString(strings.TrimSpace(line), "")
+		if line == "" || strings.HasSuffix(line, ":") || seen[line] {
+			continue
+		}
+		seen[line] = true
+		g.counts[line]++
+		if _, first := g.byGap[line]; !first {
+			g.byGap[line] = weapon
+		}
+	}
+}
+
+func (g *gapReport) addAssets(weapon string, missing []string) {
+	for _, item := range missing {
+		line := "missing asset: " + item
+		g.counts[line]++
+		if _, first := g.byGap[line]; !first {
+			g.byGap[line] = weapon
+		}
+	}
+}
+
+// report prints the decisions still to be made, most widely felt first, since
+// one policy line near the top unblocks the most weapons.
+func (g *gapReport) report(out io.Writer, skipped []string) {
+	fmt.Fprintf(out, "\n%d weapon(s) did not compile: %s\n", len(skipped), strings.Join(skipped, ", "))
+	fmt.Fprintf(out, "\n%d thing(s) the policy has not decided about, widest first:\n", len(g.counts))
+
+	lines := make([]string, 0, len(g.counts))
+	for line := range g.counts {
+		lines = append(lines, line)
+	}
+	sort.Slice(lines, func(i, j int) bool {
+		if g.counts[lines[i]] != g.counts[lines[j]] {
+			return g.counts[lines[i]] > g.counts[lines[j]]
+		}
+		return lines[i] < lines[j]
+	})
+	for _, line := range lines {
+		fmt.Fprintf(out, "  %3d weapons  %s  (first: %s)\n", g.counts[line], line, g.byGap[line])
+	}
 }
 
 // updateKeyMap gives every new weapon the first free number key, and leaves

@@ -185,11 +185,24 @@ type Runtime struct {
 	Input     Input
 	Rand      *rand.Rand
 	// Ammo is the item the running weapon spends, so take_ammo knows what to
-	// take. Empty for an actor.
-	Ammo string
+	// take, and AmmoUse is what one shot costs. Empty for an actor.
+	Ammo    string
+	AmmoUse int
 	// FireLabel is where a ready frame sends the weapon when the trigger goes
 	// down, and where a refire goes back to.
 	FireLabel string
+}
+
+// OutOfAmmo reports whether the weapon cannot pay for another shot.
+func (r *Runtime) OutOfAmmo() bool {
+	if r.Ammo == "" {
+		return false // a weapon that costs nothing never runs out
+	}
+	use := r.AmmoUse
+	if use < 1 {
+		use = 1
+	}
+	return r.Inventory[r.Ammo] < use
 }
 
 func (r *Runtime) roll(low, high int) float64 {
@@ -316,6 +329,16 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 				return false, effects
 			}
 
+		case OpJumpIfNoAmmo:
+			if runtime.OutOfAmmo() && c.Goto(op.To) {
+				return false, effects
+			}
+
+		case OpJumpRandom:
+			if target, taken := c.rollJump(runtime, op); taken && c.Goto(target) {
+				return false, effects
+			}
+
 		case OpRefire:
 			if runtime.Input.Trigger && c.Goto(op.To) {
 				return false, effects
@@ -357,6 +380,29 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 	return true, effects
 }
 
+// rollJump decides a random jump. ZDoom writes the chance out of 256, and a
+// jump with several destinations picks one of them.
+func (c *Cursor) rollJump(runtime *Runtime, op Op) (string, bool) {
+	targets := op.Targets
+	if len(targets) == 0 {
+		if op.To == "" {
+			return "", false
+		}
+		targets = []string{op.To}
+	}
+	chance := op.Chance
+	if chance <= 0 {
+		return "", false
+	}
+	if chance < 256 && runtime.roll(0, 255) >= float64(chance) {
+		return "", false
+	}
+	if len(targets) == 1 {
+		return targets[0], true
+	}
+	return targets[int(runtime.roll(0, len(targets)-1))], true
+}
+
 func (c *Cursor) inventoryTest(runtime *Runtime, op Op) bool {
 	if op.AtMax {
 		return runtime.Inventory.AtMax(runtime.Caps, op.Item)
@@ -385,6 +431,7 @@ func NewRuntime(weapon *Weapon, random *rand.Rand) *Runtime {
 		Caps:      make(Caps, len(weapon.Items)),
 		Rand:      random,
 		Ammo:      weapon.Ammo.Type,
+		AmmoUse:   weapon.Ammo.Use,
 		FireLabel: "Fire",
 	}
 	for name, item := range weapon.Items {

@@ -112,16 +112,11 @@ type Settings struct {
 	ACS map[string]float64
 }
 
-// DefaultSettings are the ACS values Brutal Doom's weapons ask for. Each one is
-// a menu toggle or slider in the mod, not logic, so a constant is the honest
-// translation.
+// DefaultSettings is the floor a mod's own CVARINFO is read on top of. It holds
+// nothing: a setting this migration has not been told about is an error naming
+// it, not a zero that quietly changes what a weapon does.
 func DefaultSettings() Settings {
-	return Settings{ACS: map[string]float64{
-		"fd_recoil":      65536, // full strength, the scripts divide by 65536
-		"fd_gunsmoke":    1,
-		"fd_guncasings":  1,
-		"fd_bulletpuffs": 1,
-	}}
+	return Settings{ACS: map[string]float64{}}
 }
 
 // Policy is the dispositions the migration runs under.
@@ -164,6 +159,7 @@ func DefaultPolicy() Policy {
 			"a_light0":      lowerLight(0),
 			"a_light1":      lowerLight(1),
 			"a_light2":      lowerLight(2),
+			"a_light":       lowerLightLevel,
 			"a_setpitch":    lowerSetPitch,
 
 			// Inventory and ammo.
@@ -172,8 +168,10 @@ func DefaultPolicy() Policy {
 			"a_jumpifinventory": lowerJumpIfInventory,
 
 			// Control flow.
-			"a_refire": lowerRefire,
-			"a_jumpif": lowerJumpIf,
+			"a_refire":       lowerRefire,
+			"a_jumpif":       lowerJumpIf,
+			"a_jump":         lowerJump,
+			"a_jumpifnoammo": lowerJumpIfNoAmmo,
 
 			// What the shot does.
 			"a_firebullets":       lowerFireBullets,
@@ -183,6 +181,9 @@ func DefaultPolicy() Policy {
 			// Sound.
 			"a_playsound":       lowerPlaySound,
 			"a_playweaponsound": lowerPlaySound,
+			"a_stopsound":       lowerStopSound,
+			"a_print":           lowerPrint,
+			"a_printbold":       lowerPrint,
 
 			// Deliberate drops. Each one is a decision, not an oversight.
 			//
@@ -192,13 +193,17 @@ func DefaultPolicy() Policy {
 			//   anything a weapon does.
 			// a_playerskinCheck and friends: cosmetic branching on the player
 			//   sprite, and we have one player.
-			"a_setangle":   nil,
-			"a_stop":       nil,
-			"a_noblocking": nil,
-			"a_setblend":   nil,
-			"a_recoil":     nil,
-			"a_scream":     nil,
-			"a_changeflag": nil,
+			// a_clearrefire: ZDoom counts how long the trigger has been held
+			//   and this resets the count. We read the trigger live, so there
+			//   is no count to reset.
+			"a_clearrefire": nil,
+			"a_setangle":    nil,
+			"a_stop":        nil,
+			"a_noblocking":  nil,
+			"a_setblend":    nil,
+			"a_recoil":      nil,
+			"a_scream":      nil,
+			"a_changeflag":  nil,
 		},
 	}
 }
@@ -230,6 +235,62 @@ func lowerGunFlash(c *Compiler, call Call) ([]wep.Op, error) {
 	target := call.NameArg(0, "Flash")
 	c.needLabel(target)
 	return []wep.Op{{Op: wep.OpGunFlash, To: target, Source: call.Raw}}, nil
+}
+
+// A_Light(n) is the general form of A_Light0, A_Light1 and A_Light2.
+func lowerLightLevel(c *Compiler, call Call) ([]wep.Op, error) {
+	level, err := c.evalInt(call.Arg(0, "0"))
+	if err != nil {
+		return nil, err
+	}
+	return []wep.Op{{Op: wep.OpFlashLight, Level: level, Source: call.Raw}}, nil
+}
+
+func lowerStopSound(c *Compiler, call Call) ([]wep.Op, error) {
+	channel, err := c.evalInt(call.Arg(0, "0"))
+	if err != nil {
+		return nil, err
+	}
+	return []wep.Op{{Op: wep.OpStopSound, Channel: channel, Source: call.Raw}}, nil
+}
+
+func lowerPrint(c *Compiler, call Call) ([]wep.Op, error) {
+	return []wep.Op{{Op: wep.OpPrint, Text: call.NameArg(0, ""), Source: call.Raw}}, nil
+}
+
+// A_Jump(chance, state, ...) takes one of its destinations, chance out of 256
+// of the time.
+func lowerJump(c *Compiler, call Call) ([]wep.Op, error) {
+	chance, err := c.evalInt(call.Arg(0, "0"))
+	if err != nil {
+		return nil, err
+	}
+	if len(call.Args) < 2 {
+		return nil, fmt.Errorf("A_Jump with no destination")
+	}
+	targets := make([]string, 0, len(call.Args)-1)
+	for i := 1; i < len(call.Args); i++ {
+		target, err := c.jumpTarget(call.Arg(i, ""))
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	op := wep.Op{Op: wep.OpJumpRandom, Chance: chance, Source: call.Raw}
+	if len(targets) == 1 {
+		op.To = targets[0]
+	} else {
+		op.Targets = targets
+	}
+	return []wep.Op{op}, nil
+}
+
+func lowerJumpIfNoAmmo(c *Compiler, call Call) ([]wep.Op, error) {
+	target, err := c.jumpTarget(call.Arg(0, ""))
+	if err != nil {
+		return nil, err
+	}
+	return []wep.Op{{Op: wep.OpJumpIfNoAmmo, To: target, Source: call.Raw}}, nil
 }
 
 func lowerLight(level int) Lowering {
