@@ -83,6 +83,10 @@ func (a Actor) Property(name string) (string, bool) {
 // Index is every actor in a mod, keyed by lowercased name.
 type Index struct {
 	Actors map[string]*Actor
+	// Constants are the mod's own named numbers, `const int x = 200;`, which
+	// its scripts use as arguments. They are file scoped in DECORATE, so they
+	// are collected across the whole mod.
+	Constants map[string]float64
 	// Files lists the DECORATE files that were read, in include order.
 	Files []string
 }
@@ -142,7 +146,10 @@ func (idx *Index) InheritsFrom(name, ancestor string) bool {
 // BuildIndex reads the mod's DECORATE lump, follows its includes and parses
 // every actor it can reach.
 func BuildIndex(src *Source) (*Index, error) {
-	idx := &Index{Actors: make(map[string]*Actor)}
+	idx := &Index{
+		Actors:    make(map[string]*Actor),
+		Constants: make(map[string]float64),
+	}
 	root, ok := src.Resolve("DECORATE")
 	if !ok {
 		return nil, fmt.Errorf("no DECORATE lump in this source")
@@ -173,9 +180,12 @@ func indexFile(src *Source, idx *Index, name string, visited map[string]bool) er
 	}
 	text := stripBlockComments(string(data))
 
-	includes, actors, err := parseDecorateFile(real, text)
+	includes, actors, constants, err := parseDecorateFile(real, text)
 	if err != nil {
 		return err
+	}
+	for name, value := range constants {
+		idx.Constants[name] = value
 	}
 	for _, actor := range actors {
 		// A later definition of the same name wins, which is what a mod that
@@ -221,11 +231,13 @@ func stripBlockComments(text string) string {
 var actorHeadRegexp = regexp.MustCompile(`(?i)^actor\s+([\w.]+)\s*(?::\s*([\w.]+))?\s*(?:replaces\s+([\w.]+))?\s*(-?\d+)?\s*(\{\s*\}?)?\s*$`)
 
 // parseDecorateFile pulls the includes and actors out of one file.
-func parseDecorateFile(fileName, text string) (includes []string, actors []*Actor, err error) {
-	scanner := bufio.NewScanner(strings.NewReader(text))
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+var constRegexp = regexp.MustCompile(`(?i)^const\s+(?:int|float|fixed)\s+(\w+)\s*=\s*([^;]+);`)
 
-	lineNumber := 0
+// parseDecorateFile pulls the includes, actors and constants out of one file.
+func parseDecorateFile(fileName, text string) (includes []string, actors []*Actor, constants map[string]float64, err error) {
+	constants = make(map[string]float64)
+	lines := readLogicalLines(text)
+
 	var current *Actor
 	// depth counts braces inside the actor body: 1 is the body, 2 is the States
 	// block, 3 and up are the anonymous action blocks a state line can carry.
@@ -235,10 +247,13 @@ func parseDecorateFile(fileName, text string) (includes []string, actors []*Acto
 	// every label, and several in a row when a script aliases one to another.
 	var pendingLabels []string
 
-	for scanner.Scan() {
-		lineNumber++
-		line := stripLineComment(scanner.Text())
-		if line == "" {
+	for index := 0; index < len(lines); index++ {
+		line, lineNumber := lines[index].text, lines[index].number
+
+		if match := constRegexp.FindStringSubmatch(line); match != nil {
+			if value, convErr := strconv.ParseFloat(strings.TrimSpace(match[2]), 64); convErr == nil {
+				constants[strings.ToLower(match[1])] = value
+			}
 			continue
 		}
 
@@ -341,15 +356,12 @@ func parseDecorateFile(fileName, text string) (includes []string, actors []*Acto
 		pendingLabels = nil
 		current.States.Lines = append(current.States.Lines, state)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", fileName, err)
-	}
 	if current != nil {
 		// An actor whose closing brace is missing still holds everything we
 		// read, and a mod that malformed will fail later on something specific.
 		actors = append(actors, current)
 	}
-	return includes, actors, nil
+	return includes, actors, constants, nil
 }
 
 // inStatesOpening handles `States` and its brace arriving on separate lines.
@@ -359,6 +371,114 @@ func inStatesOpening(line string, depth *int, inStates *bool) bool {
 		return true
 	}
 	return false
+}
+
+// sourceLine is one thing to read, and where in the file it came from.
+type sourceLine struct {
+	text   string
+	number int
+}
+
+// readLogicalLines turns a file into the lines the parser wants to see.
+//
+// DECORATE puts no weight on line endings. Brutal Doom writes a whole actor as
+// `{Health 200 States{Spawn:` and closes it with `}}`, and Final Doomer runs a
+// long spawning call over two lines. Both are legal, and a parser that reads a
+// file line by line sees neither. So comments come off, a call that has opened
+// more brackets than it closed swallows the next line, and the structural
+// braces are split onto lines of their own. Every piece keeps the number of the
+// line it came from, so an error still points where a person would look.
+func readLogicalLines(text string) []sourceLine {
+	var lines []sourceLine
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
+	number := 0
+	for scanner.Scan() {
+		number++
+		line := stripLineComment(scanner.Text())
+		for unclosedBrackets(line) && scanner.Scan() {
+			number++
+			line = strings.TrimSpace(line + " " + stripLineComment(scanner.Text()))
+		}
+		for _, piece := range splitBraces(line) {
+			lines = append(lines, sourceLine{text: piece, number: number})
+		}
+	}
+	return lines
+}
+
+// splitBraces puts every { and } on a line of its own, leaving what is around
+// them intact. Braces inside a string are left alone.
+func splitBraces(line string) []string {
+	if !strings.ContainsAny(line, "{}") {
+		if line == "" {
+			return nil
+		}
+		return []string{line}
+	}
+	var pieces []string
+	var current strings.Builder
+	flush := func() {
+		if piece := strings.TrimSpace(current.String()); piece != "" {
+			pieces = append(pieces, piece)
+		}
+		current.Reset()
+	}
+
+	inString := false
+	for i := 0; i < len(line); i++ {
+		c := line[i]
+		switch {
+		case inString:
+			current.WriteByte(c)
+			if c == '"' {
+				inString = false
+			}
+		case c == '"':
+			inString = true
+			current.WriteByte(c)
+		case c == '{':
+			// `States {` has to stay one piece, because that is what says the
+			// block is opening rather than an actor body.
+			if strings.EqualFold(strings.TrimSpace(current.String()), "states") {
+				current.WriteByte(c)
+				flush()
+				continue
+			}
+			flush()
+			pieces = append(pieces, "{")
+		case c == '}':
+			flush()
+			pieces = append(pieces, "}")
+		default:
+			current.WriteByte(c)
+		}
+	}
+	flush()
+	return pieces
+}
+
+// unclosedBrackets reports whether a line has opened more brackets than it
+// closed, outside of a string, which means the call continues below.
+func unclosedBrackets(line string) bool {
+	depth := 0
+	inString := false
+	for i := 0; i < len(line); i++ {
+		switch {
+		case inString:
+			if line[i] == '"' {
+				inString = false
+			}
+		case line[i] == '"':
+			inString = true
+		case line[i] == '(':
+			depth++
+		case line[i] == ')':
+			depth--
+		}
+	}
+	return depth > 0
 }
 
 func stripLineComment(raw string) string {

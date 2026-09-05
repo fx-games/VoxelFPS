@@ -33,6 +33,12 @@ type Compiler struct {
 	// relative jump counts from.
 	currentFrame int
 
+	// strictLabels is on for a weapon, whose jumps must all land, and off for
+	// an actor reached through one. A base actor legitimately jumps to a label
+	// only its subclasses define - Final Doomer's pickup base does exactly
+	// that - and compiling the base on its own cannot resolve it.
+	strictLabels bool
+
 	neededItems  map[string]bool
 	neededActors map[string]bool
 	neededSounds map[string]bool
@@ -43,18 +49,23 @@ type Compiler struct {
 	spriteSeen  map[string]bool
 	dropped     []string
 	droppedSeen map[string]bool
+	// defaulted names the puffs and spawners the policy had no line for, so
+	// the compiled weapon can carry what it guessed at.
+	defaultedNames []string
+	defaultedSeen  map[string]bool
 }
 
 func newCompiler(idx *Index, policy Policy) *Compiler {
 	return &Compiler{
-		idx:          idx,
-		policy:       policy,
-		neededItems:  make(map[string]bool),
-		neededActors: make(map[string]bool),
-		neededSounds: make(map[string]bool),
-		neededLabels: make(map[string]bool),
-		spriteSeen:   make(map[string]bool),
-		droppedSeen:  make(map[string]bool),
+		idx:           idx,
+		policy:        policy,
+		neededItems:   make(map[string]bool),
+		neededActors:  make(map[string]bool),
+		neededSounds:  make(map[string]bool),
+		neededLabels:  make(map[string]bool),
+		spriteSeen:    make(map[string]bool),
+		droppedSeen:   make(map[string]bool),
+		defaultedSeen: make(map[string]bool),
 	}
 }
 
@@ -75,52 +86,146 @@ func (c *Compiler) actorIsMissile(n string) bool {
 	return actor.Flags["missile"]
 }
 
-// eval resolves a DECORATE expression against the mod's configuration.
-func (c *Compiler) eval(text string) (Range, error) {
-	return EvalExpr(text, func(name string, args []Arg) (Range, bool) {
-		if strings.EqualFold(name, "CallACS") && len(args) == 1 && args[0].IsStr {
-			value, known := c.policy.Settings.ACS[strings.ToLower(args[0].Str)]
-			if !known {
-				return Range{}, false
-			}
-			return constant(value), true
-		}
-		// ZDoom's flag words read as zero here: the flags that matter are read
-		// from the argument's text by the lowering that cares about them.
-		if strings.HasPrefix(strings.ToUpper(name), "FPF_") ||
-			strings.HasPrefix(strings.ToUpper(name), "WRF_") ||
-			strings.HasPrefix(strings.ToUpper(name), "CHAN_") ||
-			strings.HasPrefix(strings.ToUpper(name), "TIF_") ||
-			strings.HasPrefix(strings.ToUpper(name), "CBF_") {
-			return constant(channelConstant(name)), true
-		}
-		return Range{}, false
-	})
+// eval works out what a DECORATE expression comes to, against the mod's own
+// settings and the state a running actor keeps.
+func (c *Compiler) eval(text string) (Value, error) {
+	return EvalExpr(text, c.resolveName)
 }
 
-// channelConstant gives ZDoom's sound channel names their numbers. Anything
-// else in that family reads as zero, which is what a flag word contributes to
-// an argument we take the text of instead.
-func channelConstant(name string) float64 {
-	switch strings.ToUpper(name) {
-	case "CHAN_WEAPON":
-		return 1
-	case "CHAN_VOICE":
-		return 2
-	case "CHAN_ITEM":
-		return 3
-	case "CHAN_BODY":
-		return 4
+// resolveName is what an expression's names mean here. Three kinds: the mod's
+// settings, which are numbers by the time we read them; ZDoom's flag and
+// pointer words, which are numbers too; and everything an actor carries while
+// it runs, which is a name the engine reads rather than a number.
+func (c *Compiler) resolveName(name string, args []Arg) (Resolution, bool) {
+	lower := strings.ToLower(name)
+
+	// CheckClass asks what kind of thing something is, which only the running
+	// game knows.
+	if strings.EqualFold(name, "CheckClass") && len(args) >= 1 && args[0].IsStr {
+		return Resolution{Var: "class:" + strings.ToLower(args[0].Str)}, true
 	}
-	return 0
+
+	// A mod script called for its answer, in an expression. We have no ACS, so
+	// the engine answers it.
+	if strings.HasPrefix(lower, "acs_named") && len(args) >= 1 && args[0].IsStr {
+		c.defaulted("acs script " + args[0].Str)
+		return Resolution{Var: "acs:" + strings.ToLower(args[0].Str)}, true
+	}
+
+	if strings.EqualFold(name, "CallACS") && len(args) == 1 && args[0].IsStr {
+		script := strings.ToLower(args[0].Str)
+		if value, known := c.policy.Settings.ACS[script]; known {
+			return Resolution{Const: constant(value)}, true
+		}
+		// A script rather than a setting. We have no ACS, so it becomes
+		// something the engine answers, and the compiled weapon records that it
+		// was left open.
+		c.defaulted("acs " + args[0].Str)
+		return Resolution{Var: "acs:" + script}, true
+	}
+
+	if len(args) > 0 {
+		return Resolution{}, false
+	}
+
+	if value, known := zdoomConstant(lower); known {
+		return Resolution{Const: constant(value)}, true
+	}
+	// The mod's own `const int x = 200;`, which its scripts pass as arguments.
+	if value, known := c.idx.Constants[lower]; known {
+		return Resolution{Const: constant(value)}, true
+	}
+	if actorVariable(lower) {
+		return Resolution{Var: lower}, true
+	}
+	return Resolution{}, false
 }
 
+// zdoomConstant covers the named numbers DECORATE writes into arguments: the
+// flag words each function has its own family of, and the pointer selectors.
+// Only the ones whose value changes what we compile are spelled out; the rest
+// read as zero, because the lowering that cares reads the argument's text.
+func zdoomConstant(name string) (float64, bool) {
+	switch name {
+	case "chan_auto":
+		return 0, true
+	case "chan_weapon":
+		return 1, true
+	case "chan_voice":
+		return 2, true
+	case "chan_item":
+		return 3, true
+	case "chan_body":
+		return 4, true
+	case "attn_none":
+		return 0, true
+	case "attn_norm":
+		return 1, true
+	case "attn_idle":
+		return 1.001, true
+	case "attn_static":
+		return 3, true
+	case "aaptr_default", "aaptr_null":
+		return 0, true
+	case "aaptr_target":
+		return 1, true
+	case "aaptr_master":
+		return 2, true
+	case "aaptr_tracer":
+		return 4, true
+	}
+	for _, family := range flagFamilies {
+		if strings.HasPrefix(name, family) {
+			return 0, true
+		}
+	}
+	return 0, false
+}
+
+// flagFamilies are the prefixes ZDoom's flag words come in. A flag contributes
+// nothing to a number, and the lowerings that act on flags read the argument's
+// text instead of its value.
+var flagFamilies = []string{
+	"wrf_", "fpf_", "tif_", "cbf_", "sxf_", "rgf_", "xf_", "jlosf_",
+	"cpf_", "rtf_", "wof_", "smf_", "ptrof_", "qf_", "spf_", "fbf_",
+	"raf_", "srf_", "warpf_", "kilf_",
+}
+
+// actorVariable reports whether a name is state a running actor carries. The
+// user_ variables are a script's own scratch space; the rest is the handful of
+// actor properties DECORATE lets an expression read.
+func actorVariable(name string) bool {
+	if strings.HasPrefix(name, "user_") {
+		return true
+	}
+	switch name {
+	case "alpha", "scalex", "scaley", "health", "mass", "waterlevel",
+		"velx", "vely", "velz", "momx", "momy", "momz", "x", "y", "z",
+		"args", "special1", "special2", "score", "reactiontime", "tid",
+		"height", "radius", "speed", "floorz", "ceilingz", "damage",
+		"stamina", "gravity", "frame", "scale", "ceilingwater", "accuracy":
+		return true
+	}
+	return false
+}
+
+// evalInt reads an expression that has to be a plain number, such as how many
+// pellets to fire. A value that varies collapses to the middle of its span.
 func (c *Compiler) evalInt(text string) (int, error) {
 	value, err := c.eval(text)
 	if err != nil {
 		return 0, err
 	}
-	return int(value.Value()), nil
+	return int(value.Range.Value()), nil
+}
+
+// evalFloat is evalInt for a value with a fraction.
+func (c *Compiler) evalFloat(text string) (float64, error) {
+	value, err := c.eval(text)
+	if err != nil {
+		return 0, err
+	}
+	return value.Range.Value(), nil
 }
 
 // engineLabels are state labels GZDoom provides itself, which no DECORATE file
@@ -159,6 +264,14 @@ func (c *Compiler) jumpTarget(text string) (string, error) {
 	}
 	c.needLabel(text)
 	return text, nil
+}
+
+func (c *Compiler) defaulted(what string) {
+	if c.defaultedSeen[what] {
+		return
+	}
+	c.defaultedSeen[what] = true
+	c.defaultedNames = append(c.defaultedNames, what)
 }
 
 func (c *Compiler) drop(source string) {
@@ -427,9 +540,34 @@ func (c *Compiler) resolveJumps(machine *wep.StateMachine) error {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return fmt.Errorf("jumps to labels that do not exist: %s", strings.Join(missing, ", "))
+		if c.strictLabels {
+			return fmt.Errorf("jumps to labels that do not exist: %s", strings.Join(missing, ", "))
+		}
+		// The jump has nowhere to go in this actor, so it ends the layer, and
+		// the compiled actor records that it was left dangling.
+		c.defaulted("dangling jump: " + strings.Join(missing, ", "))
+		c.retargetMissing(machine, missing)
 	}
 	return nil
+}
+
+// retargetMissing points jumps with no destination at a step that stops, and
+// makes sure that step exists.
+func (c *Compiler) retargetMissing(machine *wep.StateMachine, missing []string) {
+	gone := make(map[string]bool, len(missing))
+	for _, name := range missing {
+		gone[name] = true
+	}
+	machine.Labels[engineStopLabel] = -1
+	for stepIndex := range machine.Steps {
+		for opIndex, op := range machine.Steps[stepIndex].Ops {
+			if gone[op.To] {
+				machine.Steps[stepIndex].Ops[opIndex].To = engineStopLabel
+			}
+		}
+	}
+	delete(machine.Labels, engineStopLabel)
+	c.addEngineStop(machine)
 }
 
 // placeLabel resolves one destination, inventing a label for a frame offset or

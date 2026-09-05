@@ -129,8 +129,19 @@ type Policy struct {
 	Puffs map[string]string
 	// Spawns maps a lowercased spawned actor to how it is handled: "sprite"
 	// draws it from the mod's own frames, "drop" leaves it out.
-	Spawns   map[string]string
-	Settings Settings
+	Spawns map[string]string
+	// DefaultPuff and DefaultSpawn are what an unnamed puff or spawned actor
+	// gets. Empty means a name with no line is an error.
+	//
+	// Loud failure is for action functions, where one we do not recognise
+	// silently changes what a weapon does. A puff or a spawner is not that: the
+	// worst an unnamed one does is leave the wrong mark or throw the wrong
+	// thing into the air, and a mod ships a hundred of them. Every name that
+	// takes the default is recorded on the compiled weapon instead, so the
+	// decision is still reviewable, just after the fact.
+	DefaultPuff  string
+	DefaultSpawn string
+	Settings     Settings
 }
 
 // KnownFunction reports whether the policy has a disposition for a call.
@@ -143,8 +154,21 @@ func (p Policy) KnownFunction(name string) bool {
 // about. Adding a weapon that uses something else fails the migration until
 // somebody adds a line here, which is the intended friction.
 func DefaultPolicy() Policy {
+	policy := defaultWeaponPolicy()
+	for name, lowering := range actorFunctions() {
+		policy.Functions[name] = lowering
+	}
+	for name, lowering := range monsterFunctions() {
+		policy.Functions[name] = lowering
+	}
+	return policy
+}
+
+func defaultWeaponPolicy() Policy {
 	return Policy{
-		Settings: DefaultSettings(),
+		Settings:     DefaultSettings(),
+		DefaultPuff:  wep.PuffBullet,
+		DefaultSpawn: "sprite",
 		Puffs: map[string]string{
 			"fdbulletpuff": wep.PuffBullet,
 			"bulletpuff":   wep.PuffBullet,
@@ -181,6 +205,7 @@ func DefaultPolicy() Policy {
 			// Sound.
 			"a_playsound":       lowerPlaySound,
 			"a_playweaponsound": lowerPlaySound,
+			"a_playsoundex":     lowerPlaySound,
 			"a_stopsound":       lowerStopSound,
 			"a_print":           lowerPrint,
 			"a_printbold":       lowerPrint,
@@ -206,6 +231,36 @@ func DefaultPolicy() Policy {
 			"a_changeflag":  nil,
 		},
 	}
+}
+
+// puffKind is what a shot leaves where it lands. A puff the policy has not
+// named takes the default and is recorded on the compiled weapon, because a
+// mod ships dozens and the worst an unnamed one does is leave the wrong mark.
+func (c *Compiler) puffKind(puffActor string) string {
+	if puffActor == "" {
+		return wep.PuffBullet
+	}
+	if mapped, known := c.policy.Puffs[strings.ToLower(puffActor)]; known {
+		return mapped
+	}
+	c.defaulted("puff " + puffActor)
+	if c.policy.DefaultPuff != "" {
+		return c.policy.DefaultPuff
+	}
+	return wep.PuffBullet
+}
+
+// spawnDisposition says what to do with an actor a script throws into the
+// world, taking the policy's default when it has no line of its own.
+func (c *Compiler) spawnDisposition(actorName string) (string, bool) {
+	if disposition, known := c.policy.Spawns[strings.ToLower(actorName)]; known {
+		return disposition, true
+	}
+	if c.policy.DefaultSpawn == "" {
+		return "", false
+	}
+	c.defaulted("spawns " + actorName)
+	return c.policy.DefaultSpawn, true
 }
 
 func constOp(op wep.Op) Lowering {
@@ -306,7 +361,7 @@ func lowerSetPitch(c *Compiler, call Call) ([]wep.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []wep.Op{{Op: wep.OpRecoil, Delta: value.Value(), Source: call.Raw}}, nil
+	return []wep.Op{{Op: wep.OpRecoil, Delta: value.Range.Value(), Source: call.Raw}}, nil
 }
 
 func lowerGiveInventory(c *Compiler, call Call) ([]wep.Op, error) {
@@ -388,14 +443,23 @@ func lowerJumpIf(c *Compiler, call Call) ([]wep.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !condition.True() {
-		return []wep.Op{{Op: wep.OpNop, Source: call.Raw}}, nil
-	}
 	target, err := c.jumpTarget(call.Arg(1, ""))
 	if err != nil {
 		return nil, err
 	}
-	return []wep.Op{{Op: wep.OpGoto, To: target, Source: call.Raw}}, nil
+	// A condition built only from the mod's settings is settled here: either
+	// the branch always runs or it never does, and the compiled weapon says
+	// which without carrying the test.
+	if condition.Folded() {
+		if !condition.True() {
+			return []wep.Op{{Op: wep.OpNop, Source: call.Raw}}, nil
+		}
+		return []wep.Op{{Op: wep.OpGoto, To: target, Source: call.Raw}}, nil
+	}
+	// A condition that reads the running actor has to travel with the weapon.
+	return []wep.Op{{
+		Op: wep.OpJumpIf, Cond: condition.Code, To: target, Source: call.Raw,
+	}}, nil
 }
 
 // A_FireBullets(spread_xy, spread_z, numbullets, damage, puff, flags, range).
@@ -419,15 +483,7 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 	if err != nil {
 		return nil, err
 	}
-	puffActor := call.NameArg(4, "")
-	impact := wep.PuffBullet
-	if puffActor != "" {
-		mapped, known := c.policy.Puffs[strings.ToLower(puffActor)]
-		if !known {
-			return nil, fmt.Errorf("puff %q has no entry in the policy", puffActor)
-		}
-		impact = mapped
-	}
+	impact := c.puffKind(call.NameArg(4, ""))
 	// A negative count means "fire this many, ignoring autoaim spread rules".
 	if count < 0 {
 		count = -count
@@ -435,8 +491,8 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 	return []wep.Op{{
 		Op:      wep.OpFireBullets,
 		Count:   count,
-		SpreadH: spreadH.Value(),
-		SpreadV: spreadV.Value(),
+		SpreadH: spreadH.Range.Value(),
+		SpreadV: spreadV.Range.Value(),
 		Damage:  damage,
 		Puff:    impact,
 		Source:  call.Raw,
@@ -449,7 +505,7 @@ func lowerFireCustomMissile(c *Compiler, call Call) ([]wep.Op, error) {
 	if actorName == "" {
 		return nil, fmt.Errorf("A_FireCustomMissile with no actor")
 	}
-	disposition, known := c.policy.Spawns[strings.ToLower(actorName)]
+	disposition, known := c.spawnDisposition(actorName)
 	if !known {
 		return nil, fmt.Errorf("spawned actor %q has no entry in the policy", actorName)
 	}
@@ -472,10 +528,10 @@ func lowerFireCustomMissile(c *Compiler, call Call) ([]wep.Op, error) {
 	op := wep.Op{
 		Op:            wep.OpSpawnActor,
 		Actor:         actorName,
-		Angle:         angle.Value(),
-		SpawnOffset:   offset.Min,
-		SpawnOffsetTo: offset.Max,
-		SpawnHeight:   height.Value(),
+		Angle:         angle.Range.Value(),
+		SpawnOffset:   offset.Range.Min,
+		SpawnOffsetTo: offset.Range.Max,
+		SpawnHeight:   height.Range.Value(),
 		Source:        call.Raw,
 	}
 	// A missile that moves under its own power is a projectile; one that only
@@ -493,7 +549,7 @@ func lowerAlertMonsters(c *Compiler, call Call) ([]wep.Op, error) {
 		if err != nil {
 			return nil, err
 		}
-		radius = value.Value()
+		radius = value.Range.Value()
 	}
 	return []wep.Op{{Op: wep.OpMakeNoise, Radius: radius, Source: call.Raw}}, nil
 }
@@ -531,10 +587,10 @@ func lowerPlaySound(c *Compiler, call Call) ([]wep.Op, error) {
 		Op:          wep.OpPlaySound,
 		Sound:       sound,
 		Channel:     channel,
-		Volume:      volume.Value(),
-		Looping:     looping.True(),
-		Attenuation: attenuation.Value(),
-		Pitch:       pitch.Value(),
+		Volume:      volume.Range.Value(),
+		Looping:     looping.Range.True(),
+		Attenuation: attenuation.Range.Value(),
+		Pitch:       pitch.Range.Value(),
 		Source:      call.Raw,
 	}}, nil
 }

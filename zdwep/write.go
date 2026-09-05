@@ -98,28 +98,39 @@ func writeSounds(result *Result, assets *AssetIndex, dir string) (map[string]str
 	sounds := make(map[string]string, len(result.Sounds))
 	var missing []string
 	for _, cue := range result.Sounds {
-		file, ok := assets.Sound(cue)
+		files, ok := assets.Sounds(cue)
 		if !ok {
 			missing = append(missing, cue)
 			continue
 		}
-		relative := filepath.Join(wep.SoundsDir, filepath.FromSlash(cue)+".ogg")
-		target := filepath.Join(dir, relative)
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return nil, err
-		}
-		data, err := assets.ReadAll(file)
-		if err != nil {
-			return nil, err
-		}
-		if strings.EqualFold(path.Ext(file), ".ogg") {
-			if err := os.WriteFile(target, data, 0o644); err != nil {
+		// A cue the mod gave several sounds keeps them all, named apart by a
+		// suffix the loader strips again, so the engine picks between them the
+		// way SNDINFO's $random asks it to.
+		for index, file := range files {
+			data, err := assets.ReadAll(file)
+			if err != nil {
 				return nil, err
 			}
-		} else if err := convertToOgg(data, file, target); err != nil {
-			return nil, err
+			converted, extension, err := soundBytes(data, file)
+			if err != nil {
+				return nil, err
+			}
+			name := filepath.FromSlash(cue)
+			if index > 0 {
+				name = fmt.Sprintf("%s~%d", name, index+1)
+			}
+			relative := filepath.Join(wep.SoundsDir, name+extension)
+			target := filepath.Join(dir, relative)
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return nil, err
+			}
+			if err := writeSound(converted, file, target, extension); err != nil {
+				return nil, err
+			}
+			if index == 0 {
+				sounds[cue] = filepath.ToSlash(relative)
+			}
 		}
-		sounds[cue] = filepath.ToSlash(relative)
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%s plays sounds this mod does not have: %s",
@@ -128,25 +139,69 @@ func writeSounds(result *Result, assets *AssetIndex, dir string) (map[string]str
 	return sounds, nil
 }
 
-// convertToOgg turns a sound the mod ships in some other format into vorbis,
-// which is the only thing the player decodes. ffmpeg does it when it is
-// installed; when it is not, the migration says so and gives the command to
-// run, rather than quietly dropping the sound.
+// soundBytes decides what a sound becomes on the way out. An ogg is copied
+// through untouched, and a Doom sound lump is repackaged as a WAV, which is
+// arithmetic rather than transcoding and needs nothing installed. Anything else
+// is handed to ffmpeg.
+func soundBytes(data []byte, sourceName string) (out []byte, extension string, err error) {
+	if strings.EqualFold(path.Ext(sourceName), ".ogg") {
+		return data, ".ogg", nil
+	}
+	if strings.EqualFold(path.Ext(sourceName), ".wav") {
+		return data, ".wav", nil
+	}
+	if IsDMX(data) {
+		wav, err := DMXToWAV(data)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s: %w", sourceName, err)
+		}
+		return wav, ".wav", nil
+	}
+	return data, ".ogg", nil
+}
+
+// writeSound puts the bytes where they go, running ffmpeg only for a format
+// nothing here understands.
+func writeSound(data []byte, sourceName, target, extension string) error {
+	if extension == ".wav" || strings.EqualFold(path.Ext(sourceName), ".ogg") {
+		return os.WriteFile(target, data, 0o644)
+	}
+	return convertToOgg(data, sourceName, target)
+}
+
+// vorbisEncoders are the ways an ffmpeg build might be able to write vorbis.
+// Which one a given build has varies, and the common one on macOS has neither
+// libvorbis nor a default, so they are tried in turn.
+var vorbisEncoders = [][]string{
+	{"-c:a", "libvorbis"},
+	{"-c:a", "vorbis", "-strict", "-2"},
+	{"-c:a", "libopus"},
+}
+
+// convertToOgg turns a sound the mod ships in some format we do not read into
+// one the player does. ffmpeg does it when it is installed; when it is not, the
+// migration says so and gives the command to run, rather than quietly dropping
+// the sound.
 func convertToOgg(data []byte, sourceName, target string) error {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
-		return fmt.Errorf("%s is not an ogg and ffmpeg is not installed; "+
+		return fmt.Errorf("%s needs converting and ffmpeg is not installed; "+
 			"convert it yourself with: ffmpeg -i %s %s", sourceName, sourceName, target)
 	}
-	command := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
-		"-y", "-i", "pipe:0", "-c:a", "libvorbis", "-f", "ogg", target)
-	command.Stdin = bytes.NewReader(data)
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	if err := command.Run(); err != nil {
-		return fmt.Errorf("converting %s: %w: %s", sourceName, err, strings.TrimSpace(stderr.String()))
+	var lastErr error
+	for _, encoder := range vorbisEncoders {
+		arguments := append([]string{"-hide_banner", "-loglevel", "error", "-y", "-i", "pipe:0"}, encoder...)
+		command := exec.Command(ffmpeg, append(arguments, "-f", "ogg", target)...)
+		command.Stdin = bytes.NewReader(data)
+		var stderr bytes.Buffer
+		command.Stderr = &stderr
+		if err := command.Run(); err == nil {
+			return nil
+		} else {
+			lastErr = fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		}
 	}
-	return nil
+	return fmt.Errorf("converting %s: %w", sourceName, lastErr)
 }
 
 // FFmpegVersion reports the ffmpeg the migration would use, for the lock file.

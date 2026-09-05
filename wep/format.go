@@ -92,8 +92,23 @@ type Op struct {
 	// Targets is where jump_random may go; one of them is picked.
 	Targets []string `json:"targets,omitempty"`
 
-	// print.
+	// print, log, select_weapon: the thing being named.
 	Text string `json:"text,omitempty"`
+
+	// Cond is a condition worked out while the game runs, for the jumps whose
+	// answer depends on the actor rather than on the mod's settings.
+	Cond Expr `json:"cond,omitempty"`
+	// Set is what a set_var op assigns.
+	Set Expr `json:"set,omitempty"`
+
+	// Args carries the numbers of the ops that take several and whose meaning
+	// is positional in ZDoom: a thrust's force and angle, a warp's offsets, a
+	// rail attack's colours. Spelling every one of those out as its own field
+	// would double this struct for ops the engine acts on as a group anyway.
+	Args []float64 `json:"args,omitempty"`
+	// Flags is the argument's flag words, verbatim, for the ops whose behaviour
+	// turns on them.
+	Flags string `json:"flags,omitempty"`
 
 	// Source is the DECORATE call this op came from, kept so a compiled weapon
 	// can be read against the script it was made from without opening both.
@@ -122,10 +137,74 @@ const (
 	OpFlashLight      = "flash_light"
 	OpRecoil          = "recoil"
 	OpMakeNoise       = "make_noise"
-	OpGoto            = "goto"
-	OpLoop            = "loop"
-	OpStop            = "stop"
-	OpWait            = "wait"
+	OpJumpIf          = "jump_if"
+	OpSetVar          = "set_var"
+	OpCountdown       = "countdown"
+	OpSetTics         = "set_tics"
+
+	// What a shot or a blast does to the world.
+	OpExplode      = "explode"
+	OpRadiusThrust = "radius_thrust"
+	OpRadiusGive   = "radius_give"
+	OpRailAttack   = "rail_attack"
+	OpCustomPunch  = "custom_punch"
+	OpSaw          = "saw"
+	OpBFGSpray     = "bfg_spray"
+	OpQuake        = "quake"
+	OpDie          = "die"
+
+	// How an actor moves.
+	OpChangeVelocity = "change_velocity"
+	OpScaleVelocity  = "scale_velocity"
+	OpSetSpeed       = "set_speed"
+	OpThrust         = "thrust"
+	OpWarp           = "warp"
+	OpSeekerMissile  = "seeker_missile"
+
+	// What an actor puts into the world, and what it takes out.
+	OpSpawnItem     = "spawn_item"
+	OpSpawnParticle = "spawn_particle"
+	OpRemove        = "remove"
+	OpKillChildren  = "kill_children"
+
+	// How an actor is drawn.
+	OpSetAlpha = "set_alpha"
+	OpFadeTo   = "fade_to"
+	OpSetScale = "set_scale"
+
+	// The player's own view.
+	OpZoom         = "zoom"
+	OpSetCrosshair = "set_crosshair"
+	OpSelectWeapon = "select_weapon"
+	OpPlayerFlag   = "player_flag"
+	OpRunScript    = "run_script"
+
+	// Jumps that need to look at the world.
+	OpCheckFloor     = "check_floor"
+	OpCheckCeiling   = "check_ceiling"
+	OpCheckSight     = "check_sight"
+	OpCheckFlag      = "check_flag"
+	OpCheckTarget    = "check_target"
+	OpCheckHealth    = "check_health"
+	OpCheckTargetInv = "check_target_inventory"
+	OpGiveToTarget   = "give_to_target"
+	OpCheckReload    = "check_reload"
+	OpCheckCloser    = "check_closer"
+
+	// OpMonsterAction is one instruction of monster behaviour, with the name of
+	// the thing to do carried as data.
+	//
+	// Every other op names something the engine acts on. Monster behaviour is a
+	// whole subsystem this game does not have - there are no monsters - and
+	// spelling out its thirty odd actions as thirty odd ops the engine ignores
+	// would say less, not more. One op says the honest thing: this is the AI,
+	// it is compiled and carried, and it is dispatched the day there is AI.
+	OpMonsterAction = "monster_action"
+
+	OpGoto = "goto"
+	OpLoop = "loop"
+	OpStop = "stop"
+	OpWait = "wait"
 	// OpNop is an action the policy deliberately drops. It carries its Source so
 	// the decision stays visible in the compiled weapon.
 	OpNop = "nop"
@@ -142,6 +221,27 @@ var KnownOps = map[string]bool{
 	OpGunFlash: true, OpFlashLight: true,
 	OpRecoil: true, OpMakeNoise: true,
 	OpGoto: true, OpLoop: true, OpStop: true, OpWait: true, OpNop: true,
+
+	OpJumpIf: true, OpSetVar: true, OpCountdown: true, OpSetTics: true,
+
+	OpExplode: true, OpRadiusThrust: true, OpRadiusGive: true,
+	OpRailAttack: true, OpCustomPunch: true, OpSaw: true,
+	OpBFGSpray: true, OpQuake: true, OpDie: true,
+
+	OpChangeVelocity: true, OpScaleVelocity: true, OpSetSpeed: true,
+	OpThrust: true, OpWarp: true, OpSeekerMissile: true,
+
+	OpSpawnItem: true, OpSpawnParticle: true, OpRemove: true, OpKillChildren: true,
+
+	OpSetAlpha: true, OpFadeTo: true, OpSetScale: true,
+
+	OpZoom: true, OpSetCrosshair: true, OpSelectWeapon: true,
+	OpPlayerFlag: true, OpRunScript: true,
+
+	OpCheckFloor: true, OpCheckCeiling: true, OpCheckSight: true,
+	OpCheckFlag: true, OpCheckTarget: true, OpCheckHealth: true,
+	OpCheckTargetInv: true, OpGiveToTarget: true, OpCheckReload: true,
+	OpCheckCloser: true, OpMonsterAction: true,
 }
 
 // Step is one entry in a state machine: what to show, for how long, and what to
@@ -223,6 +323,10 @@ type Actor struct {
 	// Impact is what this actor does where a hitscan lands, when it is used as
 	// a puff. Empty for actors that are only drawn.
 	Impact string `json:"impact,omitempty"`
+	// Stock marks an actor the mod names but does not define, because GZDoom
+	// provides it: a plain bullet puff, an exploding barrel. It has no states
+	// of its own here, and the engine supplies the behaviour.
+	Stock bool `json:"stock,omitempty"`
 }
 
 // Weapon is one compiled weapon: weapon.json.
@@ -250,6 +354,11 @@ type Weapon struct {
 	// Dropped lists the DECORATE calls the policy deliberately did not compile,
 	// so what was left out is visible without re-reading the mod.
 	Dropped []string `json:"dropped,omitempty"`
+	// Defaulted lists the puffs and spawned actors the policy had no line for
+	// and gave its default to. Naming them here keeps the decision reviewable
+	// after the fact, which is the trade for not having to name every one of a
+	// mod's hundred spawners up front.
+	Defaulted []string `json:"defaulted,omitempty"`
 }
 
 // Actors is actors.json: everything a weapon references.

@@ -2,6 +2,7 @@ package zdwep
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -24,21 +25,73 @@ import (
 // the archive itself reads fine. The first entry of a repeated name wins.
 type Source struct {
 	names []string
-	open  func(real string) (io.ReadCloser, error)
-	close func() error
-	// byLower maps a lowercased path to the real one, and byLowerNoExt maps a
-	// lowercased extension-less path to the real one, which is how DECORATE
-	// refers to lumps like DECORATE or SNDINFO.
-	byLower      map[string]string
-	byLowerNoExt map[string]string
+	// layers are the places a file can come from, in the order they were
+	// given. A mod usually needs more than one: its own pk3 for its weapons,
+	// and the game's own data for the stock sprites it takes for granted.
+	layers []func(real string) (io.ReadCloser, error)
+	close  func() error
+	// byLower maps a lowercased path to where it is, and byLowerNoExt does the
+	// same ignoring the extension, which is how DECORATE refers to lumps like
+	// DECORATE or SNDINFO. The first source to provide a name keeps it.
+	byLower      map[string]entry
+	byLowerNoExt map[string]entry
+}
+
+// entry is where one file lives: which source, under what name.
+type entry struct {
+	layer int
+	real  string
+}
+
+// OpenSources opens several pk3s or directories as one, searched in order. The
+// first to hold a name provides it, so a mod overrides the game data it sits on
+// top of.
+func OpenSources(locations []string) (*Source, error) {
+	if len(locations) == 0 {
+		return nil, fmt.Errorf("no source given")
+	}
+	combined, err := OpenSource(locations[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, location := range locations[1:] {
+		next, err := OpenSource(location)
+		if err != nil {
+			combined.Close()
+			return nil, err
+		}
+		combined.layer(next)
+	}
+	return combined, nil
+}
+
+// layer folds another source in underneath this one.
+func (s *Source) layer(other *Source) {
+	offset := len(s.layers)
+	s.layers = append(s.layers, other.layers...)
+	previousClose := s.close
+	s.close = func() error {
+		other.Close()
+		return previousClose()
+	}
+	for _, name := range other.names {
+		found, ok := other.byLower[strings.ToLower(name)]
+		if !ok {
+			continue
+		}
+		s.noteAt(name, entry{layer: found.layer + offset, real: found.real})
+	}
 }
 
 // OpenSource opens a pk3 or a directory. The caller closes it.
 func OpenSource(location string) (*Source, error) {
 	lower := strings.ToLower(location)
 	if strings.HasSuffix(lower, ".pk3") || strings.HasSuffix(lower, ".zip") ||
-		strings.HasSuffix(lower, ".wad") {
+		strings.HasSuffix(lower, ".ipk3") || strings.HasSuffix(lower, ".pk7") {
 		return openZip(location)
+	}
+	if strings.HasSuffix(lower, ".wad") {
+		return openWAD(location)
 	}
 	info, err := os.Stat(location)
 	if err != nil {
@@ -68,12 +121,14 @@ func openZip(location string) (*Source, error) {
 		entries[name] = file
 		source.note(name)
 	}
-	source.open = func(real string) (io.ReadCloser, error) {
-		file, ok := entries[real]
-		if !ok {
-			return nil, &fs.PathError{Op: "open", Path: real, Err: fs.ErrNotExist}
-		}
-		return file.Open()
+	source.layers = []func(string) (io.ReadCloser, error){
+		func(real string) (io.ReadCloser, error) {
+			file, ok := entries[real]
+			if !ok {
+				return nil, &fs.PathError{Op: "open", Path: real, Err: fs.ErrNotExist}
+			}
+			return file.Open()
+		},
 	}
 	return source, nil
 }
@@ -91,8 +146,10 @@ func openDir(location string) (*Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	source.open = func(real string) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(location, filepath.FromSlash(real)))
+	source.layers = []func(string) (io.ReadCloser, error){
+		func(real string) (io.ReadCloser, error) {
+			return os.Open(filepath.Join(location, filepath.FromSlash(real)))
+		},
 	}
 	return source, nil
 }
@@ -111,8 +168,10 @@ func NewSourceFS(fsys fs.FS) (*Source, error) {
 	if err != nil {
 		return nil, err
 	}
-	source.open = func(real string) (io.ReadCloser, error) {
-		return fsys.Open(real)
+	source.layers = []func(string) (io.ReadCloser, error){
+		func(real string) (io.ReadCloser, error) {
+			return fsys.Open(real)
+		},
 	}
 	return source, nil
 }
@@ -120,23 +179,27 @@ func NewSourceFS(fsys fs.FS) (*Source, error) {
 func newSource(closer func() error) *Source {
 	return &Source{
 		close:        closer,
-		byLower:      make(map[string]string),
-		byLowerNoExt: make(map[string]string),
+		byLower:      make(map[string]entry),
+		byLowerNoExt: make(map[string]entry),
 	}
 }
 
 // note records one file under every name a script might ask for it by.
 func (s *Source) note(name string) {
+	s.noteAt(name, entry{layer: 0, real: name})
+}
+
+func (s *Source) noteAt(name string, where entry) {
 	s.names = append(s.names, name)
 	lower := strings.ToLower(name)
 	if _, taken := s.byLower[lower]; !taken {
-		s.byLower[lower] = name
+		s.byLower[lower] = where
 	}
 	// Two lumps whose names differ only by extension are a mod's business, not
 	// ours; the first one wins and stays put.
 	noExt := strings.TrimSuffix(lower, path.Ext(lower))
 	if _, taken := s.byLowerNoExt[noExt]; !taken {
-		s.byLowerNoExt[noExt] = name
+		s.byLowerNoExt[noExt] = where
 	}
 }
 
@@ -149,24 +212,29 @@ func (s *Source) Names() []string { return s.names }
 // trying an exact match, then case-insensitive, then case-insensitive ignoring
 // the extension.
 func (s *Source) Resolve(name string) (string, bool) {
+	found, ok := s.find(name)
+	return found.real, ok
+}
+
+func (s *Source) find(name string) (entry, bool) {
 	name = path.Clean(strings.TrimPrefix(strings.ReplaceAll(name, "\\", "/"), "./"))
 	lower := strings.ToLower(name)
-	if real, ok := s.byLower[lower]; ok {
-		return real, true
+	if found, ok := s.byLower[lower]; ok {
+		return found, true
 	}
-	if real, ok := s.byLowerNoExt[lower]; ok {
-		return real, true
+	if found, ok := s.byLowerNoExt[lower]; ok {
+		return found, true
 	}
-	return "", false
+	return entry{}, false
 }
 
 // Open reads a file by a name written the way the scripts write it.
 func (s *Source) Open(name string) (io.ReadCloser, error) {
-	real, ok := s.Resolve(name)
-	if !ok {
+	found, ok := s.find(name)
+	if !ok || found.layer >= len(s.layers) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
-	return s.open(real)
+	return s.layers[found.layer](found.real)
 }
 
 // ReadFile reads a whole file by a name written the way the scripts write it.

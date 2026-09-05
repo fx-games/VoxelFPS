@@ -6,6 +6,7 @@ import (
 	"github.com/gopxl/beep/effects"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
+	"github.com/gopxl/beep/wav"
 	"io/fs"
 	"math"
 	"math/rand"
@@ -130,7 +131,7 @@ func (p *Player) LoadCueTree(root string) error {
 			return err
 		}
 		extension := path.Ext(name)
-		if !strings.EqualFold(extension, ".ogg") {
+		if !strings.EqualFold(extension, ".ogg") && !strings.EqualFold(extension, ".wav") {
 			return nil
 		}
 		relative, err := filepath.Rel(root, name)
@@ -138,6 +139,12 @@ func (p *Player) LoadCueTree(root string) error {
 			return err
 		}
 		cue := filepath.ToSlash(strings.TrimSuffix(relative, extension))
+		// A migration writes a sound the mod gave several takes of as
+		// name.ogg, name~2.ogg and so on. They are one cue, and PlayCue picks
+		// between the takes.
+		if tilde := strings.LastIndexByte(cue, '~'); tilde >= 0 {
+			cue = cue[:tilde]
+		}
 		return p.loadCue(name, cue)
 	})
 }
@@ -151,7 +158,15 @@ func (p *Player) loadCue(fileName string, cueName string) error {
 		return err
 	}
 
-	streamer, format, err := vorbis.Decode(f)
+	// A migrated sound is an ogg when the mod shipped one and a WAV when it
+	// shipped a Doom sound lump, which is most of them.
+	var streamer beep.StreamSeekCloser
+	var format beep.Format
+	if strings.EqualFold(path.Ext(fileName), ".wav") {
+		streamer, format, err = wav.Decode(f)
+	} else {
+		streamer, format, err = vorbis.Decode(f)
+	}
 	if err != nil {
 		return err
 	}

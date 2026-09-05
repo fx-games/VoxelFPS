@@ -29,7 +29,8 @@ import (
 )
 
 func main() {
-	source := flag.String("source", "", "the mod to migrate from: a .pk3 or a directory")
+	source := flag.String("source", "", "the mod to migrate from: a .pk3 or a directory. Several, comma separated, are searched in order, so a mod can sit on top of the game data it takes for granted")
+	strictAssets := flag.Bool("strict-assets", false, "refuse a weapon whose pictures or sounds the sources do not have, instead of taking it without them")
 	outDir := flag.String("out", "weapons", "the weapons folder to write into")
 	lockPath := flag.String("lock", "weapons.lock", "where to write the hashes of what was built")
 	revision := flag.String("revision", "", "the source's revision, recorded for provenance")
@@ -37,13 +38,14 @@ func main() {
 	all := flag.Bool("all", false, "migrate every weapon that compiles, and report the rest")
 	dry := flag.Bool("dry", false, "compile but write nothing, to see what a mod would need")
 	prefix := flag.String("prefix", "", "prepend this to every weapon's folder name")
+	scan := flag.Bool("scan", false, "lower every actor in the mod and report the whole vocabulary it needs")
 	flag.Parse()
 
 	if *source == "" {
 		fail("no -source given. Point it at a .pk3 or at a checkout of the mod.")
 	}
 
-	src, err := zdwep.OpenSource(*source)
+	src, err := zdwep.OpenSources(strings.Split(*source, ","))
 	if err != nil {
 		fail("opening %s: %v", *source, err)
 	}
@@ -79,6 +81,21 @@ func main() {
 		return
 	}
 
+	if *scan {
+		policy := zdwep.DefaultPolicy()
+		policy.Settings = zdwep.LoadSettings(src)
+		gaps := newGapReport()
+		names := zdwep.AllActorNames(index)
+		for _, name := range names {
+			if err := zdwep.ScanActor(index, policy, name); err != nil {
+				gaps.add(name, err)
+			}
+		}
+		gaps.report(os.Stdout, nil)
+		fmt.Fprintf(os.Stderr, "scanned %d actors\n", len(names))
+		return
+	}
+
 	wanted := flag.Args()
 	if *all {
 		wanted = zdwep.Weapons(index)
@@ -99,9 +116,21 @@ func main() {
 	// first one would hide the other twenty, so they are collected and counted.
 	gaps := newGapReport()
 	var built, skipped []string
+	// Weapon ids come from the tag the player sees, and a mod with several
+	// weapon sets has several weapons called Shotgun. Two weapons sharing a
+	// folder would mean one quietly overwriting the other, so a name already
+	// taken falls back to the actor's own.
+	taken := make(map[string]bool)
 
 	for _, name := range wanted {
-		result, err := zdwep.CompileWeapon(index, policy, name)
+		compile := zdwep.CompileWeapon
+		if *all {
+			// Migrating a whole mod takes what a mod gives: a weapon that jumps
+			// to a state only its siblings define still compiles, with the jump
+			// recorded as going nowhere.
+			compile = zdwep.CompileWeaponLenient
+		}
+		result, err := compile(index, policy, name)
 		if err != nil {
 			if !*all {
 				fail("%v", err)
@@ -114,14 +143,24 @@ func main() {
 		result.Weapon.Provenance.Revision = *revision
 		result.Weapon.Provenance.Credit = credit(src)
 
-		result.Weapon.ID = *prefix + result.Weapon.ID
+		result.Weapon.ID = *prefix + uniqueID(taken, result.Weapon.ID, name)
 
-		if missing := assets.MissingAssets(result); len(missing) > 0 {
-			if !*all {
-				fail("%s is missing assets in this mod:\n  %s",
-					result.Weapon.ID, strings.Join(missing, "\n  "))
+		missingSprites, missingSounds := assets.MissingAssets(result)
+		if len(missingSprites)+len(missingSounds) > 0 {
+			if *strictAssets {
+				gaps.addAssets(name, missingSprites, missingSounds)
+				skipped = append(skipped, name)
+				continue
 			}
-			gaps.addAssets(name, missing)
+			// The weapon compiled; it is only some of its pictures and sounds
+			// the sources do not have. Those frames show nothing and those
+			// calls make no noise, and the weapon records which.
+			gaps.addAssets(name, missingSprites, missingSounds)
+			result.DropSprites(missingSprites)
+			result.DropSounds(missingSounds)
+		}
+		if len(result.Sprites) == 0 {
+			gaps.add(name, fmt.Errorf("none of its pictures are in these sources"))
 			skipped = append(skipped, name)
 			continue
 		}
@@ -146,7 +185,7 @@ func main() {
 		}
 	}
 
-	if len(skipped) > 0 {
+	if len(gaps.counts) > 0 {
 		gaps.report(os.Stderr, skipped)
 	}
 	fmt.Fprintf(os.Stderr, "\n%d weapon(s) migrated, %d skipped\n", len(built), len(skipped))
@@ -193,7 +232,14 @@ func (g *gapReport) add(weapon string, err error) {
 	}
 }
 
-func (g *gapReport) addAssets(weapon string, missing []string) {
+func (g *gapReport) addAssets(weapon string, sprites, sounds []string) {
+	var missing []string
+	for _, name := range sprites {
+		missing = append(missing, "sprite "+name)
+	}
+	for _, name := range sounds {
+		missing = append(missing, "sound "+name)
+	}
 	for _, item := range missing {
 		line := "missing asset: " + item
 		g.counts[line]++
@@ -206,7 +252,9 @@ func (g *gapReport) addAssets(weapon string, missing []string) {
 // report prints the decisions still to be made, most widely felt first, since
 // one policy line near the top unblocks the most weapons.
 func (g *gapReport) report(out io.Writer, skipped []string) {
-	fmt.Fprintf(out, "\n%d weapon(s) did not compile: %s\n", len(skipped), strings.Join(skipped, ", "))
+	if len(skipped) > 0 {
+		fmt.Fprintf(out, "\n%d weapon(s) did not compile: %s\n", len(skipped), strings.Join(skipped, ", "))
+	}
 	fmt.Fprintf(out, "\n%d thing(s) the policy has not decided about, widest first:\n", len(g.counts))
 
 	lines := make([]string, 0, len(g.counts))
@@ -349,6 +397,20 @@ func hashFile(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// uniqueID keeps two weapons out of one folder.
+func uniqueID(taken map[string]bool, id, actorName string) string {
+	if !taken[id] {
+		taken[id] = true
+		return id
+	}
+	fallback := zdwep.SnakeName(actorName)
+	for suffix := 2; taken[fallback]; suffix++ {
+		fallback = fmt.Sprintf("%s_%d", zdwep.SnakeName(actorName), suffix)
+	}
+	taken[fallback] = true
+	return fallback
 }
 
 // sourceHash pins a pk3 by its bytes. A checkout is pinned by its revision

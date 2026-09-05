@@ -59,7 +59,9 @@ func writeTestShotgun(t *testing.T) (string, *Result) {
 	src := modWithAssets(t, result.Sprites)
 	assets := NewAssetIndex(src)
 
-	require.Empty(t, assets.MissingAssets(result))
+	missingSprites, missingSounds := assets.MissingAssets(result)
+	require.Empty(t, missingSprites)
+	require.Empty(t, missingSounds)
 
 	dir := t.TempDir()
 	require.NoError(t, Write(result, assets, src, dir))

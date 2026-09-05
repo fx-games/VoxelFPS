@@ -25,7 +25,20 @@ type Result struct {
 }
 
 // CompileWeapon turns one actor and everything it reaches into compiled data.
+// Strict refuses a weapon whose own jumps do not all land; without it a jump
+// with nowhere to go ends that layer and is recorded, which is what migrating a
+// whole mod wants, since a mod has weapons that reference states only their
+// siblings define.
 func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error) {
+	return compileWeapon(idx, policy, actorName, true)
+}
+
+// CompileWeaponLenient is CompileWeapon without the strict jump check.
+func CompileWeaponLenient(idx *Index, policy Policy, actorName string) (*Result, error) {
+	return compileWeapon(idx, policy, actorName, false)
+}
+
+func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*Result, error) {
 	actor, ok := idx.Actor(actorName)
 	if !ok {
 		return nil, fmt.Errorf("no actor named %q in this mod", actorName)
@@ -40,6 +53,7 @@ func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error)
 	}
 
 	c := newCompiler(idx, policy)
+	c.strictLabels = strict
 	c.actorName = actor.Name
 	c.ammoType, _ = c.mergedProperty(actor.Name, "weapon.ammotype")
 	c.ammoType = strings.Trim(c.ammoType, `"`)
@@ -81,6 +95,19 @@ func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error)
 		if _, done := result.Actors[strings.ToLower(name)]; done {
 			continue
 		}
+		if _, defined := idx.Actor(name); !defined {
+			// A mod names things GZDoom provides and never defines: a plain
+			// bullet puff, an exploding barrel. The op keeps the name and the
+			// weapon records that the engine has to supply it.
+			c.defaulted("stock actor " + name)
+			result.Actors[strings.ToLower(name)] = &wep.Actor{
+				Name:   name,
+				Stock:  true,
+				Render: wep.Render{Scale: [2]float64{1, 1}, Alpha: 1},
+				States: wep.StateMachine{Labels: map[string]int{}},
+			}
+			continue
+		}
 		compiled, extra, err := compileActor(idx, policy, name, c)
 		if err != nil {
 			return nil, err
@@ -89,6 +116,8 @@ func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error)
 		pending = append(pending, extra...)
 	}
 
+	sort.Strings(c.defaultedNames)
+	weapon.Defaulted = c.defaultedNames
 	weapon.Items = c.items()
 	result.Sprites = c.sprites
 	result.Sounds = sortedNames(c.neededSounds)
@@ -123,6 +152,9 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 	for _, dropped := range inner.dropped {
 		shared.drop(dropped)
 	}
+	for _, name := range inner.defaultedNames {
+		shared.defaulted(name)
+	}
 
 	compiled := &wep.Actor{
 		Name:      actor.Name,
@@ -137,6 +169,10 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 // WeaponID is the folder name a weapon gets. The tag is what a player sees, so
 // it makes a better name than the actor's internal one, and it is stable
 // between runs.
+//
+// Tags are not unique: a mod with seven weapon sets has seven weapons tagged
+// "Shotgun". The caller settles that, because only it knows what else it has
+// already written.
 func WeaponID(actor *Actor, idx *Index) string {
 	name := actor.Name
 	for _, candidate := range idx.Ancestry(actor.Name) {
@@ -145,6 +181,11 @@ func WeaponID(actor *Actor, idx *Index) string {
 			break
 		}
 	}
+	return SnakeName(name)
+}
+
+// SnakeName turns any name into something that can be a folder.
+func SnakeName(name string) string {
 	var out strings.Builder
 	previousUnderscore := false
 	for _, r := range strings.ToLower(name) {
@@ -323,4 +364,99 @@ func Weapons(idx *Index) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// DropSprites blanks the frames whose pictures the mod does not have, so a
+// weapon that is otherwise complete can still be migrated. The frames stay in
+// the animation with their timing intact and show nothing, which is what a
+// missing sprite looks like, and every one is recorded on the weapon.
+func (r *Result) DropSprites(missing []string) {
+	if len(missing) == 0 {
+		return
+	}
+	gone := make(map[string]bool, len(missing))
+	for _, name := range missing {
+		gone[name] = true
+		r.Weapon.Defaulted = append(r.Weapon.Defaulted, "missing sprite "+name)
+	}
+	sort.Strings(r.Weapon.Defaulted)
+
+	blank := func(machine *wep.StateMachine) {
+		for i := range machine.Steps {
+			if gone[machine.Steps[i].Sprite] {
+				machine.Steps[i].Sprite = ""
+			}
+		}
+	}
+	blank(&r.Weapon.States)
+	for _, actor := range r.Actors {
+		blank(&actor.States)
+	}
+
+	kept := r.Sprites[:0]
+	for _, name := range r.Sprites {
+		if !gone[name] {
+			kept = append(kept, name)
+		}
+	}
+	r.Sprites = kept
+}
+
+// DropSounds does for sounds what DropSprites does for pictures.
+func (r *Result) DropSounds(missing []string) {
+	if len(missing) == 0 {
+		return
+	}
+	gone := make(map[string]bool, len(missing))
+	for _, name := range missing {
+		gone[name] = true
+		r.Weapon.Defaulted = append(r.Weapon.Defaulted, "missing sound "+name)
+	}
+	sort.Strings(r.Weapon.Defaulted)
+
+	silence := func(machine *wep.StateMachine) {
+		for i := range machine.Steps {
+			for j := range machine.Steps[i].Ops {
+				if gone[machine.Steps[i].Ops[j].Sound] {
+					machine.Steps[i].Ops[j].Sound = ""
+				}
+			}
+		}
+	}
+	silence(&r.Weapon.States)
+	for _, actor := range r.Actors {
+		silence(&actor.States)
+	}
+
+	kept := r.Sounds[:0]
+	for _, name := range r.Sounds {
+		if !gone[name] {
+			kept = append(kept, name)
+		}
+	}
+	r.Sounds = kept
+}
+
+// AllActorNames lists every actor in the mod, sorted.
+func AllActorNames(idx *Index) []string {
+	names := make([]string, 0, len(idx.Actors))
+	for _, actor := range idx.Actors {
+		names = append(names, actor.Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ScanActor lowers one actor's states purely to find out what it needs, without
+// building anything. Running it over a whole mod hands back the complete
+// vocabulary in one pass, instead of discovering it one weapon at a time.
+func ScanActor(idx *Index, policy Policy, name string) error {
+	actor, ok := idx.Actor(name)
+	if !ok {
+		return fmt.Errorf("no actor named %q", name)
+	}
+	c := newCompiler(idx, policy)
+	c.actorName = actor.Name
+	_, err := c.lowerStates(c.mergedStates(actor.Name))
+	return err
 }
