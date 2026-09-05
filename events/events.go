@@ -5,6 +5,9 @@ const (
 	EventHitScanCollision
 	EventPlayerInteractWith
 	EventPhysicsCollision
+	// EventWeaponNoise is a shot being heard. Nothing listens yet: there are no
+	// enemies to hear it, and the weapons already compile what they make.
+	EventWeaponNoise
 )
 
 type EventID uint16

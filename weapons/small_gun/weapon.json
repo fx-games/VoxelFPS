@@ -1,0 +1,130 @@
+{
+  "format": 1,
+  "id": "small_gun",
+  "tag": "Small Gun",
+  "ammo": {},
+  "render": {
+    "scale": [
+      2,
+      2
+    ],
+    "alpha": 1
+  },
+  "reloadable": false,
+  "states": {
+    "steps": [
+      {
+        "sprite": "SMGNA0",
+        "tics": 1,
+        "ops": [
+          {
+            "op": "weapon_ready",
+            "allow_fire": true
+          }
+        ]
+      },
+      {
+        "tics": 0,
+        "ops": [
+          {
+            "op": "loop"
+          }
+        ]
+      },
+      {
+        "sprite": "SMGNA0",
+        "tics": 2,
+        "ops": [
+          {
+            "op": "fire_bullets",
+            "count": 1,
+            "spread_h": 1,
+            "spread_v": 1,
+            "damage": 5,
+            "puff": "bullet"
+          }
+        ]
+      },
+      {
+        "sprite": "SMGNB0",
+        "tics": 2
+      },
+      {
+        "sprite": "SMGNC0",
+        "tics": 2
+      },
+      {
+        "sprite": "SMGND0",
+        "tics": 2
+      },
+      {
+        "sprite": "SMGNE0",
+        "tics": 2
+      },
+      {
+        "tics": 0,
+        "ops": [
+          {
+            "op": "refire",
+            "to": "fire"
+          }
+        ]
+      },
+      {
+        "tics": 0,
+        "ops": [
+          {
+            "op": "goto",
+            "to": "ready"
+          }
+        ]
+      },
+      {
+        "sprite": "SMGNA0",
+        "tics": 1,
+        "ops": [
+          {
+            "op": "raise"
+          }
+        ]
+      },
+      {
+        "tics": 0,
+        "ops": [
+          {
+            "op": "loop"
+          }
+        ]
+      },
+      {
+        "sprite": "SMGNA0",
+        "tics": 1,
+        "ops": [
+          {
+            "op": "lower"
+          }
+        ]
+      },
+      {
+        "tics": 0,
+        "ops": [
+          {
+            "op": "loop"
+          }
+        ]
+      }
+    ],
+    "labels": {
+      "deselect": 11,
+      "fire": 2,
+      "ready": 0,
+      "select": 9
+    }
+  },
+  "provenance": {
+    "source": "assets/smallgun_sheet.png",
+    "actor": "small_gun",
+    "source_file": "assets/smallgun_sheet.png",
+    "tool": 1
+  }
+}

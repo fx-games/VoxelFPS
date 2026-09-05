@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/memmaker/goray/quads"
+)
 
 func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {
 	cfg := DefaultStressConfig()
@@ -90,9 +94,10 @@ func TestStressLightsStayInsideTheMapAndUnderTheCap(t *testing.T) {
 		}
 	}
 
-	// Slot 0 is the flashlight, so the static lights have one less to fill.
+	// Slot 0 is the player's light and it holds the first shadow layer, so the
+	// static lights have one less to fill.
 	cfg.Lights = 999
-	if got := len(stressLights(cfg)); got > 15 {
+	if got := len(stressLights(cfg)); got > quads.MaxShadowLayers-1 {
 		t.Errorf("generated %d lights, want at most 15", got)
 	}
 }

@@ -333,3 +333,61 @@ func TestUpdateStopsAtObjectOnGrid(t *testing.T) {
 		t.Errorf("stopped far too early: x = %f", moving.Position().X())
 	}
 }
+
+// stairs makes a floor at y < 0 and one ledge of the given height filling
+// everything at x >= 2, so a mover walking towards +x runs into it.
+func ledge(height float32) func(x, y, z int32) []LinkedAABB {
+	return func(x, y, z int32) []LinkedAABB {
+		if y < 0 {
+			return []LinkedAABB{{AABB: voxel.NewAABBFromMin(
+				mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1})}}
+		}
+		if x < 2 || float32(y) >= height {
+			return nil
+		}
+		return []LinkedAABB{{AABB: voxel.NewAABBFromMin(
+			mgl32.Vec3{float32(x), 0, float32(z)}, mgl32.Vec3{1, height, 1})}}
+	}
+}
+
+// walkInto runs one blocked move plus the step retry and reports where the mover
+// ended up.
+func walkInto(t *testing.T, colliders func(x, y, z int32) []LinkedAABB, stepHeight float32) mgl32.Vec3 {
+	t.Helper()
+	moving := mover(t, mgl32.Vec3{1.5, 0.25, 0.5})
+	movement := mgl32.Vec3{0.5, 0, 0}
+	blocked, _, normals := CheckForCollisions(moving, moving.Position().Add(movement), colliders)
+	if !blockedByWall(normals) {
+		t.Fatalf("expected the ledge to block the move, ended at %v", blocked)
+	}
+	position, _, _, stepped := StepOver(moving, movement, blocked, stepHeight, colliders)
+	if !stepped {
+		return blocked
+	}
+	return position
+}
+
+// A ledge lower than the step height is walked up, and the mover ends up
+// standing on top of it.
+func TestStepOverClimbsALowLedge(t *testing.T) {
+	position := walkInto(t, ledge(0.25), 0.3)
+	if position.X() <= 1.75 {
+		t.Fatalf("did not get past the ledge: x = %f", position.X())
+	}
+	// Box is half a unit tall, so its center sits at the ledge top plus 0.25.
+	if math.Abs(float64(position.Y()-0.5)) > 0.01 {
+		t.Errorf("ended at y = %f, want to be standing on the 0.25 ledge", position.Y())
+	}
+}
+
+// A ledge taller than the step height stays a wall, and does not lift the mover
+// even part of the way.
+func TestStepOverLeavesATallLedgeAlone(t *testing.T) {
+	position := walkInto(t, ledge(0.5), 0.3)
+	if position.X() > 1.76 {
+		t.Errorf("climbed a ledge taller than the step height: %v", position)
+	}
+	if position.Y() > 0.26 {
+		t.Errorf("was lifted by a wall it cannot climb: y = %f", position.Y())
+	}
+}

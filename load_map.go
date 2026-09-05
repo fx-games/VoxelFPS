@@ -252,9 +252,34 @@ func loadLDTK(filename string) (core.MapLoadResult, error) {
 							if hex, isString := field.Value.(string); isString {
 								light.Color = colorVecFromHex(hex)
 							}
+						case "Baked":
+							// A Light entity is a dynamic spotlight unless it asks to
+							// be baked into the level instead. A Torch entity is the
+							// other way round - see below.
+							if baked, isBool := field.Value.(bool); isBool {
+								light.Baked = baked
+							}
 						}
 					}
 					loadResult.Lights = append(loadResult.Lights, light)
+				case "Torch":
+					// A torch is a baked light and nothing else: it floods the voxel
+					// light once at load and then costs nothing, which is what lets a
+					// level hold as many as it likes. A torch that has to move or
+					// switch off is a Light entity with Baked off.
+					torch := core.MapLight{
+						Position: mgl32.Vec3{float32(gridPos[0]) + 0.5, torchLightHeight, float32(gridPos[1]) + 0.5},
+						Color:    mgl32.Vec3{1, 1, 1},
+						Baked:    true,
+					}
+					for _, field := range entity.FieldInstances {
+						if field.Identifier == "Height" {
+							if value, isNumber := field.Value.(float64); isNumber {
+								torch.Position[1] = float32(value)
+							}
+						}
+					}
+					loadResult.Lights = append(loadResult.Lights, torch)
 				case "Mod":
 					mapIndex := int(gridPos[1])*int(mapSizeX) + int(gridPos[0])
 					for _, field := range entity.FieldInstances {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"log"
 	"runtime"
 )
 
@@ -13,6 +14,9 @@ type Shader struct {
 	vertexFmt  AttrFormat
 	uniformFmt AttrFormat
 	uniformLoc []int32
+	// Uniforms this program does not have that someone tried to set anyway, so the
+	// warning goes out once instead of once per frame. See warnMissingUniformOnce.
+	warnedUniforms map[int]bool
 }
 
 func NewBasicShader(vertexFmt, uniformFmt AttrFormat, vertexShader, fragmentShader string) (*Shader, error) {
@@ -267,9 +271,15 @@ func (s *Shader) HasUniform(uniform int) bool {
 	return uniform >= 0 && uniform < len(s.uniformLoc) && s.uniformLoc[uniform] >= 0
 }
 
+// SetUniformAttr sets one uniform, and reports whether the program actually has it.
+// A missing uniform is logged once and skipped rather than fatal: this runs from the
+// draw path, and dropping a uniform from a shader - or letting the compiler strip an
+// unused one - should not be able to end the session mid-frame. The caller that
+// cares can check the return, or ask HasUniform first.
 func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
-	if s.uniformLoc[uniform] < 0 {
-		panic(fmt.Sprintf("Uniform attribute %d not found", uniform))
+	if uniform < 0 || uniform >= len(s.uniformLoc) || s.uniformLoc[uniform] < 0 {
+		s.warnMissingUniformOnce(uniform)
+		return false
 	}
 	switch s.uniformFmt[uniform].Type {
 	case Int:
@@ -336,9 +346,24 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
 		value := value.(mgl32.Mat4x3)
 		gl.UniformMatrix4x3fv(s.uniformLoc[uniform], 1, false, &value[0])
 	default:
-		panic("set uniform attr: invalid attribute type")
+		s.warnMissingUniformOnce(uniform)
+		return false
 	}
 	return true
+}
+
+// warnMissingUniformOnce logs a uniform the program does not have, once per shader
+// and index. Once, because this is called from the draw path: a uniform set every
+// frame would otherwise fill the log at frame rate.
+func (s *Shader) warnMissingUniformOnce(uniform int) {
+	if s.warnedUniforms == nil {
+		s.warnedUniforms = make(map[int]bool)
+	}
+	if s.warnedUniforms[uniform] {
+		return
+	}
+	s.warnedUniforms[uniform] = true
+	log.Printf("[Shader] uniform %d is not in this program, the set is ignored", uniform)
 }
 
 // Begin binds the Shader program. This is necessary before using the Shader.

@@ -109,6 +109,14 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		g.Pathfinder.AddMovingObject(pather)
 	}
 
+	if entity.MeshName == stairsMeshName {
+		// The mesh is one box to the drawer and would be one box to physics too.
+		// Stairs need a collider per step, see stairColliders.
+		for _, step := range stairColliders(spawnPos) {
+			g.physicsSystem.AddObject(step)
+		}
+	}
+
 	if entity.CreateCollider {
 		g.physicsSystem.AddObject(physics)
 	}

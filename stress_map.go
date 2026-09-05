@@ -101,8 +101,11 @@ func loadStressMap(cfg StressConfig) core.MapLoadResult {
 // be looked at. The map to judge shadows by is the one behind -shadowtest.
 func stressLights(cfg StressConfig) []core.MapLight {
 	count := cfg.Lights
-	if count > quads.MaxLights-1 { // the flashlight holds slot 0
-		count = quads.MaxLights - 1
+	// Capped by the shadow atlas, not by MaxLights: these exist to cost shadow
+	// passes, and a light past the last layer would cost none. The player's light
+	// holds the first layer.
+	if count > quads.MaxShadowLayers-1 {
+		count = quads.MaxShadowLayers - 1
 	}
 	if count <= 0 {
 		return nil

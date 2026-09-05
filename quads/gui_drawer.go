@@ -90,9 +90,7 @@ func (q *AnimatedSprite) SetDestRect(rect mgl32.Vec4) {
 }
 
 type GuiDrawer struct {
-	shader     *glhf.Shader
-	quadsDrawn int
-	drawCalls  int
+	shader *glhf.Shader
 
 	animations        []SpriteAnimation
 	spritesPerTexture map[glhf.TextureAtlas]map[*AnimatedSprite]bool
@@ -110,8 +108,6 @@ func (q *GuiDrawer) AddAnimation(animation SpriteAnimation) int {
 	return index
 }
 func (q *GuiDrawer) Draw(elapsed float64) {
-	spritesDrawn := 0
-	drawCalls := 0
 	for currentAtlas, spriteIndices := range q.spritesPerTexture {
 		curBatch := currentAtlas.GetSpriteBatch()
 		for sprite := range spriteIndices {
@@ -121,15 +117,8 @@ func (q *GuiDrawer) Draw(elapsed float64) {
 			texIndex := q.TextureIndex(sprite, elapsed)
 
 			curBatch.DrawTextured(currentAtlas.GetSourceRect(texIndex), sprite.DestinationRect(), sprite.tintColor)
-			spritesDrawn++
 		}
 	}
-	q.quadsDrawn = spritesDrawn
-	q.drawCalls = drawCalls
-}
-
-func (q *GuiDrawer) DrawnLastFrame() (int, int) {
-	return q.quadsDrawn * 2, q.drawCalls
 }
 
 func (q *GuiDrawer) Add(texture *glhf.TextureAtlasFixed, textureIndex uint16, x, y int) *AnimatedSprite {

@@ -150,7 +150,7 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
 // along the surface normal in *world* space instead takes the angle out of it - the
 // offset is expressed in shadow texels as they measure at this fragment, so it stays
 // the right size at any distance, any cone angle and any shadow resolution.
-float ShadowCalculation(uint lightIndex, LightInfo light, vec3 fragWorldPos, vec3 normal, vec3 lightDir) {
+float ShadowCalculation(float shadowLayer, LightInfo light, vec3 fragWorldPos, vec3 normal, vec3 lightDir) {
     // How wide one shadow texel is in world units out here. direction.w carries the
     // cosine of the light's half FOV, which is also the half angle of its shadow
     // frustum, so the texel footprint follows from the distance alone.
@@ -190,7 +190,7 @@ float ShadowCalculation(uint lightIndex, LightInfo light, vec3 fragWorldPos, vec
     for (int x = -1; x <= 1; x++) {
         for (int y = -1; y <= 1; y++) {
             vec2 tap = projCoords.xy + vec2(x, y) * texelSize;
-            lit += texture(shadowMap, vec4(tap, float(lightIndex), reference));
+            lit += texture(shadowMap, vec4(tap, shadowLayer, reference));
         }
     }
     return 1.0 - (lit / 9.0);
@@ -211,7 +211,7 @@ vec3 calculateAmbientLight() {
 // constants for every light in the world, with reach borrowed from fogRange - so
 // moving the fog slider relit the level, and no light could be brighter, longer
 // or wider than any other.
-vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos, vec3 fragWorldNormal) {
+vec3 calcLight(vec3 viewPos, LightInfo light, vec3 fragWorldPos, vec3 fragWorldNormal) {
     vec3 normal = normalize(fragWorldNormal);
     vec3 lightPos = light.position.xyz;
     float range = light.position.w;
@@ -222,9 +222,14 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     float dist = max(length(toLight), 0.0001);
     vec3 lightDir = toLight / dist;
 
-    // A cone cosine of -1 marks an omni light (LightInfo.Omni): it has no cone and
-    // no shadow map, so both tests below are skipped for it.
+    // A cone cosine of -1 marks an omni light (LightInfo.Omni): it has no cone, so
+    // the cone test below is skipped for it.
     bool isOmni = coneOuter <= -1.0;
+    // params.x is this light's layer in the shadow atlas, or -1 when it has none:
+    // an omni light, or a spotlight that arrived after the last layer was handed
+    // out. It used to be the light's index in the list, which is what tied the
+    // number of lights in a map to the depth of the atlas. See assignShadowLayers.
+    float shadowLayer = light.params.x;
     float cone = 1.0;
     if (!isOmni) {
         float theta = dot(lightDir, normalize(-light.direction.xyz));
@@ -264,7 +269,7 @@ vec3 calcLight(uint lightIndex, vec3 viewPos, LightInfo light, vec3 fragWorldPos
     float spec = pow(max(dot(normal, halfwayDir), 0.0), 64.0);
     vec3 specular = spec * 0.15 * lightColor;
     // calculate shadow
-    float shadow = isOmni ? 0.0 : ShadowCalculation(lightIndex, light, fragWorldPos, normal, lightDir);
+    float shadow = shadowLayer < 0.0 ? 0.0 : ShadowCalculation(shadowLayer, light, fragWorldPos, normal, lightDir);
     
     vec3 lighting = (1.0 - shadow) * (diffuse + specular) * cone * falloff;    
     //vec3 lighting = (diffuse + specular);
@@ -315,7 +320,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
         if (curLight.color.rgb == vec3(0.0) || curLight.color.a <= 0.0) {
             continue;
         }
-        spotLightColor += calcLight(i, camPosition.xyz, curLight, fragWorldPos, fragWorldNormal);
+        spotLightColor += calcLight(camPosition.xyz, curLight, fragWorldPos, fragWorldNormal);
     }
     
     // FLASHLIGHT HERE

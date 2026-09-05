@@ -392,6 +392,16 @@ func (va *VertexArray[V]) SetPrimitiveType(primitiveType uint32) {
 	va.primitiveType = primitiveType
 }
 
+// TriangleCount is how many triangles a Draw of the whole array submits. That is
+// the index count when the array is indexed and the vertex count when it is not,
+// the same two cases Draw picks between - counting vertices for an indexed mesh
+// undercounts every vertex that more than one triangle shares.
 func (va *VertexArray[V]) TriangleCount() int {
-	return (va.vertexCount / 4) / 2
+	if va.primitiveType != gl.TRIANGLES {
+		return 0
+	}
+	if va.isIndexed() {
+		return va.indexCount / 3
+	}
+	return va.vertexCount / 3
 }

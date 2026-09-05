@@ -254,12 +254,22 @@ own shadow frustum, so the region it lights and the region it has depth informat
 for cannot drift apart. Falloff is full to half the reach, then out to nothing at
 the far plane. Covered by `TestPackedCarriesFrustumReachAndCone`.
 
-### [ ] 16. Every light is a shadow-casting spotlight
+### [x] 16. Every light is a shadow-casting spotlight
 
 No point lights, no directional/sun, no unshadowed fill lights.
 
-**Fix:** a `type` field, so cheap decorative lights skip the depth pass entirely.
-That is what makes many-light scenes affordable.
+**Fixed** in two steps. `LightInfo.Omni` made point lights (see Lighting notes in
+`ISSUES.md`), and the shadow layer is now a field of its own rather than the light's
+index in the list: `MaxLights = 32` sizes the UBO and the shader loop, `MaxShadowLayers
+= 16` sizes the atlas, and `assignShadowLayers` hands out the layers to casters in list
+order. `params.x` carries the layer, or `-1` for a light that casts none, which the
+shader reads as "skip the depth sample". A level can hold more lights than the atlas has
+room for, and the ones past it still light.
+
+The other half is not needing the slots at all: a torch is a baked light now (#17), so
+the scenery costs nothing per frame and the dynamic slots go to things that move.
+
+Still missing: a directional/sun light.
 
 ### [ ] 17. The baked voxel lighting is computed and thrown away
 
@@ -285,14 +295,20 @@ shadow-mapped spotlights cannot fit.
 `FillTorchlight` needs two fixes on the way in: a `println` inside the flood fill,
 and a `nodeLight - 1` byte underflow when the level is 0.
 
-### [ ] 18. Forward shading with a fixed 64-light loop
+### [~] 18. Forward shading with a fixed 64-light loop
 
 `quads/shader_header.go:135` iterates all active lights per fragment with a
 shadow-map sample each. Fine at 3, painful at 20+.
 
-**Fix ladder:** baked voxel light for statics (#17) -> per-light range culling on
-the CPU -> clustered forward. Deferred is listed in `optimize.txt` but it fights
-the `texelFetch` atlas and should be the last resort.
+The loop runs to `lightCounts.x`, not to the array size, and only lights holding an
+atlas layer take a shadow sample now (#16), so a scene full of baked torches and a
+handful of dynamic lights costs what it looks like it should. The loop itself is still
+every light against every fragment.
+
+**Fix ladder:** baked voxel light for statics (done, #17) -> unshadowed lights past the
+atlas (done, #16) -> per-light range culling on the CPU -> clustered forward. Deferred
+is listed in `optimize.txt` but it fights the `texelFetch` atlas and should be the last
+resort.
 
 ---
 
@@ -308,8 +324,9 @@ corrupting the texture binding for later sprites.
 
 ### [ ] 20. `updateLightAt(0)` runs unconditionally every frame
 
-`quads/gl_application.go:342` — a `glBufferSubData` on the UBO per frame even when
-the camera has not moved.
+`LightsUBO.UpdatePlayerLight` — a `glBufferSubData` on the UBO per frame even when
+the camera has not moved. It guards an empty light list now, which is the crash that
+was one `SetLights(nil)` away, but it still uploads every frame.
 
 ### [x] 21. `GetProjectionViewMatrix()` rebuilds the projection every call
 

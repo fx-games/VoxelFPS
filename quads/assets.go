@@ -114,13 +114,29 @@ func (a Assets) Texture(filePath string) *glhf.Texture {
 	return texture
 }
 
+// Image follows Texture: a file that is missing or is not an image gives a magenta
+// placeholder, not a dead process. One of its callers is the atlas picker, which
+// decodes whatever the player dropped on the window - a text file dropped by
+// accident used to end the session.
 func (a Assets) Image(filePath string) image.Image {
-	file := a.open(filePath)
+	file, err := a.Open(filePath)
+	if err != nil {
+		log.Printf("[Assets] could not open image %s: %v - using placeholder", filePath, err)
+		return placeholderImage()
+	}
 	defer file.Close()
 	img, _, err := image.Decode(file)
 	if err != nil {
-		panic("could not decode image " + filePath + ": " + err.Error())
+		log.Printf("[Assets] could not decode image %s: %v - using placeholder", filePath, err)
+		return placeholderImage()
 	}
+	return img
+}
+
+// placeholderImage is the magenta of NewPlaceholderTexture, before it is uploaded.
+func placeholderImage() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 255, G: 0, B: 255, A: 255})
 	return img
 }
 

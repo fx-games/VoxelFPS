@@ -48,30 +48,40 @@ func (g *Game) pollInput(elapsed float64) {
 		upDown = 1
 	}
 
-	const moveSpeed = 7.0
-	const jumpSpeed = 8.0
-
-	var walkVelocity mgl32.Vec3
-	if moveDir[0] != 0 || moveDir[1] != 0 {
-		desiredPos := g.Camera.GetDesiredPosition(moveSpeed, moveDir)
-		walkVelocity = desiredPos.Sub(g.Camera.GetPosition()).Normalize().Mul(moveSpeed)
-	}
-
 	physics := g.player.Physics()
+
 	if !g.gravitationEnabled {
-		// Free flight: space and C move straight up and down.
-		g.player.Physics().SetGrounded(false)
-		physics.SetVelocity(walkVelocity.Add(mgl32.Vec3{0, float32(upDown) * moveSpeed, 0}))
+		// Free flight: no Quake physics, space and C move straight up and down.
+		const flySpeed = 7.0
+		var flyVelocity mgl32.Vec3
+		if moveDir[0] != 0 || moveDir[1] != 0 {
+			desiredPos := g.Camera.GetDesiredPosition(flySpeed, moveDir)
+			flyVelocity = desiredPos.Sub(g.Camera.GetPosition()).Normalize().Mul(flySpeed)
+		}
+		physics.SetGrounded(false)
+		physics.SetVelocity(flyVelocity.Add(mgl32.Vec3{0, float32(upDown) * flySpeed, 0}))
 		return
 	}
 
-	// Gravity does the vertical part, so only the horizontal velocity is
-	// replaced. Jumping needs something to push off from.
-	fallVelocity := physics.Velocity().Y()
-	if upDown > 0 && physics.IsGrounded() {
-		fallVelocity = jumpSpeed
+	// The direction the player is asking to move in, flattened: looking up must
+	// not slow you down.
+	var wishDir mgl32.Vec3
+	if moveDir[0] != 0 || moveDir[1] != 0 {
+		desired := g.Camera.GetDesiredPosition(1, moveDir).Sub(g.Camera.GetPosition())
+		wishDir = mgl32.Vec3{desired.X(), 0, desired.Z()}
+		if wishDir.Len() > 0 {
+			wishDir = wishDir.Normalize()
+		}
 	}
-	physics.SetVelocity(mgl32.Vec3{walkVelocity.X(), fallVelocity, walkVelocity.Z()})
+
+	velocity := physics.Velocity()
+	if g.move.CheckJump(upDown > 0, physics.IsGrounded()) {
+		velocity = mgl32.Vec3{velocity.X(), pmJumpVelocity, velocity.Z()}
+		// The jump has already left the ground, the next physics step only
+		// finds out afterwards.
+		physics.SetGrounded(false)
+	}
+	physics.SetVelocity(g.move.Advance(velocity, wishDir, physics.IsGrounded(), elapsed))
 }
 
 func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
@@ -94,15 +104,22 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		}
 	}
 
-	if key == glfw.KeyTab && g.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
+	if key == glfw.KeyTab && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
 		rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
 		hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
-		g.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
+		g.editor.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
 		g.Toast(fmt.Sprintf("Block textures copied from %v", rayHitBlock))
 	}
 
 	if key >= glfw.Key1 && key <= glfw.Key9 {
-		g.selectWeapon(int(key - glfw.Key1))
+		// The binding is the weapons folder's, not ours.
+		g.selectWeaponByKey(int(key-glfw.Key1) + 1)
+	}
+
+	// Reload is a press the weapon's script may or may not act on: a gun with
+	// no Reload state, like a pump shotgun that works itself, ignores it.
+	if key == glfw.KeyR && g.isMouseCursorCaptured {
+		g.reloadHeld = true
 	}
 
 	if key == glfw.KeyEscape {
@@ -175,7 +192,9 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.Toast(fmt.Sprintf("Gravity %s", map[bool]string{true: "on", false: "off"}[g.gravitationEnabled]))
 	}
 	if key == glfw.KeyT {
-		g.Toast(fmt.Sprintf("Flashlight %s", map[bool]string{true: "on", false: "off"}[g.ToggleFlashlight()]))
+		// One key, one slot: off -> flashlight -> torch -> off. The player carries a
+		// single light, so picking one puts the other away.
+		g.Toast(fmt.Sprintf("Player light: %s", g.CyclePlayerLight()))
 	}
 	if key == glfw.KeyE && g.isHoveringObject() {
 		events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
@@ -184,7 +203,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.spawnCurrentGameObject()
 	}
 
-	if key == glfw.KeyR {
+	if key == glfw.KeyR && !g.isMouseCursorCaptured {
 		g.openVoxelEditMenu()
 	}
 
@@ -204,14 +223,14 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 }
 
 func (g *Game) spawnCurrentGameObject() {
-	if g.gameObjectForSpawning != nil {
-		decoToSpawn := g.gameObjectForSpawning
+	if g.editor.gameObjectForSpawning != nil {
+		decoToSpawn := g.editor.gameObjectForSpawning
 		if !decoToSpawn.HasComponent(quads.ComponentTypeSprite) {
 			// A mesh ghost - a torch. It is already the object it will be, so it
 			// only has to stop being the ghost: its light goes into the map and a
 			// fresh ghost takes over the crosshair.
 			g.dropTorch(decoToSpawn.Transform().GetPosition())
-			g.gameObjectForSpawning = g.spawnTorch(decoToSpawn.Transform().GetPosition())
+			g.editor.gameObjectForSpawning = g.spawnTorch(decoToSpawn.Transform().GetPosition())
 			return
 		}
 		sprite := decoToSpawn.Sprite()
@@ -224,13 +243,13 @@ func (g *Game) spawnCurrentGameObject() {
 		decoToSpawn.SetComponent(physicsComponent)
 		g.physicsSystem.AddObject(physicsComponent)
 
-		g.gameObjectForSpawning = g.spawnEntity(decoToSpawn.Transform().GetPosition(), core.MapEntity{
+		g.editor.gameObjectForSpawning = g.spawnEntity(decoToSpawn.Transform().GetPosition(), core.MapEntity{
 			Name:           decoToSpawn.DisplayName,
 			TextureIndices: sprite.TextureIndices,
 			CreateCollider: false,
 			IsTransparent:  true,
 		})
-		g.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+		g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
 	}
 }
 
@@ -290,15 +309,24 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		return
 	}
 
-	if g.gameObjectForSpawning != nil && button == glfw.MouseButtonLeft && action == glfw.Press {
+	if g.editor.gameObjectForSpawning != nil && button == glfw.MouseButtonLeft && action == glfw.Press {
 		g.spawnCurrentGameObject()
 		return
 	}
 
 	if g.isMouseCursorCaptured {
-		if action == glfw.Press && button == glfw.MouseButtonLeft {
-			g.startWeaponFireAnimation()
+		if button != glfw.MouseButtonLeft {
+			return
 		}
+		if g.editor.tool != EditorToolNone {
+			if action == glfw.Press {
+				g.applyEditorTool()
+			}
+			return
+		}
+		// The trigger is held, not pulled: a weapon's script decides what a
+		// held trigger does, and several of them keep firing while it is down.
+		g.triggerHeld = action == glfw.Press
 	} else if button == glfw.MouseButtonLeft {
 		switch action {
 		case glfw.Press:
@@ -317,14 +345,14 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 // cursor, or the empty one in front of it when placing. Reports false when the
 // ray hit nothing, so the brush does not act on a bogus grid position.
 func (g *Game) brushTarget(x, y float64) (voxel.Int3, bool) {
-	if g.voxelBrush == nil {
+	if g.editor.voxelBrush == nil {
 		return voxel.Int3{}, false
 	}
 	result := g.rayCastFromScreenPos(x, y)
 	if !result.HitInfo.Hit {
 		return voxel.Int3{}, false
 	}
-	if g.voxelSelectionEmpty {
+	if g.editor.voxelSelectionEmpty {
 		return result.HitInfo.PreviousGridPosition, true
 	}
 	return result.HitInfo.CollisionGridPosition, true
@@ -332,32 +360,32 @@ func (g *Game) brushTarget(x, y float64) (voxel.Int3, bool) {
 
 func (g *Game) HandleMouseMove(x float64, y float64) {
 	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
+		g.editor.voxelSelection = g.editor.voxelBrush.StartDrag(blockHit)
 	}
 }
 
 func (g *Game) HandleDragStart(x float64, y float64) {
 	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.voxelSelection = g.voxelBrush.StartDrag(blockHit)
+		g.editor.voxelSelection = g.editor.voxelBrush.StartDrag(blockHit)
 	}
 }
 
 func (g *Game) HandleDragMove(x float64, y float64) {
 	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.voxelSelection = g.voxelBrush.Drag(blockHit)
+		g.editor.voxelSelection = g.editor.voxelBrush.Drag(blockHit)
 	}
 }
 
 func (g *Game) HandleDragStop(x float64, y float64) {
-	if g.voxelBrush == nil {
+	if g.editor.voxelBrush == nil {
 		return
 	}
 	// A drag that ends off the map keeps the selection it had, but still commits.
 	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.voxelSelection = g.voxelBrush.Drag(blockHit)
+		g.editor.voxelSelection = g.editor.voxelBrush.Drag(blockHit)
 	}
-	if g.voxelSelectionAction != nil {
-		g.voxelSelectionAction(g.voxelSelection)
+	if g.editor.voxelSelectionAction != nil {
+		g.editor.voxelSelectionAction(g.editor.voxelSelection)
 	}
 }
 

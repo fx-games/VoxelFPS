@@ -6,13 +6,13 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/audio"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/eassets"
 	"github.com/memmaker/goray/events"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
-	"github.com/memmaker/goray/zdwep"
 	_ "image/png"
 	"log"
 	"path/filepath"
@@ -30,6 +30,7 @@ func main() {
 	defaults := DefaultStressConfig()
 	stress := flag.Bool("stress", false, "generate a stress map instead of loading the LDtk map")
 	shadowTest := flag.Bool("shadowtest", false, "load the shadow test map: one caster, one wall, one light from above")
+	stairsTest := flag.Bool("stairs", false, "load the stairs test map: a staircase onto a platform, to walk the step-up")
 	// The two shadow knobs are also flags, not only config menu sliders, so a
 	// before/after can be run from a script instead of from muscle memory.
 	shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
@@ -46,6 +47,8 @@ func main() {
 	shadowTestMap := *shadowTest
 	if shadowTestMap {
 		mapLoad = loadShadowTestMap()
+	} else if *stairsTest {
+		mapLoad = loadStairsTestMap()
 	} else if *stress {
 		stressConfig = &StressConfig{
 			Size:          *stressSize,
@@ -111,7 +114,6 @@ type Game struct {
 
 	widgetStack                []InputReceiver
 	widgetsAreBlockingMovement bool
-	table                      *quads.GameObject
 
 	fogStart               float32
 	fogEnd                 float32
@@ -137,19 +139,26 @@ type Game struct {
 	projectileImpactAnim int
 	lastHitResult        *RaycastResult
 
-	gameObjectForSpawning *quads.GameObject
-	gravitationEnabled    bool
-	isMouseBeingDragged   bool
+	gravitationEnabled  bool
+	move                q3Move
+	isMouseBeingDragged bool
 
-	voxelBlock           *voxel.Block
-	voxelBrush           VoxelBrush
-	voxelSelection       []voxel.Int3
-	voxelSelectionEmpty  bool // if voxelSelectionEmpty is set to true, the selection will select the empty grid position right before the collision grid position
-	voxelSelectionAction func(pos []voxel.Int3)
+	// The map editor's half of the state. Kept together rather than mixed into the
+	// player's, because the two are only ever touched by different halves of the
+	// code: nothing in a normal run reads any of it.
+	editor Editor
 
-	weapons                     []Weapon
-	currentWeaponIndex          int
-	currentPaintGunTextureIndex int
+	weapons            []*Weapon
+	currentWeaponIndex int
+	// weaponKeys and weaponByID come out of the weapons folder's key map.
+	weaponKeys map[int]string
+	weaponByID map[string]int
+	// triggerHeld and reloadHeld are what the weapon's script reads; the script
+	// decides whether either does anything.
+	triggerHeld bool
+	reloadHeld  bool
+
+	audio *audio.Player
 
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
@@ -157,21 +166,18 @@ type Game struct {
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
 	// Basics (Window / Camera)
-	g.currentPaintGunTextureIndex = -1
+	g.editor.currentPaintGunTextureIndex = -1
 	g.GlApplication = app
 
 	g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
 	g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
 
-	// 1, 2, 3, 4 switch between these.
-	g.weapons = []Weapon{
-		g.loadDoomWeapon("Ol_Faithful", WeaponEffectKillingProjectile, 0.4),
-		g.loadDoomWeapon("Borstal_Shotgun", WeaponEffectHitscanVoxelDestruction, 0.8),
-		g.loadDoomWeapon("Charge_Pistol", WeaponEffectHitscanVoxelPaintGun, 0.2),
-		g.loadSheetWeapon("Small Gun", "assets/smallgun_sheet.png", 64, 64,
-			[]uint16{0, 1, 2, 3, 4}, 0.06, WeaponEffectHitscanVoxelDestruction, 0.3),
+	// Weapons and the number keys that select them are data, in the weapons
+	// folder. A folder that does not load stops the game with every problem it
+	// found, rather than quietly leaving a gun out.
+	if err := g.LoadWeapons(weaponsDir()); err != nil {
+		panic(err)
 	}
-	g.currentWeapon().Equip()
 
 	g.SetupUnitCubes()
 	//g.SetCursor("assets/cursor.png", 7, 7)
@@ -264,11 +270,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 	g.mapLoad(mapLoadResult, false)
 
-	events.Subscribe(events.EventPlayerWeaponFired, func(id events.EventID, event events.Event) {
-		origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
-		g.fireWeapon(origin, direction, event.(WeaponEffect))
-	})
-
 	events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
 	events.Subscribe(events.EventPhysicsCollision, g.physicsCollision)
 	events.Subscribe(events.EventPlayerInteractWith, g.playerInteractWith)
@@ -296,36 +297,6 @@ func (g *Game) benchmarkLabel() string {
 		return "shadow test map"
 	}
 	return "raymap.ldtk"
-}
-
-// loadDoomWeapon reads a Doom weapon sprite atlas plus the ZDoom script that is
-// stored alongside it in the PNG, and hands back a weapon that fires with the
-// given effect.
-func (g *Game) loadDoomWeapon(weaponName string, effect WeaponEffect, delayBetweenShots float64) *DoomWeapon {
-	atlas, zscript, err := zdwep.ReadDoomAtlasFromFile(filepath.Join("assets", weaponName+".png"))
-	if err != nil {
-		panic(err)
-	}
-	g.SetupSpriteBatch(atlas)
-
-	script, err := zdwep.ParseActorScript(zscript)
-	if err != nil {
-		panic(err)
-	}
-
-	weapon := newDoomWeapon(weaponName, script.ParsedScript)
-	weapon.Atlas = atlas
-	weapon.Scale = g.UIScale
-	weapon.Effect = effect
-	weapon.DelayBetweenShots = delayBetweenShots
-
-	spriteMap := make(map[string]int)
-	for i := 0; i <= atlas.LastValidIndex(); i++ {
-		spriteMap[atlas.NameOfFrame(i)] = i
-	}
-	weapon.spriteToIndex = spriteMap
-
-	return weapon
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
@@ -360,6 +331,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	*/
 	// Setup Collision Solver
 	g.physicsSystem = quads.NewCollisionSolver(g.CubeMap.IsSolidBlockAt, g.CubeMap.ContainsVec)
+	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
+	g.physicsSystem.SetStepHeight(pmStepSize)
 	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt)
 
 	// Spawn Entities
@@ -458,6 +431,7 @@ func (g *Game) Update(elapsed float64) {
 
 	g.pollInput(elapsed)
 
+	g.updateWeapon(elapsed)
 	g.physicsSystem.Update(elapsed)
 	g.updateGUI(elapsed)
 }
@@ -473,10 +447,10 @@ func (g *Game) printDebugInfo() {
 	}
 
 	spriteTrisDrawn, spriteDrawCalls := g.Sprites.DrawnLastFrame()
-	guiTrisDrawn, guiDrawCalls := g.Gui.DrawnLastFrame()
+	guiTrisDrawn, guiDrawCalls := g.GuiDrawnLastFrame()
 	meshTriangles, meshDrawCalls := g.Meshes.DrawnLastFrame()
 	shadowPasses, litLights := g.ShadowPasses()
-	meshGen, sceneHash := g.ShadowCacheState()
+	meshGen, _ := g.ShadowCacheState()
 
 	rows := []core.TableRow{
 		core.NewTableRow("Cam Fwd", "", vec3String(forward)),
@@ -489,7 +463,6 @@ func (g *Game) printDebugInfo() {
 		core.NewTableRow("Sprites", fmt.Sprintf("%d tris", spriteTrisDrawn), fmt.Sprintf("%d", spriteDrawCalls)),
 		core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
 		core.NewTableRow("Shadows", fmt.Sprintf("%d/%d lit", shadowPasses, litLights), fmt.Sprintf("gen %d", meshGen)),
-		core.NewTableRow("Shadow key", fmt.Sprintf("%04x", sceneHash&0xffff), ""),
 	}
 	debugLines := core.TableLayout(rows, []core.TextAlignment{core.AlignLeft, core.AlignRight, core.AlignRight})
 	g.PrintMulti(debugLines)
@@ -576,7 +549,7 @@ func (g *Game) DrawGui(elapsed float64) {
 
 	if weapon := g.currentWeapon(); weapon != nil {
 		guiWidth, guiHeight := g.GuiSize()
-		weapon.Draw(elapsed, int32(guiWidth), int32(guiHeight))
+		weapon.Draw(int32(guiWidth), int32(guiHeight))
 	}
 
 	if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
@@ -586,14 +559,6 @@ func (g *Game) DrawGui(elapsed float64) {
 	for _, widget := range g.widgetStack {
 		widget.Draw()
 	}
-}
-
-func (g *Game) startWeaponFireAnimation() {
-	weapon := g.currentWeapon()
-	if weapon == nil || !weapon.Fire(glfw.GetTime()) {
-		return
-	}
-	events.Publish(events.EventPlayerWeaponFired, weapon.FireEffect())
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {
@@ -635,15 +600,15 @@ func (g *Game) updateGUI(elapsed float64) {
 		result = g.rayCast(g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5))
 	} else {
 		result = g.rayCastFromScreenPos(g.Window.GetCursorPos())
-		g.UnitCube.QueueDraw(g.voxelSelection)
+		g.UnitCube.QueueDraw(g.editor.voxelSelection)
 	}
 
 	g.lastHitResult = &result
 
-	if g.gameObjectForSpawning != nil {
+	if g.editor.gameObjectForSpawning != nil {
 		groundPos, hitGround := g.lastHitResult.GroundPosition()
 		if hitGround {
-			g.gameObjectForSpawning.Transform().SetPosition(groundPos)
+			g.editor.gameObjectForSpawning.Transform().SetPosition(groundPos)
 		}
 	}
 
@@ -715,7 +680,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 			// A projectile in flight is not something to look at, interact with or
 			// shoot: it is skipped here rather than in hoveredObj, so the HUD frame,
 			// the label and the hitscan weapons all lose it at once.
-			if gObj.GameObject() == g.player || gObj.GameObject() == g.gameObjectForSpawning ||
+			if gObj.GameObject() == g.player || gObj.GameObject() == g.editor.gameObjectForSpawning ||
 				gObj.GameObject().HasComponent(quads.ComponentTypeProjectile) {
 				continue
 			}
@@ -756,7 +721,7 @@ func (g *Game) openSpriteEditor(obj *quads.GameObject) {
 	//TODO
 }
 func (g *Game) openCubeTextureMapper() {
-	if g.voxelBlock == nil {
+	if g.editor.voxelBlock == nil {
 		g.Toast("No voxel block loaded")
 		return
 	}
@@ -765,7 +730,7 @@ func (g *Game) openCubeTextureMapper() {
 	g.SetMouseCapture(false)
 
 	g.widgetsAreBlockingMovement = true
-	atlasPicker := g.OpenTextureCube(g.AtlasMap, g.voxelBlock.Textures)
+	atlasPicker := g.OpenTextureCube(g.AtlasMap, g.editor.voxelBlock.Textures)
 	guiWidth, guiHeight := g.GuiSize()
 	atlasPicker.HandleResize(guiWidth, guiHeight, g.UIScale)
 

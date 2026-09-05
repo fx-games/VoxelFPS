@@ -64,9 +64,14 @@ func (a *SpriteBatch) End() {
 
 }
 
+// QuadCount is how many quads have been written since the last Begin, which is
+// what Render draws.
+func (a *SpriteBatch) QuadCount() int {
+	return (a.vertexElementCounter / a.elementsPerVertex) / verticesPerQuad
+}
+
 func (a *SpriteBatch) Render() {
-	quadCount := (a.vertexElementCounter / a.elementsPerVertex) / 4
-	a.RenderSlice(0, quadCount)
+	a.RenderSlice(0, a.QuadCount())
 }
 func (a *SpriteBatch) RenderSlice(firstIndex int, quadCount int) {
 	if quadCount == 0 {

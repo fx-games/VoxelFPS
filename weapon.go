@@ -1,124 +1,297 @@
 package main
 
 import (
+	"fmt"
+	"math"
+	"math/rand"
+	"os"
+	"path/filepath"
+
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/audio"
+	"github.com/memmaker/goray/events"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
-	"strings"
+	"github.com/memmaker/goray/wep"
 )
 
-// Weapon is what the player holds. The sprites come either from a Doom atlas
-// with its ZDoom script (DoomWeapon) or from a plain sprite sheet
-// (SheetWeapon); what a shot does to the world is the WeaponEffect.
-type Weapon interface {
-	DisplayName() string
-	FireEffect() WeaponEffect
-	SetFireEffect(effect WeaponEffect)
-	// Fire starts the firing animation and reports whether the shot goes off,
-	// ie. whether the weapon was off cooldown.
-	Fire(now float64) bool
-	Draw(elapsed float64, screenWidth, screenHeight int32)
-	Equip()
-	Unequip()
+// Weapon is what the player holds. Everything about it, from the frames it
+// shows to what a shot does, comes out of the weapons folder; nothing about any
+// particular gun is written here.
+type Weapon struct {
+	Data   *wep.Weapon
+	Actors map[string]*wep.Actor
+	Atlas  *glhf.TextureAtlasPacked
+
+	// spriteIndex turns a step's frame name into its place in the atlas.
+	spriteIndex map[string]int
+
+	runtime *wep.Runtime
+	// cursor runs the weapon's own animation and flash runs the overlay
+	// A_GunFlash starts over it, at the same time.
+	cursor *wep.Cursor
+	flash  *wep.Cursor
+
+	uiScale mgl32.Vec2
 }
 
-func (w *DoomWeapon) DisplayName() string {
-	return strings.ReplaceAll(w.Name, "_", " ")
-}
-
-func (w *DoomWeapon) FireEffect() WeaponEffect {
-	return w.Effect
-}
-
-func (w *DoomWeapon) SetFireEffect(effect WeaponEffect) {
-	w.Effect = effect
-}
-
-func (w *DoomWeapon) Draw(elapsed float64, screenWidth, screenHeight int32) {
-	src, dst := w.DrawRects(elapsed, screenWidth, screenHeight)
-	w.Atlas.GetSpriteBatch().DrawTextured(src, dst, mgl32.Vec4{1, 1, 1, 1})
-}
-
-func (w *DoomWeapon) Equip() {
-	w.firing = false
-	w.SetState("Ready")
-}
-
-func (w *DoomWeapon) Unequip() {}
-
-// SheetWeapon draws itself from a plain grid sprite sheet: one idle frame, and
-// an animation that plays once per shot.
-type SheetWeapon struct {
-	name              string
-	sprite            *quads.AnimatedSprite
-	atlas             *glhf.TextureAtlasFixed
-	animation         int
-	effect            WeaponEffect
-	delayBetweenShots float64
-	lastShotTime      float64
-	scale             mgl32.Vec2
-}
-
-// loadSheetWeapon builds a weapon from a sprite sheet of equally sized frames.
-// The frames are shown in order on every shot, the first one is the idle frame.
-func (g *Game) loadSheetWeapon(name string, fileName string, frameWidth, frameHeight int, frames []uint16, secondsPerFrame float32, effect WeaponEffect, delayBetweenShots float64) *SheetWeapon {
-	atlas := g.LoadFixedGuiAtlasWithBatch(fileName, frameWidth, frameHeight, 2)
-
-	showTimes := make([]float32, len(frames))
-	for i := range showTimes {
-		showTimes[i] = secondsPerFrame
+// NewWeapon wires a loaded weapon to its atlas.
+func NewWeapon(data *wep.Weapon, actors map[string]*wep.Actor, atlas *glhf.TextureAtlasPacked, uiScale mgl32.Vec2) *Weapon {
+	indices := make(map[string]int)
+	for i := 0; i <= atlas.LastValidIndex(); i++ {
+		indices[atlas.NameOfFrame(i)] = i
 	}
-	animation := g.Gui.AddAnimation(quads.SpriteAnimation{Frames: [][]uint16{frames}, ShowTimeInSeconds: showTimes})
-
-	weapon := &SheetWeapon{
-		name:              name,
-		sprite:            g.Gui.Add(atlas, frames[0], 0, 0),
-		atlas:             atlas,
-		animation:         animation,
-		effect:            effect,
-		delayBetweenShots: delayBetweenShots,
-		scale:             g.UIScale,
+	weapon := &Weapon{
+		Data:        data,
+		Actors:      actors,
+		Atlas:       atlas,
+		spriteIndex: indices,
+		runtime:     wep.NewRuntime(data, rand.New(rand.NewSource(1))),
+		uiScale:     uiScale,
 	}
-	weapon.sprite.Hide()
+	weapon.cursor = wep.NewCursor(&data.States, "Ready")
 	return weapon
 }
 
-func (w *SheetWeapon) DisplayName() string {
-	return w.name
-}
+func (w *Weapon) DisplayName() string { return w.Data.Tag }
 
-func (w *SheetWeapon) FireEffect() WeaponEffect {
-	return w.effect
-}
-
-func (w *SheetWeapon) SetFireEffect(effect WeaponEffect) {
-	w.effect = effect
-}
-
-func (w *SheetWeapon) Fire(now float64) bool {
-	if now-w.lastShotTime < w.delayBetweenShots {
-		return false
+// Equip puts the weapon in hand, running its raise animation when it has one.
+func (w *Weapon) Equip() {
+	w.flash = nil
+	if !w.cursor.Goto("Select") {
+		w.cursor.Goto("Ready")
 	}
-	w.lastShotTime = now
-	w.sprite.PlayAnimation(w.animation)
-	return true
 }
 
-// Draw only places the sprite, the GUI drawer paints it along with the rest of
-// the HUD.
-func (w *SheetWeapon) Draw(elapsed float64, screenWidth, screenHeight int32) {
-	frameWidth, frameHeight := w.atlas.GetAtlasItemSize()
-	width := float32(frameWidth) * w.scale.X()
-	height := float32(frameHeight) * w.scale.Y()
-	left := (float32(screenWidth) - width) / 2
-	top := float32(screenHeight) - height
-	w.sprite.SetDestRect(mgl32.Vec4{left, top, left + width, top + height})
+// Unequip stops the overlay; the weapon keeps its inventory, which is the
+// player's and not the gun's.
+func (w *Weapon) Unequip() { w.flash = nil }
+
+// AmmoLine is what the HUD says about how loaded the weapon is, or empty for a
+// weapon that costs nothing to fire.
+func (w *Weapon) AmmoLine() string {
+	if w.Data.Ammo.Type == "" {
+		return ""
+	}
+	return fmt.Sprintf("%d/%d", w.runtime.Inventory[w.Data.Ammo.Type],
+		w.runtime.Caps[w.Data.Ammo.Type])
 }
 
-func (w *SheetWeapon) Equip() {
-	w.sprite.Show()
+// Update steps the weapon and its overlay and returns what they asked the world
+// to do, in the order it was asked.
+func (w *Weapon) Update(input wep.Input, elapsed float64) []wep.Op {
+	w.runtime.Input = input
+	effects := w.cursor.Update(w.runtime, elapsed)
+	if w.flash != nil {
+		effects = append(effects, w.flash.Update(w.runtime, elapsed)...)
+		if w.flash.Stopped() {
+			w.flash = nil
+		}
+	}
+	return effects
 }
 
-func (w *SheetWeapon) Unequip() {
-	w.sprite.Hide()
+// StartFlash puts the overlay on the label A_GunFlash named.
+func (w *Weapon) StartFlash(label string) {
+	w.flash = wep.NewCursor(&w.Data.States, label)
 }
+
+// Draw paints the weapon and, over it, whatever the flash overlay is showing.
+func (w *Weapon) Draw(screenWidth, screenHeight int32) {
+	w.drawCursor(w.cursor, screenWidth, screenHeight)
+	if w.flash != nil {
+		w.drawCursor(w.flash, screenWidth, screenHeight)
+	}
+}
+
+func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32) {
+	step := cursor.Step()
+	if step == nil || step.Sprite == "" {
+		return // a frame that shows nothing, which is most of a firing state
+	}
+	index, known := w.spriteIndex[step.Sprite]
+	if !known {
+		return // loading rejects this, so only hand-edited data gets here
+	}
+	scale := mgl32.Vec2{
+		w.uiScale.X() * float32(w.Data.Render.Scale[0]),
+		w.uiScale.Y() * float32(w.Data.Render.Scale[1]),
+	}
+	position := mgl32.Vec2{
+		float32(screenWidth)/2 + float32(step.OffsetX)*scale.X(),
+		float32(screenHeight) + float32(w.Data.Render.YAdjust+step.OffsetY)*scale.Y(),
+	}
+	source, destination := w.Atlas.GetSourceAndDestRects(index, position, mgl32.Vec2{0.5, 1}, scale)
+	w.Atlas.GetSpriteBatch().DrawTextured(source, destination, mgl32.Vec4{1, 1, 1, 1})
+}
+
+// LoadWeapons reads the weapons folder and puts every weapon in it into the
+// player's hands. A folder that does not load stops the game rather than
+// quietly leaving a gun out.
+func (g *Game) LoadWeapons(dir string) error {
+	library, err := wep.Load(dir)
+	if err != nil {
+		return err
+	}
+	for _, data := range library.Ordered() {
+		atlas := g.LoadPackedAtlasWithBatch(library.AtlasPath(data.ID))
+		g.weapons = append(g.weapons, NewWeapon(data, library.Actors[data.ID], atlas, g.UIScale))
+		g.loadWeaponSounds(library, data)
+	}
+	g.weaponKeys = library.Keys
+	g.weaponByID = make(map[string]int, len(g.weapons))
+	for index, weapon := range g.weapons {
+		g.weaponByID[weapon.Data.ID] = index
+	}
+	if len(g.weapons) > 0 {
+		g.currentWeapon().Equip()
+	}
+	return nil
+}
+
+// loadWeaponSounds hands the weapon's sounds to the player under the names its
+// ops play them by. The migration writes them in the layout the cue names
+// imply, so this needs no mapping of its own.
+func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) {
+	if len(data.Sounds) == 0 {
+		return
+	}
+	if g.audio == nil {
+		g.audio = audio.NewPlayer(44100)
+	}
+	g.audio.LoadCuesFromDir(library.SoundsPath(data.ID), "")
+	g.audio.SoundsLoaded()
+}
+
+// selectWeaponByKey puts the weapon bound to a number key in the player's
+// hands. An unbound key does nothing.
+func (g *Game) selectWeaponByKey(key int) {
+	id, bound := g.weaponKeys[key]
+	if !bound {
+		return
+	}
+	if index, known := g.weaponByID[id]; known {
+		g.selectWeapon(index)
+	}
+}
+
+// updateWeapon steps the weapon in hand and acts on what it asks for.
+func (g *Game) updateWeapon(elapsed float64) {
+	weapon := g.currentWeapon()
+	if weapon == nil {
+		return
+	}
+	input := wep.Input{Trigger: g.triggerHeld, Reload: g.reloadHeld}
+	g.reloadHeld = false // a reload is a press, not a state
+
+	for _, op := range weapon.Update(input, elapsed) {
+		g.applyWeaponOp(weapon, op)
+	}
+}
+
+// applyWeaponOp is the whole of what a compiled weapon can ask the world for.
+func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
+	switch op.Op {
+	case wep.OpFireBullets:
+		g.fireBullets(op)
+	case wep.OpGunFlash:
+		weapon.StartFlash(op.To)
+	case wep.OpFlashLight:
+		g.setMuzzleFlash(op.Level)
+	case wep.OpPlaySound:
+		g.playWeaponSound(op)
+	case wep.OpRecoil:
+		g.Camera.ChangeAngles(0, float32(op.Delta))
+	case wep.OpMakeNoise:
+		// Nothing listens yet; there are no enemies to hear it. Compiled and
+		// published so wiring AI up later needs no re-migration.
+		events.Publish(events.EventWeaponNoise, op)
+	case wep.OpSpawnActor, wep.OpFireProjectile:
+		// ponytail: compiled and carried, not yet drawn. World sprites come
+		// from a fixed grid atlas and a weapon's frames are packed, so putting
+		// the mod's own smoke and casings in the air needs the sprite system to
+		// take a packed atlas first.
+	}
+}
+
+// fireBullets casts one ray per pellet, spread the way the script asked.
+func (g *Game) fireBullets(op wep.Op) {
+	origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
+	count := op.Count
+	if count < 1 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		g.fireHitscan(origin, spreadDirection(direction, op.SpreadH, op.SpreadV), op)
+	}
+}
+
+// spreadDirection scatters a pellet within the horizontal and vertical spread,
+// which are half angles in degrees the way ZDoom writes them.
+func spreadDirection(direction mgl32.Vec3, spreadH, spreadV float64) mgl32.Vec3 {
+	if spreadH == 0 && spreadV == 0 {
+		return direction
+	}
+	up := mgl32.Vec3{0, 1, 0}
+	right := direction.Cross(up).Normalize()
+	trueUp := right.Cross(direction).Normalize()
+
+	yaw := (rand.Float64()*2 - 1) * spreadH * math.Pi / 180
+	pitch := (rand.Float64()*2 - 1) * spreadV * math.Pi / 180
+	scattered := direction.
+		Add(right.Mul(float32(math.Tan(yaw)))).
+		Add(trueUp.Mul(float32(math.Tan(pitch))))
+	return scattered.Normalize()
+}
+
+func (g *Game) playWeaponSound(op wep.Op) {
+	if g.audio == nil {
+		return
+	}
+	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
+		Volume:  op.Volume,
+		Pitch:   op.Pitch,
+		Looping: op.Looping,
+	})
+}
+
+// LoadPackedAtlasWithBatch reads a weapon's packed sprite atlas off disk and
+// gives it a batch to draw through.
+func (g *Game) LoadPackedAtlasWithBatch(path string) *glhf.TextureAtlasPacked {
+	file, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	atlas := quads.ReadTextureAtlasPacked(path, file)
+	g.SetupSpriteBatch(atlas)
+	return atlas
+}
+
+// How the muzzle flash lights the room: A_Light1 and A_Light2 are the two
+// levels Doom weapons ask for, and A_Light0 puts it out.
+const (
+	muzzleFlashIntensity = float32(14)
+	muzzleFlashReach     = float32(7)
+)
+
+var muzzleFlashColor = mgl32.Vec3{1.0, 0.85, 0.55}
+
+// setMuzzleFlash lights the room from the player for as long as the weapon's
+// flash overlay says. This is A_Light0/1/2: not a sector light, but the brief
+// world brightening that goes with a muzzle flash.
+//
+// ponytail: rides the single tracked light slot, which projectiles also use, so
+// firing while a plasma bolt is in the air takes the light off the bolt. One
+// slot each needs the light system to hand out more than one tracked slot.
+func (g *Game) setMuzzleFlash(level int) {
+	if level <= 0 || g.player == nil {
+		g.DetachLight()
+		return
+	}
+	g.AttachLightTo(g.player, muzzleFlashColor,
+		muzzleFlashIntensity*float32(level), muzzleFlashReach)
+}
+
+// weaponsDir is where the engine looks for weapons, next to the binary.
+func weaponsDir() string { return filepath.Clean("weapons") }

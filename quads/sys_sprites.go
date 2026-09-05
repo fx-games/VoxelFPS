@@ -40,6 +40,12 @@ type SpriteDrawer struct {
 	spritesPerTexture  map[*glhf.TextureAtlasFixed][]*SpriteComponent
 	transparentSprites []*SpriteComponent
 
+	// Decals are quads stuck to the world geometry - see decals.go. They live
+	// here because they are drawn with the same quad vertex array and shader.
+	decals     []decal
+	decalAtlas *glhf.TextureAtlasFixed
+	nextDecal  int
+
 	// Instance attribute scratch, reused every frame so the per-frame draw does
 	// not allocate. Two batches because a static sprite needs face culling off.
 	culledBatch   []float32
@@ -355,6 +361,7 @@ func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 }
 func (q *SpriteDrawer) Clear() {
 	q.spritesPerTexture = make(map[*glhf.TextureAtlasFixed][]*SpriteComponent)
+	q.ClearDecals()
 }
 
 func (q *SpriteDrawer) GetFirstFrameIndex(anim int, viewDirection int) uint16 {

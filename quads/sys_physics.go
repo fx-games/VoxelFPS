@@ -19,12 +19,26 @@ type PhysicsSystem struct {
 	gravityEnabled          bool
 	colliderScratch         []LinkedAABB
 	stepAccumulator         float64
+	stepHeight              float32
 }
 
 // SetGravityEnabled turns gravity on or off for every object that is affected
 // by it. With gravity off, objects keep whatever velocity they are given.
 func (c *PhysicsSystem) SetGravityEnabled(enabled bool) {
 	c.gravityEnabled = enabled
+}
+
+// SetStepHeight is how high a ledge a falling object may walk straight up, as
+// Quake 3's STEPSIZE does for stairs. Zero, the default, turns stepping off and
+// every ledge is a wall.
+func (c *PhysicsSystem) SetStepHeight(height float32) {
+	c.stepHeight = height
+}
+
+// SetGravity replaces the acceleration gravity applies. The default is roughly
+// earth's; a game with its own scale (Quake's, say) wants its own value.
+func (c *PhysicsSystem) SetGravity(acceleration mgl32.Vec3) {
+	c.accelerationFromGravity = acceleration
 }
 
 func (c *PhysicsSystem) GravityEnabled() bool {
@@ -187,6 +201,16 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 			correctedPos, pairsChecked, hitNormals := CheckForCollisions(obj, oldPos.Add(stepMovement), getCollidersAt)
 			c.collisionPairsChecked += pairsChecked
 
+			// A move a wall stopped gets one more chance: over the top of it, if
+			// the wall turns out to be low enough to be a stair.
+			if c.stepHeight > 0 && obj.AffectedByGravity() && blockedByWall(hitNormals) {
+				steppedPos, steppedNormals, stepPairs, stepped := StepOver(obj, stepMovement, correctedPos, c.stepHeight, getCollidersAt)
+				c.collisionPairsChecked += stepPairs
+				if stepped {
+					correctedPos, hitNormals = steppedPos, steppedNormals
+				}
+			}
+
 			obj.SetPosition(correctedPos)
 			c.moveObjectOnGrid(obj, oldPos, correctedPos)
 
@@ -212,6 +236,53 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 	}
 
 	//c.updateProjectiles(deltaTime)
+}
+
+// blockedByWall reports whether any of these surfaces is steep enough to be a
+// wall. A floor underfoot or a ceiling overhead stops a move too, and neither is
+// something to try and climb.
+func blockedByWall(normals []mgl32.Vec3) bool {
+	for _, normal := range normals {
+		if math.Abs(float64(normal.Y())) < groundNormalThreshold {
+			return true
+		}
+	}
+	return false
+}
+
+// StepOver is Quake 3's PM_StepSlideMove: a move that ran into a wall is tried
+// again from stepHeight higher up and then dropped back down again, which walks
+// an object up a stair without needing a ramp to slide along. The entity is
+// expected to still be standing where the blocked move started.
+//
+// It reports false, and changes nothing, unless the retry got further along than
+// the blocked move did - otherwise a wall too tall to climb would still nudge
+// the climber upwards every frame it is walked into.
+func StepOver(movingEntity *PhysicsComponent, movement mgl32.Vec3, blockedPos mgl32.Vec3, stepHeight float32, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, []mgl32.Vec3, int, bool) {
+	startPos := movingEntity.Position()
+	up := mgl32.Vec3{0, stepHeight, 0}
+	pairs := 0
+
+	// Up, along, and back down. Each leg starts from where the last one ended,
+	// so a low ceiling shortens the first leg instead of pushing the entity
+	// through it.
+	risen, upPairs, _ := CheckForCollisions(movingEntity, startPos.Add(up), collidersAt)
+	movingEntity.SetPosition(risen)
+	moved, alongPairs, _ := CheckForCollisions(movingEntity, risen.Add(movement), collidersAt)
+	movingEntity.SetPosition(moved)
+	landed, downPairs, landingNormals := CheckForCollisions(movingEntity, moved.Sub(up), collidersAt)
+	movingEntity.SetPosition(startPos)
+	pairs = upPairs + alongPairs + downPairs
+
+	if flatDistance(landed, startPos) <= flatDistance(blockedPos, startPos)+epsilon {
+		return blockedPos, nil, pairs, false
+	}
+	return landed, landingNormals, pairs, true
+}
+
+// flatDistance is the distance between two points ignoring height.
+func flatDistance(a, b mgl32.Vec3) float32 {
+	return mgl32.Vec2{a.X() - b.X(), a.Z() - b.Z()}.Len()
 }
 
 func kinematic(acceleration mgl32.Vec3, velocity mgl32.Vec3, position mgl32.Vec3, deltaTime float64) mgl32.Vec3 {

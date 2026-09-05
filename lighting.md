@@ -9,7 +9,8 @@ Four things light a surface, and they are deliberately different in cost:
 | Ambient | 1 | nothing | no |
 | Baked voxel light | dozens of emitters | nothing (a texel already fetched) | occlusion is baked in |
 | Emissive texels | any | nothing | n/a, it is not a light |
-| Shadow-mapped spotlights | ~3 today, 16 hard cap | a full scene redraw each, when dirty | yes |
+| Dynamic lights | ~3 today, 32 hard cap | one shader loop iteration per lit fragment | only the ones holding a shadow layer |
+| Shadow layers | 16 hard cap | a full scene redraw each, when dirty | yes |
 
 The design follows from that table. Spotlights are the expensive, dramatic light and
 there are a handful. Everything static and cheap is baked. Nothing is a spotlight
@@ -54,13 +55,14 @@ FOV is the cone angle, its far plane is the reach. Which means the region a ligh
 *lights* and the region it has *depth information for* are the same region by
 construction, and cannot drift apart.
 
-That is packed into three `vec4`s and a `mat4` by `LightInfo.packed()`, using the spare
+That is packed into four `vec4`s and a `mat4` by `LightInfo.packed()`, using the spare
 components that would otherwise be padding:
 
 ```
 position.xyz   world position        position.w    reach (the far plane)
 color.rgb      colour                color.w       intensity
 direction.xyz  beam axis             direction.w   cos(half FOV) — the cone edge
+params.x       shadow atlas layer, or -1 for a light that casts none
 projView                             the light's projection * view
 ```
 
@@ -68,19 +70,54 @@ Before this, reach was read from `fogRange` and the cone was a hardcoded
 `smoothstep(0.94, 0.98)` — every light in the world had identical reach and identical
 cone, and moving the fog slider relit the level.
 
-`LightsUBO` holds them in a std140 uniform block of `MaxLights = 16`. `SetLights`
-uploads the whole array; `updateLightAt(i)` re-uploads one 28-float stride, which is
-what the flashlight uses every frame.
+`LightsUBO` holds them in a std140 uniform block of `MaxLights = 32`, and owns the
+list: `setAll` uploads the whole array, `updateLightAt(i)` re-uploads one 32-float
+stride, which is what the player's light uses every frame. Callers reach it through
+`SetStaticLights` (rebuild around slot 0) and `AddLights` (append) — both return how
+many lights did not fit, and the map loader toasts that rather than silently dropping
+them.
 
-**Slot 0 is the flashlight and nothing else.** It is parented to the camera, updated by
-index every frame, and belongs to the player rather than to any map. `SetStaticLights`
-therefore rebuilds the list *around* slot 0, and `AddLights` appends rather than
-replaces — replacing the whole list would unhook it
-([gl_application.go:362](quads/gl_application.go:362)).
+### Lights and shadow layers are two different budgets
 
-Off is `{0,0,0,1}`, not a removal: a light's index is also its layer in the shadow
-atlas, so dropping one out of the list would hand every light after it someone else's
-cached depth map.
+A light's slot used to *be* its layer in the shadow atlas, which meant the number of
+lights a level could hold was the number of 512² depth textures the atlas allocated.
+They are separate now:
+
+- `MaxLights = 32` — the UBO array and the shader's loop. One light costs 128 bytes and
+  one iteration per lit fragment.
+- `MaxShadowLayers = 16` — the atlas. One layer costs 512² of depth, plus a full scene
+  redraw whenever it goes stale.
+
+`assignShadowLayers` hands the layers out in list order to the lights that cast
+(everything but an omni light), writes the layer into `params.x`, and gives everything
+past the last layer `-1`: those still light, they just do not shadow. A light that
+*changes* layer drops its cached depth map with it — the layer it now points at holds
+another light's scene, which is exactly the bug the old index-is-the-layer rule had.
+
+Off is `{0,0,0,1}`, not a removal, and `CastsShadow` deliberately ignores it: the
+player's light starts switched off, and a light that only gets a layer while lit would
+light without shadowing until the next time the list was rebuilt.
+
+### Slot 0 is the player's light
+
+**One slot, one light, never two.** It hangs off the camera, is re-uploaded by index
+every frame, and is one of `PlayerLightOff`, `PlayerLightFlashlight` (45° / 15 units)
+or `PlayerLightTorch` (120° / 9 units, warm). `CyclePlayerLight` steps through the
+three and `T` is bound to it, so picking one puts the other away — a player cannot be
+lit by their own flashlight and their own torch at the same time.
+
+**Both cast shadows.** They are the same mechanism with different cones: a beam against
+a wide pool of warm light. A torch is *not* an omni light, because an omni light is the
+one thing that cannot have a shadow map here — a shadow map is one perspective frustum,
+and a sphere needs six of them. 120° is the practical ceiling for one frustum: the
+projection stretches towards the rim, so at 512² a shadow texel out there covers
+`tan(60°) = 1.7` world units per unit of distance, and a wider cone spends quality on
+the edge of vision. The price is the wall behind the player, which a real torch would
+light and this one does not — cube shadow maps are the upgrade, at five extra depth
+passes a frame.
+
+Swapping kinds goes through a full rebuild rather than writing slot 0 in place: the
+light is rebuilt around a new frustum, and switching it off hands its layer back.
 
 ### Intensity is not a multiplier
 
@@ -173,17 +210,16 @@ Two more guards earn their place:
 Tune with `-shadow-offset` / `-shadow-bias`, or the two F1 sliders. Judge with
 `-shadowtest`, which is a rig built for exactly this: one caster, one wall, one light.
 
-### Omni lights *(uncommitted, in the working tree)*
+### Omni lights
 
 `LightInfo.Omni` makes a point light: lights in every direction, casts no shadow. The
 shader recognises it by a cone cosine of `-1` — a value a real cone cannot reach, since
-that would be a 360° spotlight — and skips both the cone test and the shadow lookup. The
-shadow pass skips it outright.
+that would be a 360° spotlight — and skips the cone test; the shadow lookup is skipped
+because an omni light never gets an atlas layer. The shadow pass skips it outright.
 
 `AttachLightTo(obj, …)` parents one to a game object so it moves with it and switches off
 when the object dies. There is one tracked slot for the whole application; a second
-simultaneous one would need a slot pool and a light index that is no longer a shadow
-atlas layer.
+simultaneous one would need a slot pool.
 
 ## 3. Baked voxel light
 
@@ -192,7 +228,7 @@ buffer the shader already reads.**
 
 ### What emits
 
-Not a light entity — the emissive texture set. Every face using one of those textures
+Two things. First, the emissive texture set: every face using one of those textures
 lights the air in front of it. This reuses authored data that already says which faces
 glow, so what glows and what lights the room cannot disagree:
 
@@ -201,6 +237,17 @@ g.CubeMap.SetEmissiveTextures([]uint16{19, 26, 27, 29, 30, 45, 46, 47, 49})
 ```
 
 ([main.go:350](main.go:350) — cyan tube panels, lit strips, console screens.)
+
+Second, point emitters registered with `Map.AddTorchLight(gridPos)` — **that is what a
+torch is**. A torch is a baked light by default and by design: it seeds the flood fill
+once and costs nothing per frame afterwards, so a level can hold hundreds of them while
+the dynamic list is capped at 32. It is map state rather than a one-off
+`FillTorchlight`, because a re-bake starts from dark and anything not re-seeded there
+would vanish the next time a block was placed.
+
+The trade is what baking always trades: a torch cannot move, cannot be switched off, has
+no cone, and takes `BAKED_LIGHT_COLOR` rather than its own. A torch that has to do any of
+those is a `Light` entity with `Baked` off, and it spends a slot.
 
 ### The flood fill
 
@@ -332,9 +379,15 @@ to know how a shadow frustum is built. `quads.LightFromMap` turns one into a
 reload does not leave the last map's lights burning.
 
 In `raymap.ldtk`, a `Light` entity with fields `Height`, `Yaw`, `Pitch`, `Intensity`,
-`Angle`, `Reach`. Grid position plus half a tile centres it. Defaults if unset or ≤0:
-angle 45°, reach 15, intensity 1. `TestLDtkMapCarriesItsLights` fails if a save from the
-editor drops them.
+`Angle`, `Reach`, `Baked`. Grid position plus half a tile centres it. Defaults if unset
+or ≤0: angle 45°, reach 15, intensity 1. `TestLDtkMapCarriesItsLights` fails if a save
+from the editor drops them.
+
+A **`Torch` entity** is the same thing from the other end: baked, always, with only a
+`Height` to set. `splitMapLights` sorts the two apart at load — baked ones go to
+`Map.AddTorchLight` and never reach the light list, dynamic ones become `LightInfo`s and
+the loader toasts how many did not fit. Reach for `Light` when it moves, switches, or
+its shadow is the point; reach for `Torch` for everything nailed to a wall.
 
 Generated maps use `MapLight.LookAt(target)` — they know what they want lit rather than
 what angle that works out to. `TestLookAtAndForwardAreTheSameRotation` checks both
@@ -353,15 +406,19 @@ Horizon Fade.
 
 ## 7. Budgets and known gaps
 
-- **16 lights hard cap** (`MaxLights`). Not free headroom: the shadow atlas allocates all
-  16 layers of 512² depth whether used or not.
-- **Forward shading, loop over all active lights per fragment**, each with a shadow
-  sample. Fine at 3, painful at 20+. The ladder from here: baked light for statics
-  (done) → per-light range culling on the CPU → clustered forward. Deferred fights the
-  `texelFetch` atlas and should be the last resort.
-- **No directional/sun light**, and no unshadowed fill spotlight. A `type` field would
-  let cheap decorative lights skip the depth pass entirely — that is what makes
-  many-light scenes affordable.
+- **32 dynamic lights, 16 shadow layers** (`MaxLights`, `MaxShadowLayers`). The atlas
+  allocates all 16 layers of 512² depth whether used or not; the other 16 slots are
+  cheap by comparison, and anything static should be baked rather than spending one.
+- **Forward shading, loop over all active lights per fragment**, with a shadow sample
+  only for the ones holding a layer. Fine at 3, painful at 20+. The ladder from here:
+  baked light for statics (done) → unshadowed lights past the atlas (done) → per-light
+  range culling on the CPU → clustered forward. Deferred fights the `texelFetch` atlas
+  and should be the last resort.
+- **No directional/sun light.**
+- **A baked light has one colour** — `BAKED_LIGHT_COLOR`, a cool white, for every
+  emitter in the level. A warm torch and a cyan screen panel light the room the same
+  way. Per-emitter colour would need three channels where the lookup buffer has four
+  spare bits, so it is a format change, not a constant.
 - **Baked light is flat per face**, no gradient across a quad. That is the resolution
   greedy meshing leaves and the same resolution the emissive flag has always had. Smooth
   would need a level per vertex.

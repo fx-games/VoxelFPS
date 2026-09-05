@@ -90,8 +90,14 @@ func (a AstarFinder) Estimation(point geometry.Point, point2 geometry.Point) int
 func (c *PathfindingSystem) calculatePath(position mgl32.Vec3, destination mgl32.Vec3) []mgl32.Vec3 {
 	heightPlaneOrigin := position.Y()
 	heightPlaneDestination := destination.Y()
+	// The search is a flat 2D grid at one height, so it cannot answer this. No path
+	// rather than a dead process: the caller already handles a nil path, and a
+	// destination one step up a staircase is a normal thing for gameplay to ask for.
+	//
+	// ponytail: no answer for a destination on another floor. It wants the search to
+	// walk a 3D neighbourhood, which is a different pathfinder, not a guard.
 	if heightPlaneOrigin != heightPlaneDestination {
-		panic("PathfindingSystem: calculatePath: height difference between origin and destination is not supported")
+		return nil
 	}
 
 	pathrange := geometry.NewPathRange(geometry.NewRect(0, 0, 64, 64))

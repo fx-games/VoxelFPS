@@ -91,8 +91,6 @@ type GlApplication struct {
 	lightsUbo     *LightsUBO
 	// The one light slot that follows a game object around. -1 until something asks
 	// for it; the slot is then kept for good, see DetachLight.
-	trackedLightIndex  int
-	trackedLightObject *GameObject
 
 	colorBatch *glhf.SpriteBatch
 
@@ -134,7 +132,6 @@ type GlApplication struct {
 	minimap *Minimap
 
 	ShouldDrawSkybox  bool
-	FlashlightOn      bool
 	ShouldDrawMinimap bool
 	AtlasMap          *glhf.TextureAtlasFixed
 	AtlasSprites      *glhf.TextureAtlasFixed
@@ -145,6 +142,17 @@ type GlApplication struct {
 	spriteBatches    []*glhf.SpriteBatch
 	shadowResolution int
 	shadowPassCount  int
+
+	guiQuadsDrawn int
+	guiDrawCalls  int
+}
+
+// GuiDrawnLastFrame is what the 2D pass put on screen: every quad written into a
+// sprite batch, whoever wrote it - the GUI drawer, the bitmap fonts, the
+// minimap, the toasts and the widgets all share these batches, and one non-empty
+// batch is one draw call.
+func (a *GlApplication) GuiDrawnLastFrame() (triangles, drawCalls int) {
+	return a.guiQuadsDrawn * 2, a.guiDrawCalls
 }
 
 // Start starts the OpenGL application with the given parentApp and screen dimensions.
@@ -235,7 +243,6 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 			guiShader:          LoadGuiShader(winSizeX, winSizeY, mgl32.Vec2{1, 1}),
 			postShader:         LoadPostShader(mainUboGLSL),
 			bloomShader:        LoadBloomShader(),
-			trackedLightIndex:  -1, // nothing is tracking a light yet, see AttachLightTo
 			bloomStrength:      DefaultBloomStrength,
 			bloomThreshold:     DefaultBloomThreshold,
 			emissiveStrength:   DefaultEmissiveStrength,
@@ -255,7 +262,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 			cubeShaderDepth: LoadCubeShaderDepthPass(injectedGLSL),
 			meshShaderDepth: LoadMeshShaderDepthPass(injectedGLSL),
 
-			shadowBuffer: glhf.NewFrameBufferWithDepth(shadowResolution, shadowResolution, MaxLights),
+			shadowBuffer: glhf.NewFrameBufferWithDepth(shadowResolution, shadowResolution, MaxShadowLayers),
 			// HDR: the scene keeps values past 1.0 all the way to the post pass, which
 			// is what lets the bloom threshold tell a blown-out highlight from a merely
 			// bright texel, and what lets tone mapping happen once instead of per shader.
@@ -359,14 +366,12 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
 		glApp.lightsUbo = lightsUbo
 
-		// Slot 0 is the flashlight and nothing else: it is attached to the camera, is
+		// Slot 0 is the player's light and nothing else: it hangs off the camera, is
 		// updated by index every frame, and belongs to the player rather than to any
 		// map. Every other light comes from the map file - the two that used to be
 		// hardcoded here now live in raymap.ldtk as Light entities, where they can be
 		// moved without a rebuild and where a second map can have its own.
-		glApp.lightsUbo.SetLights([]LightInfo{
-			{PerspectiveTransform: core.NewPerspectiveTransformForSpotlightFromParent(glApp.Camera, 45, 15, glApp.shadowResolution), Color: flashlightOffColor},
-		})
+		glApp.lightsUbo.AttachPlayerLightTo(glApp.Camera, glApp.shadowResolution, PlayerLightOff)
 
 		parentApp.Init(glApp, mapLoad)
 
@@ -417,8 +422,8 @@ func (a *GlApplication) StartEventLoop() {
 				a.Sprites.Update(deltaTime)
 				a.Meshes.Update(deltaTime)
 				a.UpdateParticles(deltaTime)
-				a.lightsUbo.updateLightAt(0)
-				a.updateTrackedLight()
+				a.lightsUbo.UpdatePlayerLight()
+				a.lightsUbo.UpdateTrackedLight()
 			} // Update END
 
 			// The scene buffer is linear HDR, so the authored ceiling colour is lifted to
@@ -441,14 +446,16 @@ func (a *GlApplication) StartEventLoop() {
 
 				sceneSignature := a.shadowSceneSignature()
 				a.shadowPassCount = 0
-				for i := range a.lightsUbo.lights {
-					light := &a.lightsUbo.lights[i]
-					// A light that is off contributes nothing, and a light whose frustum
-					// and scene are unchanged still has a valid depth map from last frame.
-					if light.IsOff() || !light.NeedsShadowUpdate(sceneSignature) {
+				lights := a.lightsUbo.Lights()
+				for i := range lights {
+					light := &lights[i]
+					// A light that is off contributes nothing, one with no atlas layer
+					// casts no shadow at all, and a light whose frustum and scene are
+					// unchanged still has a valid depth map from last frame.
+					if light.IsOff() || light.ShadowLayer < 0 || !light.NeedsShadowUpdate(sceneSignature) {
 						continue
 					}
-					a.shadowBuffer.SetDepthLayer(i)
+					a.shadowBuffer.SetDepthLayer(int(light.ShadowLayer))
 					gl.Clear(gl.DEPTH_BUFFER_BIT)
 					a.draw3dScene(light, a.cubeShaderDepth, a.meshShaderDepth, a.quadShaderDepth, nil)
 					light.MarkShadowRendered(sceneSignature)
@@ -525,8 +532,13 @@ func (a *GlApplication) StartEventLoop() {
 
 				a.drawToasts()
 
+				a.guiQuadsDrawn, a.guiDrawCalls = 0, 0
 				for _, batch := range a.spriteBatches {
 					batch.End()
+					if quads := batch.QuadCount(); quads > 0 {
+						a.guiQuadsDrawn += quads
+						a.guiDrawCalls++
+					}
 					batch.Render()
 				}
 				a.guiShader.End()
@@ -606,6 +618,12 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 	if a.ShouldDrawSprites {
 		gl.Enable(gl.BLEND)
 		a.Sprites.Draw(observer, spriteShader)
+		// Decals are skipped in the shadow pass on purpose: they sit a centimetre
+		// off the wall they are stuck to, so a depth map holding them would shadow
+		// that wall with the bullet hole's own outline.
+		if spriteShader != a.quadShaderDepth {
+			a.Sprites.DrawDecals(observer, spriteShader)
+		}
 		gl.Disable(gl.BLEND)
 	}
 
@@ -1240,24 +1258,20 @@ func (a *GlApplication) SetFog(colour mgl32.Vec3, near, far float32) {
 	a.mainUbo.End()
 }
 
-// light 0 is the flashlight, parented to the camera. Off means black, the shadow pass still
-// runs for it, which costs a little but keeps the light indices stable.
-//
-// The alpha is intensity, not opacity, and it is large because the falloff is
-// inverse square: it is the brightness at LIGHT_REF_DIST (2.5 units), not a
-// multiplier on the final colour. Reach and cone angle come from its shadow frustum
-// (45 degrees, 15 units) and are not set here.
-var flashlightColor = mgl32.Vec4{0.7, 0.7, 0.7, 8.0}
-var flashlightOffColor = mgl32.Vec4{0, 0, 0, 1}
+// TogglePlayerLight switches the light the player carries off, or back on as
+// whatever it was last. CyclePlayerLight picks which kind that is.
+func (a *GlApplication) TogglePlayerLight() PlayerLightKind {
+	return a.lightsUbo.TogglePlayerLight()
+}
 
-func (a *GlApplication) ToggleFlashlight() bool {
-	a.FlashlightOn = !a.FlashlightOn
-	if a.FlashlightOn {
-		a.lightsUbo.lights[0].Color = flashlightColor
-	} else {
-		a.lightsUbo.lights[0].Color = flashlightOffColor
-	}
-	return a.FlashlightOn
+// CyclePlayerLight steps through off, flashlight and torch. One slot holds all
+// three, so the player is never lit by two of their own lights at once.
+func (a *GlApplication) CyclePlayerLight() PlayerLightKind {
+	return a.lightsUbo.CyclePlayerLight()
+}
+
+func (a *GlApplication) PlayerLight() PlayerLightKind {
+	return a.lightsUbo.PlayerLight()
 }
 
 // SetSkyFog sets how many degrees above the horizon the sky fades in over, 0 for a hard horizon.
@@ -1326,11 +1340,21 @@ func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) map[mgl32.Ve
 	// The map owns its lighting. This replaces rather than appends, so a hot reload
 	// or a second map does not leave the previous map's lights burning, and a map
 	// with no lights is dark instead of inheriting someone else's.
-	lights := make([]LightInfo, 0, len(loadResult.Lights))
-	for _, light := range loadResult.Lights {
-		lights = append(lights, LightFromMap(light, a.shadowResolution))
+	//
+	// A baked light never reaches the light list: it seeds the voxel flood fill,
+	// where it costs one bake at load and nothing per frame afterwards. That is what
+	// a torch is, and it is why a map can hold hundreds of them while the dynamic
+	// list is capped at MaxLights.
+	lights, torches := splitMapLights(loadResult.Lights, a.shadowResolution)
+	for _, torch := range torches {
+		cubeMap.AddTorchLight(torch)
 	}
-	a.SetStaticLights(lights...)
+	if dropped := a.SetStaticLights(lights...); dropped > 0 {
+		// Silently dropping them is how a map ends up mysteriously darker than it
+		// was authored. Bake the ones that do not move instead.
+		a.Toast(fmt.Sprintf("%d of the map's %d dynamic lights did not fit under the %d slot cap",
+			dropped, len(lights), MaxLights))
+	}
 
 	return entitySpawns
 }
@@ -1433,87 +1457,27 @@ func (a *GlApplication) UiContext() UIContext {
 	}
 }
 
-// SetLights replaces the scene's lights. Anything past MaxLights is dropped: the
-// UBO, the shadow atlas and the shader's light loop are all sized to that cap.
-func (a *GlApplication) SetLights(infos []LightInfo) {
-	if len(infos) > MaxLights {
-		infos = infos[:MaxLights]
-	}
-	a.lightsUbo.SetLights(infos)
-	// The list was rebuilt, so whatever slot the tracked light had is gone with it.
-	a.trackedLightIndex = -1
-	a.trackedLightObject = nil
-}
-
-// AttachLightTo parents a point light to a game object: it moves with the object and
-// switches itself off the frame the object dies. Reach is how far it carries and
-// intensity its brightness at LIGHT_REF_DIST, the same numbers a map light uses.
-//
-// ponytail: one tracked slot for the whole application, reused by every caller. The
-// thing that wants it is whatever the player just fired, and two of those at once
-// would need a slot pool plus a light index that is no longer a shadow atlas layer.
+// AttachLightTo parents a point light to a game object: it moves with the object
+// and switches itself off the frame the object dies.
 func (a *GlApplication) AttachLightTo(obj *GameObject, color mgl32.Vec3, intensity, reach float32) {
-	// The FOV is unused - an omni light has no cone - but the frustum still supplies
-	// the position and the far plane, which is the light's reach.
-	transform := core.NewPerspectiveTransformForSpotlightFromParent(obj.Transform(), 90, reach, a.shadowResolution)
-	transform.SetPosition(mgl32.Vec3{}) // sit on the object, not under it like the flashlight
-	light := LightInfo{
-		PerspectiveTransform: transform,
-		Color:                color.Vec4(intensity),
-		Omni:                 true,
-	}
-	if a.trackedLightIndex < 0 {
-		slot := len(a.lightsUbo.lights)
-		if slot >= MaxLights {
-			return // every slot is a map light; the projectile just does not light the room
-		}
-		a.AddLights(light)
-		a.trackedLightIndex = slot
-	} else {
-		a.lightsUbo.lights[a.trackedLightIndex] = light
-		a.lightsUbo.updateLightAt(a.trackedLightIndex)
-	}
-	a.trackedLightObject = obj
+	a.lightsUbo.AttachLightTo(obj, color, intensity, reach)
 }
 
-// DetachLight switches the tracked light off but keeps its slot. A light's index is
-// also its layer in the shadow atlas, so dropping one out of the list would hand the
-// lights after it someone else's cached depth map.
+// DetachLight switches the tracked light off but keeps its slot.
 func (a *GlApplication) DetachLight() {
-	if a.trackedLightIndex < 0 {
-		return
-	}
-	a.lightsUbo.lights[a.trackedLightIndex].Color = mgl32.Vec4{}
-	a.lightsUbo.updateLightAt(a.trackedLightIndex)
-	a.trackedLightObject = nil
+	a.lightsUbo.DetachLight()
 }
 
-// updateTrackedLight re-uploads the tracked light's slot, which is what makes it
-// follow its parent, and switches it off once that parent is dead.
-func (a *GlApplication) updateTrackedLight() {
-	if a.trackedLightIndex < 0 || a.trackedLightObject == nil {
-		return
-	}
-	if !a.trackedLightObject.IsAlive() {
-		a.DetachLight()
-		return
-	}
-	a.lightsUbo.updateLightAt(a.trackedLightIndex)
+// AddLights appends to the scene's lights, keeping the ones already there. Returns
+// how many did not fit under MaxLights.
+func (a *GlApplication) AddLights(infos ...LightInfo) int {
+	return a.lightsUbo.AddLights(infos...)
 }
 
-// AddLights appends to the scene's lights, keeping the ones already there. The
-// flashlight lives in slot 0 and is updated by index every frame, so replacing
-// the whole list would unhook it.
-func (a *GlApplication) AddLights(infos ...LightInfo) {
-	a.SetLights(append(a.lightsUbo.lights, infos...))
-}
-
-// SetStaticLights replaces every light in the scene except the flashlight, which
-// lives in slot 0 and is updated by index every frame. A map that brings its own
-// lighting calls this on load, so switching maps does not accumulate the lights of
-// every map loaded before it.
-func (a *GlApplication) SetStaticLights(infos ...LightInfo) {
-	a.SetLights(append([]LightInfo{a.lightsUbo.lights[0]}, infos...))
+// SetStaticLights replaces every light in the scene except the player's, which
+// lives in slot 0. A map that brings its own lighting calls this on load.
+func (a *GlApplication) SetStaticLights(infos ...LightInfo) int {
+	return a.lightsUbo.SetStaticLights(infos...)
 }
 
 // ShadowResolution is the edge length of one layer of the shadow atlas. Callers
@@ -1526,12 +1490,7 @@ func (a *GlApplication) ShadowResolution() int {
 // frame, out of how many are switched on. Lights whose frustum and scene are
 // unchanged reuse the map from the previous frame.
 func (a *GlApplication) ShadowPasses() (rendered, lit int) {
-	for i := range a.lightsUbo.lights {
-		if !a.lightsUbo.lights[i].IsOff() {
-			lit++
-		}
-	}
-	return a.shadowPassCount, lit
+	return a.shadowPassCount, a.lightsUbo.LitCount()
 }
 
 // ShadowCacheState exposes the two inputs the shadow cache keys on. If rendered

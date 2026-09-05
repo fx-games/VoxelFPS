@@ -3,8 +3,10 @@ package audio
 import (
 	"fmt"
 	"github.com/gopxl/beep"
+	"github.com/gopxl/beep/effects"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
+	"math"
 	"math/rand"
 	"os"
 	"path"
@@ -17,10 +19,13 @@ type Player struct {
 	currentStream beep.StreamSeekCloser
 	cuesLoaded    bool
 	disabled      bool
+	// channels holds one mixer per ZDoom sound channel, so a new sound on a
+	// channel can replace what was playing there.
+	channels map[int]*beep.Mixer
 }
 
 func NewPlayer(sampleRate int32) *Player {
-	p := &Player{}
+	p := &Player{channels: make(map[int]*beep.Mixer)}
 	p.UnloadAllCues()
 	p.init(sampleRate)
 	return p
@@ -183,4 +188,91 @@ func (p *Player) loadAllCuesInDir(dirName string, cueName string) {
 
 func (p *Player) SoundsLoaded() {
 	p.cuesLoaded = true
+}
+
+// CueOptions is how a cue should sound: as loud, as high and as far to one side
+// as whatever asked for it says.
+//
+// Volume is a plain multiplier, where 1 is the sound as recorded; it is
+// converted to the exponential scale hearing actually works on. Pitch is a
+// playback rate, where 1 is unchanged. Pan runs from -1 for hard left to +1 for
+// hard right.
+type CueOptions struct {
+	Volume  float64
+	Pitch   float64
+	Looping bool
+	Pan     float64
+	// Channel is ZDoom's notion: a new sound on a channel replaces whatever was
+	// playing there. Channel 0 mixes freely.
+	Channel int
+}
+
+// PlayCueAt plays a cue with volume, pitch, panning and channel behaviour.
+func (p *Player) PlayCueAt(name string, options CueOptions) {
+	if p.disabled || !p.cuesLoaded {
+		return
+	}
+	buffers, exists := p.loadedCues[name]
+	if !exists || len(buffers) == 0 {
+		return
+	}
+	buffer := buffers[0]
+	if len(buffers) > 1 {
+		buffer = buffers[rand.Intn(len(buffers))]
+	}
+
+	var streamer beep.Streamer = buffer.Streamer(0, buffer.Len())
+	if options.Looping {
+		streamer = beep.Loop(-1, buffer.Streamer(0, buffer.Len()))
+	}
+	if options.Pitch > 0 && options.Pitch != 1 {
+		streamer = beep.ResampleRatio(3, options.Pitch, streamer)
+	}
+	if options.Pan != 0 {
+		streamer = &effects.Pan{Streamer: streamer, Pan: clampPan(options.Pan)}
+	}
+	if options.Volume > 0 && options.Volume != 1 {
+		streamer = &effects.Volume{
+			Streamer: streamer,
+			Base:     2,
+			Volume:   math.Log2(options.Volume),
+		}
+	} else if options.Volume == 0 {
+		return // asked for silence, so make none
+	}
+
+	if options.Channel > 0 {
+		p.playOnChannel(options.Channel, streamer)
+		return
+	}
+	speaker.Play(streamer)
+}
+
+// playOnChannel starts a sound on one of ZDoom's channels, stopping whatever
+// was on it. Each channel is a mixer that stays in the speaker for good, so
+// replacing a sound is emptying its mixer rather than reaching into the
+// speaker's own list.
+func (p *Player) playOnChannel(channel int, streamer beep.Streamer) {
+	speaker.Lock()
+	mixer, exists := p.channels[channel]
+	if !exists {
+		mixer = &beep.Mixer{}
+		p.channels[channel] = mixer
+	}
+	mixer.Clear()
+	mixer.Add(streamer)
+	speaker.Unlock()
+	if !exists {
+		speaker.Play(mixer)
+	}
+}
+
+func clampPan(pan float64) float64 {
+	if pan < -1 {
+		return -1
+	}
+	if pan > 1 {
+		return 1
+	}
+	return pan
 }

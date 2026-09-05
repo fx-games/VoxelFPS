@@ -27,9 +27,18 @@ type MapLight struct {
 	Intensity float32
 	// Angle is the full cone angle in degrees, Reach how far the light carries. Reach
 	// doubles as the far plane of its shadow frustum, so a light cannot light what it
-	// has no depth information for.
+	// has no depth information for. Neither applies to a baked light.
 	Angle float32
 	Reach float32
+
+	// Baked makes this light part of the level's voxel light instead of a slot in
+	// the renderer's light list: it is flood-filled through the map once at load and
+	// costs nothing per frame afterwards, but it cannot move, cannot be switched
+	// off, has no cone and takes the baked light's colour rather than its own. This
+	// is what a torch on a wall is, and it is why a map may hold hundreds of them
+	// while the dynamic list holds MaxLights. Yaw, Pitch, Angle and Reach are
+	// ignored for one.
+	Baked bool
 }
 
 // LookAt points the light at a world position, expressed in the Yaw/Pitch the map

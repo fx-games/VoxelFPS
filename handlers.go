@@ -2,44 +2,62 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/events"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/goray/wep"
 )
 
-// WeaponEffect defines:
-// - Hitscan or projectile
-// - Firing effects / projectile flight animations
-// - Hit/miss effects / projectile impact animations
-type WeaponEffect uint8
+// EditorTool is what a left click does while a map authoring tool is picked.
+// Digging, painting and filling are things you do to a map, not things a gun
+// does, so they no longer travel through the weapon in hand: they work whatever
+// is being held, and nothing is held while the tool is on.
+type EditorTool uint8
 
 const (
-	WeaponEffectNone WeaponEffect = iota
-	WeaponEffectHitscanVoxelDestruction
-	WeaponEffectHitscanVoxelPaintGun
-	WeaponEffectHitscanVoxelPaintGunFill
-	WeaponEffectKillingProjectile
+	EditorToolNone EditorTool = iota
+	EditorToolDig
+	EditorToolPaint
+	EditorToolFill
 )
 
-func (we WeaponEffect) String() string {
-	switch we {
-	case WeaponEffectHitscanVoxelDestruction:
+func (t EditorTool) String() string {
+	switch t {
+	case EditorToolDig:
 		return "digger"
-	case WeaponEffectHitscanVoxelPaintGun:
+	case EditorToolPaint:
 		return "paint gun"
-	case WeaponEffectHitscanVoxelPaintGunFill:
+	case EditorToolFill:
 		return "fill gun"
-	case WeaponEffectKillingProjectile:
-		return "projectiles"
 	}
-	return "nothing"
+	return "off"
 }
 
-func (we WeaponEffect) IsHitscan() bool {
-	return we == WeaponEffectHitscanVoxelDestruction ||
-		we == WeaponEffectHitscanVoxelPaintGun ||
-		we == WeaponEffectHitscanVoxelPaintGunFill
+// setEditorTool picks the tool a left click uses, and says so.
+func (g *Game) setEditorTool(tool EditorTool) {
+	g.editor.tool = tool
+	g.Toast(fmt.Sprintf("editor tool: %s", tool))
+}
+
+// applyEditorTool does what the picked tool does where the player is looking.
+func (g *Game) applyEditorTool() {
+	origin, direction := g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
+	result := g.rayCast(origin, direction)
+	if !result.HitInfo.Hit || result.HitObject != nil {
+		return
+	}
+	blockPos := result.HitInfo.CollisionGridPosition
+	switch g.editor.tool {
+	case EditorToolDig:
+		g.CubeMap.SetAir(blockPos)
+		g.EmitParticlesByName(quads.ParticlesBulletImpact, result.WorldPosition(), 30)
+	case EditorToolPaint:
+		g.CubeMap.SetBlockSide(blockPos, result.HitInfo.Side, uint16(g.editor.currentPaintGunTextureIndex))
+	case EditorToolFill:
+		g.CubeMap.SetBlockSideFill(blockPos, result.HitInfo.Side, uint16(g.editor.currentPaintGunTextureIndex))
+	}
 }
 
 // selectWeapon puts weapon number index (0 based) in the player's hands.
@@ -51,59 +69,74 @@ func (g *Game) selectWeapon(index int) {
 	g.currentWeaponIndex = index
 	weapon := g.currentWeapon()
 	weapon.Equip()
-	g.Toast(fmt.Sprintf("%s (%s)", weapon.DisplayName(), weapon.FireEffect()))
-}
-
-// setWeaponEffect changes what the weapon in hand does, used by the editor to
-// turn a gun into a paint gun.
-func (g *Game) setWeaponEffect(effect WeaponEffect) {
-	if weapon := g.currentWeapon(); weapon != nil {
-		weapon.SetFireEffect(effect)
+	if ammo := weapon.AmmoLine(); ammo != "" {
+		g.Toast(fmt.Sprintf("%s (%s)", weapon.DisplayName(), ammo))
+		return
 	}
+	g.Toast(weapon.DisplayName())
 }
 
-func (g *Game) currentWeapon() Weapon {
+func (g *Game) currentWeapon() *Weapon {
 	if len(g.weapons) == 0 {
 		return nil
 	}
 	return g.weapons[g.currentWeaponIndex]
 }
 
-func (g *Game) fireWeapon(origin, direction mgl32.Vec3, effect WeaponEffect) {
-	if effect.IsHitscan() {
-		g.fireHitscan(origin, direction, effect)
-	} else {
-		g.fireProjectile(origin, direction, effect)
-	}
-}
-
+// HitscanEffect is one pellet's worth of a shot, with the compiled op it came
+// from so the impact knows what kind of shot it was and how hard.
 type HitscanEffect struct {
-	Hit    RaycastResult
-	Effect WeaponEffect
+	Hit       RaycastResult
+	Direction mgl32.Vec3
+	Shot      wep.Op
 }
 
-func (g *Game) fireHitscan(origin, direction mgl32.Vec3, effect WeaponEffect) {
+func (g *Game) fireHitscan(origin, direction mgl32.Vec3, shot wep.Op) {
 	hit := g.rayCast(origin, direction)
 	events.Publish(events.EventHitScanCollision, HitscanEffect{
-		Hit:    hit,
-		Effect: effect,
+		Hit:       hit,
+		Direction: direction,
+		Shot:      shot,
 	})
 }
 
 func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	hitScanEffect := event.(HitscanEffect)
 	hit := hitScanEffect.Hit
-	weaponEffect := hitScanEffect.Effect
-	hitPos := hit.WorldPos
-	hitObject := hit.HitObject
-	if hitObject != nil {
-		hitPos = hit.HitInfo.CollisionWorldPosition
+	if !hit.HitInfo.Hit {
+		return // the ray ran out without touching anything, so there is nothing to mark
 	}
+	// WorldPosition picks the right one of the two positions a hit carries: the
+	// object intersection for an object, the voxel face for the world. The two
+	// used to be swapped here, which put every impact effect at the world origin.
+	hitPos := hit.WorldPosition()
 
-	g.createImpactEffects(weaponEffect, hit.HitObject, hitPos)
-	g.applyHitscanEffect(weaponEffect, hitScanEffect.Hit)
+	// The surface normal of a voxel hit is the face the ray came in through; an
+	// object hit has no face, so the decals go on the wall behind it instead.
+	surfaceNormal := hit.HitInfo.Side.AsDirection().ToVec3()
+	g.createImpactEffects(hitScanEffect.Shot.Puff, hit.HitObject, hitPos, surfaceNormal)
+	if hit.HitObject != nil {
+		g.splatterBehind(hitPos, hitScanEffect.Direction)
+		g.damage(hit, hitScanEffect.Shot.Damage)
+	}
 }
-func (g *Game) fireProjectile(origin, direction mgl32.Vec3, weaponEffect WeaponEffect) {
+
+// damage is what a shot does to what it hits. There is nothing with health in
+// this game yet, so it plays the reaction and publishes the hit for whatever
+// grows a health bar later.
+func (g *Game) damage(hit RaycastResult, amount int) {
+	hitObject := hit.HitObject
+	if hitObject == nil || hitObject.DisplayName != "Scientist" {
+		return
+	}
+	sprite := hitObject.Sprite()
+	if hit.Relative.Y() > 0.6 && hit.Relative.Y() < 0.8 {
+		sprite.PlayAnimationFreezeLastFrame(int(quads.AnimDying))
+		return
+	}
+	sprite.PlayAnimationInterrupting(int(quads.AnimHit))
+}
+func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int) {
 	offsetOrigin := origin.Add(direction.Mul(0.8))
 
 	sprite := quads.NewSprite(g.AtlasSprites, []uint16{179})
@@ -119,7 +152,7 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, weaponEffect WeaponE
 	physics := quads.NewPhysicsComponent(false, voxel.NewAABB(mgl32.Vec3{-0.1, -0.1, -0.1}, mgl32.Vec3{0.1, 0.1, 0.1}))
 	newProjectile.SetComponent(physics)
 
-	newProjectile.SetComponent(quads.NewProjectileComponent(int(weaponEffect)))
+	newProjectile.SetComponent(quads.NewProjectileComponent(damage))
 
 	g.Sprites.Add(sprite)
 	sprite.PlayAnimationLooping(g.projectileFlyingAnim)
@@ -154,7 +187,6 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 		mover.Kill()
 
 		projectileComponent := mover.GetComponent(quads.ComponentTypeProjectile).(*quads.ProjectileComponent)
-		weaponEffect := WeaponEffect(projectileComponent.HitEffect)
 
 		// impact effects
 		var hitObject *quads.GameObject
@@ -165,68 +197,61 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 			relativePosition = hitObject.Transform().GetRelativePosition(collisionEvent.WorldPos)
 		}
 
-		g.createImpactEffects(weaponEffect, hitObject, collisionEvent.WorldPos)
-		g.applyProjectileEffect(weaponEffect, hitObject, collisionEvent.WorldPos, relativePosition, collisionEvent.SurfaceNormal)
-	}
-}
-
-func (g *Game) applyHitscanEffect(effect WeaponEffect, result RaycastResult) {
-	hitObject := result.HitObject
-	switch effect {
-	case WeaponEffectHitscanVoxelDestruction:
-		if hitObject == nil {
-			g.CubeMap.SetAir(result.HitInfo.CollisionGridPosition)
-		} else if hitObject.DisplayName == "Scientist" {
-			relativeHitPos := result.Relative
-			sprite := hitObject.Sprite()
-			if relativeHitPos.Y() > 0.6 && relativeHitPos.Y() < 0.8 {
-				sprite.PlayAnimationFreezeLastFrame(int(quads.AnimDying))
-			} else {
-				sprite.PlayAnimationInterrupting(int(quads.AnimHit))
-			}
-		}
-	case WeaponEffectHitscanVoxelPaintGun:
-		if hitObject == nil {
-			paintedIndex := g.currentPaintGunTextureIndex
-			blockPos := result.HitInfo.CollisionGridPosition
-			cubeSide := result.HitInfo.Side
-			g.CubeMap.SetBlockSide(blockPos, cubeSide, uint16(paintedIndex))
-		}
-	case WeaponEffectHitscanVoxelPaintGunFill:
-		if hitObject == nil {
-			paintedIndex := g.currentPaintGunTextureIndex
-			blockPos := result.HitInfo.CollisionGridPosition
-			cubeSide := result.HitInfo.Side
-			g.CubeMap.SetBlockSideFill(blockPos, cubeSide, uint16(paintedIndex))
-		}
-	}
-
-}
-func (g *Game) applyProjectileEffect(effect WeaponEffect, hitObject *quads.GameObject, worldPos, relativeHitPos, normal mgl32.Vec3) {
-	switch effect {
-	case WeaponEffectKillingProjectile:
-		if hitObject != nil && hitObject.DisplayName == "Scientist" {
+		_ = relativePosition
+		g.createImpactEffects(puffExplosion, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
+		if hitObject != nil && projectileComponent.HitEffect > 0 && hitObject.DisplayName == "Scientist" {
 			hitObject.Sprite().PlayAnimationFreezeLastFrame(int(quads.AnimDying))
 		}
 	}
 }
-func (g *Game) createImpactEffects(effect WeaponEffect, hitObject *quads.GameObject, pos mgl32.Vec3) {
-	switch effect {
-	case WeaponEffectHitscanVoxelDestruction:
-		if hitObject == nil {
-			g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
-		} else {
-			bloodProps := quads.Particles[quads.ParticlesBlood].WithOrigin(pos)
-			bloodProps.VelocityFromPosition = func(origin, pos mgl32.Vec3) mgl32.Vec3 {
-				return mgl32.Vec3{0, -0.01, 0}
-			}
-			g.EmitParticles(quads.ParticlesCustom, bloodProps, 30)
-		}
-	case WeaponEffectKillingProjectile:
+
+// splatterBehind carries a hit on a body through to the wall behind it and leaves
+// blood there. The ray restarts past the object's own collider so it does not hit
+// the same body again; if nothing solid is close enough behind, nothing is drawn.
+//
+// ponytail: fixed restart offset and range rather than the object's real extent.
+// Bodies in this game are all roughly a metre wide.
+func (g *Game) splatterBehind(hitPos, direction mgl32.Vec3) {
+	behind := g.rayCast(hitPos.Add(direction.Mul(1.0)), direction)
+	if !behind.HitInfo.Hit || behind.HitObject != nil || behind.HitInfo.Distance > bloodSplatterRange {
+		return
+	}
+	g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBloodSplatter,
+		behind.HitInfo.CollisionWorldPosition, behind.HitInfo.Side.AsDirection().ToVec3(), bloodSplatterSize)
+}
+
+// How big the decals are, in world units where a voxel is 1, and how far behind a
+// body a wall can be and still catch the blood.
+const (
+	bulletHoleSize     = float32(0.22)
+	bloodSplatterSize  = float32(0.5)
+	bloodSplatterRange = 4.0
+)
+
+// The impact kinds a compiled puff maps onto. Which ZDoom puff actor becomes
+// which is a line in the migration's policy file, not a decision made here.
+const (
+	puffBullet    = "bullet"
+	puffExplosion = "explosion"
+)
+
+// createImpactEffects paints what a shot leaves where it landed. The kind comes
+// from the puff the script named, so a weapon that fires a different puff gets
+// a different mark without any of this changing.
+func (g *Game) createImpactEffects(puff string, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
+	switch puff {
+	case puffExplosion:
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
 		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
 		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
 		if hitObject != nil {
+			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
+		}
+	default: // puffBullet, and anything a policy line has not given its own mark
+		if hitObject == nil {
+			g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
+			g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBulletHole, pos, surfaceNormal, bulletHoleSize)
+		} else {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}
 	}

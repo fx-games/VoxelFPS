@@ -10,7 +10,7 @@ import (
 )
 
 func (g *Game) openVoxelBrushMenu() {
-	if g.voxelBlock == nil {
+	if g.editor.voxelBlock == nil {
 		return
 	}
 	previousMouseState := g.setupModal()
@@ -19,22 +19,22 @@ func (g *Game) openVoxelBrushMenu() {
 	options := []quads.GuiOption{
 		quads.NewGuiOptionAction("Pen", func() {
 			g.captureMouse(previousMouseState)
-			g.voxelBrush = &VoxelBrushDrag{}
+			g.editor.voxelBrush = &VoxelBrushDrag{}
 
-			if g.voxelSelectionAction == nil {
-				g.voxelSelectionAction = g.voxelPlaceBlock
-				g.voxelSelectionEmpty = true
+			if g.editor.voxelSelectionAction == nil {
+				g.editor.voxelSelectionAction = g.voxelPlaceBlock
+				g.editor.voxelSelectionEmpty = true
 			}
 			g.Toast("Pen Brush Selected")
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Line", func() {
 			g.captureMouse(previousMouseState)
-			g.voxelBrush = &VoxelBrushLine{}
+			g.editor.voxelBrush = &VoxelBrushLine{}
 
-			if g.voxelSelectionAction == nil {
-				g.voxelSelectionAction = g.voxelPlaceBlock
-				g.voxelSelectionEmpty = true
+			if g.editor.voxelSelectionAction == nil {
+				g.editor.voxelSelectionAction = g.voxelPlaceBlock
+				g.editor.voxelSelectionEmpty = true
 			}
 
 			g.Toast("Line Brush Selected")
@@ -42,11 +42,11 @@ func (g *Game) openVoxelBrushMenu() {
 		}),
 		quads.NewGuiOptionAction("Rect (outline)", func() {
 			g.captureMouse(previousMouseState)
-			g.voxelBrush = &VoxelBrushRectangle{fill: false}
+			g.editor.voxelBrush = &VoxelBrushRectangle{fill: false}
 
-			if g.voxelSelectionAction == nil {
-				g.voxelSelectionAction = g.voxelPlaceBlock
-				g.voxelSelectionEmpty = true
+			if g.editor.voxelSelectionAction == nil {
+				g.editor.voxelSelectionAction = g.voxelPlaceBlock
+				g.editor.voxelSelectionEmpty = true
 			}
 
 			g.Toast("Line Brush Selected")
@@ -54,11 +54,11 @@ func (g *Game) openVoxelBrushMenu() {
 		}),
 		quads.NewGuiOptionAction("Rect (filled)", func() {
 			g.captureMouse(previousMouseState)
-			g.voxelBrush = &VoxelBrushRectangle{fill: true}
+			g.editor.voxelBrush = &VoxelBrushRectangle{fill: true}
 
-			if g.voxelSelectionAction == nil {
-				g.voxelSelectionAction = g.voxelPlaceBlock
-				g.voxelSelectionEmpty = true
+			if g.editor.voxelSelectionAction == nil {
+				g.editor.voxelSelectionAction = g.voxelPlaceBlock
+				g.editor.voxelSelectionEmpty = true
 			}
 
 			g.Toast("Line Brush Selected")
@@ -73,7 +73,7 @@ func (g *Game) openVoxelBrushMenu() {
 }
 
 func (g *Game) openVoxelEditMenu() {
-	if g.voxelBlock == nil {
+	if g.editor.voxelBlock == nil {
 		return
 	}
 	previousMouseState := g.setupModal()
@@ -82,15 +82,21 @@ func (g *Game) openVoxelEditMenu() {
 	options := []quads.GuiOption{
 		quads.NewGuiOptionAction("Choose Brush", g.openVoxelBrushMenu),
 		quads.NewGuiOptionAction("Block Textures", g.openCubeTextureMapper),
-		quads.NewGuiOptionAction("Paint Gun", func() {
-			g.setWeaponEffect(WeaponEffectHitscanVoxelPaintGun)
+		quads.NewGuiOptionAction("Paint Tool", func() {
+			g.setEditorTool(EditorToolPaint)
 		}),
-		quads.NewGuiOptionAction("Fill Gun", func() {
-			g.setWeaponEffect(WeaponEffectHitscanVoxelPaintGunFill)
+		quads.NewGuiOptionAction("Fill Tool", func() {
+			g.setEditorTool(EditorToolFill)
+		}),
+		quads.NewGuiOptionAction("Dig Tool", func() {
+			g.setEditorTool(EditorToolDig)
+		}),
+		quads.NewGuiOptionAction("Put Tools Away", func() {
+			g.setEditorTool(EditorToolNone)
 		}),
 		quads.NewGuiOptionAction("Choose Paint Texture", func() {
 			g.pickTexture(g.AtlasMap, func(selectedIndex int) {
-				g.currentPaintGunTextureIndex = selectedIndex
+				g.editor.currentPaintGunTextureIndex = selectedIndex
 			})
 		}),
 		quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
@@ -102,22 +108,22 @@ func (g *Game) openVoxelEditMenu() {
 		}),
 		quads.NewGuiOptionAction("Add Blocks", func() {
 			g.captureMouse(previousMouseState)
-			if g.voxelBrush == nil {
-				g.voxelBrush = &VoxelBrushDrag{}
+			if g.editor.voxelBrush == nil {
+				g.editor.voxelBrush = &VoxelBrushDrag{}
 			}
 
-			g.voxelSelectionAction = g.voxelPlaceBlock
-			g.voxelSelectionEmpty = true
+			g.editor.voxelSelectionAction = g.voxelPlaceBlock
+			g.editor.voxelSelectionEmpty = true
 			g.Toast("Setting blocks")
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Remove Blocks", func() {
 			g.captureMouse(previousMouseState)
-			if g.voxelBrush == nil {
-				g.voxelBrush = &VoxelBrushDrag{}
+			if g.editor.voxelBrush == nil {
+				g.editor.voxelBrush = &VoxelBrushDrag{}
 			}
-			g.voxelSelectionAction = g.voxelRemoveBlock
-			g.voxelSelectionEmpty = false
+			g.editor.voxelSelectionAction = g.voxelRemoveBlock
+			g.editor.voxelSelectionEmpty = false
 			g.Toast("Removing blocks")
 			g.popFromWidgetStack()
 		}),
@@ -139,7 +145,7 @@ func (g *Game) openVoxelEditMenu() {
 		}),
 		quads.NewGuiOptionAction("Clear Map", func() {
 			g.CubeMap.ClearAllChunks()
-			g.CubeMap.SetFloorAtHeight(0, g.voxelBlock)
+			g.CubeMap.SetFloorAtHeight(0, g.editor.voxelBlock)
 			g.popFromWidgetStack()
 		}),
 	}
@@ -148,6 +154,34 @@ func (g *Game) openVoxelEditMenu() {
 	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
 
 	g.replaceWidgetStack(configMenu)
+}
+
+// Editor is the state the map editor keeps: what the brush is holding, what is
+// selected, and what a click is currently for. It is a plain struct on Game rather
+// than a system of its own, because it has no update of its own to run - it is
+// touched by the F1 menus, by the editing keys and by nothing else. A normal run
+// never reads it.
+type Editor struct {
+	// The block the brush paints, and the shape it paints with.
+	voxelBlock *voxel.Block
+	voxelBrush VoxelBrush
+
+	// The cells the next action applies to, and the action itself. A nil action
+	// means the editor is not waiting for a selection.
+	voxelSelection []voxel.Int3
+	// voxelSelectionEmpty selects the empty grid position just before the one that
+	// was hit, which is where a block being placed has to go.
+	voxelSelectionEmpty  bool
+	voxelSelectionAction func(pos []voxel.Int3)
+
+	// The ghost following the crosshair in spawn mode, placed by a click.
+	gameObjectForSpawning *quads.GameObject
+
+	currentPaintGunTextureIndex int
+
+	// tool is what a left click does. Off by default, so a click fires the
+	// weapon in hand.
+	tool EditorTool
 }
 
 const (
@@ -165,10 +199,10 @@ const (
 // sprite decorations use - updateGUI moves it to whatever ground the crosshair is
 // over, and a left click drops it.
 func (g *Game) startTorchPlacement() {
-	if g.gameObjectForSpawning != nil {
-		g.gameObjectForSpawning.Kill()
+	if g.editor.gameObjectForSpawning != nil {
+		g.editor.gameObjectForSpawning.Kill()
 	}
-	g.gameObjectForSpawning = g.spawnTorch(mgl32.Vec3{})
+	g.editor.gameObjectForSpawning = g.spawnTorch(mgl32.Vec3{})
 }
 
 // spawnTorch is the model half of a torch: six quads and a flame that glows. The
@@ -188,14 +222,14 @@ func (g *Game) dropTorch(pos mgl32.Vec3) {
 
 func (g *Game) changeDecorationTexture() {
 	g.pickTexture(g.AtlasSprites, func(selectedIndex int) {
-		if g.gameObjectForSpawning != nil && g.gameObjectForSpawning.HasComponent(quads.ComponentTypeSprite) {
-			g.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
+		if g.editor.gameObjectForSpawning != nil && g.editor.gameObjectForSpawning.HasComponent(quads.ComponentTypeSprite) {
+			g.editor.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
 		}
 	})
 }
 func (g *Game) testPackedAtlasPicker() {
-	weapon, isDoomWeapon := g.currentWeapon().(*DoomWeapon)
-	if !isDoomWeapon {
+	weapon := g.currentWeapon()
+	if weapon == nil {
 		g.Toast("No packed atlas to pick from")
 		return
 	}
@@ -205,9 +239,9 @@ func (g *Game) testPackedAtlasPicker() {
 }
 
 func (g *Game) toggleSpawnMode() {
-	if g.gameObjectForSpawning != nil {
-		g.gameObjectForSpawning.Kill()
-		g.gameObjectForSpawning = nil
+	if g.editor.gameObjectForSpawning != nil {
+		g.editor.gameObjectForSpawning.Kill()
+		g.editor.gameObjectForSpawning = nil
 		return
 	}
 	if g.lastHitResult == nil {
@@ -223,20 +257,20 @@ func (g *Game) toggleSpawnMode() {
 		CreateCollider: false,
 		IsTransparent:  true,
 	}
-	g.gameObjectForSpawning = g.spawnEntity(spawnPos, entityDesc)
-	g.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+	g.editor.gameObjectForSpawning = g.spawnEntity(spawnPos, entityDesc)
+	g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
 }
 
 func (g *Game) startVoxelEditing() {
 	g.captureMouse(false)
-	g.voxelBrush = &VoxelBrushRectangle{fill: false}
-	g.voxelBlock = voxel.NewBlock(2)
-	g.voxelSelectionAction = g.voxelPlaceBlock
-	g.voxelSelectionEmpty = true
+	g.editor.voxelBrush = &VoxelBrushRectangle{fill: false}
+	g.editor.voxelBlock = voxel.NewBlock(2)
+	g.editor.voxelSelectionAction = g.voxelPlaceBlock
+	g.editor.voxelSelectionEmpty = true
 }
 
 func (g *Game) voxelPlaceBlock(pos []voxel.Int3) {
-	g.CubeMap.SetBlocks(pos, g.voxelBlock.Copy())
+	g.CubeMap.SetBlocks(pos, g.editor.voxelBlock.Copy())
 }
 
 func (g *Game) voxelRemoveBlock(pos []voxel.Int3) {
