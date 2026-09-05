@@ -27,16 +27,25 @@ type WorldActor struct {
 	runtime *wep.Runtime
 	object  *quads.GameObject
 	sprite  *quads.SpriteComponent
-	// physics is only given to what has to hit something: a shell that lands on
-	// the floor, a rocket that hits a wall. Smoke drifts and is drawn, and a
-	// weapon makes a great deal of it, so it moves by arithmetic here instead
-	// of by a body sweeping the voxel world every frame.
-	physics  *quads.PhysicsComponent
+	// velocity is how it is moving. A spawned thing carries no physics body:
+	// one would sweep the voxel world every frame for every puff of smoke, and
+	// worse, it would be something the player bumps into. A shell casing is
+	// scenery, and scenery does not block a doorway.
 	velocity mgl32.Vec3
+	// resting is set once it has landed and stopped moving.
+	resting bool
+	// seeking is where a homing missile is trying to get to, and homing says
+	// whether it is trying.
+	homing   bool
+	seekTo   mgl32.Vec3
+	seekRate float64
 	// scale is the actor's own, on top of the picture's own size.
 	scale mgl32.Vec2
 	// world is what it asks whether there is ground under it.
 	world *voxel.Map
+	// master is what spawned it, when something did: a rocket's smoke trail
+	// hangs off the rocket.
+	master *WorldActor
 }
 
 // worldUnitsPerDoomUnit converts the numbers a script writes into ours. Doom
@@ -64,8 +73,15 @@ func (g *Game) spawnWorldActor(weapon *Weapon, op wep.Op) {
 	g.spawnActorAt(weapon, actor, op, g.spawnPosition(origin, direction, op))
 }
 
+// setMaster records what spawned this, so a warp knows what to sit on.
+func (live *WorldActor) setMaster(master *WorldActor) {
+	if live != nil {
+		live.master = master
+	}
+}
+
 // spawnActorAt is the rest of it, once where has been decided.
-func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, position mgl32.Vec3) {
+func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, position mgl32.Vec3) *WorldActor {
 	_, direction := g.aim()
 
 	sprite := quads.NewSprite(g.sharedAtlas, []uint16{0})
@@ -99,19 +115,10 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	g.Sprites.Add(sprite)
 	live.velocity = g.launchVelocity(actor, op, direction)
 
-	if needsCollision(actor) {
-		physics := quads.NewPhysicsComponent(false,
-			voxel.NewAABB(mgl32.Vec3{-0.05, -0.05, -0.05}, mgl32.Vec3{0.05, 0.05, 0.05}))
-		object.SetComponent(physics)
-		g.physicsSystem.AddObject(physics)
-		physics.SetVelocity(live.velocity)
-		physics.ApplyGravity = !actor.NoGravity
-		live.physics = physics
-	}
-
 	live.showCurrentFrame(g)
 	g.worldActors = append(g.worldActors, live)
 	g.capWorldActors()
+	return live
 }
 
 // maxWorldActors is how many spawned things may be in the air at once. A
@@ -128,13 +135,6 @@ func (g *Game) capWorldActors() {
 		g.worldActors[0].remove(g)
 		g.worldActors = g.worldActors[1:]
 	}
-}
-
-// needsCollision says whether a spawned thing has to be stopped by the world.
-// Something that falls has to land, and something with a speed of its own is
-// going somewhere and can arrive at a wall. Smoke does neither.
-func needsCollision(actor *wep.Actor) bool {
-	return !actor.NoGravity || actor.Speed > 0
 }
 
 // spawnPosition puts it where the script asked, relative to the player: out
@@ -236,17 +236,102 @@ func (live *WorldActor) publishState() {
 	set("height", float64(live.sprite.Size.Y())/worldUnitsPerDoomUnit)
 }
 
-// move carries along whatever has no body of its own: gravity if it falls, and
-// then the step.
+// move carries a spawned thing along: what falls falls, what homes turns
+// towards where it is going, and everything stops at the first solid thing it
+// meets rather than passing through the world.
 func (live *WorldActor) move(g *Game, elapsed float64) {
-	if live.physics != nil {
-		return // its body is doing this, and stopping it at walls
+	if live.resting {
+		return
+	}
+	if live.homing {
+		live.steerTowards(live.seekTo, elapsed)
 	}
 	if !live.data.NoGravity {
 		live.velocity = live.velocity.Add(mgl32.Vec3{0, float32(-gravity * elapsed), 0})
 	}
+
 	transform := live.object.Transform()
-	transform.SetPosition(transform.GetPosition().Add(live.velocity.Mul(float32(elapsed))))
+	from := transform.GetPosition()
+	to := from.Add(live.velocity.Mul(float32(elapsed)))
+
+	if live.solidAt(to) {
+		// It has arrived somewhere solid. A shell settles just above the
+		// surface and lies there; anything with a speed of its own has hit
+		// something, and its script decides what that means.
+		live.velocity = mgl32.Vec3{}
+		live.resting = true
+		live.homing = false
+		if live.data.Speed > 0 {
+			live.hitSomething(g, from)
+		}
+		return
+	}
+	transform.SetPosition(to)
+}
+
+// hitSomething sends a missile to its Death state, which is where a script puts
+// the explosion.
+func (live *WorldActor) hitSomething(g *Game, at mgl32.Vec3) {
+	if live.cursor.Goto("Death") {
+		return
+	}
+	if live.cursor.Goto("XDeath") {
+		return
+	}
+	live.object.Kill()
+}
+
+// steerTowards turns a homing missile's heading towards a point, by no more
+// than its turn rate, which is what A_SeekerMissile does.
+func (live *WorldActor) steerTowards(target mgl32.Vec3, elapsed float64) {
+	live.velocity = steer(live.velocity,
+		live.object.Transform().GetPosition(), target, live.seekRate*elapsed)
+}
+
+// steer turns a velocity towards a point without changing how fast it is going,
+// by at most maxTurn radians. A missile that could turn as far as it liked
+// would arrive in a straight line and there would be nothing to watch.
+func steer(velocity, from, target mgl32.Vec3, maxTurn float64) mgl32.Vec3 {
+	speed := velocity.Len()
+	wanted := target.Sub(from)
+	if speed < 0.0001 || wanted.Len() < 0.0001 || maxTurn <= 0 {
+		return velocity
+	}
+	wanted = wanted.Normalize()
+	heading := velocity.Mul(1 / speed)
+
+	angle := math.Acos(float64(clampUnitF(heading.Dot(wanted))))
+	if angle <= 0.0001 {
+		return wanted.Mul(speed) // already pointed at it
+	}
+	if angle <= maxTurn {
+		return wanted.Mul(speed) // near enough to finish the turn this step
+	}
+
+	// Turned about the axis the two headings share, by exactly the angle
+	// allowed. Mixing the two directions and normalising instead would turn
+	// short of it, by more the further apart they are, which makes a missile
+	// with a long way to come round turn slower than its script says.
+	axis := heading.Cross(wanted)
+	if axis.Len() < 0.0001 {
+		// Pointed the opposite way, so any axis across the heading will do.
+		axis = heading.Cross(mgl32.Vec3{0, 1, 0})
+		if axis.Len() < 0.0001 {
+			axis = heading.Cross(mgl32.Vec3{1, 0, 0})
+		}
+	}
+	turned := mgl32.QuatRotate(float32(maxTurn), axis.Normalize()).Rotate(heading)
+	return turned.Normalize().Mul(speed)
+}
+
+func clampUnitF(v float32) float32 {
+	if v < -1 {
+		return -1
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 // Below answers A_CheckFloor: whether there is solid ground right under it,
@@ -347,6 +432,10 @@ func (live *WorldActor) apply(g *Game, op wep.Op) {
 		// Something a spawned thing spawns in turn: a rocket's smoke trail.
 		// It goes where this one is rather than where the player is looking.
 		g.spawnFrom(live, op)
+	case wep.OpSeekerMissile:
+		live.startSeeking(g, op)
+	case wep.OpWarp:
+		live.warp(g, op)
 	case wep.OpRemove, wep.OpDie:
 		live.cursor.Goto("@enginestop")
 		live.object.Kill()
@@ -357,6 +446,49 @@ func (live *WorldActor) apply(g *Game, op wep.Op) {
 func (live *WorldActor) argsOf(op wep.Op) []float64 {
 	return op.ArgValues(live.runtime, live.runtime.Rand)
 }
+
+// startSeeking points a missile at something and says how sharply it may turn.
+// A_SeekerMissile(threshold, maxturn, ...) writes both in ZDoom's angle units,
+// where a whole turn is 256.
+func (live *WorldActor) startSeeking(g *Game, op wep.Op) {
+	values := live.argsOf(op)
+	maxTurn := defaultSeekDegrees
+	if len(values) >= 2 && values[1] > 0 {
+		maxTurn = values[1] * degreesPerZDoomAngle
+	}
+	live.homing = true
+	live.seekRate = maxTurn * wep.TicRate * math.Pi / 180
+	live.seekTo = g.seekTarget()
+}
+
+// warp moves something to sit on whatever it belongs to. A script uses it to
+// hang an effect off its master; with nothing to hang off, the player is what
+// it came from, so that is where it goes.
+func (live *WorldActor) warp(g *Game, op wep.Op) {
+	values := live.argsOf(op)
+	anchor := g.muzzlePosition()
+	if live.master != nil && live.master.object.IsAlive() {
+		anchor = live.master.object.Transform().GetPosition()
+	}
+	offset := mgl32.Vec3{}
+	if len(values) >= 3 {
+		// Doom's x and y are the ground plane and its z is up.
+		offset = mgl32.Vec3{
+			float32(values[0] * worldUnitsPerDoomUnit),
+			float32(values[2] * worldUnitsPerDoomUnit),
+			float32(values[1] * worldUnitsPerDoomUnit),
+		}
+	}
+	live.object.Transform().SetPosition(anchor.Add(offset))
+	live.resting = false
+}
+
+// How sharply a missile turns when the script does not say, and what one of
+// ZDoom's angle units is worth: it counts a whole turn as 256.
+const (
+	defaultSeekDegrees   = 2.0
+	degreesPerZDoomAngle = 360.0 / 256.0
+)
 
 // fade walks the sprite's alpha towards where the script wants it.
 func (live *WorldActor) fade(op wep.Op) {
@@ -374,18 +506,11 @@ func (live *WorldActor) fade(op wep.Op) {
 	live.sprite.Tint = mgl32.Vec4{1, 1, 1, alpha}
 }
 
-func (live *WorldActor) currentVelocity() mgl32.Vec3 {
-	if live.physics != nil {
-		return live.physics.Velocity()
-	}
-	return live.velocity
-}
+func (live *WorldActor) currentVelocity() mgl32.Vec3 { return live.velocity }
 
 func (live *WorldActor) setVelocity(velocity mgl32.Vec3) {
 	live.velocity = velocity
-	if live.physics != nil {
-		live.physics.SetVelocity(velocity)
-	}
+	live.resting = velocity.Len() < 0.0001 && live.resting
 }
 
 func (live *WorldActor) remove(g *Game) {

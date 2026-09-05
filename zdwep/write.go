@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/memmaker/goray/png_chunks"
 	"github.com/memmaker/goray/tpack"
 	"github.com/memmaker/goray/wep"
 )
@@ -128,9 +129,9 @@ func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) e
 
 // asPNG makes sure a picture is one, whatever the mod stored it as.
 func asPNG(data []byte, name string) ([]byte, error) {
-	decoded, kind, err := image.Decode(bytes.NewReader(data))
+	decoded, kind, err := decodePicture(data, name)
 	if err != nil {
-		return nil, fmt.Errorf("sprite %s: %w", name, err)
+		return nil, err
 	}
 	if kind == "png" {
 		return data, nil
@@ -140,6 +141,26 @@ func asPNG(data []byte, name string) ([]byte, error) {
 		return nil, err
 	}
 	return out.Bytes(), nil
+}
+
+// decodePicture reads a picture a mod shipped, repairing the container when a
+// strict decoder will not have it. Doom mods carry PNGs with checksums that do
+// not match and transparency chunks the spec forbids; GZDoom reads them anyway
+// and so, now, do we.
+func decodePicture(data []byte, name string) (image.Image, string, error) {
+	decoded, kind, err := image.Decode(bytes.NewReader(data))
+	if err == nil {
+		return decoded, kind, nil
+	}
+	repaired, changed, repairErr := png_chunks.Repair(data)
+	if repairErr != nil || !changed {
+		return nil, "", fmt.Errorf("sprite %s: %w", name, err)
+	}
+	decoded, kind, err = image.Decode(bytes.NewReader(repaired))
+	if err != nil {
+		return nil, "", fmt.Errorf("sprite %s: %w", name, err)
+	}
+	return decoded, "repaired", nil
 }
 
 func stripSource(machine *wep.StateMachine) {
@@ -170,9 +191,9 @@ func writeAtlas(result *Result, assets *AssetIndex, outPath string) error {
 		if err != nil {
 			return err
 		}
-		decoded, _, err := image.Decode(bytes.NewReader(data))
+		decoded, _, err := decodePicture(data, name+" ("+file+")")
 		if err != nil {
-			return fmt.Errorf("sprite %s (%s): %w", name, file, err)
+			return err
 		}
 		images = append(images, tpack.NamedImage{Image: decoded, Name: name})
 	}

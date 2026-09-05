@@ -86,9 +86,15 @@ func (w *Weapon) Equip() {
 	w.cursor.Goto("Ready")
 }
 
-// Unequip stops the overlay; the weapon keeps its inventory, which is the
-// player's and not the gun's.
-func (w *Weapon) Unequip() { w.flash = nil }
+// Unequip stops the overlay and anything the weapon was still playing. Several
+// of these guns hum while they are held, on a looping sound their script starts
+// and never stops, so putting one away has to.
+func (w *Weapon) Unequip() {
+	w.flash = nil
+	if w.game != nil && w.game.audio != nil {
+		w.game.audio.StopChannels()
+	}
+}
 
 // AmmoLine is what the HUD says about how loaded the weapon is, or empty for a
 // weapon that costs nothing to fire.
@@ -343,6 +349,21 @@ func (g *Game) muzzlePosition() mgl32.Vec3 {
 	return origin.Add(direction.Mul(spawnDistanceInFront))
 }
 
+// seekTarget is what a homing missile steers at. There are no monsters to lock
+// onto, so it is whatever the player is looking at: the first thing the
+// crosshair meets, or a point out along it when it meets nothing. A rocket that
+// follows the crosshair is what homing looks like from behind the gun anyway.
+func (g *Game) seekTarget() mgl32.Vec3 {
+	origin, direction := g.aim()
+	if hit := g.rayCast(origin, direction); hit.HitInfo.Hit {
+		return hit.WorldPosition()
+	}
+	return origin.Add(direction.Mul(seekReach))
+}
+
+// seekReach is how far ahead a missile aims when the crosshair is on nothing.
+const seekReach = 64.0
+
 // spawnFrom puts an actor into the world where another one already is, which is
 // how a rocket lays a smoke trail behind itself.
 func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
@@ -358,7 +379,7 @@ func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
 	// inheriting its heading. A trail behind a rocket looks right either way,
 	// and anything that needs the heading needs seeking first.
 	position := parent.object.Transform().GetPosition()
-	g.spawnActorAt(weapon, actor, op, position)
+	g.spawnActorAt(weapon, actor, op, position).setMaster(parent)
 }
 
 // playSoundAt plays a cue from somewhere in the world, panned and quietened by

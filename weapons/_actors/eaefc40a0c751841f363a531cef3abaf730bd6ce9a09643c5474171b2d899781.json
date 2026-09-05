@@ -1,0 +1,1 @@
+{"format":1,"name":"GasSpawner","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"spawn_item","actor":"Gas"}]},{"tics":0,"ops":[{"op":"spawn_item","actor":"CellPackPurist"}]},{"tics":1,"tics_max":1},{"tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

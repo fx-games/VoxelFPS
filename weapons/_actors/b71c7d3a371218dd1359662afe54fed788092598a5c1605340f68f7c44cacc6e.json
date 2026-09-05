@@ -1,1 +1,0 @@
-{"format":1,"name":"DetectFloorCraterNoFire","render":{"scale":[3.4,3.4],"alpha":0.7,"style":"shaded"},"states":{"steps":[{"tics":0},{"tics":0,"ops":[{"op":"thrust","args":[0,-10,0,1]}]},{"tics":4,"tics_max":4},{"tics":0,"ops":[{"op":"stop"}]},{"tics":1,"tics_max":1},{"tics":1000,"tics_max":1000},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":4,"spawn":0}}}

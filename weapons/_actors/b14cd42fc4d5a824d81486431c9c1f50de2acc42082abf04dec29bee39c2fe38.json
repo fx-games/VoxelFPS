@@ -1,0 +1,1 @@
+{"format":1,"name":"GrenadeAmmo","render":{"scale":[0.3,0.3],"alpha":1},"states":{"steps":[{"sprite":"GRNDH0","tics":-1,"tics_max":-1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

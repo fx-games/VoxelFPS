@@ -1,1 +1,0 @@
-{"format":1,"name":"HeavyMachinegunFlash","render":{"scale":[0.4,0.4],"alpha":0.2,"style":"add"},"speed":15,"states":{"steps":[{"tics":1,"tics_max":1},{"tics":0,"ops":[{"op":"nop","source":"A_Stop"}]},{"tics":0,"ops":[{"op":"spawn_item","actor":"OrangeLensFlareAlt"}]},{"tics":2,"tics_max":2},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":2,"spawn":0}}}

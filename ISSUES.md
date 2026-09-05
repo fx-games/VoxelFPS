@@ -85,12 +85,16 @@ reports one event for the surface that was actually hit (see Physics below).
   up needs no re-migration:
   - Monster behaviour (`monster_action`), the mod's own ACS scripts (`run_script`),
     screen shake (`quake`), crosshairs, player flags, and everything about how a
-    spawned actor moves that it does not do itself: seeking and warping. Velocity,
-    fading and scaling do work.
+    player's own view beyond zoom. Velocity, fading, scaling, seeking and warping all
+    work.
   - `give_to_target`, `radius_give` and `radius_thrust`: nothing has health or mass.
-- A spawned thing only collides with the world if it falls or has a speed of its own.
-  Smoke drifts by arithmetic instead, because a weapon makes a great deal of it and a
-  body sweeping the voxel world every frame for each puff is not worth it.
+- A spawned thing carries no physics body. It moves by arithmetic and stops at the
+  first solid block: a shell falls and settles on the floor, a missile that reaches a
+  wall goes to its Death state. A body would sweep the voxel world every frame for
+  every puff of smoke, and worse, the player would bump into ejected shell casings.
+- Homing works: A_SeekerMissile turns a missile towards what the player is looking at,
+  by no more than its own turn rate. There are no monsters to lock onto, so the
+  crosshair is the target. A_Warp puts a thing on whatever spawned it.
 - Spawned sprites do not cast shadows, the way Doom sprites never did. A hundred
   drifting puffs that cast would have every light redraw its shadow map every frame.
 - No more than 192 spawned things are kept at once, oldest dropped first. That is

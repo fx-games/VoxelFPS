@@ -1,1 +1,0 @@
-{"format":1,"name":"HealthCrueltyBonus2","render":{"scale":[0.75,0.75],"alpha":1},"states":{"steps":[{"tics":6,"tics_max":6,"bright":true},{"tics":6,"tics_max":6,"bright":true},{"tics":6,"tics_max":6,"bright":true},{"tics":6,"tics_max":6,"bright":true},{"tics":0,"ops":[{"op":"loop"}]}],"labels":{"spawn":0}}}

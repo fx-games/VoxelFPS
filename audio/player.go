@@ -287,8 +287,15 @@ func (p *Player) PlayCueAt(name string, options CueOptions) {
 		return // asked for silence, so make none
 	}
 
-	if options.Channel > 0 {
-		p.playOnChannel(options.Channel, streamer)
+	// A sound that loops has to be stoppable, and a channel is the only handle
+	// there is on one. A script that asks for a looping sound on no channel
+	// gets one of its own rather than a sound that plays until the game ends.
+	channel := options.Channel
+	if options.Looping && channel <= 0 {
+		channel = loopChannel
+	}
+	if channel > 0 {
+		p.playOnChannel(channel, streamer)
 		return
 	}
 	speaker.Play(streamer)
@@ -326,6 +333,23 @@ func (p *Player) StopChannel(channel int) {
 		mixer.Clear()
 	}
 }
+
+// StopChannels silences every channel, which is what putting a weapon away
+// means: a gun that hums while it is held has to stop humming once it is not.
+func (p *Player) StopChannels() {
+	if p.disabled {
+		return
+	}
+	speaker.Lock()
+	defer speaker.Unlock()
+	for _, mixer := range p.channels {
+		mixer.Clear()
+	}
+}
+
+// loopChannel is where a looping sound goes when its script named no channel.
+// ZDoom's own channels are small numbers, so this sits above them.
+const loopChannel = 64
 
 func clampPan(pan float64) float64 {
 	if pan < -1 {

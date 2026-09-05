@@ -1,1 +1,0 @@
-{"format":1,"name":"BFGExtraParticle","render":{"scale":[0.035,0.035],"alpha":1,"style":"add"},"states":{"steps":[{"tics":2,"tics_max":2,"bright":true,"ops":[{"op":"fade_to","args":[0,0.1]}]},{"tics":0,"ops":[{"op":"loop"}]}],"labels":{"death":0,"spawn":0}}}

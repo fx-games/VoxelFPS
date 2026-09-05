@@ -406,7 +406,10 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 				OffsetY: line.OffsetY,
 			}
 			if visibleSprite(sprite) {
-				step.Sprite = fmt.Sprintf("%s%c0", strings.ToUpper(sprite), frame)
+				// A frame letter is a letter whichever case it is written in,
+				// and mods write both. Uppercasing it here keeps one name for
+				// one picture, in the atlas and in the shared store alike.
+				step.Sprite = strings.ToUpper(fmt.Sprintf("%s%c0", sprite, frame))
 				c.useSprite(step.Sprite)
 			}
 			ops, err := c.lowerAction(line)
