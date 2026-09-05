@@ -94,8 +94,6 @@ func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Sha
 	}
 	q.quadVertices.Begin()
 
-	tileW, tileH := q.decalAtlas.GetAtlasItemSize()
-	spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 	q.decalAtlas.BeginOnUnit(gl.TEXTURE0)
 
 	// Oldest first, so a fresh decal blends over the ones it lands on. nextDecal
@@ -107,9 +105,11 @@ func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Sha
 		if !observer.IsSphereInViewFrustum(d.center, d.radius) {
 			continue
 		}
+		leftU, topV, rightU, bottomV := q.decalAtlas.GetUV(int(d.texIndex))
 		q.culledBatch = append(q.culledBatch, d.model[:]...)
-		// origin offset (centred), texture index, emissive
-		q.culledBatch = append(q.culledBatch, 0, 0, float32(d.texIndex), 0)
+		// origin offset (centred), uv rect, emissive
+		q.culledBatch = append(q.culledBatch, 0, 0,
+			float32(leftU), float32(topV), float32(rightU), float32(bottomV), 0)
 	}
 	q.quadsDrawn += len(q.culledBatch) / QuadInstanceFloats
 	// No depth writes. Every decal on one wall sits at the same distance from it,

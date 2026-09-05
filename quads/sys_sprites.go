@@ -37,7 +37,7 @@ type SpriteDrawer struct {
 	drawCalls    int
 
 	animations         []SpriteAnimation
-	spritesPerTexture  map[*glhf.TextureAtlasFixed][]*SpriteComponent
+	spritesPerTexture  map[glhf.TextureAtlas][]*SpriteComponent
 	transparentSprites []*SpriteComponent
 
 	// Decals are quads stuck to the world geometry - see decals.go. They live
@@ -55,7 +55,7 @@ type SpriteDrawer struct {
 func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
 	return &SpriteDrawer{
 		shader:            shader,
-		spritesPerTexture: make(map[*glhf.TextureAtlasFixed][]*SpriteComponent),
+		spritesPerTexture: make(map[glhf.TextureAtlas][]*SpriteComponent),
 	}
 }
 func (q *SpriteDrawer) AddAnimation(animation SpriteAnimation) int {
@@ -152,9 +152,6 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader) {
 		if len(spriteList) == 0 {
 			continue
 		}
-
-		tileW, tileH := currentAtlas.GetAtlasItemSize()
-		spriteShader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(tileW), int32(tileH)})
 
 		currentAtlas.BeginOnUnit(gl.TEXTURE0)
 
@@ -257,7 +254,11 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 }
 
 // appendInstance packs one sprite into the instance attribute buffer, in the order
-// given by QuadInstanceFormat: mat4 model, vec2 origin offset, texture index, emissive.
+// given by QuadInstanceFormat: mat4 model, vec2 origin offset, vec4 uv, emissive.
+//
+// The UV rect is worked out here rather than in the shader. A fixed grid can be
+// divided up from a tile size, but a packed atlas cannot, and both kinds answer
+// GetUV, so asking is both simpler and general.
 func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComponent, texIndex uint16) []float32 {
 	model := sprite.Transform(observer)
 
@@ -265,9 +266,12 @@ func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComp
 	if sprite.Origin() == SpriteOriginBottomCenter {
 		originOffset = mgl32.Vec2{0, 0.5}
 	}
+	leftU, topV, rightU, bottomV := sprite.AtlasTexture.GetUV(int(texIndex))
 
 	dst = append(dst, model[:]...)
-	return append(dst, originOffset[0], originOffset[1], float32(texIndex), sprite.Emissive)
+	return append(dst, originOffset[0], originOffset[1],
+		float32(leftU), float32(topV), float32(rightU), float32(bottomV),
+		sprite.Emissive)
 }
 
 // drawBatch submits one instanced draw and reports the number of draw calls it cost.
@@ -360,7 +364,7 @@ func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 	}
 }
 func (q *SpriteDrawer) Clear() {
-	q.spritesPerTexture = make(map[*glhf.TextureAtlasFixed][]*SpriteComponent)
+	q.spritesPerTexture = make(map[glhf.TextureAtlas][]*SpriteComponent)
 	q.ClearDecals()
 }
 

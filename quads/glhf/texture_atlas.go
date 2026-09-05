@@ -17,6 +17,7 @@ type TextureAtlas interface {
 	Width() int
 	Height() int
 	Begin()
+	BeginOnUnit(unit uint32)
 	End()
 	CanAppend(image image.Image) bool
 	AppendImages(index int, files []tpack.NamedImage)

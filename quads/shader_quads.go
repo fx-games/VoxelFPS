@@ -7,8 +7,7 @@ import (
 )
 
 const (
-	QuadShaderAtlasItemSize int = iota
-	QuadShaderTintColor
+	QuadShaderTintColor int = iota
 )
 
 // The per-sprite values used to be uniforms reset before every draw. They are
@@ -18,7 +17,7 @@ const (
 const (
 	QuadInstanceModelLocation    = 1 // through 4, a mat4 spans four slots
 	QuadInstanceOriginLocation   = 5
-	QuadInstanceTexIdxLocation   = 6
+	QuadInstanceUVLocation       = 6
 	QuadInstanceEmissiveLocation = 7
 )
 
@@ -26,12 +25,12 @@ const (
 var QuadInstanceFormat = []glhf.InstanceAttr{
 	{Location: QuadInstanceModelLocation, Floats: 16},
 	{Location: QuadInstanceOriginLocation, Floats: 2},
-	{Location: QuadInstanceTexIdxLocation, Floats: 1},
+	{Location: QuadInstanceUVLocation, Floats: 4},
 	{Location: QuadInstanceEmissiveLocation, Floats: 1},
 }
 
 // QuadInstanceFloats is how many float32 one sprite occupies in that buffer.
-const QuadInstanceFloats = 16 + 2 + 1 + 1
+const QuadInstanceFloats = 16 + 2 + 4 + 1
 
 func LoadQuadShader(uboBlock string) *glhf.Shader {
 	var (
@@ -39,8 +38,7 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
 			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 0
-			glhf.Attr{Name: "tintColor", Type: glhf.Vec4},      // 1
+			glhf.Attr{Name: "tintColor", Type: glhf.Vec4}, // 0
 		}
 		shader *glhf.Shader
 	)
@@ -57,7 +55,6 @@ func LoadQuadShader(uboBlock string) *glhf.Shader {
 
 	shader.Begin()
 	shader.SetUniformAttr(QuadShaderTintColor, mgl32.Vec4{1, 1, 1, 1})
-	shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
 	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
 	shader.End()
 
@@ -72,10 +69,8 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
 		vertexFormat = glhf.AttrFormat{
 			{Name: "cornerIndex", Type: glhf.UInt}, // 0-3
 		}
-		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "atlasItemSize", Type: glhf.IVec2}, // 0
-		}
-		shader *glhf.Shader
+		uniformFormat = glhf.AttrFormat{}
+		shader        *glhf.Shader
 	)
 	var err error
 	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+quadVertexShaderSource, quadFragmentShaderSourceDepth)
@@ -89,7 +84,6 @@ func LoadQuadShaderDepthPass(uboBlock string) *glhf.Shader {
 	}
 
 	shader.Begin()
-	shader.SetUniformAttr(QuadShaderAtlasItemSize, [2]int32{int32(64), int32(64)})
 	shader.End()
 
 	glErr := gl.GetError()
@@ -112,32 +106,10 @@ layout(location = 0) in uint cornerIndex;
 // Per-instance: one sprite per instance, advanced by glVertexAttribDivisor.
 layout(location = 1) in mat4 instModelTransform;
 layout(location = 5) in vec2 instOriginOffset;
-layout(location = 6) in float instTextureIndex;// float, so the whole instance buffer stays one float array
+layout(location = 6) in vec4 instUV;// leftU, topV, rightU, bottomV, worked out on the CPU
 layout(location = 7) in float instEmissive;// 0 for a normal sprite, otherwise how far past white it glows
 
-uniform ivec2 atlasItemSize;
-
 uniform sampler2D tex;
-
-float getLeftU(uint texIndex, uint xCount, uint tileWidthInPx, uint textureSizeX) {
-    uint leftBorder = ((texIndex % xCount) * (tileWidthInPx));
-    return float(leftBorder) / float(textureSizeX);
-}
-
-float getRightU(uint texIndex, uint xCount, uint tileWidthInPx, uint textureSizeX) {
-    uint leftBorder = ((texIndex % xCount) * (tileWidthInPx));
-    return float(leftBorder + tileWidthInPx) / float(textureSizeX);
-}
-
-float getTopV(uint texIndex, uint xCount, uint tileHeightInPx, uint textureSizeY) {
-    uint topBorder = ((texIndex / xCount) * (tileHeightInPx));
-    return float(topBorder) / float(textureSizeY);
-}
-
-float getBottomV(uint texIndex, uint xCount, uint tileHeightInPx, uint textureSizeY) {
-    uint topBorder = ((texIndex / xCount) * (tileHeightInPx));
-    return (float(topBorder + tileHeightInPx) / float(textureSizeY)) - 0.0001;
-}
 
 /*
 relative vertex positions
@@ -153,17 +125,13 @@ uv mapping
 3 -> leftU, topV
 */
 
-vec2 getUV(uint cornerIndex, uint textureIndex) {
-    ivec2 textureSize2d = textureSize(tex,0);
-    uint textureSizeX = uint(textureSize2d.x);
-    uint textureSizeY = uint(textureSize2d.y);
-    uint tileWidthInPx = uint(atlasItemSize.x);
-    uint tileHeightInPx = uint(atlasItemSize.y);
-    uint xCount = (textureSizeX / tileWidthInPx);
-
-    float uValue = cornerIndex == uint(0) || cornerIndex == uint(1) ? getRightU(textureIndex, xCount, tileWidthInPx, textureSizeX) : getLeftU(textureIndex, xCount, tileWidthInPx, textureSizeX);
-    float vValue = cornerIndex == uint(1) || cornerIndex == uint(2) ? getBottomV(textureIndex, xCount, tileHeightInPx, textureSizeY) : getTopV(textureIndex, xCount, tileHeightInPx, textureSizeY);
-
+// The rect arrives ready made, so a frame of any size in an atlas of any layout
+// looks the same from here. It used to be worked out from a texture index and a
+// uniform tile size, which only a fixed grid of equally sized frames can have,
+// and a weapon's frames are packed and all different.
+vec2 getUV(uint cornerIndex, vec4 uv) {
+    float uValue = cornerIndex == uint(0) || cornerIndex == uint(1) ? uv.z : uv.x;
+    float vValue = cornerIndex == uint(1) || cornerIndex == uint(2) ? uv.w - 0.0001 : uv.y;
     return vec2(uValue, vValue);
 }
 
@@ -181,7 +149,7 @@ void main() {
 
     gl_Position = camProjectionView * worldPos;
 
-    VertUV = getUV(cornerIndex, uint(instTextureIndex));
+    VertUV = getUV(cornerIndex, instUV);
 #ifndef DEPTH_PASS
     // The model transform is per instance now, so the fragment shader cannot
     // reach it. World position and normal are handed over instead.
