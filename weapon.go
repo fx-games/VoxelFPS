@@ -159,7 +159,12 @@ func (g *Game) loadWeaponSounds(library *wep.Library, data *wep.Weapon) {
 	if g.audio == nil {
 		g.audio = audio.NewPlayer(44100)
 	}
-	g.audio.LoadCuesFromDir(library.SoundsPath(data.ID), "")
+	// Cue names are the names the ops play by, which the migration wrote the
+	// folder to match, so no mapping is needed here. Two weapons that play the
+	// same ZDoom sound share the cue, which is what sharing a name means.
+	if err := g.audio.LoadCueTree(library.SoundsPath(data.ID)); err != nil {
+		panic(err)
+	}
 	g.audio.SoundsLoaded()
 }
 
@@ -248,10 +253,14 @@ func (g *Game) playWeaponSound(op wep.Op) {
 	if g.audio == nil {
 		return
 	}
+	// A weapon's own sounds come from where the listener is standing, so there
+	// is nothing to pan. Attenuation is compiled and carried for the day a
+	// spawned actor makes a noise somewhere else.
 	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
 		Volume:  op.Volume,
 		Pitch:   op.Pitch,
 		Looping: op.Looping,
+		Channel: op.Channel,
 	})
 }
 

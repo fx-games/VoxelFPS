@@ -6,10 +6,12 @@ import (
 	"github.com/gopxl/beep/effects"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
+	"io/fs"
 	"math"
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -111,6 +113,35 @@ func (p *Player) LoadCuesFromDir(dirName string, cuePrefix string) {
 		}
 	}
 }
+
+// LoadCueTree loads every ogg under a directory, naming each cue by its path
+// relative to that directory without the extension. That is exactly how ZDoom
+// names sounds, so a cue loaded from sounds/hellboundshotgun/fire.ogg answers to
+// "hellboundshotgun/fire", which is the name the script plays it by.
+//
+// LoadCuesFromDir names cues after the directory it was pointed at, which puts
+// an extra segment on the front; this does not.
+func (p *Player) LoadCueTree(root string) error {
+	if p.disabled {
+		return nil
+	}
+	return filepath.WalkDir(root, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		extension := path.Ext(name)
+		if !strings.EqualFold(extension, ".ogg") {
+			return nil
+		}
+		relative, err := filepath.Rel(root, name)
+		if err != nil {
+			return err
+		}
+		cue := filepath.ToSlash(strings.TrimSuffix(relative, extension))
+		return p.loadCue(name, cue)
+	})
+}
+
 func (p *Player) loadCue(fileName string, cueName string) error {
 	if p.disabled {
 		return nil
