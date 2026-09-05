@@ -341,3 +341,30 @@ func TestCompileIsDeterministic(t *testing.T) {
 	assert.Equal(t, first.Sounds, second.Sounds)
 	assert.Equal(t, first.Weapon, second.Weapon)
 }
+
+// Brutal Doom's weapons are `: BrutalWeapon`, and BrutalWeapon is
+// `: DoomWeapon`, which GZDoom derives from Weapon without any DECORATE file
+// saying so. Looking for Weapon alone finds nothing in a mod written that way.
+func TestWeaponsFoundThroughEngineBaseClasses(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR BrutalWeapon : DoomWeapon {}
+ACTOR BrutalShotgun : BrutalWeapon
+{
+  Tag "Brutal Shotgun"
+  States
+  {
+  Ready:
+    BSHT A 1 A_WeaponReady
+    Loop
+  }
+}
+ACTOR SomeAmmo : Ammo {}
+`})
+
+	assert.Equal(t, []string{"BrutalShotgun", "BrutalWeapon"}, Weapons(idx))
+	assert.False(t, IsWeapon(idx, "SomeAmmo"))
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "BrutalShotgun")
+	require.NoError(t, err)
+	assert.Equal(t, "brutal_shotgun", result.Weapon.ID)
+}

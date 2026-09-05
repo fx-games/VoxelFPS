@@ -30,12 +30,13 @@ func CompileWeapon(idx *Index, policy Policy, actorName string) (*Result, error)
 	if !ok {
 		return nil, fmt.Errorf("no actor named %q in this mod", actorName)
 	}
-	if !idx.InheritsFrom(actorName, "Weapon") {
+	if !IsWeapon(idx, actorName) {
 		return nil, fmt.Errorf(
-			"%s does not inherit from Weapon; its chain is %s.\n"+
-				"If %s is defined in this mod, the DECORATE lump does not include the file "+
-				"holding it, and the whole mod has to be indexed for the chain to resolve.",
-			actor.Name, strings.Join(chainNames(idx, actorName), " -> "), UnresolvedRoot(idx, actorName))
+			"%s is not a weapon: its chain is %s, which reaches none of %s.\n"+
+				"If %s is a class this mod defines, the DECORATE lump does not include the "+
+				"file holding it, and the whole mod has to be indexed for the chain to resolve.",
+			actor.Name, strings.Join(chainNames(idx, actorName), " -> "),
+			strings.Join(WeaponBaseClasses, ", "), UnresolvedRoot(idx, actorName))
 	}
 
 	c := newCompiler(idx, policy)
@@ -291,11 +292,32 @@ func UnresolvedRoot(idx *Index, name string) string {
 	return chain[len(chain)-1].Parent
 }
 
+// WeaponBaseClasses are the classes a weapon's chain has to reach. They are all
+// engine classes, defined by GZDoom rather than by any mod, so the chain ends at
+// a name no DECORATE file provides.
+//
+// DoomWeapon is on the list because it is where Doom mods actually stop: Brutal
+// Doom's weapons are `: BrutalWeapon`, and BrutalWeapon is `: DoomWeapon`, which
+// GZDoom derives from Weapon. Checking for Weapon alone finds nothing in a mod
+// like that.
+var WeaponBaseClasses = []string{"Weapon", "DoomWeapon", "HereticWeapon", "StrifeWeapon"}
+
+// IsWeapon reports whether an actor's chain reaches one of the engine's weapon
+// classes.
+func IsWeapon(idx *Index, name string) bool {
+	for _, base := range WeaponBaseClasses {
+		if idx.InheritsFrom(name, base) {
+			return true
+		}
+	}
+	return false
+}
+
 // Weapons lists every actor in the mod that is a weapon, by name, sorted.
 func Weapons(idx *Index) []string {
 	var names []string
 	for _, actor := range idx.Actors {
-		if idx.InheritsFrom(actor.Name, "Weapon") {
+		if IsWeapon(idx, actor.Name) {
 			names = append(names, actor.Name)
 		}
 	}
