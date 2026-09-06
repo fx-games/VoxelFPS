@@ -696,6 +696,293 @@ func Weapons(idx *Index) []string {
 	return names
 }
 
+// weaponEntryLabels are where the engine's own input can send the cursor -
+// grep wep/runtime.go and weapon.go for every hardcoded Goto/has target and
+// this is the complete list. Nothing outside this set is ever entered except
+// by a jump written into the compiled ops themselves.
+var weaponEntryLabels = []string{"select", "ready", "fire", "hold", "altfire", "althold", "reload"}
+
+// deadAnimationLabels are BDCE's own labels (DEFAULTWEAPON.txt, the
+// BrutalWeapon every bd_ weapon inherits from) for the five animations this
+// engine has no button for: a kick, a taunt, tossing a grenade, and executing
+// a body on the ground (curbstomping one is the same feature, branched by
+// victim type inside DoExecution). Meat-shield grab-and-throw is a monster
+// mechanic (CguyShield.txt and siblings), not a weapon state, so there is
+// nothing of it here to begin with.
+//
+// This is the actual DECORATE source's own label list, not a name guess, so
+// it stays exact across every weapon that inherits it. Pruning is scoped to
+// exactly these five, deliberately - other things this engine also never
+// reaches (a sprint key, a dual-wield toggle, an aim-down-sights hold, a
+// manual unload) are left alone, because nothing here asked for them and a
+// button for one of those is not implausible later; a kick with no leg is.
+var deadAnimationLabels = []string{
+	"dokick", "berserkerkick", "airkick", "superairkick", "slideattack",
+	"berserkslide", "finishslide", "finishslidehitwall", "executeairstomp", "doairstomp",
+	"taunt", "tauntfemale", "tauntclassic", "tauntfemaleclassic", "salute",
+	"tossgrenade",
+	"doexecution", "bashwall", "execution1", "execution2", "finishexecution",
+}
+
+// reachableSteps is which of a weapon's own steps the engine can ever actually
+// reach, starting from weaponEntryLabels and following every op's own jump.
+//
+// jump_if_inventory is the one edge not taken for free: an inventory flag
+// nothing reachable ever gives cannot be true, so a branch on it cannot be
+// taken. Settable is found by the same walk it gates, so the two are computed
+// to a fixed point: a step already known reachable can make an item settable,
+// which can make a jump_if_inventory reachable, which can reach a step that
+// gives another item.
+//
+// Every other jump - ammo running out, a random roll, a world check, a
+// countdown - depends on something this analysis cannot rule out (real
+// gameplay state, real randomness), so its target is always taken. Being
+// wrong there only keeps a step that turns out unreachable after all, which
+// costs nothing; being wrong the other way deletes a frame the gun still
+// needs.
+func reachableSteps(weapon *wep.Weapon) []bool {
+	machine := &weapon.States
+	n := len(machine.Steps)
+	reachable := make([]bool, n)
+	settable := make(map[string]bool)
+	for name, item := range weapon.Items {
+		if item.Initial > 0 {
+			settable[strings.ToLower(name)] = true
+		}
+	}
+
+	for {
+		visited := make([]bool, n)
+		stack := make([]int, 0, n)
+		for _, name := range weaponEntryLabels {
+			if index, ok := machine.Labels[name]; ok && index >= 0 && index < n {
+				stack = append(stack, index)
+			}
+		}
+		for len(stack) > 0 {
+			i := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if i < 0 || i >= n || visited[i] {
+				continue
+			}
+			visited[i] = true
+			terminates := false
+			for _, op := range machine.Steps[i].Ops {
+				if op.Op == wep.OpGive {
+					settable[strings.ToLower(op.Item)] = true
+				}
+				if op.Op == wep.OpGoto {
+					terminates = true
+				}
+				if op.Op == wep.OpJumpIfInventory {
+					if !settable[strings.ToLower(op.Item)] {
+						continue
+					}
+				}
+				if op.To == "" {
+					continue
+				}
+				if target, ok := machine.Labels[strings.ToLower(op.To)]; ok {
+					stack = append(stack, target)
+				}
+			}
+			if !terminates && i+1 < n {
+				stack = append(stack, i+1)
+			}
+		}
+		grew := false
+		for i := 0; i < n; i++ {
+			if visited[i] && !reachable[i] {
+				reachable[i] = true
+				grew = true
+			}
+		}
+		if !grew {
+			return reachable
+		}
+	}
+}
+
+// namedAnimationClosure is everything forward-reachable from
+// deadAnimationLabels, taking every jump unconditionally (this is scoping the
+// prune, not proving safety - reachableSteps already did that). It stops at
+// weaponEntryLabels rather than walking through them: every one of these
+// animations hands back to Ready or a sibling when it ends, and following
+// that would claim the entire rest of the weapon's states belong to it.
+func namedAnimationClosure(machine *wep.StateMachine) []bool {
+	n := len(machine.Steps)
+	isEntry := make(map[int]bool, len(weaponEntryLabels))
+	for _, name := range weaponEntryLabels {
+		if index, ok := machine.Labels[name]; ok {
+			isEntry[index] = true
+		}
+	}
+
+	visited := make([]bool, n)
+	inClosure := make([]bool, n)
+	stack := make([]int, 0, n)
+	for _, name := range deadAnimationLabels {
+		if index, ok := machine.Labels[name]; ok && index >= 0 && index < n {
+			stack = append(stack, index)
+		}
+	}
+	for len(stack) > 0 {
+		i := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if i < 0 || i >= n || visited[i] {
+			continue
+		}
+		visited[i] = true
+		if isEntry[i] {
+			continue
+		}
+		inClosure[i] = true
+		terminates := false
+		for _, op := range machine.Steps[i].Ops {
+			if op.Op == wep.OpGoto {
+				terminates = true
+			}
+			if op.To == "" {
+				continue
+			}
+			if target, ok := machine.Labels[strings.ToLower(op.To)]; ok {
+				stack = append(stack, target)
+			}
+		}
+		if !terminates && i+1 < n {
+			stack = append(stack, i+1)
+		}
+	}
+	return inClosure
+}
+
+// rescueStillNamedSteps clears remove on any step a surviving step's own
+// (non jump_if_inventory) op still names, in place, to a fixed point.
+// jump_if_inventory is excluded on purpose: that op is the one this whole
+// prune runs on, and a kept Ready frame's own dead check on "Kicking" must
+// never be the thing that saves DoKick.
+func rescueStillNamedSteps(machine *wep.StateMachine, remove []bool) {
+	for {
+		changed := false
+		for i, step := range machine.Steps {
+			if remove[i] {
+				continue
+			}
+			for _, op := range step.Ops {
+				if op.Op == wep.OpJumpIfInventory || op.To == "" {
+					continue
+				}
+				if target, ok := machine.Labels[strings.ToLower(op.To)]; ok && remove[target] {
+					remove[target] = false
+					changed = true
+				}
+			}
+		}
+		if !changed {
+			return
+		}
+	}
+}
+
+// PruneDeadStates drops the steps that are both unreachable (reachableSteps)
+// and part of one of the five named animations (namedAnimationClosure) - the
+// intersection, not either alone: a state nothing but a kick ever reaches is
+// only worth deleting once it is also confirmed dead, and a state that
+// happens to be dead for its own unrelated reason (no sprint key, say) is left
+// alone because nobody asked for that one.
+//
+// A jump_if_inventory still aimed at a label this deletes is stripped from its
+// step - it already never fires, since its item is exactly what proved the
+// target unreachable, but the label it names is gone and the load-time check
+// in wep/load.go rejects a jump with nowhere to go, which is right for a
+// stale reference and would otherwise be right about these too.
+//
+// Everything else that still names a step marked for removal rescues it
+// instead: BDCE's own "GoingToReady" utility label, for one, is where a kick
+// or a taunt ends up on its way back to Ready, but it is also where several
+// other, unrelated (and here also dead, but out of scope) frames end up on
+// theirs. One animation being in scope for this prune does not make a label
+// three others still use fair game. The rescue runs to a fixed point, since
+// saving a step can mean saving whatever its own ops name in turn.
+func (r *Result) PruneDeadStates() (droppedSteps int) {
+	machine := &r.Weapon.States
+	reachable := reachableSteps(r.Weapon)
+	prunable := namedAnimationClosure(machine)
+	remove := make([]bool, len(machine.Steps))
+	for i := range machine.Steps {
+		remove[i] = prunable[i] && !reachable[i]
+	}
+	rescueStillNamedSteps(machine, remove)
+
+	newIndex := make([]int, len(machine.Steps))
+	newSteps := make([]wep.Step, 0, len(machine.Steps))
+	for i, step := range machine.Steps {
+		if remove[i] {
+			newIndex[i] = -1
+			continue
+		}
+		step.Ops = withoutDeadJumps(step.Ops, machine, remove)
+		newIndex[i] = len(newSteps)
+		newSteps = append(newSteps, step)
+	}
+	droppedSteps = len(machine.Steps) - len(newSteps)
+	if droppedSteps == 0 {
+		return 0
+	}
+
+	newLabels := make(map[string]int, len(machine.Labels))
+	for name, index := range machine.Labels {
+		if index >= 0 && index < len(newIndex) && newIndex[index] >= 0 {
+			newLabels[name] = newIndex[index]
+		}
+		// A negative or out-of-range index (the engine's own stop marker) and
+		// a label whose step got dropped both simply do not carry over.
+	}
+	machine.Steps = newSteps
+	machine.Labels = newLabels
+	r.Sprites = spritesUsedBy(newSteps)
+	return droppedSteps
+}
+
+// withoutDeadJumps drops an op whose only reason to exist was reaching a step
+// PruneDeadStates just removed - a jump_if_inventory on the item that proved
+// it unreachable. Everything else survives untouched.
+func withoutDeadJumps(ops []wep.Op, machine *wep.StateMachine, remove []bool) []wep.Op {
+	kept := ops[:0]
+	for _, op := range ops {
+		if op.Op == wep.OpJumpIfInventory && op.To != "" {
+			if target, ok := machine.Labels[strings.ToLower(op.To)]; ok && target >= 0 && target < len(remove) && remove[target] {
+				continue
+			}
+		}
+		kept = append(kept, op)
+	}
+	return kept
+}
+
+// spritesUsedBy is DropSprites and useSprite's own rule for what counts as a
+// picture rather than a keep marker, applied after the fact: first use order,
+// each name once, so a re-migration with nothing pruned writes back the same
+// list it already had.
+func spritesUsedBy(steps []wep.Step) []string {
+	seen := make(map[string]bool)
+	var names []string
+	add := func(name string) {
+		if name == "" || seen[name] || wep.IsKeepMarker(name) {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	for _, step := range steps {
+		add(step.Sprite)
+		for _, alt := range step.SpriteAlt {
+			add(alt)
+		}
+	}
+	return names
+}
+
 // DropSprites blanks the frames whose pictures the mod does not have, so a
 // weapon that is otherwise complete can still be migrated. The frames stay in
 // the animation with their timing intact and show nothing, which is what a

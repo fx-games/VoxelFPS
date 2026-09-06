@@ -179,6 +179,24 @@ leniently; the single-weapon mods were named one at a time. `-prune` afterwards
 deletes the shared actor files nothing points at any more, and deleting
 `weapons/_sprites.png` makes the next run repack the shared atlas.
 
+**Every bd_ weapon compiles with five animations already gone.** BDCE's shared
+`BrutalWeapon` base class gives every one of its weapons a kick, a taunt, a
+grenade toss and an execution/curbstomp finisher - real states, real frames -
+gated behind inventory flags (`Kicking`, `Taunting`, `TossGrenade`,
+`ExecuteDownedEnemy` and its per-victim siblings) that only a key bind this
+engine does not have would ever set. `zdwep.Result.PruneDeadStates`
+(`zdwep/compile_weapon.go`) walks the compiled state graph from where the
+engine's own input can actually send the cursor (`weaponEntryLabels`), and
+separately from BDCE's own label names for those five animations
+(`deadAnimationLabels`, straight out of `DEFAULTWEAPON.txt`), and deletes only
+their intersection - a state that is dead for some other, unrelated reason (no
+sprint key, no aim-down-sights hold, no manual unload) is left exactly as it
+was, because nothing asked for that one. It runs once, in `genweapons`, right
+after `DropSprites`/`DropSounds`; a re-migration reproduces it automatically.
+Cut roughly half of every bd_ weapon's own states and 55-90% of its own
+`sprites.png` (43 weapons, 296MB folder down to 240MB). `tools/firecheck`
+still reports all 43 firing after.
+
 ## Where the furniture comes from
 
 `scenery/` is the weapons folder's shape applied to what a room is furnished
