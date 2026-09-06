@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"image"
@@ -71,6 +72,8 @@ func main() {
 
 	must(wep.WriteAtlas(images, filepath.Join(dir, wep.AtlasFile)))
 	weapon := buildWeapon(*id, *tag, names, *tics, *damage, *sheet)
+	weapon.Icon = writeIcon(*outDir, names[0], images[0].Image)
+	must(wep.MeasurePickups(*outDir, weapon))
 	must(wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), weapon))
 	fmt.Fprintf(os.Stderr, "wrote %s: %d frames\n", dir, len(names))
 }
@@ -131,6 +134,24 @@ func buildWeapon(id, tag string, names []string, tics, damage int, sheet string)
 			Tool:       wep.Format,
 		},
 	}
+}
+
+// writeIcon puts the idle frame in the shared picture store, which is where a
+// pickup on the floor, the inventory and the HUD draw a weapon nobody is
+// holding from - only the weapon in hand has its own atlas loaded. A sheet
+// carries no separate pickup art, so the idle frame is the picture there is,
+// the same fallback the migration makes for a mod that ships no Spawn state.
+//
+// Written without a hotspot: the frame's own is the weapon-space anchor above,
+// which means nothing to a billboard lying on the floor.
+func writeIcon(outDir, name string, frame image.Image) string {
+	var encoded bytes.Buffer
+	must(png.Encode(&encoded, frame))
+	store := filepath.Join(outDir, wep.SpritesDir)
+	must(os.MkdirAll(store, 0o755))
+	stored := wep.SharedSpriteName(name, encoded.Bytes())
+	must(os.WriteFile(filepath.Join(store, stored+".png"), encoded.Bytes(), 0o644))
+	return stored
 }
 
 // frameHotspot is the hotspot every vanilla Doom weapon frame carries, given to

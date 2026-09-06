@@ -141,7 +141,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 			return c.colliderScratch
 		}
 		for collider := range c.objectsOnGrid[core.Int3{X: x, Y: y, Z: z}] {
-			if !collider.GameObject().IsAlive() {
+			if !collider.GameObject().IsAlive() || collider.PassThrough {
 				continue
 			}
 			c.colliderScratch = append(c.colliderScratch, LinkedAABB{

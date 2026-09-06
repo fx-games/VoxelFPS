@@ -131,6 +131,12 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.cycleWeapon(1)
 	}
 
+	// The inventory: what has been picked up, and a way back into anything
+	// that is not on a number key.
+	if key == glfw.KeyI {
+		g.openInventory()
+	}
+
 	if key == glfw.KeyEscape {
 		g.openEscapeMenu()
 	}
@@ -208,7 +214,11 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		// single light, so picking one puts the other away.
 		g.Toast(fmt.Sprintf("Player light: %s", g.CyclePlayerLight()))
 	}
-	if key == glfw.KeyE && g.isHoveringObject() {
+	// One key for "do the thing I am looking at": an item the selection beam
+	// has picked out is taken, and anything else is interacted with. The item
+	// wins because it is the nearer of the two - the beam only holds one that
+	// is in front of whatever the ray hit.
+	if key == glfw.KeyE && !g.takeHoveredPickup() && g.isHoveringObject() {
 		events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
 	}
 	if key == glfw.KeyV {
@@ -238,11 +248,20 @@ func (g *Game) spawnCurrentGameObject() {
 	if g.editor.gameObjectForSpawning != nil {
 		decoToSpawn := g.editor.gameObjectForSpawning
 		if !decoToSpawn.HasComponent(quads.ComponentTypeSprite) {
-			// A mesh ghost - a torch. It is already the object it will be, so it
-			// only has to stop being the ghost: its light goes into the map and a
-			// fresh ghost takes over the crosshair.
-			g.dropTorch(decoToSpawn.Transform().GetPosition())
-			g.editor.gameObjectForSpawning = g.spawnTorch(decoToSpawn.Transform().GetPosition())
+			// A mesh ghost. It is already the object it will be, so it only has
+			// to stop being the ghost, and a fresh ghost takes over the
+			// crosshair. What it takes to stop being one is the piece's own: a
+			// torch's light goes into the map, a shelf's colliders go into
+			// physics.
+			at := decoToSpawn.Transform().GetPosition()
+			if id := g.editor.sceneryToPlace; id != "" {
+				g.spawnScenery(id, at, true)
+				decoToSpawn.Kill()
+				g.editor.gameObjectForSpawning = g.spawnScenery(id, at, false)
+				return
+			}
+			g.dropTorch(at)
+			g.editor.gameObjectForSpawning = g.spawnTorch(at)
 			return
 		}
 		sprite := decoToSpawn.Sprite()

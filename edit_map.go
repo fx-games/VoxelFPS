@@ -72,6 +72,40 @@ func (g *Game) openVoxelBrushMenu() {
 	g.pushToWidgetStack(configMenu)
 }
 
+// openSceneryMenu is the placement half of the scenery folder: whatever is in
+// it is in this menu, without a line of Go per piece. Picking one puts a ghost
+// of it on the crosshair, and a left click drops it - the same ghost the sprite
+// decorations and the torch ride.
+func (g *Game) openSceneryMenu() {
+	previousMouseState := g.setupModal()
+	configMenu := g.OpenConfigMenu()
+
+	var options []quads.GuiOption
+	for _, id := range g.sceneryIDs() {
+		options = append(options, quads.NewGuiOptionAction(g.scenery[id].Name, func() {
+			g.captureMouse(previousMouseState)
+			g.startSceneryPlacement(id)
+			g.Toast("Left click drops " + g.scenery[id].Name)
+			g.popFromWidgetStack()
+		}))
+	}
+	configMenu.SetOptions(options)
+	guiWidth, guiHeight := g.GuiSize()
+	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
+
+	g.pushToWidgetStack(configMenu)
+}
+
+// startSceneryPlacement puts a piece on the cursor. The ghost is not solid: a
+// ghost you can walk into is a ghost that has already been placed.
+func (g *Game) startSceneryPlacement(id string) {
+	if g.editor.gameObjectForSpawning != nil {
+		g.editor.gameObjectForSpawning.Kill()
+	}
+	g.editor.sceneryToPlace = id
+	g.editor.gameObjectForSpawning = g.spawnScenery(id, mgl32.Vec3{}, false)
+}
+
 func (g *Game) openVoxelEditMenu() {
 	if g.editor.voxelBlock == nil {
 		return
@@ -100,6 +134,7 @@ func (g *Game) openVoxelEditMenu() {
 			})
 		}),
 		quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
+		quads.NewGuiOptionAction("Place Scenery", g.openSceneryMenu),
 		quads.NewGuiOptionAction("Place Torches", func() {
 			g.captureMouse(previousMouseState)
 			g.startTorchPlacement()
@@ -174,8 +209,11 @@ type Editor struct {
 	voxelSelectionEmpty  bool
 	voxelSelectionAction func(pos []voxel.Int3)
 
-	// The ghost following the crosshair in spawn mode, placed by a click.
+	// The ghost following the crosshair in spawn mode, placed by a click, and -
+	// when the ghost is a piece of scenery rather than a torch or a sprite -
+	// which piece it is.
 	gameObjectForSpawning *quads.GameObject
+	sceneryToPlace        string
 
 	currentPaintGunTextureIndex int
 
@@ -202,6 +240,7 @@ func (g *Game) startTorchPlacement() {
 	if g.editor.gameObjectForSpawning != nil {
 		g.editor.gameObjectForSpawning.Kill()
 	}
+	g.editor.sceneryToPlace = ""
 	g.editor.gameObjectForSpawning = g.spawnTorch(mgl32.Vec3{})
 }
 
@@ -242,8 +281,10 @@ func (g *Game) toggleSpawnMode() {
 	if g.editor.gameObjectForSpawning != nil {
 		g.editor.gameObjectForSpawning.Kill()
 		g.editor.gameObjectForSpawning = nil
+		g.editor.sceneryToPlace = ""
 		return
 	}
+	g.editor.sceneryToPlace = ""
 	if g.lastHitResult == nil {
 		return
 	}

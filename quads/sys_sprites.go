@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/goray/quads/voxel"
 	"slices"
 )
 
@@ -456,28 +457,33 @@ func swapRemove[T any](list []T, i int) []T {
 }
 
 func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
+	defer voxel.DrawDebugLines(lineShader)
 	for _, spriteIndices := range q.spritesPerTexture {
 		for _, sprite := range spriteIndices {
 			if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
 				continue
 			}
-			lineShader.SetUniformAttr(1, sprite.GameObject().Transform().GetTranslationMatrix())
 			collObj := sprite.GameObject().Physics()
-			collObj.AABBAt(mgl32.Vec3{}).Draw(lineShader)
+			// The box is in the space of the sprite's own quad, which is the
+			// world only while the sprite is drawn at its natural size. A
+			// pickup on a shelf is a fraction of that, and its box was drawn a
+			// whole voxel wide. The quad's own scale is what the transform
+			// applies; the third axis is not scaled there either.
+			collObj.AABBAt(mgl32.Vec3{}).
+				Scaled(mgl32.Vec3{sprite.Size.X(), sprite.Size.Y(), 1}).
+				QueueDebugDraw(sprite.GameObject().Transform().GetTranslationMatrix())
 		}
 	}
 }
 func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
+	defer voxel.DrawDebugLines(lineShader)
 	for _, spriteIndices := range q.spritesPerTexture {
 		for _, sprite := range spriteIndices {
 			if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
 				continue
 			}
-			collObj := sprite.GameObject().Physics()
-
-			obb := collObj.OBB(cam)
-			lineShader.SetUniformAttr(1, obb.Transform)
-			obb.Draw(lineShader)
+			obb := sprite.GameObject().Physics().OBB(cam)
+			obb.AABB.QueueDebugDraw(obb.Transform)
 		}
 	}
 }

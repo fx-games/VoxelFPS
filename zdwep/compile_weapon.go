@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/memmaker/goray/wep"
 )
@@ -129,6 +130,11 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 		result.Actors[strings.ToLower(name)] = compiled
 		pending = append(pending, extra...)
 	}
+
+	weapon.Ammo.Clip = clipOf(weapon.Ammo, states)
+	weapon.Icon = c.weaponIcon(actor.Name)
+	weapon.Starting = StartsWith(idx, actor.Name)
+	weapon.AmmoPickup, weapon.AmmoIcon = c.ammoPickup()
 
 	sort.Strings(c.defaultedNames)
 	weapon.Defaulted = c.defaultedNames
@@ -725,6 +731,14 @@ func (r *Result) DropSprites(missing []string) {
 	for _, actor := range r.Actors {
 		blank(&actor.States)
 	}
+	// A pickup picture the sources do not have is no pickup picture. Left
+	// named, it would fail the load check on a store that never got the file.
+	if gone[r.Weapon.Icon] {
+		r.Weapon.Icon = ""
+	}
+	if gone[r.Weapon.AmmoIcon] {
+		r.Weapon.AmmoIcon = ""
+	}
 	r.Sprites = without(r.Sprites, gone)
 	r.ActorSprites = without(r.ActorSprites, gone)
 }
@@ -799,4 +813,186 @@ func ScanActor(idx *Index, policy Policy, name string) error {
 	c.actorName = actor.Name
 	_, err := c.lowerStates(c.mergedStates(actor.Name))
 	return err
+}
+
+// weaponIcon is the picture of this weapon lying on the floor. Where it goes is
+// the shared picture store, not the weapon's own atlas: a pickup, an inventory
+// list and the HUD all draw weapons that are not in anybody's hands, and only
+// the weapon in hand has its atlas loaded.
+//
+// GZDoom has two answers and a mod uses whichever suits it, so both are read,
+// nearest first:
+//
+//   - **The Spawn state**, which is what the engine draws where a weapon has
+//     been dropped. Brutal Doom, Doom itself and every single-weapon mod here
+//     answer this way.
+//   - **Inventory.Icon**, the name of a picture for the status bar. Final
+//     Doomer answers this way and nothing else: its weapons have no Spawn
+//     state at all, because they are never dropped - a separate
+//     `replaces BFG9000` CustomInventory is what lies on the floor and it hands
+//     out whichever of the nine weapon sets you are playing. What is left that
+//     belongs to the weapon itself is its icon, which the mod builds in
+//     TEXTURES out of that weapon's own pickup sprite at half size.
+//
+// A weapon with neither is one the mod ships no picture of but the frame it is
+// held in. That is the last fallback and it is recorded as one rather than
+// passed off as pickup art.
+func (c *Compiler) weaponIcon(actorName string) string {
+	if name := c.needShared(c.stateSprite(actorName, "spawn")); name != "" {
+		return name
+	}
+	if name := c.needShared(c.iconSprite(actorName)); name != "" {
+		return name
+	}
+	name := c.needShared(c.stateSprite(actorName, "ready"))
+	if name != "" {
+		c.defaulted("no pickup sprite, using the first-person frame " + name)
+	}
+	return name
+}
+
+// iconSprite is the picture Inventory.Icon names, as a sprite this migration
+// can find. The property holds a *texture* name rather than a lump name, so it
+// goes through the mod's TEXTURES definitions first - `PLCHAING` is a texture
+// whose one patch is the sprite `PCHGZ0` - and a name that is already a lump
+// is used as it stands, which is how a mod that points its icon straight at a
+// sprite is read.
+//
+// An empty icon and TNT1A0, the invisible sprite, both mean the mod is saying
+// this thing has no icon. Final Doomer's own weapon base class writes the
+// empty one, and reading it as a name would give every weapon in the mod the
+// same blank picture.
+func (c *Compiler) iconSprite(actorName string) string {
+	value, written := c.mergedProperty(actorName, "inventory.icon")
+	if !written {
+		return ""
+	}
+	name := strings.ToUpper(strings.Trim(strings.TrimSuffix(strings.TrimSpace(value), ";"), `"`))
+	if patch, defined := c.idx.Textures[name]; defined {
+		name = patch
+	}
+	if name == "" || name == "TNT1A0" {
+		return ""
+	}
+	return name
+}
+
+// clipOf is which of a weapon's two ammo pools is the magazine: the one a
+// reload fills. Only a pool the weapon actually spends counts - a dual wielded
+// gun reloads two magazines and one of them is a counter for the off hand,
+// which is not what the HUD is counting down.
+func clipOf(ammo wep.Ammo, states wep.StateMachine) string {
+	filled := reloadedItems(states)
+	for _, pool := range []string{ammo.Type, ammo.Type2} {
+		if pool != "" && filled[strings.ToLower(pool)] {
+			return pool
+		}
+	}
+	return ""
+}
+
+// StartsWith reports whether a player class hands this weapon out before the
+// first frame - `Player.StartItem "FDPlutFist"`. Such a weapon is one the
+// player has always got, so it is never anywhere to be picked up: Doom's own
+// fists and pistol are the shape of it, and every one of these mods keeps it.
+//
+// The union over every player class in the mod, because a mod with nine of
+// them - one per weapon set, which is what Final Doomer is - has nine fists
+// and nine pistols and all of them are somebody's starting weapon.
+func StartsWith(idx *Index, actorName string) bool {
+	for _, actor := range idx.Actors {
+		for _, item := range actor.StartItems {
+			if strings.EqualFold(item, actorName) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ammoPickup is the ammo this weapon's own box of ammo hands over, and what
+// that box looks like. A weapon names up to two ammo pools and DECORATE says
+// nothing about which is the reserve and which the loaded magazine - the Dual
+// 92s have them the other way round from the shape the comments assume - so
+// the one that is picked up is the one that has a picture of itself on the
+// floor. Nobody drops a magazine, so no mod draws one.
+func (c *Compiler) ammoPickup() (item, icon string) {
+	for _, ammo := range []string{c.ammoType, c.ammoType2} {
+		if sprite := c.needShared(c.ammoPickupSprite(ammo)); sprite != "" {
+			return ammo, sprite
+		}
+	}
+	return "", ""
+}
+
+// ammoPickupSprite is the picture of the item that refills a weapon's reserve.
+// The mod's own art first, because a mod that redefines Clip means its own
+// clip; Doom's own four ammo classes are not in any mod's DECORATE at all, so
+// a weapon that names one and leaves it alone is answered from
+// stockAmmoSprites, the same way stockAmmoMax already answers how much of it a
+// player may carry.
+func (c *Compiler) ammoPickupSprite(ammoType string) string {
+	if ammoType == "" {
+		return ""
+	}
+	if sprite := c.stateSprite(ammoType, "spawn"); sprite != "" {
+		return sprite
+	}
+	return stockAmmoSprites[strings.ToLower(ammoType)]
+}
+
+// stateSprite is the first picture an actor shows under a label: the frame the
+// state starts on, skipping the TNT1 frames a script opens with. It reads the
+// merged states rather than the compiled machine because an ammo item is never
+// compiled - nothing about it runs - and the answer is the same either way.
+func (c *Compiler) stateSprite(actorName, label string) string {
+	if actorName == "" {
+		return ""
+	}
+	if _, defined := c.idx.Actor(actorName); !defined {
+		return ""
+	}
+	block := c.mergedStates(actorName)
+	start, ok := block.Labels[label]
+	if !ok {
+		return ""
+	}
+	for i := start; i < len(block.Lines); i++ {
+		line := block.Lines[i]
+		if !line.IsFrame() {
+			continue
+		}
+		sprite := strings.ToUpper(line.Sprite)
+		if !visibleSprite(sprite) || sprite == wep.KeepSprite || sprite == wep.KeepBoth {
+			continue
+		}
+		frame := unicode.ToUpper(expandFrames(line.Frames)[0])
+		if frame == wep.KeepFrame || frame == '-' {
+			continue
+		}
+		return fmt.Sprintf("%s%c0", sprite, frame)
+	}
+	return ""
+}
+
+// needShared asks for a picture in the shared store, which is where everything
+// drawn outside the weapon in hand comes from. It hands back the name so the
+// caller can record it, and nothing for an empty name.
+func (c *Compiler) needShared(name string) string {
+	if name == "" {
+		return ""
+	}
+	if !c.actorSpriteSeen[name] {
+		c.actorSpriteSeen[name] = true
+		c.actorSprites = append(c.actorSprites, name)
+	}
+	return name
+}
+
+// stockAmmoSprites is what Doom's own four ammo classes look like on the
+// floor. They are in doom2.wad, which every one of these migrations has last
+// in its source list precisely because the mods take the base game for
+// granted.
+var stockAmmoSprites = map[string]string{
+	"clip": "CLIPA0", "shell": "SHELA0", "rocketammo": "ROCKA0", "cell": "CELLA0",
 }

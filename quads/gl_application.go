@@ -969,6 +969,9 @@ func (a *GlApplication) DrawAABBs() {
 	a.lineShader.Begin()
 	a.lineShader.SetUniformAttr(0, a.Camera.GetProjectionViewMatrix())
 	a.lineShader.SetUniformAttr(LineShaderDrawColor, mgl32.Vec3{0.8, 2, 0.8})
+	// The boxes are batched into one mesh in world space - see
+	// voxel.QueueDebugDraw - so there is nothing left for the shader to place.
+	a.lineShader.SetUniformAttr(LineShaderModelTransform, mgl32.Ident4())
 
 	a.Sprites.DrawAABBs(a.lineShader, a.Camera)
 	a.Meshes.DrawAABBs(a.lineShader)
@@ -980,6 +983,7 @@ func (a *GlApplication) DrawChunkAABBs(cubeMap *voxel.Map) {
 	a.lineShader.Begin()
 	a.lineShader.SetUniformAttr(0, a.Camera.GetProjectionViewMatrix())
 	a.lineShader.SetUniformAttr(LineShaderDrawColor, mgl32.Vec3{0.8, 2, 0.8})
+	a.lineShader.SetUniformAttr(LineShaderModelTransform, mgl32.Ident4())
 
 	cubeMap.DrawAABBs(a.lineShader)
 
@@ -989,6 +993,7 @@ func (a *GlApplication) DrawOBBs() {
 	a.lineShader.Begin()
 	a.lineShader.SetUniformAttr(0, a.Camera.GetProjectionViewMatrix())
 	a.lineShader.SetUniformAttr(LineShaderDrawColor, mgl32.Vec3{1, 0.498, 0.259})
+	a.lineShader.SetUniformAttr(LineShaderModelTransform, mgl32.Ident4())
 
 	a.Sprites.DrawOBBs(a.lineShader, a.Camera)
 	a.Meshes.DrawOBBs(a.lineShader)

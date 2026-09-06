@@ -63,3 +63,52 @@ func TestAPuffsChannelIsNotThePlayers(t *testing.T) {
 		t.Fatal("a spawned thing's CHAN_WEAPON is the player's")
 	}
 }
+
+// A beep.Mixer never drains - empty, it streams silence for ever - so a mixer
+// handed to the speaker stays in the speaker's list until the game ends. Every
+// spawned thing that makes a sound has an origin and a channel of its own, and
+// two hundred of them were stacking up inside a minute of firing: enough dead
+// mixers and the audio callback stops keeping up with the device, and the
+// sound stops for good.
+func TestARetiredChannelDrainsSoTheSpeakerDropsIt(t *testing.T) {
+	live := &channel{mixer: &beep.Mixer{}}
+	samples := make([][2]float64, 8)
+
+	if n, ok := live.Stream(samples); !ok || n != len(samples) {
+		t.Fatalf("a live channel should stream silence, got %d, %v", n, ok)
+	}
+
+	live.retired = true
+	if n, ok := live.Stream(samples); ok || n != 0 {
+		t.Fatalf("a retired channel has to report itself drained, got %d, %v", n, ok)
+	}
+}
+
+// The player's own origin is the listener and never goes away. Everything else
+// does, and takes its channels with it.
+func TestDropOriginRetiresOnlyThatOriginsChannels(t *testing.T) {
+	p := &Player{channels: map[channelKey]*channel{
+		{origin: 0, number: 1}: {mixer: &beep.Mixer{}, cue: "pistol/fire"},
+		{origin: 7, number: 1}: {mixer: &beep.Mixer{}, cue: "puff/ricochet"},
+		{origin: 7, number: 2}: {mixer: &beep.Mixer{}, cue: "rocket/see"},
+		{origin: 8, number: 1}: {mixer: &beep.Mixer{}, cue: "casing/land"},
+	}}
+	casing := p.channels[channelKey{8, 1}]
+
+	p.DropOrigin(7)
+	if len(p.channels) != 2 {
+		t.Fatalf("dropped %d channels, want the two of origin 7", 4-len(p.channels))
+	}
+	if _, kept := p.channels[channelKey{0, 1}]; !kept {
+		t.Error("the listener's own channel was dropped")
+	}
+
+	// Dropping the player would retire the channel every weapon plays on.
+	p.DropOrigin(0)
+	if _, kept := p.channels[channelKey{0, 1}]; !kept {
+		t.Error("origin 0 is the listener and is never dropped")
+	}
+	if casing.retired {
+		t.Error("another origin's channel was retired with it")
+	}
+}

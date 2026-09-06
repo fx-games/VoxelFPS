@@ -940,9 +940,11 @@ func (m *Map) DrawCalls() int {
 func (m *Map) DrawAABBs(lineShader *glhf.Shader) {
 	for _, chunk := range m.chunks {
 		if chunk != nil {
-			NewAABB(chunk.AsAABB()).Draw(lineShader)
+			// Already in world space, so it is placed by nothing.
+			NewAABB(chunk.AsAABB()).QueueDebugDraw(mgl32.Ident4())
 		}
 	}
+	DrawDebugLines(lineShader)
 }
 
 func (m *Map) ChunkIndex(x int32, y int32, z int32) int {

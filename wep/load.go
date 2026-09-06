@@ -199,6 +199,16 @@ func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]boo
 		known[sprite] = true
 	}
 
+	// The pickup pictures are in the shared store, not in the weapon's own
+	// atlas: what draws them is a pickup on the floor, an inventory list and
+	// the HUD, none of which have the weapon in hand.
+	for what, icon := range map[string]string{"icon": weapon.Icon, "ammo_icon": weapon.AmmoIcon} {
+		if icon != "" && !sharedSprites[icon] {
+			problems = append(problems, fmt.Sprintf("%s/: %s is %s, and there is no such picture",
+				id, what, icon))
+		}
+	}
+
 	problems = append(problems, checkStates(id, WeaponFile, weapon.States, known, actors, weapon.Sounds, dir)...)
 	for _, name := range sortedActorNames(actors) {
 		actor := actors[name]

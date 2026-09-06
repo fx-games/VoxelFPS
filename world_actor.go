@@ -1035,6 +1035,13 @@ func (live *WorldActor) setVelocity(velocity mgl32.Vec3) {
 func (live *WorldActor) remove(g *Game) {
 	live.object.Kill()
 	live.sprite.Hide()
+	// Its sound channels go with it. Each of these has an origin of its own -
+	// see the origin field - and a channel that outlives what it belonged to
+	// is a mixer the speaker steps through on every callback for the rest of
+	// the run.
+	if g.audio != nil {
+		g.audio.DropOrigin(live.origin)
+	}
 }
 
 // How long a spawned thing may hang around whatever its script says, how far in

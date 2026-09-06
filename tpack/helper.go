@@ -140,3 +140,11 @@ func detectOpaqueEdges(pixels []uint8, textureWidth int, textureHeight int) (int
 	}
 	return minX, minY, maxX, maxY
 }
+
+// TrimRect is where a picture actually has pixels, which is the box the packer
+// cuts it down to. Exported because a picture's own opaque bounds are what
+// something standing in the world is the size of, and that is worked out once,
+// away from the packing.
+func TrimRect(img image.Image) image.Rectangle {
+	return getTrimRect(img)
+}

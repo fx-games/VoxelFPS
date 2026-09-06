@@ -29,6 +29,15 @@ import (
 // One atlas rather than one per weapon also means the world sprite pass binds
 // one texture for every casing, puff and rocket on screen, whoever fired it.
 
+// SharedSpriteName is what a frame is called in the shared store: its own name,
+// so a folder full of them is still readable, plus enough of the hash of the
+// picture to tell two mods' versions of that name apart. Brutal Doom and Final
+// Doomer both ship a SMOKA0 and they are not the same picture.
+func SharedSpriteName(name string, picture []byte) string {
+	sum := sha256.Sum256(picture)
+	return name + "." + hex.EncodeToString(sum[:4])
+}
+
 // SharedAtlas is where the packed pictures ended up.
 type SharedAtlas struct {
 	// Path is the packed atlas, ready to be read as a texture.

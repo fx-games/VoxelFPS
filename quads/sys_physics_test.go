@@ -391,3 +391,34 @@ func TestStepOverLeavesATallLedgeAlone(t *testing.T) {
 		t.Errorf("was lifted by a wall it cannot climb: y = %f", position.Y())
 	}
 }
+
+// A pass-through collider is on the grid, so a ray finds it, but nothing walks
+// into it. That is what an item lying on the floor is: in Doom you walk over a
+// pickup, and before this the only way to be findable by a ray was to be a wall.
+func TestPassThroughCollidersAreWalkedThrough(t *testing.T) {
+	walkInto := func(passThrough bool) mgl32.Vec3 {
+		system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+
+		item := mover(t, mgl32.Vec3{2, 0.5, 0.5})
+		item.PassThrough = passThrough
+		system.AddObject(item)
+
+		walker := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+		walker.SetVelocity(mgl32.Vec3{1, 0, 0})
+		system.AddObject(walker)
+
+		// Update clamps a long frame, so this is two seconds of them.
+		for frame := 0; frame < 120; frame++ {
+			walker.SetVelocity(mgl32.Vec3{1, 0, 0})
+			system.Update(1.0 / 60.0)
+		}
+		return walker.Position()
+	}
+
+	if stopped := walkInto(false); stopped.X() > 1.6 {
+		t.Errorf("walked to %v through a solid collider at x = 2", stopped)
+	}
+	if through := walkInto(true); through.X() < 2.4 {
+		t.Errorf("stopped at %v, and a pass-through collider is not something to bump into", through)
+	}
+}

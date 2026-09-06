@@ -25,10 +25,9 @@ func NewCollisionInfo(intersection bool, timeOfImpact float32, normalAtImpact mg
 }
 
 type AABB struct {
-	minCoords            mgl32.Vec3
-	maxCoords            mgl32.Vec3
-	vertexesForDebugDraw *glhf.VertexArray[glhf.GlFloat]
-	id                   int
+	minCoords mgl32.Vec3
+	maxCoords mgl32.Vec3
+	id        int
 }
 
 func NewAABB(minCoords, maxCoords mgl32.Vec3) AABB {
@@ -79,56 +78,72 @@ func (a AABB) MinkowskiDifference(other AABB) AABB {
 	return NewAABBFromMin(minM, extM)
 }
 
-func (a AABB) Draw(shader *glhf.Shader) {
-	if a.vertexesForDebugDraw == nil {
-		a.vertexesForDebugDraw = glhf.NewVertexArray[glhf.GlFloat](shader, false) // 2*4 verts for top and bottom, 2*4 verts for sides
-		a.vertexesForDebugDraw.SetPrimitiveType(gl.LINES)
-		a.vertexesForDebugDraw.Begin()
-		a.vertexesForDebugDraw.SetVertexData([]glhf.GlFloat{
-			// top
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
+// The F1 debug boxes - "Show AABBs" and "Show OBBs" - are collected here and
+// drawn as one mesh at the end of the pass, rather than one box at a time.
+//
+// Twelve lines a box is nothing to draw and everything to submit. Per box, one
+// at a time, this bound a vertex array - which asks the driver what was bound
+// before and waits for the answer - refilled the same buffer the box before it
+// was still being drawn out of, and submitted its own draw call, and each of
+// those three is a place the CPU stops until the GPU catches up. A room with two
+// hundred things in it spent longer on the outlines than on the room.
+//
+// Each box's transform is folded into its corners here, because one draw call
+// has one model matrix. Whoever draws the batch sets that to the identity.
+var (
+	debugLines     []glhf.GlFloat
+	debugLineArray *glhf.VertexArray[glhf.GlFloat]
+)
 
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
-
-			// bottom
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-
-			// sides
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
-
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Min().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Min().Z()),
-
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Max().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Min().Y()), glhf.GlFloat(a.Max().Z()),
-			glhf.GlFloat(a.Min().X()), glhf.GlFloat(a.Max().Y()), glhf.GlFloat(a.Max().Z()),
-		})
-		a.vertexesForDebugDraw.End()
+// QueueDebugDraw adds this box, placed by model, to what the next DrawDebugLines
+// draws.
+func (a AABB) QueueDebugDraw(model mgl32.Mat4) {
+	for _, corner := range a.edges() {
+		placed := model.Mul4x1(corner.Vec4(1)).Vec3()
+		debugLines = append(debugLines,
+			glhf.GlFloat(placed.X()), glhf.GlFloat(placed.Y()), glhf.GlFloat(placed.Z()))
 	}
-	a.vertexesForDebugDraw.Begin()
-	a.vertexesForDebugDraw.Draw()
-	a.vertexesForDebugDraw.End()
+}
+
+// DrawDebugLines draws every box queued since the last call, and empties the
+// queue. The buffer is kept and refilled, growing to the busiest frame's worth.
+func DrawDebugLines(shader *glhf.Shader) {
+	if len(debugLines) == 0 {
+		return
+	}
+	if debugLineArray == nil {
+		debugLineArray = glhf.NewVertexArray[glhf.GlFloat](shader, true)
+		debugLineArray.SetPrimitiveType(gl.LINES)
+	}
+	debugLineArray.Begin()
+	debugLineArray.SetVertexData(debugLines)
+	debugLineArray.Draw()
+	debugLineArray.End()
+	debugLines = debugLines[:0]
+}
+
+// edges is the twelve edges of the box, as the pairs of corners they run
+// between.
+func (a AABB) edges() [24]mgl32.Vec3 {
+	minX, minY, minZ := a.Min().X(), a.Min().Y(), a.Min().Z()
+	maxX, maxY, maxZ := a.Max().X(), a.Max().Y(), a.Max().Z()
+	return [24]mgl32.Vec3{
+		// top
+		{minX, maxY, minZ}, {maxX, maxY, minZ},
+		{maxX, maxY, minZ}, {maxX, maxY, maxZ},
+		{maxX, maxY, maxZ}, {minX, maxY, maxZ},
+		{minX, maxY, maxZ}, {minX, maxY, minZ},
+		// bottom
+		{minX, minY, minZ}, {maxX, minY, minZ},
+		{maxX, minY, minZ}, {maxX, minY, maxZ},
+		{maxX, minY, maxZ}, {minX, minY, maxZ},
+		{minX, minY, maxZ}, {minX, minY, minZ},
+		// sides
+		{minX, minY, minZ}, {minX, maxY, minZ},
+		{maxX, minY, minZ}, {maxX, maxY, minZ},
+		{maxX, minY, maxZ}, {maxX, maxY, maxZ},
+		{minX, minY, maxZ}, {minX, maxY, maxZ},
+	}
 }
 
 func (a AABB) Contains(vec3 mgl32.Vec3) bool {
@@ -145,6 +160,16 @@ func (a AABB) Center() mgl32.Vec3 {
 
 func (a AABB) Add(pos mgl32.Vec3) AABB {
 	return NewAABB(a.Min().Add(pos), a.Max().Add(pos))
+}
+
+// Scaled is the box with every axis multiplied by its own factor, which is what
+// a box around a sprite needs: a sprite's box is in the space of its own quad,
+// and the quad is drawn at the size of the picture.
+func (a AABB) Scaled(by mgl32.Vec3) AABB {
+	perAxis := func(v mgl32.Vec3) mgl32.Vec3 {
+		return mgl32.Vec3{v.X() * by.X(), v.Y() * by.Y(), v.Z() * by.Z()}
+	}
+	return NewAABB(perAxis(a.Min()), perAxis(a.Max()))
 }
 
 func (a AABB) Corners() [8]mgl32.Vec3 {

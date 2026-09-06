@@ -43,13 +43,18 @@ func (g *Game) spawnPlayer(cam *core.FPSCamera, spawn mgl32.Vec3, dir mgl32.Vec2
 }
 
 func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.GameObject {
+	if entity.Name == weaponRangeEntity {
+		// Not a thing in the world: a corner the weapons are laid out from.
+		g.spawnWeaponRange(spawnPos)
+		return nil
+	}
 	goFromEntity := quads.NewGameObject(entity.Name)
 	goFromEntity.Transform().SetPosition(spawnPos)
 
 	var aabb voxel.AABB
 
 	if entity.MeshName != "" {
-		meshFile := filepath.Join("assets", "meshes", entity.MeshName+".glb")
+		meshFile := g.meshFile(entity.MeshName)
 		if !quads.FileExists(meshFile) {
 			panic("Mesh file not found: " + meshFile)
 		}
@@ -112,17 +117,29 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		g.Pathfinder.AddMovingObject(pather)
 	}
 
-	if entity.MeshName == stairsMeshName {
-		// The mesh is one box to the drawer and would be one box to physics too.
-		// Stairs need a collider per step, see stairColliders.
-		for _, step := range stairColliders(spawnPos) {
-			g.physicsSystem.AddObject(step)
+	// A piece of scenery that names its own boxes collides as those instead of
+	// as the one the mesh drawer hands out. The mesh is one box to the drawer
+	// and would be one box to physics too: stairs need a box per step or they
+	// are a wall, and a shelf needs an open front or nothing on it can be
+	// reached. They all belong to this one object - see Scenery.colliders - so
+	// a shelf is still one thing in the world with one model and one name.
+	if entity.CreateCollider {
+		if piece, isScenery := g.scenery[entity.MeshName]; isScenery && len(piece.Colliders) > 0 {
+			for _, shape := range piece.colliders(goFromEntity) {
+				g.physicsSystem.AddObject(shape)
+			}
+		} else {
+			g.physicsSystem.AddObject(physics)
 		}
 	}
-
-	if entity.CreateCollider {
-		g.physicsSystem.AddObject(physics)
+	if _, isScenery := g.scenery[entity.MeshName]; isScenery {
+		g.furniture[goFromEntity] = true
 	}
 
 	return goFromEntity
 }
+
+// weaponRangeEntity is what the map calls the marker the test range is laid
+// out from. The map decides where the range is; the engine decides what goes
+// in it, which is every weapon the folder holds.
+const weaponRangeEntity = "WeaponRange"

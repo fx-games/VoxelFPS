@@ -50,11 +50,36 @@ type channelKey struct {
 // channel is one origin's channel: the mixer it plays through, and what is on
 // it. The cue and the loop flag are kept because a looping sound that is
 // already playing must not be restarted - see playOnChannel.
+//
+// It is a Streamer of its own rather than the mixer being handed straight to
+// the speaker, and that is what lets a channel ever go away. A beep.Mixer
+// never drains - empty, it streams silence for ever - so a mixer given to the
+// speaker stays in the speaker's list until the game ends. Every spawned thing
+// that makes a sound has an origin of its own and a channel of its own, so
+// firing for a couple of minutes left hundreds of dead mixers being stepped
+// through on every audio callback; enough of them and the callback stops
+// keeping up with the device, and the sound stops for good. Retired, the
+// channel reports itself drained and the speaker's own mixer drops it.
 type channel struct {
 	mixer   *beep.Mixer
 	cue     string
 	looping bool
+	retired bool
 }
+
+// Stream mixes what is on the channel, until the channel is retired.
+//
+// Read and written under the speaker's lock: the speaker calls this from the
+// audio callback with the lock held, and everything that retires a channel
+// takes the same lock.
+func (c *channel) Stream(samples [][2]float64) (int, bool) {
+	if c.retired {
+		return 0, false
+	}
+	return c.mixer.Stream(samples)
+}
+
+func (c *channel) Err() error { return nil }
 
 func NewPlayer(sampleRate int32) *Player {
 	p := &Player{channels: make(map[channelKey]*channel)}
@@ -241,6 +266,18 @@ func (p *Player) loadCue(fileName string, cueName string) error {
 	if closeErr != nil {
 		return closeErr
 	}
+	// A cue that decoded to nothing is a cue that is not there, and it must
+	// not reach the speaker: beep.Loop asked for an endless loop of no samples
+	// never returns from Stream at all - it drains the streamer, seeks back to
+	// the start, and tries again, for ever, on the audio callback's own
+	// goroutine. That is not a quiet sound, it is the end of all sound.
+	//
+	// Three of these WAVs decode to nothing today because their data chunk
+	// claims 0xFFFFFFFF bytes, which the decoder reads as a negative length -
+	// see repairWAV in the migration, which is where that is really fixed.
+	if buffer.Len() == 0 {
+		return fmt.Errorf("%s decoded to no samples at all", fileName)
+	}
 
 	if _, exists := p.loadedCues[cueName]; !exists {
 		p.loadedCues[cueName] = make([]*beep.Buffer, 0)
@@ -410,7 +447,7 @@ func (p *Player) playOnChannel(key channelKey, cue string, looping bool, streame
 	open.mixer.Add(streamer)
 	speaker.Unlock()
 	if !exists {
-		speaker.Play(open.mixer)
+		speaker.Play(open)
 	}
 }
 
@@ -450,6 +487,26 @@ func (p *Player) StopChannels() {
 	defer speaker.Unlock()
 	for _, open := range p.channels {
 		open.clear()
+	}
+}
+
+// DropOrigin retires every channel belonging to something that no longer
+// exists: a shell casing that has been cleared away, a rocket that has
+// exploded. The player's own origin is never dropped - the listener is always
+// there - and neither is anything still in the world.
+func (p *Player) DropOrigin(origin int) {
+	if p.disabled || origin == 0 {
+		return
+	}
+	speaker.Lock()
+	defer speaker.Unlock()
+	for key, open := range p.channels {
+		if key.origin != origin {
+			continue
+		}
+		open.clear()
+		open.retired = true
+		delete(p.channels, key)
 	}
 }
 

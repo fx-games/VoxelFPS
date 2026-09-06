@@ -68,7 +68,9 @@ func (g *Game) selectWeapon(index int) {
 	if index < 0 || index >= len(g.weapons) || index == g.currentWeaponIndex {
 		return
 	}
-	g.currentWeapon().Unequip()
+	if held := g.currentWeapon(); held != nil {
+		held.Unequip()
+	}
 	g.currentWeaponIndex = index
 	weapon := g.currentWeapon()
 	weapon.Equip()
@@ -104,8 +106,10 @@ func (g *Game) keepLoaded(weapon *Weapon) {
 // weaponsKeptLoaded is how many weapons' pictures stay in memory at once.
 const weaponsKeptLoaded = 4
 
+// currentWeapon is what the player is holding, or nothing when they are empty
+// handed - which is how a run starts, before anything has been picked up.
 func (g *Game) currentWeapon() *Weapon {
-	if len(g.weapons) == 0 {
+	if g.currentWeaponIndex < 0 || g.currentWeaponIndex >= len(g.weapons) {
 		return nil
 	}
 	return g.weapons[g.currentWeaponIndex]

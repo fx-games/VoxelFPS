@@ -1,4 +1,4 @@
-// Command genstairs writes assets/meshes/stairs.glb: a four step staircase, each
+// Command genstairs writes scenery/stairs/mesh.glb: a four step staircase, each
 // step a solid box from the floor up, with one 16x16 stone texture embedded in
 // the .glb the way gentorch does it.
 //
@@ -20,8 +20,8 @@ import (
 	"github.com/qmuntal/gltf/modeler"
 )
 
-// The staircase, in world units where a voxel is 1. Must match the stairs
-// constants in package main, which builds the colliders from the same numbers.
+// The staircase, in world units where a voxel is 1. Must match the boxes in
+// scenery/stairs/scenery.json, which is where physics reads the same steps.
 // The rise has to stay below the physics system's step height: at 0.25 against a
 // step height of 0.289 there is room for it to be raised without the stairs
 // turning into a wall.
@@ -127,7 +127,7 @@ func main() {
 	})
 	doc.Scenes[0].Nodes = []int{0}
 
-	out := filepath.Join("assets", "meshes", "stairs.glb")
+	out := filepath.Join("scenery", "stairs", "mesh.glb")
 	if err := gltf.SaveBinary(doc, out); err != nil {
 		log.Fatal(err)
 	}

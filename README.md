@@ -26,9 +26,11 @@ optional gravity, projectiles, particles, animated sprites, paths and pathfindin
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
 
 **Doom asset import** — ZDoom-style weapon definitions (`zdwep/`) so Doom sprite weapons
-load and animate (`doom_weapon.go`). Three of them are in the player's hands, on `1`, `2` and
-`3`; the scripts are interpreted far enough to play a firing animation, the effect of a shot
-is ours (`handlers.go`). `4` is a plain sprite sheet weapon (`weapon.go`), no script involved.
+load and animate. 134 of them are in `weapons/`; the scripts are interpreted far enough to
+play a firing animation and spend ammo, the effect of a shot is ours (`handlers.go`).
+You start with what the mod's player class starts you with - the fists and a pistol - and
+pick the rest up: the test map has a range room with every weapon in the folder lying on
+the floor, a box of ammo beside each.
 
 **In-game editor** (`edit_map.go`, `quads/ui_*.go`) — voxel painting and selection,
 per-face texture mapping, entity spawning, atlas pickers, minimap, toasts, lists and
@@ -78,10 +80,12 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 |---|---|
 | `WASD` / `Space` / `C` | move / jump or up / down |
 | `Left mouse` | fire |
-| `1` `2` `3` `4` | Ol' Faithful (projectiles) / Borstal Shotgun (digs voxels) / Charge Pistol (paints voxels) / Small Gun (digs voxels) |
+| `1`..`9` / `,` `.` | pick a weapon you are carrying, by its `keys.txt` binding / walk the rest |
+| `R` | reload (while the mouse is captured) |
+| `I` | inventory: what you are carrying, and what it is |
 | `F` | toggle gravity |
 | `T` | toggle flashlight (off by default) |
-| `E` | interact with hovered object |
+| `E` | take the outlined item / interact with hovered object |
 | `V` | spawn current object |
 | `Esc` / `F1` | escape menu / wizard menu |
 | `F2` | toggle mouse capture |
@@ -98,6 +102,7 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 
 ```
 main.go handlers.go input.go load_map.go edit_map.go spawn_entities.go doom_weapon.go
+scenery.go  pickup.go   the furniture folder and what stands on it
 quads/      renderer, systems, UI widgets, shaders
 quads/glhf/ OpenGL abstraction layer
 quads/voxel/ voxel block/chunk/mesh, raycast, collision shapes
@@ -115,7 +120,9 @@ and the weapon pipeline end to end in `zdwep` (compile, write, load, fire).
 
 ## Weapons
 
-Weapons are data. `weapons/` holds one self-contained folder per weapon, plus
+Weapons are data, and they are picked up rather than handed out. Each carries a
+picture of itself lying on the floor, which is also its icon in the inventory (`I`)
+and on the HUD. `weapons/` holds one self-contained folder per weapon, plus
 `keys.txt` binding the number keys:
 
 ```
@@ -192,12 +199,69 @@ go run . -weapon fd_drum_shotgun -autofire
 The decisions behind all this are in [docs/adr/](docs/adr/), the vocabulary in
 [CONTEXT.md](CONTEXT.md).
 
+## Scenery
+
+Furniture is data too, the same way weapons are: one folder per piece under
+`scenery/`, holding the model and a line or two saying what it is called and what
+you bump into.
+
+```
+scenery/
+  table/
+    mesh.glb            the model
+    scenery.json        {"name": "Table"}
+  stairs/
+    mesh.glb
+    scenery.json        one collider box per step - see below
+  shelves/
+    mesh.glb
+    scenery.json        two uprights and three boards
+```
+
+Only the JSON is read at startup; a model is loaded the first time something
+spawns one, so a folder of scenery nobody has placed costs nothing. A map entity
+naming a piece in its `MeshName` field gets it, and everything in the folder is in
+the editor's `Place Scenery` menu (`F5`, then `R`) without a line of Go per piece.
+
+`colliders` is why the format has anything in it at all. A model is one box to the
+drawer and would be one box to physics too, and one box is wrong twice: stairs are
+a wall unless every step is its own collider, and nothing on a shelf can be
+reached unless its front is open. A piece that names no colliders gets the box
+around its model, which is what a table wants.
+
+Two of the three are generated, because they are boxes:
+
+```
+go run ./tools/genstairs      # four steps, rise under the engine's step height
+go run ./tools/genshelves     # two uprights, three boards
+```
+
+## Picking things up
+
+Two modes, switchable in the `F1` menu:
+
+- **Intentional**, the default - aim at it. The selection beam outlines the item
+  and names it, and `E` takes it. Nothing is picked up by accident.
+- **Collision Based** - Doom's own. Walk within an item's radius and it is yours.
+
+How big an item is, and so what the beam has to be on, is measured off the
+picture's own pixels by the migration and kept in `weapon.json` as `icon_box`
+and `ammo_icon_box`. A weapons folder migrated before that gets them from:
+
+```bash
+go run ./tools/genweapons -measure
+```
+
+The weapon range east of the spawn room racks the whole `weapons/` folder on
+shelves, a weapon and its own ammo side by side on a board, two boards to a rack
+and a rack on every other row so there are aisles to walk down.
+
 ## Status & backlog
 
 Last worked on July 2025; state is "renderer and editor are fun, gameplay is stubs".
 Known bugs and dead code are tracked in [ISSUES.md](ISSUES.md).
 `optimize.txt` holds the running todo list — highlights: jumping/throwing physics,
-decals, pickups, destructible props, hitscan vs projectile weapons, enemy movement,
+destructible props, hitscan vs projectile weapons, enemy movement,
 dialog/container UI, SDF font rendering, and the rendering optimizations
 (single-draw-call statics, octree culling, instancing, better frustum culling).
 `design.txt` holds the atlas layout decisions.

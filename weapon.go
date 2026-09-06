@@ -48,6 +48,10 @@ type Weapon struct {
 	// zoom is how far this weapon's own scope magnifies the view, 0 or 1 for
 	// one that does not. ZDoom keeps it as Weapon.FOVScale, on the weapon.
 	zoom float32
+	// owned says the player has picked this one up. The folder is the whole
+	// library of a hundred and thirty four weapons, not the loadout: what a
+	// player can hold is what they have walked over.
+	owned bool
 }
 
 // NewWeapon wires a loaded weapon to where its pictures and sounds are. They
@@ -138,14 +142,32 @@ func (w *Weapon) unload() {
 	w.spriteIndex = nil
 }
 
-// AmmoLine is what the HUD says about how loaded the weapon is, or empty for a
-// weapon that costs nothing to fire.
+// AmmoLine is what the HUD says about how loaded the weapon is: what is in the
+// magazine out of what the magazine holds, and the reserve behind it. Empty for
+// a weapon that costs nothing to fire.
+//
+// A weapon with one pool and no reload - most of the folder - has no magazine
+// to count separately, so its one pool is the whole line.
 func (w *Weapon) AmmoLine() string {
-	if w.Data.Ammo.Type == "" {
-		return ""
+	clip, reserve := w.Data.Ammo.Clip, w.Data.Ammo.Type
+	if clip == "" {
+		if reserve == "" {
+			return ""
+		}
+		return w.pool(reserve)
 	}
-	return fmt.Sprintf("%d/%d", w.runtime.Inventory[w.Data.Ammo.Type],
-		w.runtime.Caps[w.Data.Ammo.Type])
+	if clip == reserve {
+		reserve = w.Data.Ammo.Type2
+	}
+	if reserve == "" {
+		return w.pool(clip)
+	}
+	return fmt.Sprintf("%s  +%d", w.pool(clip), w.runtime.Inventory[reserve])
+}
+
+// pool is how much of one item the weapon is carrying, out of how much it can.
+func (w *Weapon) pool(item string) string {
+	return fmt.Sprintf("%d/%d", w.runtime.Inventory[item], w.runtime.Caps[item])
 }
 
 // debugWeapon makes the weapon in hand say where its script is, once a tic.
@@ -398,7 +420,10 @@ func (g *Game) LoadWeapons(dir string) error {
 		return fmt.Errorf("weapons: packing the shared pictures: %w", err)
 	}
 	if shared.Path != "" {
-		g.sharedAtlas = g.LoadPackedAtlas(shared.Path)
+		// With a batch of its own: the pickups on the floor are world sprites,
+		// but the same pictures are the icons the HUD and the inventory draw,
+		// and those go through the 2D pass.
+		g.sharedAtlas = g.LoadPackedAtlasWithBatch(shared.Path)
 		g.sharedSpriteIndex = sharedAtlasIndex(g.sharedAtlas)
 		if shared.Rebuilt {
 			log.Printf("[weapons] packed %d shared pictures into %s", shared.Frames, shared.Path)
@@ -414,14 +439,55 @@ func (g *Game) LoadWeapons(dir string) error {
 	for index, weapon := range g.weapons {
 		g.weaponByID[weapon.Data.ID] = index
 	}
-	if len(g.weapons) > 0 {
-		if index, known := g.weaponByID[g.startWeapon]; known {
-			g.currentWeaponIndex = index
+	// What the player has always got: ZDoom's Player.StartItem, which in every
+	// one of these mods is the fists and the pistol. Everything else is picked
+	// up, and until something is, the player is empty handed.
+	for _, weapon := range g.weapons {
+		weapon.owned = weapon.Data.Starting
+	}
+	if starting := g.startingInHand(); starting >= 0 {
+		g.selectWeapon(starting)
+	}
+	// The two capture flags are the exception, because what they are for is
+	// looking at a weapon: -weapon hands over the one it names, and -cycle
+	// walks the whole folder, which means holding it.
+	if index, known := g.weaponByID[g.startWeapon]; known {
+		g.weapons[index].owned = true
+		g.selectWeapon(index)
+	}
+	if g.autoCycle > 0 {
+		for _, weapon := range g.weapons {
+			weapon.owned = true
 		}
-		g.currentWeapon().Equip()
-		g.keepLoaded(g.currentWeapon())
+		if g.currentWeapon() == nil {
+			g.selectWeapon(0)
+		}
 	}
 	return nil
+}
+
+// startingInHand is which of the weapons the player starts with comes up
+// first, or -1 when they start with none.
+//
+// The one that costs ammo, which is Doom's own answer: you begin with the
+// fists and the pistol and it is the pistol you are holding. It matters more
+// here than it does there, because several of these mods' bare hands draw
+// nothing at all - Alien Vendetta's fist is an invisible ready frame - and
+// coming up holding one reads exactly like coming up holding nothing.
+func (g *Game) startingInHand() int {
+	first := -1
+	for index, weapon := range g.weapons {
+		if !weapon.owned {
+			continue
+		}
+		if weapon.Data.Ammo.Type != "" {
+			return index
+		}
+		if first < 0 {
+			first = index
+		}
+	}
+	return first
 }
 
 // loadWeaponSounds hands the weapon's sounds to the player under the names its
@@ -457,11 +523,17 @@ func (g *Game) cycleWeapon(step int) {
 	if len(g.weapons) < 2 {
 		return
 	}
-	next := (g.currentWeaponIndex + step) % len(g.weapons)
-	if next < 0 {
-		next += len(g.weapons)
+	// Round the folder once looking for the next one the player actually
+	// carries. Empty handed there is nothing to cycle to and the loop ends
+	// where it started.
+	next := g.currentWeaponIndex
+	for range g.weapons {
+		next = (next + step + len(g.weapons)) % len(g.weapons)
+		if g.weapons[next].owned {
+			g.selectWeapon(next)
+			return
+		}
 	}
-	g.selectWeapon(next)
 }
 
 // selectWeaponByKey puts the weapon bound to a number key in the player's
@@ -471,7 +543,7 @@ func (g *Game) selectWeaponByKey(key int) {
 	if !bound {
 		return
 	}
-	if index, known := g.weaponByID[id]; known {
+	if index, known := g.weaponByID[id]; known && g.weapons[index].owned {
 		g.selectWeapon(index)
 	}
 }
@@ -585,8 +657,8 @@ func (g *Game) selectWeaponByTag(name string) {
 		return
 	}
 	for index, weapon := range g.weapons {
-		if strings.EqualFold(weapon.Data.Provenance.Actor, name) ||
-			strings.EqualFold(weapon.Data.Tag, name) {
+		if weapon.owned && (strings.EqualFold(weapon.Data.Provenance.Actor, name) ||
+			strings.EqualFold(weapon.Data.Tag, name)) {
 			g.selectWeapon(index)
 			return
 		}

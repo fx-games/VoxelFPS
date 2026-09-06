@@ -175,6 +175,12 @@ func (t *BitmapFontMesh) Draw() {
 	charWidth := float32(cW) * t.scale.X()
 	charHeight := float32(cH) * t.scale.Y()
 
+	// Where every line starts. A second line went back to x=0 rather than to
+	// the mesh's own left edge, which put every line after the first hard
+	// against the left of the screen - invisible for as long as the only
+	// multi-line text was the debug overlay in that corner, and unmissable the
+	// first time a panel somewhere else showed four lines.
+	lineStart := curDrawPos.X()
 	for _, line := range t.lastText {
 		for _, character := range line {
 			if character == ' ' {
@@ -191,7 +197,7 @@ func (t *BitmapFontMesh) Draw() {
 			curDrawPos = curDrawPos.Add(mgl32.Vec2{float32(charWidth + paddingBetweenCharacters)})
 		}
 
-		curDrawPos = mgl32.Vec2{0, curDrawPos.Y() + float32(charHeight+paddingBetweenLines)}
+		curDrawPos = mgl32.Vec2{lineStart, curDrawPos.Y() + float32(charHeight+paddingBetweenLines)}
 	}
 }
 

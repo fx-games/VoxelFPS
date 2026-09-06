@@ -133,6 +133,8 @@ func main() {
 func NewGame(stress *StressConfig) *Game {
 	return &Game{
 		isMouseCursorCaptured:  true,
+		currentWeaponIndex:     -1,
+		pickupModeIndex:        pickupIntentional,
 		stressConfig:           stress,
 		currentGuiScaleIndex:   defaultGuiScaleIndex,
 		currentTimeFactorIndex: defaultTimeFactorIndex,
@@ -156,6 +158,10 @@ type Game struct {
 	crossHair *quads.AnimatedSprite
 
 	uiLabel *quads.BitmapFontMesh
+	// hudName and hudAmmo are the two lines the HUD says about the weapon in
+	// hand, beside its icon.
+	hudName *quads.BitmapFontMesh
+	hudAmmo *quads.BitmapFontMesh
 	player  *quads.GameObject
 
 	relativeHitPos mgl32.Vec3
@@ -213,6 +219,28 @@ type Game struct {
 	// recentWeapons is which weapons still have their pictures loaded, oldest
 	// first. See keepLoaded.
 	recentWeapons []*Weapon
+	// pickups are the weapons and boxes of ammo waiting to be picked up, and
+	// pickupModeIndex is how: walked over, or looked at and asked for. See
+	// pickupModeNames. pickupByObject is how the selection tells an item from
+	// anything else it has picked out - a pickup is a thing in the world like
+	// the barrel beside it, and this is the way back to what it holds.
+	pickups         []*Pickup
+	pickupModeIndex int
+	pickupByObject  map[*quads.GameObject]*Pickup
+
+	// furniture is every piece of scenery standing in the world. The selection
+	// looks straight through it: a shelf is somewhere to put things, not
+	// something to pick out, and it used to offer to remove itself instead.
+	//
+	// ponytail: entries for pieces the editor has removed stay in it. A map of
+	// pointers the size of the furniture in one map costs nothing; sweep it
+	// where the editor kills one if a map ever holds thousands.
+	furniture map[*quads.GameObject]bool
+
+	// scenery is the furniture the world can be furnished with, by folder name.
+	// Only the descriptions are here; a model is loaded the first time one is
+	// spawned.
+	scenery map[string]*Scenery
 	// triggerHeld is a state and reloadPressed is an edge; the weapon's script
 	// decides whether either does anything. altHeld is the second attack
 	// button, ZDoom's +altattack, which a weapon with an AltFire state of its
@@ -290,6 +318,19 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		panic(err)
 	}
 
+	// So is the furniture: one folder to a piece under scenery/, read for its
+	// name and its colliders here and for its model only when something spawns
+	// one.
+	scenery, err := loadScenery(sceneryDir)
+	if err != nil {
+		panic(err)
+	}
+	g.scenery = scenery
+	g.furniture = make(map[*quads.GameObject]bool)
+	g.ShouldDrawAABBs = os.Getenv("BENCH_AABB") != "" // TEMPORARY
+	g.ShouldDrawOBBs = os.Getenv("BENCH_OBB") != ""   // TEMPORARY
+	g.pickupByObject = make(map[*quads.GameObject]*Pickup)
+
 	g.SetupUnitCubes()
 	//g.SetCursor("assets/cursor.png", 7, 7)
 
@@ -301,6 +342,11 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.uiLabel = g.NewLabel()
 	g.uiLabel.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
 	g.uiLabel.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.74})
+
+	g.hudName = g.NewLabel()
+	g.hudName.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
+	g.hudAmmo = g.NewLabel()
+	g.hudAmmo.SetTintColor(mgl32.Vec4{0.3, 1, 0.3, 1})
 
 	g.entityMenu = g.NewList()
 	g.entityMenu.SetTextCentered(true)
@@ -443,6 +489,8 @@ func (g *Game) benchmarkLabel() string {
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.Sprites.Clear()
 	g.Meshes.Clear()
+	// Their sprites went with Sprites.Clear, and the map puts the range back.
+	g.pickups = nil
 
 	// Load Map
 	entitySpawns := g.LoadVoxelMap(mapLoad)
@@ -582,8 +630,18 @@ func (g *Game) Update(elapsed float64) {
 	g.updateAutoCycle(elapsed)
 	g.updateWeapon(elapsed)
 	g.physicsSystem.Update(elapsed)
+	g.updatePickups()
 	g.updateGUI(elapsed)
+	if spec := os.Getenv("SHOT_POS"); spec != "" && !shotAimed { // TEMPORARY
+		shotAimed = true
+		var x, y, z, dx, dz float64
+		fmt.Sscanf(spec, "%f,%f,%f,%f,%f", &x, &y, &z, &dx, &dz)
+		g.player.GameObject().Transform().SetPosition(mgl32.Vec3{float32(x), float32(y), float32(z)})
+		g.Camera.SetForward2D(mgl32.Vec3{float32(dx), 0, float32(dz)}.Normalize())
+	}
 }
+
+var shotAimed bool // TEMPORARY
 
 func (g *Game) printDebugInfo() {
 	forward := g.Camera.GetForward()
@@ -668,43 +726,22 @@ func (g *Game) bringToFront(widget InputReceiver) {
 }
 
 func (g *Game) DrawGui(elapsed float64) {
-	hoveredObj := g.hoveredObj()
-	if hoveredObj != nil {
-		guiBatch := g.UIAtlas.GetSpriteBatch()
-
+	if pickup := g.hoveredPickup(); pickup != nil {
+		// An item the selection is on, in intentional mode: outlined by its own
+		// collider like anything else, named, and waiting for the key that
+		// takes it.
+		topLeft := g.drawSelectionOutline(g.getHoveredOBB(pickup.object))
+		g.drawSelectionLabel(topLeft, pickup.object.DisplayName+"  [E]")
+	} else if hoveredObj := g.hoveredObj(); hoveredObj != nil {
 		aabb, transform := g.getHoveredOBB(hoveredObj)
-
-		topLeft, topRight, bottomLeft, bottomRight := quads.HudCornersFromOBB(aabb, transform, g.Camera.ProjectWorldToScreenPixels)
-
-		borderColor := mgl32.Vec4{0.5, 1, 0.5, 0.8}
-
-		tlScr, tlDst := g.UIAtlas.GetSourceAndDestRects(0, mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1])}, mgl32.Vec2{0, 0}, mgl32.Vec2{1, 1})
-		guiBatch.DrawTextured(tlScr, tlDst, borderColor)
-
-		trScr, trDst := g.UIAtlas.GetSourceAndDestRects(1, mgl32.Vec2{float32(topRight[0]), float32(topRight[1])}, mgl32.Vec2{1, 0}, mgl32.Vec2{1, 1})
-		guiBatch.DrawTextured(trScr, trDst, borderColor)
-
-		brScr, brDst := g.UIAtlas.GetSourceAndDestRects(2, mgl32.Vec2{float32(bottomRight[0]), float32(bottomRight[1])}, mgl32.Vec2{1, 1}, mgl32.Vec2{1, 1})
-		guiBatch.DrawTextured(brScr, brDst, borderColor)
-
-		blScr, blDst := g.UIAtlas.GetSourceAndDestRects(3, mgl32.Vec2{float32(bottomLeft[0]), float32(bottomLeft[1])}, mgl32.Vec2{0, 1}, mgl32.Vec2{1, 1})
-		guiBatch.DrawTextured(blScr, blDst, borderColor)
-
-		if g.uiLabel != nil {
-			hitZone := "body"
-			if g.relativeHitPos.Y() > 0.6 && g.relativeHitPos.Y() < 0.8 {
-				hitZone = "head"
-			}
-			labelText := fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)
-			g.uiLabel.SetText(labelText)
-			_, fontH := g.uiLabel.Size()
-			g.uiLabel.SetPosition(mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1] - fontH)})
-
-			g.uiLabel.Draw()
-
-			if g.entityMenu != nil {
-				g.entityMenu.Draw()
-			}
+		topLeft := g.drawSelectionOutline(aabb, transform)
+		hitZone := "body"
+		if g.relativeHitPos.Y() > 0.6 && g.relativeHitPos.Y() < 0.8 {
+			hitZone = "head"
+		}
+		if g.drawSelectionLabel(topLeft, fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)) &&
+			g.entityMenu != nil {
+			g.entityMenu.Draw()
 		}
 	}
 
@@ -714,13 +751,58 @@ func (g *Game) DrawGui(elapsed float64) {
 		weapon.Draw(int32(guiWidth), int32(guiHeight), bobX, bobY)
 	}
 
-	if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
+	g.drawWeaponHUD()
+
+	// Only while the overlay is on. The check used to be commented out here
+	// and left on the half that *builds* the text, so switching the F1
+	// checkbox off stopped printDebugInfo updating it and left the last frame
+	// of it painted on the screen for the rest of the run - which reads as the
+	// checkbox doing nothing at all.
+	if g.textLabel != nil && g.ShouldDrawDebugInfo {
 		g.textLabel.Draw()
 	}
 
 	for _, widget := range g.widgetStack {
 		widget.Draw()
 	}
+}
+
+// drawSelectionOutline puts the four corner brackets round a box in the world
+// and reports where its top left corner landed on the screen, which is where a
+// label above it goes.
+func (g *Game) drawSelectionOutline(aabb voxel.AABB, transform mgl32.Mat4) [2]int {
+	guiBatch := g.UIAtlas.GetSpriteBatch()
+	topLeft, topRight, bottomLeft, bottomRight := quads.HudCornersFromOBB(aabb, transform, g.Camera.ProjectWorldToScreenPixels)
+
+	borderColor := mgl32.Vec4{0.5, 1, 0.5, 0.8}
+	// One tile per corner, each anchored by the corner of itself that meets the
+	// box: top left by its own top left, and so round.
+	for index, corner := range [4]struct {
+		at     [2]int
+		anchor mgl32.Vec2
+	}{
+		{topLeft, mgl32.Vec2{0, 0}},
+		{topRight, mgl32.Vec2{1, 0}},
+		{bottomRight, mgl32.Vec2{1, 1}},
+		{bottomLeft, mgl32.Vec2{0, 1}},
+	} {
+		source, dest := g.UIAtlas.GetSourceAndDestRects(index,
+			mgl32.Vec2{float32(corner.at[0]), float32(corner.at[1])}, corner.anchor, mgl32.Vec2{1, 1})
+		guiBatch.DrawTextured(source, dest, borderColor)
+	}
+	return topLeft
+}
+
+// drawSelectionLabel writes what the outlined thing is, just above it.
+func (g *Game) drawSelectionLabel(topLeft [2]int, text string) bool {
+	if g.uiLabel == nil {
+		return false
+	}
+	g.uiLabel.SetText(text)
+	_, fontH := g.uiLabel.Size()
+	g.uiLabel.SetPosition(mgl32.Vec2{float32(topLeft[0]), float32(topLeft[1] - fontH)})
+	g.uiLabel.Draw()
+	return true
 }
 
 func (g *Game) hoveredObj() *quads.GameObject {
@@ -732,21 +814,19 @@ func (g *Game) hoveredObj() *quads.GameObject {
 		return nil
 	}
 
-	return g.lastHitResult.HitObject
+	// Furniture is not something to select. The ray still hits a shelf - it
+	// stops a bullet and it caps the pickup beam - but the selection looks
+	// through it at whatever is standing on it, rather than outlining the shelf
+	// and offering to remove it.
+	object := g.lastHitResult.HitObject
+	if g.furniture[object] {
+		return nil
+	}
+	return object
 }
 
 func (g *Game) isHoveringObject() bool {
-	if g.lastHitResult == nil {
-		return false
-	}
-	if !g.lastHitResult.HitInfo.Hit || g.lastHitResult.HitInfo.Distance > 10 {
-		return false
-	}
-	if g.lastHitResult.HitObject == nil {
-		return false
-	}
-	return true
-
+	return g.hoveredObj() != nil
 }
 func (g *Game) updateGUI(elapsed float64) {
 	if g.widgetsAreBlockingMovement {
@@ -757,13 +837,16 @@ func (g *Game) updateGUI(elapsed float64) {
 	g.uiLabel.Hide()
 	g.entityMenu.Hide()
 
-	var result RaycastResult
+	var origin, direction mgl32.Vec3
 	if g.isMouseCursorCaptured {
-		result = g.rayCast(g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5))
+		origin, direction = g.Camera.GetPickingRayFromScreenPosition(0.5, 0.5)
 	} else {
-		result = g.rayCastFromScreenPos(g.Window.GetCursorPos())
+		x, y := g.Window.GetCursorPos()
+		origin, direction = g.Camera.GetPickingRayFromScreenPosition(
+			x/float64(g.WindowWidth), y/float64(g.WindowHeight))
 		g.UnitCube.QueueDraw(g.editor.voxelSelection)
 	}
+	result := g.rayCast(origin, direction)
 
 	g.lastHitResult = &result
 
@@ -772,6 +855,12 @@ func (g *Game) updateGUI(elapsed float64) {
 		if hitGround {
 			g.editor.gameObjectForSpawning.Transform().SetPosition(groundPos)
 		}
+	}
+
+	if g.hoveredPickup() != nil {
+		// The label belongs to whatever is outlined, and only one thing is.
+		g.uiLabel.Show()
+		return
 	}
 
 	hoveredObj := g.hoveredObj()
@@ -786,11 +875,15 @@ func (g *Game) updateGUI(elapsed float64) {
 
 func (g *Game) getHoveredOBB(hoveredObj *quads.GameObject) (voxel.AABB, mgl32.Mat4) {
 	aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
-	var transform mgl32.Mat4
+	// Where the thing is, which is what the box is relative to. A sprite is the
+	// exception: it turns to face the camera, and its box turns with it.
+	//
+	// This used to be a zero matrix for anything that was neither, and a zero
+	// matrix sends all four corners of the box through a divide by zero - no
+	// outline at all, and a label somewhere off the screen.
+	transform := hoveredObj.Transform().GetTransformMatrix()
 	if hoveredObj.HasComponent(quads.ComponentTypeSprite) {
 		transform = hoveredObj.Sprite().Transform(g.Camera)
-	} else if hoveredObj.HasComponent(quads.ComponentTypeMesh) {
-		transform = hoveredObj.Transform().GetTransformMatrix()
 	}
 	return aabb, transform
 }
@@ -838,6 +931,13 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 		if !g.CubeMap.Contains(int32(x), int32(y), int32(z)) {
 			return false // outside the map there is nothing to hit, keep going until the ray runs out
 		}
+		// The nearest thing in this cell, not the first one the map happens to
+		// hand over. A cell holds one barrel and it never mattered; a cell of
+		// the weapon room holds a shelf's five boxes and the guns standing on
+		// them, and picking whichever came out of the map first meant looking
+		// at a gun and selecting the board behind it - differently each frame.
+		nearest := math.MaxFloat64
+		var nearestObj *quads.PhysicsComponent
 		for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
 			// A projectile in flight is not something to look at, interact with or
 			// shoot: it is skipped here rather than in hoveredObj, so the HUD frame,
@@ -847,14 +947,16 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 				continue
 			}
 			intersectionDistance, intersects := voxel.IntersectRayOBB(origin, direction, gObj.OBB(g.Camera))
-			if !intersects {
+			if !intersects || intersectionDistance >= nearest {
 				continue
 			}
-			collisionWorldPos := origin.Add(direction.Mul(float32(intersectionDistance)))
-			hitObject = gObj.GameObject()
-			relativeToObj := collisionWorldPos.Sub(gObj.Position())
+			nearest, nearestObj = intersectionDistance, gObj
+		}
+		if nearestObj != nil {
+			collisionWorldPos := origin.Add(direction.Mul(float32(nearest)))
+			hitObject = nearestObj.GameObject()
 			worldPos = collisionWorldPos
-			relativePos = relativeToObj
+			relativePos = collisionWorldPos.Sub(nearestObj.Position())
 			return true
 		}
 		return g.CubeMap.IsSolidBlockAt(x, y, z)
@@ -960,6 +1062,7 @@ func (g *Game) openWizardMenu() {
 		quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowResolution),
 		quads.NewGuiOptionList("GUI Scale", guiScaleLabels, &g.currentGuiScaleIndex, g.setGuiScale),
 		quads.NewGuiOptionList("Time Factor", timeFactorLabels, &g.currentTimeFactorIndex, g.setTimeFactor),
+		quads.NewGuiOptionList("Item Pickup", pickupModeNames, &g.pickupModeIndex, g.setPickupMode),
 	}
 
 	// Only macOS puts a menu bar and Dock over a borderless window, so only there is

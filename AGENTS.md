@@ -179,6 +179,117 @@ leniently; the single-weapon mods were named one at a time. `-prune` afterwards
 deletes the shared actor files nothing points at any more, and deleting
 `weapons/_sprites.png` makes the next run repack the shared atlas.
 
+## Where the furniture comes from
+
+`scenery/` is the weapons folder's shape applied to what a room is furnished
+with: one folder per piece, holding `mesh.glb` and a `scenery.json`. There is no
+list of pieces in Go and there must not be one - a map entity's `MeshName` and
+the editor's `Place Scenery` menu both go through `Game.scenery`, which is
+whatever `loadScenery` found on disk.
+
+**Only the JSON is read at startup.** `MeshDrawer.loadGLTF` caches by filename,
+so a model is loaded the first time something spawns one and never again; a
+folder of scenery nobody has placed costs nothing but a stat.
+
+**`colliders` replaces the model's box, it does not add to it.** That is the
+whole reason the file has a body at all, and both existing cases are load-bearing:
+
+- **Stairs.** The mesh is one box to the drawer and would be one box to physics,
+  and one box is a wall. Each step has to be its own collider for the step-up to
+  have anything to climb. This used to be `stairColliders` in `stairs.go`, a
+  special case on the mesh name in `spawnEntity`; it is four boxes in
+  `scenery/stairs/scenery.json` now, and `stairs_test.go` walks the real physics
+  system over the boxes the file actually holds.
+- **Shelves.** The front has to be open or nothing standing on a board can be
+  reached - not by the selection beam, and not by walking into it. The colliders
+  are the two uprights and the three boards, so the ray to a gun on a board
+  passes through the space where the model's own bounding box would have been.
+
+`tools/genstairs` and `tools/genshelves` draw the same numbers the JSON collides
+with. They are generated because they are boxes, and because the stair rise has
+to stay under the physics system's step height. **The numbers are in two files
+and nothing checks one against the other for the stairs**; for the shelves,
+`TestThingsStandOnTheShelfsOwnBoards` checks that the heights the weapon range
+stands things at are heights the shelf actually has a board at, with room above
+for a pickup.
+
+`assets/meshes/` still holds the models that are not scenery - the torch, the
+cube, the debug human - and `Game.meshFile` is the one place that knows which
+folder a name lives in.
+
+**A piece of scenery is one thing.** One model, one GameObject, one name - and
+the boxes it collides as all belong to that object. `Scenery.colliders` binds
+them to it with `Init` rather than `SetComponent`, because a GameObject holds one
+component of a type and a shelf is five boxes: the object keeps its own, the one
+around the whole model, and these are extra shapes that answer with its name, its
+transform and its life. So the ray that hits a board reports the shelf, the
+outline is the shelf's own box, and killing a shelf takes its boxes with it.
+
+They were five GameObjects of their own first - "Shelves 0", "Shelves 3" - which
+is why looking at a shelf offered to remove one of its boards, and why the
+outline round it was drawn from a zero matrix.
+
+**Furniture is not selectable.** `Game.furniture` is every piece standing in the
+world and `hoveredObj` drops anything in it: a shelf is somewhere to put things,
+not something to pick out. The ray itself still hits it - it stops a bullet and
+it caps the pickup beam - this is the selection, not the ray.
+
+## Walking over a thing, and asking for it
+
+`pickupModeIndex` is Doom's rule or a deliberate one, and it is in the F1 menu:
+
+- **Collision Based**, what this has always done: a flat distance test in
+  `updatePickups`, Doom's own radius, no collider. A pickup is something you walk
+  through, not something you bump into, and there are a couple of hundred of them
+  in one room.
+- **Intentional**, the default: `updateHoveredPickup` casts the same ray
+  `updateGUI` already casts and finds the nearest item it passes through, which
+  `DrawGui` outlines and names, and `E` takes.
+
+The beam is a ray test of its own rather than a physics body, for the same reason
+the distance test is not one - and because a body between the shelf boards would
+be in the ray's way. **The world's own hit caps the reach**, so nothing behind a
+wall is selectable; the shelf's open front is what lets the ray in as far as the
+gun, and the shelf's uprights are what stop it where a post is in the way.
+
+`Pickup.hit` is `voxel.IntersectRayOBB` against the pickup's own collider under
+the transform that draws it - the same box `drawSelectionOutline` puts the
+brackets round, and the same one the F1 debug boxes show. So what can be picked
+out is exactly what is outlined. An axis aligned box round a billboard - which is
+what this did first - is half again as wide as the picture when you look at it
+down a diagonal, and on a shelf what stands in that extra width is the next item
+along. IntersectRayOBB gives the distance back in world units, which matters
+here: the box's transform scales it by the size of the picture.
+
+A pickup carries that collider but is **never given to the physics system**. In
+this engine being in that system is what makes a thing both solid and hittable by
+the world ray, and a pickup is something you walk through. The component is there
+because it is the shape: the beam tests it, and `Show AABBs`/`Show OBBs` draw it.
+A sprite's box is in the space of its own quad, so `SpriteDrawer.DrawAABBs`
+scales it by the sprite's size - without that a pickup drawn a fifth of a voxel
+wide had a box a whole voxel wide, and everything else in the world is drawn at
+its natural size and so never showed it.
+
+The outline is `drawSelectionOutline`, which is what used to be inline in
+`DrawGui` for a hovered object. One thing is outlined at a time and the label
+belongs to whatever that is.
+
+**A pickup is the size its own picture says**, and that is measured once, by the
+migration: `wep.MeasurePickups` writes `icon_box` and `ammo_icon_box` into
+weapon.json off the opaque pixels of the art in the shared store. The runtime
+never asks the packed atlas, because asking it means reading the texture back off
+the GPU - seventy five megabytes a go, per pickup, for an answer that cannot
+change between runs. `go run ./tools/genweapons -measure` fills in a folder
+migrated before this existed; the runtime still falls back on the atlas for a
+weapon.json without one.
+
+The size is then **capped on both axes** - `pickupMaxHeight` a little under the
+shelf's shortest gap and `pickupMaxWidth` half the space between its uprights -
+because a weapon and its ammo stand side by side on one board. Both caps scale
+the whole picture: a gun squeezed on one axis reads as a different gun. It is
+also what makes a long thin gun a long thin target: a metre-long staff 11cm thick
+comes out 45cm long and 4.5cm thick, and the beam has to be on that.
+
 ## The two references worth reading before guessing
 
 - **GZDoom's own source** — <https://github.com/zdoom/gzdoom>. What a weapon
@@ -788,6 +899,54 @@ WAV, and it is the difference between a truncated sound and a hung game. A mod
 you migrate tomorrow may ship another one - the scan is four lines of python
 over `weapons/**/*.wav` comparing the data chunk's size against the file's.
 
+## A sound can also be longer than its own header says, and that one is ours
+
+The other direction, and the broken header is this migration's own doing.
+ffmpeg is handed a sound on a pipe and writes the WAV back on one, and a pipe
+cannot be seeked - so it never returns to patch the two sizes it could not know
+in advance and leaves both at `0xFFFFFFFF`, the "read until the stream ends"
+marker. beep keeps a data size in an `int32`, where that is **-1**, and its
+decoder stops before the first sample: `d.pos >= d.h.DataSize` is true at
+position zero.
+
+So the three sounds these mods ship as FLAC - the BFG10K's idle hum and its
+spin-down, the Unmaker's shot - were written out as twenty-seven kilobytes of
+silence each, and the weapons were mute. `repairWAV` in `zdwep/write.go` sets
+both sizes to what the file actually holds, on the way out of ffmpeg and on a
+mod's own WAV that lies the same way.
+
+The check for the next migration is a dozen lines of Go: walk
+`weapons/**/*.{wav,ogg}`, decode each into a `beep.Buffer` the way `loadCue`
+does, and print the ones that come out with `Len() == 0`. Three of 4492 did;
+none does now.
+
+**An empty buffer is one step from silencing the whole game.** `beep.Loop`
+asked to loop no samples never returns from `Stream` at all - it drains the
+streamer, seeks back to nothing, and tries again, for ever, on the audio
+callback's own goroutine. `loadCue` therefore refuses a cue that decoded to
+nothing rather than keeping an empty buffer that something may later loop.
+
+## A mixer handed to the speaker never leaves it
+
+`beep.Mixer` does not drain: empty, it streams silence for ever, and the
+speaker's own mixer only drops a streamer that reports itself finished. So
+every per-channel mixer `playOnChannel` gave to the speaker stayed in the
+speaker's list for the rest of the run.
+
+That is not a small leak, because **a channel belongs to an origin and every
+spawned thing has an origin of its own** - `g.lastActorOrigin++`. Cycling the
+folder with the trigger held stacked up 244 dead mixers in fifty seconds, each
+one stepped through on every audio callback; enough of them and the callback
+stops keeping up with the device and the sound stops for good, which is what
+"the audio gets stuck and nothing plays any more" turned out to be.
+
+A `channel` is a Streamer of its own now rather than the mixer being handed
+over directly, and `DropOrigin` retires the channels of something that has left
+the world - called from `WorldActor.remove`, which every path that ends an
+actor goes through. Retired, the channel reports itself drained and the speaker
+drops it. The same run now sits at fifteen and goes down as well as up. Origin
+zero is the listener and is never dropped.
+
 ## Loop goes to a label the mod wrote, not one we invented
 
 `Loop` returns to the top of the state block, which the runtime works out by
@@ -1017,6 +1176,157 @@ draw, so the gun goes invisible and can never fire again - which reads exactly
 like a missing frame and is nothing of the sort. It now abandons the update,
 keeps its place, says so once, and tries again next frame: a weapon that
 stutters is one somebody can still see and still put down.
+
+## A weapon has a picture of itself, and there are two places to look
+
+`weapon.json`'s `icon` is the weapon lying on the floor and `ammo_icon` is the
+box of ammo beside it. Both name pictures in the **shared** store,
+`weapons/_sprites`, and not in the weapon's own atlas - a pickup on the ground,
+the inventory list and the HUD all draw weapons nobody is holding, and only the
+weapon in hand has its own atlas loaded.
+
+GZDoom has two answers and a mod uses whichever suits it, so both are read,
+nearest first:
+
+- **The `Spawn` state**, which is what the engine draws where a weapon has been
+  dropped. Brutal Doom, Doom itself and all ten single-weapon mods answer this
+  way.
+- **`Inventory.Icon`**, the picture for the status bar. Final Doomer answers
+  this way and nothing else: **its weapons have no `Spawn` state at all**,
+  because none of them is ever dropped. What lies on the floor is a separate
+  `FDBFG9000Pickup : FDWeaponPickup replaces BFG9000` - a `CustomInventory`
+  whose `Pickup` state reads the player's set token and gives one of nine
+  weapons, and whose `Spawn` state spawns one of nine decorative
+  `FD...PickupVisual<Set>` actors to be the picture. There is no engine-level
+  link from that back to a weapon; the mapping is the mod's own ACS and tokens.
+  What *is* on the weapon is its icon.
+
+**`Inventory.Icon` is a texture name, not a lump name.** Final Doomer's
+`PLCHAING` is not a lump anywhere in the pk3: `TEXTURES.hud` defines it as a
+half-scale copy of the sprite `PCHGZ0`, which is that weapon's own pickup
+sprite. So `zdwep/textures.go` reads every lump called TEXTURES - GZDoom takes
+any extension, which is how one mod ships `TEXTURES.hud` beside
+`TEXTURES.weapons` - and keeps each texture's first patch. `Index.Textures` is
+that map, and an icon name goes through it before it is looked for as a sprite.
+A mod that points its icon straight at a sprite needs none of this and is read
+as it stands.
+
+Reading the icon took the weapons with no pickup art of their own from 81 to
+**one**: Brutal Doom's fists, which have no `Spawn` state and no icon because
+in that mod nobody ever picks them up. That one falls back to the first frame of
+`Ready` - the gun as it is held - and it is recorded in `defaulted` as
+`no pickup sprite, using the first-person frame NAMEA0` rather than passed off
+as pickup art. `pickupMaxHeight` exists for that case: a whole first-person
+frame is three voxels tall lying on the floor otherwise.
+
+**Which of the two ammo pools you pick up is decided by which one has a
+picture**, not by which slot it is in. `Weapon.AmmoType1` is the magazine and
+`AmmoType2` the reserve on the Dual 92s and the other way round elsewhere;
+nobody draws a magazine lying on the floor, so the pool with a `Spawn` state is
+the reserve. `ammo_pickup` carries the item name.
+
+**Doom's own four ammo classes are in no mod's DECORATE.** `Clip`, `Shell`,
+`RocketAmmo` and `Cell` are the base game's, so `stockAmmoSprites` answers for
+them the way `stockAmmoMax` already answers how much of one you may carry - and
+the mod's own actor wins when it redefines one, which Brutal Doom does.
+
+`Weapon.Pictures()` is what the weapon itself names in that store, and it exists
+for the same reason `Actor.Pictures()` does: `genweapons -prune` deleted every
+icon on its first run, because no actor named them.
+
+`tools/gensheet` writes an icon too - the idle frame, into the same store -
+because the format does not care where a weapon came from and neither should the
+inventory.
+
+## A weapon you always have is not a weapon you pick up
+
+`Player.StartItem` on a player class is what the player is handed before the
+first frame, and in every one of these mods that is the fists and the pistol.
+Such a weapon is never anywhere to be found, so `weapon.json`'s `starting` marks
+it: the engine owns it from the start and the test range lays out its ammo and
+no weapon.
+
+It is a **list**, not a property, and `Actor.Properties` keeps one value per
+key - so `Actor.StartItems` collects them separately as the file is read.
+`StartsWith` takes the union over every player class in the mod, because Final
+Doomer has nine of them, one per weapon set, and all nine fists and nine pistols
+are somebody's starting weapon. 23 of the 134 come out starting.
+
+The one that comes up in your hands is the first starting weapon that costs
+ammo, which is Doom's own answer - you begin with the fists and the pistol and
+it is the pistol you are holding. It matters more here than it does there:
+several of these bare hands draw nothing at all (Alien Vendetta's fist is an
+invisible ready frame), and coming up holding one reads exactly like coming up
+holding nothing.
+
+## The test range, and the player starting empty handed
+
+The player no longer holds the whole folder. `Weapon.owned` is what has been
+walked over plus what `starting` says they were born with, and the number keys
+and `,`/`.` only reach those. A folder with no starting weapon in it leaves the
+player empty handed - `currentWeapon()` returns nil, which every drawing and
+firing path already had to handle.
+
+The two capture flags are the exception, because what they are for is looking at
+a weapon: `-weapon ID` hands over the one it names, and `-cycle N` owns the whole
+folder so it can still walk it. Everything in "Seeing what a change did" works
+exactly as it did.
+
+`assets/raymap.ldtk` has a room east of the spawn room, through a doorway in the
+shared wall, with a `WeaponRange` entity in its north-west corner. That entity is
+not a thing in the world: `spawnWeaponRange` racks every weapon in the folder from
+it - a rack of shelves to a tile, a weapon and its own ammo side by side on a
+board, two boards to a rack - skipping the tiles the room's own pillars stand on.
+All 134 fit; a folder that grows past the room simply racks fewer, and the count
+is logged.
+
+**Every other row is left empty.** A rack is a tile wide, so a row of them is a
+wall, and racking every row leaves aisles a tenth of a voxel wider than the player
+- a room you cannot walk through is a room where nothing can be picked up either
+way round. The pillar row at z=7 is the map's, not the range's, and the player
+walking dead east from the spawn stops against it.
+
+The doorway is worth knowing about, because it is not a hole in the wall: three
+`Mod` entities at the end of the WallMods layer give those tiles `WallHeight 1`
+and `WallOffset 3`, which puts the wall block up at head height and leaves the
+tiles under it open. A later `Mod` wins over an earlier one, so the doorway is
+three appended entities and nothing was deleted from the map.
+
+A pickup is a distance test, not a collider - Doom's own radius, the player's 16
+plus an item's 20 - because a pickup is something you walk *through*, and two
+hundred physics bodies in one room is two hundred things to bump into.
+
+## The HUD counts the magazine, not the pool
+
+`AmmoLine` is what is in the clip out of what the clip holds, and the reserve
+behind it: `9/31  +300`. Which of the two ammo pools is the clip is
+`Ammo.Clip`, and DECORATE does not say - Brutal Doom's assault rifle spends
+`Clip2` and reloads `RifleAmmo` into it, and the Dual 92s have them the other
+way round. What tells them apart is that **a reload fills a magazine**, which
+is the same walk over the Reload states that already decides which pools start
+loaded; `clipOf` picks the one of `AmmoType1`/`AmmoType2` that walk reaches.
+Only a pool the weapon actually spends counts: a dual wielded gun reloads two
+magazines and one of them is the off hand's, which is not what the HUD is
+counting down. 22 of the 134 have a clip; the rest have one pool and no reload,
+and their one pool is the whole line.
+
+## The inventory and the HUD
+
+`I` opens `quads.GuiInventory`: what is carried down the left, the highlighted
+one of them down the right. The left pane is a `GuiList`, the right is a
+`GuiBorder` and two `BitmapFontMesh`es, and the only new drawing is
+`quads.DrawIconInBox`.
+
+**An icon is not a weapon sprite and must not be placed like one.**
+`GetSourceAndDestRects` puts a frame where its own canvas and hotspot say to,
+which is exactly right in GZDoom's 320x200 weapon space and exactly wrong in a
+panel: a fist frame authored a third of the way down a full-screen canvas landed
+six hundred pixels outside its own pane. `DrawIconInBox` places the picture
+itself, centred and scaled to fit.
+
+The same call fixed a bug in `BitmapFontMesh.Draw` that had been there all along:
+a second line went back to `x=0` rather than to the mesh's own left edge. Nothing
+noticed while the only multi-line text was the debug overlay in that corner.
 
 ## Keep the unused packages
 

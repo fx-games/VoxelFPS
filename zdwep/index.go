@@ -74,6 +74,12 @@ type Actor struct {
 	// raw text after the key.
 	Properties map[string]string
 	PropOrder  []string
+	// StartItems is what a player class is handed before the first frame,
+	// which is a list and not a property: Player.StartItem is written once per
+	// item and Properties keeps one value for a key. A weapon in here is one
+	// the player has always got - the fists, the pistol - and is never
+	// anywhere to be picked up.
+	StartItems []string
 	Flags      map[string]bool
 	States     StateBlock
 
@@ -90,6 +96,9 @@ func (a Actor) Property(name string) (string, bool) {
 // Index is every actor in a mod, keyed by lowercased name.
 type Index struct {
 	Actors map[string]*Actor
+	// Textures maps a name a TEXTURES lump defines to the lump its first patch
+	// names, uppercased. A mod's weapon icons live in there - see textures.go.
+	Textures map[string]string
 	// Constants are the mod's own named numbers, `const int x = 200;`, which
 	// its scripts use as arguments. They are file scoped in DECORATE, so they
 	// are collected across the whole mod.
@@ -156,6 +165,7 @@ func BuildIndex(src *Source) (*Index, error) {
 	idx := &Index{
 		Actors:    make(map[string]*Actor),
 		Constants: make(map[string]float64),
+		Textures:  readTextures(src),
 	}
 	root, ok := src.Resolve("DECORATE")
 	if !ok {
@@ -665,6 +675,10 @@ func parseActorBodyLine(actor *Actor, line string) {
 	value := ""
 	if len(fields) == 2 {
 		value = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(fields[1]), ";"))
+	}
+	if key == "player.startitem" {
+		item, _, _ := strings.Cut(value, ",") // an amount may follow the name
+		actor.StartItems = append(actor.StartItems, strings.Trim(strings.TrimSpace(item), `"`))
 	}
 	if _, exists := actor.Properties[key]; !exists {
 		actor.PropOrder = append(actor.PropOrder, key)

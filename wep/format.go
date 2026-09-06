@@ -441,6 +441,15 @@ type Ammo struct {
 	// Type is the inventory item, empty for a weapon that costs nothing.
 	Type string `json:"type,omitempty"`
 	Use  int    `json:"use,omitempty"`
+	// Clip is the pool a reload refills, which is what makes it a magazine
+	// rather than a reserve. It is one of Type and Type2, and DECORATE says
+	// nothing about which: Brutal Doom's assault rifle spends `Clip2` and
+	// reloads `RifleAmmo` into it, and the Dual 92s have them the other way
+	// round. What tells them apart is that a reload fills a magazine, which is
+	// the same walk over the Reload states that decides which pools start
+	// loaded. Empty for a weapon with one pool and no magazine at all - most
+	// of the folder, and every weapon that pumps inside its own firing states.
+	Clip string `json:"clip,omitempty"`
 	// Type2 and Use2 are AmmoType2/AmmoUse2: a second ammo pool, alongside
 	// Type rather than instead of it. A two-stage reload (a magazine drawn
 	// from a reserve) is the common shape - Type is the reserve, Type2 the
@@ -597,6 +606,43 @@ type Weapon struct {
 	// decision to the puff.
 	Decal string `json:"decal,omitempty"`
 
+	// Icon is this weapon lying on the floor: the frame its Spawn state starts
+	// on, which is the picture ZDoom draws where a weapon has been dropped. It
+	// names a picture in the shared store rather than in the weapon's own
+	// atlas, because a pickup on the ground, an inventory list and the HUD all
+	// draw weapons nobody is holding, and only the weapon in hand has its own
+	// atlas loaded.
+	//
+	// A mod that gives a weapon no Spawn state at all - most of Brutal Doom -
+	// leaves nothing to draw a pickup with but the gun's own first-person
+	// frame, which is what the migration falls back to and records in
+	// Defaulted.
+	Icon string `json:"icon,omitempty"`
+	// IconBox and AmmoIconBox are how big those two pictures are where they
+	// have pixels, measured off the art by the migration. See PickupBox: the
+	// game stands a pickup in the world at exactly this size, rather than
+	// working it out from the packed atlas every time one is spawned.
+	IconBox PickupBox `json:"icon_box,omitempty"`
+	// Starting marks a weapon the player has from the first frame and never
+	// picks up: ZDoom's `Player.StartItem`, which is the fists and the pistol
+	// in Doom and in every one of these mods. Nothing lays one on the floor,
+	// because in the mod it came from nothing ever does.
+	Starting bool `json:"starting,omitempty"`
+
+	// AmmoPickup is the ammo item a box of ammo for this weapon hands over, and
+	// AmmoIcon is what that box looks like on the floor: a clip, a shell box, a
+	// cell. Empty for a weapon that costs nothing to fire.
+	//
+	// Which of AmmoType1 and AmmoType2 is the reserve and which is the loaded
+	// magazine is the mod's own business and it goes both ways - the Dual 92s
+	// spend "Dual92Loaded" and reload it out of "Clip" - so this is decided by
+	// which of the two is a thing you can pick up at all, which is the one with
+	// a picture of itself lying on the floor. A magazine has no such picture,
+	// because nobody ever drops one.
+	AmmoPickup  string    `json:"ammo_pickup,omitempty"`
+	AmmoIcon    string    `json:"ammo_icon,omitempty"`
+	AmmoIconBox PickupBox `json:"ammo_icon_box,omitempty"`
+
 	// Reloadable is set when the weapon has a Reload label to jump to. Weapons
 	// that pump inside their own firing states, as the Borstal shotgun does,
 	// are not reloadable and the reload key does nothing for them.
@@ -619,6 +665,23 @@ type Weapon struct {
 	// after the fact, which is the trade for not having to name every one of a
 	// mod's hundred spawners up front.
 	Defaulted []string `json:"defaulted,omitempty"`
+}
+
+// Pictures is every name in the shared store the weapon itself names, as
+// opposed to the ones its actors name. That is the two pickup icons, and it
+// exists for the same reason Actor.Pictures does: the load check and the store
+// sweep have to agree about what the store is for. They did not when the icons
+// were added, and `genweapons -prune` deleted every one of them on the first
+// run, because no actor named them.
+func (w *Weapon) Pictures() []string {
+	var names []string
+	if w.Icon != "" {
+		names = append(names, w.Icon)
+	}
+	if w.AmmoIcon != "" {
+		names = append(names, w.AmmoIcon)
+	}
+	return names
 }
 
 // Actors is actors.json: everything a weapon references.

@@ -2,6 +2,7 @@ package zdwep
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -226,4 +227,61 @@ func TestActorsAreSharedBetweenWeapons(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, library.Weapons, 1)
 	assert.NotNil(t, library.Actors["first_gun"]["testsmoke"])
+}
+
+// A WAV whose data chunk claims 0xFFFFFFFF bytes is one an encoder wrote for a
+// stream of unknown length. Three of Brutal Doom's are like that, and read
+// literally they decode to nothing: beep keeps the size in an int32, where
+// that is -1, and stops before the first sample.
+func TestRepairWAVCorrectsALengthThatOverrunsTheFile(t *testing.T) {
+	samples := make([]byte, 40)
+	for i := range samples {
+		samples[i] = byte(i)
+	}
+	lying := wavWith(0xFFFFFFFF, samples)
+
+	repaired := repairWAV(lying)
+	require.Len(t, repaired, len(lying))
+	assert.Equal(t, uint32(len(samples)), binary.LittleEndian.Uint32(repaired[len(repaired)-len(samples)-4:]),
+		"the data chunk should say what the file actually holds")
+	assert.Equal(t, uint32(len(lying)-8), binary.LittleEndian.Uint32(repaired[4:]),
+		"and the RIFF size should agree with it")
+
+	// A header telling the truth is left exactly as it is, bytes and all.
+	honest := wavWith(uint32(len(samples)), samples)
+	assert.Equal(t, honest, repairWAV(honest))
+
+	// So is one that claims less than the file holds: that is the mod's own
+	// trailing junk, not a lie about the sound.
+	short := wavWith(uint32(len(samples)-8), samples)
+	assert.Equal(t, short, repairWAV(short))
+}
+
+// wavWith builds the smallest WAV that carries a fmt chunk, a chunk to skip
+// over and a data chunk whose declared size is whatever the caller says.
+func wavWith(declared uint32, samples []byte) []byte {
+	var out bytes.Buffer
+	put := func(v uint32) { binary.Write(&out, binary.LittleEndian, v) }
+
+	out.WriteString("RIFF")
+	put(0) // filled in below
+	out.WriteString("WAVE")
+
+	out.WriteString("fmt ")
+	put(16)
+	out.Write(make([]byte, 16))
+
+	// A chunk between the format and the data, which is where these files keep
+	// their LIST: the walk has to step over it to find the data chunk at all.
+	out.WriteString("LIST")
+	put(4)
+	out.Write([]byte("INFO"))
+
+	out.WriteString("data")
+	put(declared)
+	out.Write(samples)
+
+	made := out.Bytes()
+	binary.LittleEndian.PutUint32(made[4:], uint32(len(made)-8))
+	return made
 }

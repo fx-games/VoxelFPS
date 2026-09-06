@@ -2,8 +2,7 @@ package zdwep
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -35,6 +34,11 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 		return err
 	}
 	renameActorSprites(result, renamed, views)
+	// How big the two pickup pictures are is measured here, off the store, so
+	// the game never has to work it out from the packed atlas at spawn time.
+	if err := wep.MeasurePickups(weaponsDir, result.Weapon); err != nil {
+		return err
+	}
 	if err := writeActors(result, weaponsDir); err != nil {
 		return err
 	}
@@ -145,7 +149,7 @@ func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) (
 		if err != nil {
 			return nil, nil, err
 		}
-		stored := SharedSpriteName(name, encoded)
+		stored := wep.SharedSpriteName(name, encoded)
 		renamed[name] = stored
 		if err := writeSharedSprite(store, stored, encoded); err != nil {
 			return nil, nil, err
@@ -184,7 +188,7 @@ func writeSpriteViews(name string, angles [Views]SpriteView, assets *AssetIndex,
 				return nil, err
 			}
 		}
-		stored[i] = SharedSpriteName(viewName, encoded)
+		stored[i] = wep.SharedSpriteName(viewName, encoded)
 		if err := writeSharedSprite(store, stored[i], encoded); err != nil {
 			return nil, err
 		}
@@ -238,14 +242,6 @@ func mirrorPNG(data []byte, name string) ([]byte, error) {
 	return withGrab.Bytes(), nil
 }
 
-// SharedSpriteName is what a frame is called in the shared store: its own name,
-// so a folder full of them is still readable, plus enough of the hash of the
-// picture to tell two mods' versions of that name apart.
-func SharedSpriteName(name string, picture []byte) string {
-	sum := sha256.Sum256(picture)
-	return name + "." + hex.EncodeToString(sum[:4])
-}
-
 // renameActorSprites points the things a weapon spawns at the names their
 // pictures actually went into the store under. Only the spawned actors: a
 // weapon's own frames live in its own atlas, where a bare name is unique
@@ -258,6 +254,15 @@ func renameActorSprites(result *Result, renamed map[string]string, views map[str
 		if stored, ok := renamed[name]; ok {
 			result.ActorSprites[i] = stored
 		}
+	}
+	// The pickup pictures are named the same way and live in the same store,
+	// so they are renamed here with everything else rather than left pointing
+	// at a name the store never used.
+	if stored, ok := renamed[result.Weapon.Icon]; ok {
+		result.Weapon.Icon = stored
+	}
+	if stored, ok := renamed[result.Weapon.AmmoIcon]; ok {
+		result.Weapon.AmmoIcon = stored
 	}
 	for _, actor := range result.Actors {
 		for i := range actor.States.Steps {
@@ -439,7 +444,7 @@ func soundBytes(data []byte, sourceName string) (out []byte, extension string, e
 	case bytes.HasPrefix(data, []byte("OggS")):
 		return data, ".ogg", nil
 	case bytes.HasPrefix(data, []byte("RIFF")):
-		return data, ".wav", nil
+		return repairWAV(data), ".wav", nil
 	case IsDMX(data):
 		converted, err := DMXToWAV(data)
 		if err != nil {
@@ -451,7 +456,50 @@ func soundBytes(data []byte, sourceName string) (out []byte, extension string, e
 	if err != nil {
 		return nil, "", err
 	}
-	return converted, ".wav", nil
+	return repairWAV(converted), ".wav", nil
+}
+
+// repairWAV corrects a data chunk that claims more bytes than the file holds,
+// which is the other half of the truncated-sound problem: `endWhenSilent` in
+// the player copes with a header that overruns by a few bytes, and this is
+// what to do about one that overruns by four gigabytes.
+//
+// **The broken header is ours.** ffmpeg is handed the sound on a pipe and
+// writes the WAV back on one, and a pipe cannot be seeked - so it never goes
+// back to patch the two sizes it could not know in advance and leaves both at
+// 0xFFFFFFFF, the "read until the stream ends" marker. beep keeps a data size
+// in an int32, where that is -1, and its decoder stops before the first
+// sample, because `d.pos >= d.h.DataSize` is true at position zero.
+//
+// So the three sounds these mods ship as FLAC - the BFG10K's idle hum and its
+// spin-down, the Unmaker's shot - came out as twenty-seven kilobytes of
+// silence each. And an empty buffer is one step away from silencing the whole
+// game: beep.Loop asked to loop no samples never returns from Stream, on the
+// audio callback's own goroutine.
+//
+// The real length is what the file actually holds, which is the one thing a
+// marker like that says to work out for yourself. Fixing it here rather than
+// giving ffmpeg a temp file to seek in keeps the conversion a pipe, which is
+// what makes it a pure function of the bytes going in.
+func repairWAV(data []byte) []byte {
+	const header = 12 // "RIFF", the file size, "WAVE"
+	for at := header; at+8 <= len(data); {
+		size := int64(binary.LittleEndian.Uint32(data[at+4:]))
+		body := int64(at) + 8
+		if string(data[at:at+4]) != "data" {
+			at = int(body + size + size%2)
+			continue
+		}
+		if body+size <= int64(len(data)) {
+			return data // the header is telling the truth
+		}
+		repaired := make([]byte, len(data))
+		copy(repaired, data)
+		binary.LittleEndian.PutUint32(repaired[at+4:], uint32(int64(len(data))-body))
+		binary.LittleEndian.PutUint32(repaired[4:], uint32(len(data)-8))
+		return repaired
+	}
+	return data
 }
 
 // convertToWAV hands a sound in some format we do not read to ffmpeg. It is

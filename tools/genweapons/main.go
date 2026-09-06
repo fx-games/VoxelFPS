@@ -40,7 +40,17 @@ func main() {
 	prefix := flag.String("prefix", "", "prepend this to every weapon's folder name")
 	scan := flag.Bool("scan", false, "lower every actor in the mod and report the whole vocabulary it needs")
 	prune := flag.Bool("prune", false, "delete shared actor files no weapon points at any more, and stop")
+	measure := flag.Bool("measure", false, "measure every installed weapon's pickup pictures into its weapon.json, and stop")
 	flag.Parse()
+
+	if *measure {
+		measured, err := measurePickups(*outDir)
+		if err != nil {
+			fail("%v", err)
+		}
+		fmt.Fprintf(os.Stderr, "measured the pickups of %d weapon(s)\n", measured)
+		return
+	}
 
 	if *prune {
 		actors, sprites, err := pruneStores(*outDir)
@@ -438,6 +448,9 @@ func pruneStores(weaponsDir string) (actors, sprites int, err error) {
 		for _, file := range weapon.Actors {
 			wantedActors[file] = true
 		}
+		for _, name := range weapon.Pictures() {
+			wantedSprites[name+".png"] = true
+		}
 	}
 	for _, actor := range library.Actors {
 		for _, one := range actor {
@@ -536,4 +549,31 @@ func credit(src *zdwep.Source) string {
 func fail(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "genweapons: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// measurePickups fills in the pickup boxes of weapons that were migrated before
+// there were any. The migration does this itself now; this is the one-off for a
+// folder full of weapons nobody is going to migrate again, and it is the same
+// measurement off the same store, so running it twice writes the same numbers.
+func measurePickups(weaponsDir string) (int, error) {
+	library, err := wep.Load(weaponsDir)
+	if err != nil {
+		return 0, err
+	}
+	measured := 0
+	for _, weapon := range library.Weapons {
+		before := fmt.Sprint(weapon.IconBox, weapon.AmmoIconBox)
+		if err := wep.MeasurePickups(weaponsDir, weapon); err != nil {
+			return measured, err
+		}
+		if fmt.Sprint(weapon.IconBox, weapon.AmmoIconBox) == before {
+			continue
+		}
+		path := filepath.Join(weaponsDir, weapon.ID, wep.WeaponFile)
+		if err := wep.WriteJSON(path, weapon); err != nil {
+			return measured, err
+		}
+		measured++
+	}
+	return measured, nil
 }

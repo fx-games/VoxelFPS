@@ -12,9 +12,15 @@ type PhysicsComponent struct {
 	acceleration mgl32.Vec3
 	velocity     mgl32.Vec3
 	ApplyGravity bool
-	aabb         voxel.AABB
-	aabbPerAnim  map[AnimIndex]voxel.AABB
-	isGrounded   bool
+	// PassThrough is a collider things move straight through: it is on the
+	// grid, so a ray finds it and the selection can pick it out, but the
+	// collision solver skips it. A pickup is the case it exists for - Doom's
+	// items are something you walk over, not something you bump into - and
+	// without it the only way to be findable by a ray was to be a wall.
+	PassThrough bool
+	aabb        voxel.AABB
+	aabbPerAnim map[AnimIndex]voxel.AABB
+	isGrounded  bool
 }
 
 // IsGrounded reports whether the last move ended on top of something. Jumping

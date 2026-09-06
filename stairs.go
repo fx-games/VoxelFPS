@@ -1,52 +1,21 @@
 package main
 
 import (
-	"fmt"
 	"image/color"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
 )
 
-// The staircase assets/meshes/stairs.glb is built from. Must match the constants
-// in tools/genstairs, which draws the same boxes.
+// stairsMeshName is the scenery folder the staircase lives in. Its steps are one
+// collider each, listed in scenery/stairs/scenery.json and drawn by
+// tools/genstairs from the same numbers.
 //
 // The rise is what the whole thing is about: at 0.25 it is under the physics
 // system's step height (18 Quake units, 0.289 here), so the player walks up it.
 // Raise it past that and the stairs become a wall, which is the point of having
 // a step height at all.
-const (
-	stairsMeshName = "stairs"
-	stairStepRise  = 0.25
-	stairStepRun   = 0.5
-	stairStepCount = 4
-	stairWidth     = 1.0
-	// The front face of the bottom step, so a staircase spawned at a tile centre
-	// spans two whole tiles and its top step ends on the tile boundary.
-	stairFrontZ = -0.5
-)
-
-// stairColliders is the physics half of the stairs mesh: one box per step,
-// reaching from the floor to that step's top. The mesh drawer would hand
-// spawnEntity a single box around the whole staircase, and a single box is a
-// wall - each step has to be its own collider for the step-up to have anything
-// to climb.
-func stairColliders(origin mgl32.Vec3) []*quads.PhysicsComponent {
-	steps := make([]*quads.PhysicsComponent, 0, stairStepCount)
-	for i := 0; i < stairStepCount; i++ {
-		step := quads.NewGameObject(fmt.Sprintf("Stair %d", i))
-		step.Transform().SetPosition(origin)
-		physics := quads.NewPhysicsComponent(false, voxel.NewAABB(
-			mgl32.Vec3{-stairWidth / 2, 0, stairFrontZ + float32(i)*stairStepRun},
-			mgl32.Vec3{stairWidth / 2, float32(i+1) * stairStepRise, stairFrontZ + float32(i+1)*stairStepRun},
-		))
-		step.SetComponent(physics)
-		steps = append(steps, physics)
-	}
-	return steps
-}
+const stairsMeshName = "stairs"
 
 // The stairs test map: one platform a whole voxel above the floor, one staircase
 // leading up onto it, and every other side of the platform left bare. Walk up the
@@ -90,8 +59,9 @@ func loadStairsTestMap() core.MapLoadResult {
 
 	stairsTile := &mapData[stairsTileZ*size+stairsTileX]
 	stairsTile.Entities = append(stairsTile.Entities, core.MapEntity{
-		Name:     "Stairs",
-		MeshName: stairsMeshName,
+		Name:           "Stairs",
+		MeshName:       stairsMeshName,
+		CreateCollider: true,
 	})
 
 	return core.MapLoadResult{

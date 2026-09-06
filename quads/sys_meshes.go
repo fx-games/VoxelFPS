@@ -135,27 +135,26 @@ func (q *MeshDrawer) Remove(mesh *MeshComponent) {
 }
 
 func (q *MeshDrawer) DrawAABBs(lineShader *glhf.Shader) {
+	defer voxel.DrawDebugLines(lineShader)
 	for _, meshes := range q.gameObjectsPerMesh {
 		for _, mesh := range meshes {
 			if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
 				continue
 			}
-			lineShader.SetUniformAttr(1, mesh.GameObject().Transform().GetTranslationMatrix())
-			collObj := mesh.GameObject().Physics()
-			collObj.AABBAt(mgl32.Vec3{}).Draw(lineShader)
+			mesh.GameObject().Physics().AABBAt(mgl32.Vec3{}).
+				QueueDebugDraw(mesh.GameObject().Transform().GetTranslationMatrix())
 		}
 	}
 }
 
 func (q *MeshDrawer) DrawOBBs(lineShader *glhf.Shader) {
+	defer voxel.DrawDebugLines(lineShader)
 	for _, meshes := range q.gameObjectsPerMesh {
 		for _, mesh := range meshes {
 			if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
 				continue
 			}
-			collObj := mesh.GameObject().Physics()
-			lineShader.SetUniformAttr(1, mesh.Transform())
-			collObj.AABBAt(mgl32.Vec3{}).Draw(lineShader)
+			mesh.GameObject().Physics().AABBAt(mgl32.Vec3{}).QueueDebugDraw(mesh.Transform())
 		}
 	}
 }
