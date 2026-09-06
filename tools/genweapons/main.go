@@ -189,6 +189,9 @@ func main() {
 			fmt.Fprintf(os.Stderr, "%s: dropped %d unreachable states, %d of %d sprites\n",
 				result.Weapon.ID, dropped, beforeSprites-len(result.Sprites), beforeSprites)
 		}
+		if result.UnifyReloadOnAltFire() {
+			fmt.Fprintf(os.Stderr, "%s: reload was on alt-fire, moved to the reload button\n", result.Weapon.ID)
+		}
 		if len(result.Sprites) == 0 {
 			gaps.add(name, fmt.Errorf("none of its pictures are in these sources"))
 			skipped = append(skipped, name)

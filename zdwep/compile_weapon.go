@@ -810,6 +810,18 @@ func reachableSteps(weapon *wep.Weapon) []bool {
 // animations hands back to Ready or a sibling when it ends, and following
 // that would claim the entire rest of the weapon's states belong to it.
 func namedAnimationClosure(machine *wep.StateMachine) []bool {
+	return forwardClosureFrom(machine, deadAnimationLabels)
+}
+
+// forwardClosureFrom is everything forward-reachable from the named labels,
+// taking every jump unconditionally - a scope, not a safety proof, since it
+// does not ask whether any of it can really be reached from outside. It
+// stops at weaponEntryLabels rather than walking through them, because
+// everything this is used for hands back to Ready or a sibling when it ends,
+// and following that would claim the entire rest of the machine - except a
+// root that is itself one of those labels (AltFire, say): the caller asked
+// to start exactly there, so that one still gets walked.
+func forwardClosureFrom(machine *wep.StateMachine, roots []string) []bool {
 	n := len(machine.Steps)
 	isEntry := make(map[int]bool, len(weaponEntryLabels))
 	for _, name := range weaponEntryLabels {
@@ -820,10 +832,12 @@ func namedAnimationClosure(machine *wep.StateMachine) []bool {
 
 	visited := make([]bool, n)
 	inClosure := make([]bool, n)
+	isRoot := make(map[int]bool, len(roots))
 	stack := make([]int, 0, n)
-	for _, name := range deadAnimationLabels {
-		if index, ok := machine.Labels[name]; ok && index >= 0 && index < n {
+	for _, name := range roots {
+		if index, ok := machine.Labels[strings.ToLower(name)]; ok && index >= 0 && index < n {
 			stack = append(stack, index)
+			isRoot[index] = true
 		}
 	}
 	for len(stack) > 0 {
@@ -833,7 +847,7 @@ func namedAnimationClosure(machine *wep.StateMachine) []bool {
 			continue
 		}
 		visited[i] = true
-		if isEntry[i] {
+		if isEntry[i] && !isRoot[i] {
 			continue
 		}
 		inClosure[i] = true
@@ -854,6 +868,78 @@ func namedAnimationClosure(machine *wep.StateMachine) []bool {
 		}
 	}
 	return inClosure
+}
+
+// UnifyReloadOnAltFire is for the weapons that never got a real "Reload"
+// label at all: Final Doomer's own pistols do their reloading from AltFire
+// instead, disabling the button once the magazine is full (WRF_NOSECONDARY
+// on the "already full" ready frame) rather than giving it a state of its
+// own - alt-fire reused as the only way to reload rather than a second
+// attack. Detected, not named: a weapon's AltFire counts as this only when
+// it is reachable, gives back the weapon's own ammo (Type, Clip or Type2),
+// and never fires or zooms anywhere in its own closure - a real secondary
+// fire (a scope, a charged shot) always does one of those, and nothing here
+// touches a weapon that does.
+//
+// The fix aliases "Reload" onto the same steps AltFire already has - nothing
+// is duplicated or moved - and flips AllowAlt to AllowReload on exactly the
+// ready frames that had it, which is the same frames the mod itself decided
+// alt-fire should do something on. A weapon with a real secondary fire never
+// matches the detection and is untouched, scopes included.
+func (r *Result) UnifyReloadOnAltFire() bool {
+	machine := &r.Weapon.States
+	if _, hasReload := machine.Label("reload"); hasReload {
+		return false
+	}
+	altIndex, hasAlt := machine.Label("altfire")
+	if !hasAlt {
+		return false
+	}
+
+	ownAmmo := make(map[string]bool, 3)
+	for _, item := range []string{r.Weapon.Ammo.Type, r.Weapon.Ammo.Clip, r.Weapon.Ammo.Type2} {
+		if item != "" {
+			ownAmmo[strings.ToLower(item)] = true
+		}
+	}
+	if len(ownAmmo) == 0 {
+		return false
+	}
+
+	closure := forwardClosureFrom(machine, []string{"altfire"})
+	givesOwnAmmo := false
+	for i, inClosure := range closure {
+		if !inClosure {
+			continue
+		}
+		for _, op := range machine.Steps[i].Ops {
+			switch op.Op {
+			case wep.OpFireBullets, wep.OpFireProjectile, wep.OpZoom:
+				return false
+			case wep.OpGive:
+				if ownAmmo[strings.ToLower(op.Item)] {
+					givesOwnAmmo = true
+				}
+			}
+		}
+	}
+	if !givesOwnAmmo {
+		return false
+	}
+
+	machine.Labels["reload"] = altIndex
+	changed := false
+	for i := range machine.Steps {
+		for j := range machine.Steps[i].Ops {
+			op := &machine.Steps[i].Ops[j]
+			if op.Op == wep.OpWeaponReady && op.AllowAlt {
+				op.AllowAlt = false
+				op.AllowReload = true
+				changed = true
+			}
+		}
+	}
+	return changed
 }
 
 // rescueStillNamedSteps clears remove on any step a surviving step's own
