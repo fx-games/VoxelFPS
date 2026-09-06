@@ -169,6 +169,12 @@ type Game struct {
 
 	widgetStack                []InputReceiver
 	widgetsAreBlockingMovement bool
+	// menuPreviousMouseState is what the cursor was doing before the F1 menu's
+	// top level opened, for an action buried in one of its sub-menus (Start
+	// Map Hot Reload) that needs to close the whole tree and hand the mouse
+	// back exactly the way the top level's own close does, not just pop
+	// itself the way a submenu's Escape does.
+	menuPreviousMouseState bool
 
 	fogStart               float32
 	fogEnd                 float32
@@ -1036,37 +1042,58 @@ func (g *Game) setupModal() bool {
 	g.captureMouse(false)
 	return previousMouseState
 }
+
+// openWizardMenu is F1: four sub-menus rather than one long list, since the
+// list had grown past thirty rows - what to show or hide, the window and
+// display, what changes how the world runs, and the rendering pipeline's own
+// knobs (fog, bloom, emissive, shadows, and the one plain action among them,
+// regenerating the terrain's mipmaps).
 func (g *Game) openWizardMenu() {
-	previousMouseState := g.setupModal()
-	configMenu := g.OpenConfigMenu()
-	vModes := g.GetVideoModes()
-	var resolutionOptions []string
-	for _, vMode := range vModes {
-		resolutionOptions = append(resolutionOptions, fmt.Sprintf("%dx%d", vMode.Width, vMode.Height))
+	g.menuPreviousMouseState = g.setupModal()
+	top := g.OpenConfigMenu()
+	top.SetOptions([]quads.GuiOption{
+		quads.NewGuiOptionSubmenu("Show / Hide", func() { g.pushConfigSubmenu(g.showHideOptions()) }),
+		quads.NewGuiOptionSubmenu("Video", func() { g.pushConfigSubmenu(g.videoOptions()) }),
+		quads.NewGuiOptionSubmenu("Rendering", func() { g.pushConfigSubmenu(g.renderingOptions()) }),
+		quads.NewGuiOptionSubmenu("Global", func() { g.pushConfigSubmenu(g.globalOptions()) }),
+	})
+	guiWidth, guiHeight := g.GuiSize()
+	top.HandleResize(guiWidth, guiHeight, g.UIScale)
+	top.SetOnClose(g.closeAllMenus)
+	g.pushToWidgetStack(top)
+}
+
+// closeAllMenus dismisses the whole F1 tree, however many sub-menus deep it
+// is, and hands the mouse back the way it was before the top level opened.
+// The top level's own Escape reaches this directly; an action buried in a
+// sub-menu (Start Map Hot Reload) calls it too, because starting a watcher
+// reads as leaving the menu, not stepping back one level in it.
+func (g *Game) closeAllMenus() {
+	g.captureMouse(g.menuPreviousMouseState)
+	for len(g.widgetStack) > 0 {
+		g.popFromWidgetStack()
 	}
+}
+
+// pushConfigSubmenu opens one of the F1 menu's categories on top of whatever
+// is already open. Closing it only pops itself - the parent menu is still on
+// the stack underneath and still drawn (DrawGui walks the whole stack), so
+// Escape from a submenu reads as going back a level rather than leaving the
+// menu entirely, which is what the top level's own close does.
+func (g *Game) pushConfigSubmenu(options []quads.GuiOption) {
+	menu := g.OpenConfigMenu()
+	menu.SetOptions(options)
+	guiWidth, guiHeight := g.GuiSize()
+	menu.HandleResize(guiWidth, guiHeight, g.UIScale)
+	menu.SetOnClose(g.popFromWidgetStack)
+	g.pushToWidgetStack(menu)
+}
+
+// showHideOptions is every render-pass toggle: the debug overlays and the
+// pieces of the scene itself a pass can be switched off to isolate.
+func (g *Game) showHideOptions() []quads.GuiOption {
 	options := []quads.GuiOption{
 		quads.NewGuiOptionBool("Show Debug Info", &g.ShouldDrawDebugInfo),
-		quads.NewGuiOptionAction("Generate MipMaps for Terrain", func() {
-			//core.BigDebugSwitch = !core.BigDebugSwitch
-			g.CubeMap.GetTerrainTexture().GenerateMipMaps()
-		}),
-		quads.NewGuiOptionList("Window Mode", quads.WindowModeNames, &g.currentWindowModeIndex, g.setWindowMode),
-		quads.NewGuiOptionAction("VSync", g.toggleVsync),
-
-		quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowResolution),
-		quads.NewGuiOptionList("GUI Scale", guiScaleLabels, &g.currentGuiScaleIndex, g.setGuiScale),
-		quads.NewGuiOptionList("Time Factor", timeFactorLabels, &g.currentTimeFactorIndex, g.setTimeFactor),
-		quads.NewGuiOptionList("Item Pickup", pickupModeNames, &g.pickupModeIndex, g.setPickupMode),
-	}
-
-	// Only macOS puts a menu bar and Dock over a borderless window, so only there is
-	// there anything to choose between.
-	if quads.CanConstrainToWorkArea {
-		options = append(options, quads.NewGuiOptionBool("Constrain to work area", &g.ConstrainToWorkArea).
-			ActivateFunc(g.RefreshWindowMode))
-	}
-
-	options = append(options,
 		quads.NewGuiOptionBool("Show Chunk AABBs", &g.ShouldDrawChunkAABBs),
 		quads.NewGuiOptionBool("Show AABBs", &g.ShouldDrawAABBs),
 		quads.NewGuiOptionBool("Show OBBs", &g.ShouldDrawOBBs),
@@ -1076,6 +1103,42 @@ func (g *Game) openWizardMenu() {
 		quads.NewGuiOptionBool("Show Skybox", &g.ShouldDrawSkybox),
 		quads.NewGuiOptionBool("Show Minimap", &g.ShouldDrawMinimap),
 		quads.NewGuiOptionBool("Show Particles", &g.ShouldDrawParticles),
+	}
+	return options
+}
+
+// videoOptions is the window and display: what a settings menu calls
+// "Video" everywhere else too, kept apart from the rendering pipeline's own
+// tuning below.
+func (g *Game) videoOptions() []quads.GuiOption {
+	vModes := g.GetVideoModes()
+	var resolutionOptions []string
+	for _, vMode := range vModes {
+		resolutionOptions = append(resolutionOptions, fmt.Sprintf("%dx%d", vMode.Width, vMode.Height))
+	}
+	options := []quads.GuiOption{
+		quads.NewGuiOptionList("Window Mode", quads.WindowModeNames, &g.currentWindowModeIndex, g.setWindowMode),
+		quads.NewGuiOptionAction("VSync", g.toggleVsync),
+		quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowResolution),
+		quads.NewGuiOptionList("GUI Scale", guiScaleLabels, &g.currentGuiScaleIndex, g.setGuiScale),
+	}
+	// Only macOS puts a menu bar and Dock over a borderless window, so only
+	// there is there anything to choose between.
+	if quads.CanConstrainToWorkArea {
+		options = append(options, quads.NewGuiOptionBool("Constrain to work area", &g.ConstrainToWorkArea).
+			ActivateFunc(g.RefreshWindowMode))
+	}
+	return options
+}
+
+// renderingOptions is the pipeline's own knobs: fog, bloom and tone mapping,
+// the emissive pass, shadow bias, and the two things beside them that touch
+// the same picture rather than the window it is drawn in.
+func (g *Game) renderingOptions() []quads.GuiOption {
+	return []quads.GuiOption{
+		quads.NewGuiOptionAction("Generate MipMaps for Terrain", func() {
+			g.CubeMap.GetTerrainTexture().GenerateMipMaps()
+		}),
 		quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
@@ -1089,24 +1152,26 @@ func (g *Game) openWizardMenu() {
 		quads.NewGuiOptionFloat("Shadow Normal Offset", &g.shadowNormalOffset).StepSize(0.5).ActivateFunc(g.updateShadowBias),
 		quads.NewGuiOptionFloat("Shadow Depth Bias", &g.shadowDepthBias).StepSize(0.0005).ActivateFunc(g.updateShadowBias),
 		quads.NewGuiOptionAction("Drop Light Here", g.dropLightHere),
-	)
+	}
+}
 
+// globalOptions is everything that changes how the world runs rather than
+// how it looks or what window it is in: time itself, how a pickup is taken,
+// and the map's own dev workflow.
+func (g *Game) globalOptions() []quads.GuiOption {
+	options := []quads.GuiOption{
+		quads.NewGuiOptionList("Time Factor", timeFactorLabels, &g.currentTimeFactorIndex, g.setTimeFactor),
+		quads.NewGuiOptionList("Item Pickup", pickupModeNames, &g.pickupModeIndex, g.setPickupMode),
+	}
 	if !g.watchFileChanges {
 		options = append(options, quads.NewGuiOptionAction("Start Map Hot Reload", func() {
-			g.popFromWidgetStack()
+			g.closeAllMenus()
 			g.Toast("Watching for map changes")
 			g.watchFileChanges = true
 			go g.watchFileChangesLoop()
 		}))
 	}
-	configMenu.SetOptions(options)
-	guiWidth, guiHeight := g.GuiSize()
-	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
-	configMenu.SetOnClose(func() {
-		g.captureMouse(previousMouseState)
-		g.popFromWidgetStack()
-	})
-	g.pushToWidgetStack(configMenu)
+	return options
 }
 
 // guiScaleSteps are the GUI scale factors the menu offers, with their labels.

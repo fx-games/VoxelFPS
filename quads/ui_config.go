@@ -178,6 +178,26 @@ func (o *GuiOptionFloat) Activate() {
 	}
 }
 
+// GuiOptionSubmenu is a row that opens another menu rather than holding a
+// value of its own - the whole of what makes a GuiConfig's flat list of
+// options into a tree. More and Less do nothing, the way GuiOptionAction's
+// do: A and D step a value, and a submenu is not one.
+type GuiOptionSubmenu struct {
+	name string
+	open func()
+}
+
+func NewGuiOptionSubmenu(name string, open func()) *GuiOptionSubmenu {
+	return &GuiOptionSubmenu{name: name, open: open}
+}
+
+// String carries the arrow so a submenu row reads as a door rather than a
+// setting sitting there with no value after the colon everything else has.
+func (g *GuiOptionSubmenu) String() string { return g.name + " >" }
+func (g *GuiOptionSubmenu) More()          {}
+func (g *GuiOptionSubmenu) Less()          {}
+func (g *GuiOptionSubmenu) Activate()      { g.open() }
+
 func NewGuiConfig(uiContext UIContext) *GuiConfig {
 	g := &GuiConfig{
 		GuiList: NewGuiList(uiContext),
