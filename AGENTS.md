@@ -112,25 +112,64 @@ the camera's lap.
 ## Where the weapons come from
 
 The `weapons/` folder is generated. `tools/genweapons` reads a mod and writes
-it; it never runs while the game does, and `weapons.lock` records what was
-built from what.
+it; it never runs while the game does, and `weapons.lock` records what the last
+run built from what.
+
+Every source that produced a weapon in the folder, and where it is on this
+machine. `doom2.wad` goes last in every `-source` list: the mods take the base
+game's sprites and sounds for granted, and a source list is searched in order.
+
+| source | weapons | prefix | where it is |
+| --- | --- | --- | --- |
+| Brutal Doom Community Expansion | 43 | `bd_` | `$OLD/bdce` — a clone of <https://github.com/BLOODWOLF333/Brutal-Doom-Community-Expansion> at `02623c7`, recorded as revision `master` |
+| Final Doomer v3.4 | 80 | `fd_` | `~/Downloads/FinalDoomer_v3.4.pk3` |
+| nine single-weapon community mods | 10 | none | `~/Downloads/*.zip`, unpacked under `$OLD/mods/<Name>/`. Ten were downloaded; one does not migrate |
+| `assets/smallgun_sheet.png` | 1 | none | in this repo; not a mod at all, see below |
+| Doom II | — | — | `~/Downloads/doom2.wad` |
+
+`$OLD` is `/private/tmp/claude-501/-Users-felix-Projects-go-fps/3b5b84ba-fb8f-4f32-b475-f14ef98a2c7d/scratchpad`,
+an earlier session's scratchpad. **It is under `/private/tmp` and will not
+survive a reboot.** The durable copies are the zips and the pk3 in
+`~/Downloads`; the BDCE clone is not, and has to be cloned again when it goes.
+
+The ten downloaded, each a Realm667 Armory-format release carrying its own
+`CREDITS` or `readme.txt` naming its author, and the weapons each produced:
+
+| zip | weapon |
+| --- | --- |
+| `Axe.zip` | `axe` |
+| `BTConnector.zip` | `blacktail_51_connector` |
+| `Colt45.zip` | `colt45` |
+| `CombatKnife.zip` | `combat_knife` |
+| `DualBerettas.zip` | `dual_92s` |
+| `HuntingRifle.zip` | `huntingrifle`, `huntingriflescope` |
+| `Reaper.zip` | `reaper` |
+| `SilencedPistol.zip` | `silencedpistol` |
+| `UACSniperRifle.zip` | `sniper_rifle` |
+| `MagnumRevolver.zip` | **none** — written entirely in ZScript, which is a different and far larger language than DECORATE. It ships no DECORATE lump and this migration cannot read it. |
+
+`small_gun` was never in a mod. `tools/gensheet` builds it out of a plain grid
+sprite sheet in this repo, and writes the same `weapon.json` the migration
+writes:
 
 ```bash
-go run ./tools/genweapons -source ../Brutal-Doom-Community-Expansion,~/Downloads/doom2.wad -list
+go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
+    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 3
 ```
 
-Sources, and where they are:
+The three runs that built the rest:
 
-- **Brutal Doom Community Expansion** —
-  <https://github.com/BLOODWOLF333/Brutal-Doom-Community-Expansion>. Clone it;
-  `weapons.lock` names a clone that no longer exists.
-- **Final Doomer** — `~/Downloads/FinalDoomer_v3.4.pk3`.
-- **doom2.wad** — `~/Downloads/doom2.wad`. Needed underneath the mods: they
-  take the base game's sprites and sounds for granted, so it goes last in
-  `-source`.
-- The single-weapon community mods are the zips in `~/Downloads`: `Axe.zip`,
-  `Colt45.zip`, `CombatKnife.zip`, `DualBerettas.zip`, `HuntingRifle.zip`,
-  `MagnumRevolver.zip`, `Reaper.zip`, `SilencedPistol.zip` and the rest.
+```bash
+go run ./tools/genweapons -source "$OLD/bdce,$HOME/Downloads/doom2.wad" \
+    -all -prefix bd_ -revision master
+go run ./tools/genweapons -source "$HOME/Downloads/FinalDoomer_v3.4.pk3,$HOME/Downloads/doom2.wad" \
+    -all -prefix fd_ -revision v3.4
+go run ./tools/genweapons -source "$OLD/mods/DualBerettas/DualBerettas.pk3,$HOME/Downloads/doom2.wad" \
+    Dual92
+```
+
+`-list` names the weapons in a mod without compiling anything, which is how you
+find the actor name the third form wants.
 
 **Re-migrating is reproducible from the folder itself.** Every weapon.json
 records the source it came from, its revision and its actor name, so the runs
@@ -294,13 +333,62 @@ sees is the flash drawn into the weapon's own frames.
 
 `AssetIndex.Sprite` used to take the first lump in sorted order, which is
 rotation 1, the view from the *front* - so every gun in the mod fired a 21 unit
-fireball into the player's face. It now takes rotation 5, then 0, then whatever
-the mod has, and the folder was re-migrated on that rule. Thirty one frames
-changed picture: `PLMZA0` to the blank one, and thirty others - `TRAC`, `MISL`,
-`AXET`, `GBPJ`, `PLAY`, `SPOS` and the rest - to the back of a thing that is
-flying away from the player, which is the side they were always looking at.
-Fifty weapons name one of them, and `firecheck` reports the same 36 weapons
-failing before and after, so nothing else moved.
+fireball into the player's face. All eight views are migrated now (below), and
+the shooter still gets rotation 5, still blank.
+
+## All eight views of a spawned frame, not just the one
+
+**A weapon's own frames are always rotation 0. The things it throws are not.**
+A mod ships five lumps for the eight views of a rocket - `MISLE1`, `MISLE5`,
+and three double lumps `MISLE6E4`, `MISLE7E3`, `MISLE8E2`, each carrying one
+view and, mirrored, the view opposite it.
+
+Only rotation 5 used to be migrated, and the other seven were dropped silently:
+the picture went into the store under the name the script asked for, so nothing
+downstream could tell afterwards that they had existed. A rocket showed its own
+exhaust from every angle. Fifty one weapons and forty one frames were affected -
+rockets, tracers, the thrown axe, the ofuda, muzzle flashes.
+
+Now:
+
+- **`AssetIndex.SpriteViews`** returns all eight, in the order the engine asks
+  for them, or false for one all-angle picture and for a partial set. A set with
+  holes in it is not something to fill in by guessing, and
+  `AssetIndex.CollapsedViews` names those so the loss stays visible - it is
+  printed by `genweapons`, and as of the current sources it prints nothing.
+- **View direction 0 is the front, 4 the back, and they run round the thing's
+  own left**, which is what `core.GetViewDirection` reports and what the wolf
+  character sheet's own `dir_ft, dir_fl, dir_lt, ...` comment in `main.go` has
+  always meant. **Doom's rotation number is that plus one**: rotation 1 is the
+  front, 3 the thing's left, 5 the back, 7 its right. Getting this backwards
+  shows a thing's left side to somebody standing on its right, so it is pinned
+  by `core.TestGetViewDirectionRunsRoundTheThingsOwnLeft` rather than left to
+  be re-derived.
+- **A mirrored half is mirrored at migration time**, not at draw time: it is the
+  same picture every frame it is drawn. The hotspot mirrors with it - measured
+  from the left edge, so mirrored it is `width - x`, which is the arithmetic
+  GZDoom does on a mirrored rotation.
+- **Each view goes into the shared store under its own rotation** - `MISLE1`
+  through `MISLE8` - because the store is keyed by name and these are eight
+  different pictures. There is no `MISLE0` any more.
+- **The eight ride on the actor, not on the step**: `wep.Actor.Views` maps the
+  name a step names - which is still the back, view 4 - to the eight. A step
+  that names a frame with no other views is untouched, so the keep markers
+  `####` and `----` need to know nothing about any of this.
+- **`Actor.Pictures()` is every name in the store an actor can draw.** Both the
+  load check and `genweapons -prune` walk it. They did not when `Views` was
+  added, and the sweep deleted seven views of every frame on the first run
+  because no step named them.
+- **The view is chosen once a frame in `showCurrentFrame`**, from the actor's
+  own `facing` - set when it is launched and kept afterwards, the way ZDoom's
+  angle is - rather than per draw call in the sprite pass. A second viewpoint in
+  the same frame, which is the shadow pass, therefore draws the angle the player
+  sees. These are rockets and casings a few pixels across and they cast no
+  shadows anyway. Doing it in the batch means per-direction quad sizes and
+  pivots, because Doom's rotations are not all the same width: the rocket's is
+  15 pixels head on and 49 side on.
+
+The store went from 2182 pictures to 2469, and `weapons/_sprites.png` with it.
 
 Offsets themselves ride the aim rather than the yaw: `aimOffset` in
 `world_actor.go` measures a spawn's forward, sideways and height along the line
@@ -729,6 +817,25 @@ bike part carrying a world sprite's hotspot - drawn off the left edge of the
 screen, which looked exactly like the gun vanishing when you pulled the
 trigger. It is a narrow rule: 44 of Brutal Doom's 11971 sprite lumps are named
 twice, and 3 of its 750 sounds.
+
+**Inside one lump list only.** A `-source` list is several lists stacked, and it
+is searched the *other* way round on purpose: the mod first and `doom2.wad`
+last, because the mods want the base game only for what they did not ship
+themselves. Run over the whole stack, "last wins" hands every name the base game
+also uses straight back to the base game. Brutal Doom shares **655** lump names
+with `doom2.wad`, and what came out vanilla was not obscure: every frame of the
+super shotgun, the rocket, the ejected shell casing, and `SAWGA0` through
+`SAWGD0` - four of the seven frames of the chainsaw's idle. The idle animation
+flicked between two entirely different chainsaws, in two different pairs of
+hands, seven times a second.
+
+So a lump name belongs to the **first layer that has one**, and only lumps from
+that same layer may shadow it afterwards. `Source.LayerOf` says which layer a
+name came from and `NewAssetIndex` claims on it; the rotations a `NAMEA0` lookup
+falls back on are still filled from wherever they are, because `NAMEE1` and
+`NAMEE5` are different lump names and a mod that overrode only some of the eight
+meant to keep the rest. Only Brutal Doom was affected - Final Doomer and all ten
+single-weapon mods share no lump name with `doom2.wad` at all.
 
 ## A_ReFire repeats the attack that is running
 

@@ -435,7 +435,7 @@ func (a *GlApplication) StartEventLoop() {
 				a.updateToasts(deltaTime)
 
 				if a.Pathfinder != nil {
-					a.Pathfinder.Update(elapsed)
+					a.Pathfinder.Update(deltaTime)
 				}
 				if a.minimap != nil {
 					a.minimap.Update()

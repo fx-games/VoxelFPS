@@ -180,7 +180,7 @@ Making one by hand from a sprite sheet:
 
 ```
 go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
-    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 2
+    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 3
 ```
 
 Looking at one:

@@ -247,7 +247,16 @@ func (c *FPSCamera) GetNearAndFar() (near float32, far float32) {
 	return c.nearPlaneDist, c.farPlaneDist
 }
 
-func GetViewDirection(viewerPos, spritePosition mgl32.Vec3, spriteLookDir mgl32.Vec2) int { // must return 0-7
+// ViewDirections is how many angles a thing is drawn from: Doom's eight, and
+// the length of the frame lists that go with them.
+const ViewDirections = 8
+
+// GetViewDirection is which of the eight views of a thing the observer is
+// looking at: 0 the front, 4 the back, running round the thing's own left.
+// Doom numbers the same eight 1 to 8 in that order, so a Doom rotation is this
+// plus one - see TestGetViewDirectionRunsRoundTheThingsOwnLeft, which is what
+// the migration writes a spawned actor's frame lists against.
+func GetViewDirection(viewerPos, spritePosition mgl32.Vec3, spriteLookDir mgl32.Vec2) int {
 	camPosition2d := mgl32.Vec2{viewerPos.X(), viewerPos.Z()}
 	spritePosition2d := mgl32.Vec2{spritePosition.X(), spritePosition.Z()}
 

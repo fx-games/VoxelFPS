@@ -1,1 +1,0 @@
-{"format":1,"name":"PlayerMuzzle2","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"sprite":"PLMZA0.d2a849e6","tics":1,"tics_max":1,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]},{"sprite":"PLMZA0.d2a849e6","tics":1,"tics_max":1,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":2}},"no_gravity":true,"missile":true}

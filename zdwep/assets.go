@@ -44,28 +44,57 @@ func NewAssetIndex(src *Source) *AssetIndex {
 		rotations: make(map[string][]string),
 		sounds:    make(map[string]string),
 	}
+	// The last file with a lump's name wins, which is GZDoom's rule and not an
+	// arbitrary one: FileSystem::CheckNumForName searches the lump list
+	// backwards, so a later entry shadows an earlier one of the same name.
+	// That is how a mod overrides a sound with a better take in an `hd/`
+	// folder, and it is how Brutal Doom means PLSTA0 to be the plasma gun's
+	// firing frame in sprites/weapons/plasmagun and not the 43x24 exhaust
+	// flare in sprites/vehicles/bike. Keeping the first one instead handed the
+	// plasma gun a bike part with a world sprite's hotspot on it, drawn off
+	// the left edge of the screen: firing made the gun disappear.
+	//
+	// It is a narrow rule in practice. Brutal Doom has 11971 sprite lumps and
+	// 44 of them are named twice, most being a folder duplicated inside
+	// itself.
+	//
+	// But it is a rule about *one* lump list, and OpenSources stacks several.
+	// The stack is searched the other way round on purpose - the mod first and
+	// doom2.wad last, because the mods take the base game's sprites and sounds
+	// for granted and only want what they did not ship themselves. Run over
+	// the whole stack, "last wins" hands every name the base game also uses
+	// straight back to the base game. Brutal Doom shares 655 lump names with
+	// doom2.wad, and what came out vanilla was not obscure: the whole super
+	// shotgun, the rocket, the ejected shell casing, and four frames of the
+	// chainsaw's idle - which is why the chainsaw's idle animation was four
+	// vanilla frames and three of Brutal Doom's own, jumping between two
+	// different pairs of hands.
+	//
+	// So a lump name belongs to the first layer that has one, and only lumps
+	// from that same layer may shadow it afterwards.
+	claimed := func(seen map[string]int, base string, layer int) bool {
+		if first, taken := seen[base]; taken && first != layer {
+			return false
+		}
+		seen[base] = layer
+		return true
+	}
+	spriteLayer, soundLayer := map[string]int{}, map[string]int{}
 	for _, name := range src.Names() {
 		lower := strings.ToLower(name)
 		base := strings.TrimSuffix(path.Base(lower), path.Ext(lower))
+		layer := src.LayerOf(name)
 		switch {
-		// The last file with a lump's name wins, which is GZDoom's rule and
-		// not an arbitrary one: FileSystem::CheckNumForName searches the lump
-		// list backwards, so a later entry shadows an earlier one of the same
-		// name. That is how a mod overrides a sound with a better take in an
-		// `hd/` folder, and it is how Brutal Doom means PLSTA0 to be the
-		// plasma gun's firing frame in sprites/weapons/plasmagun and not the
-		// 43x24 exhaust flare in sprites/vehicles/bike. Keeping the first one
-		// instead handed the plasma gun a bike part with a world sprite's
-		// hotspot on it, drawn off the left edge of the screen: firing made
-		// the gun disappear.
-		//
-		// It is a narrow rule in practice. Brutal Doom has 11971 sprite lumps
-		// and 44 of them are named twice, most being a folder duplicated
-		// inside itself.
 		case strings.HasPrefix(lower, "sprites/"):
+			if !claimed(spriteLayer, base, layer) {
+				continue
+			}
 			index.sprites[base] = name
 			index.noteRotations(base, name)
 		case strings.HasPrefix(lower, "sounds/"):
+			if !claimed(soundLayer, base, layer) {
+				continue
+			}
 			index.sounds[base] = name
 		}
 	}
@@ -221,6 +250,110 @@ func readSndInfoFrom(src *Source) map[string][]string {
 		}
 	}
 	return mapping
+}
+
+// SpriteView is one angle of a frame: the file holding it, and whether the
+// file holds it mirrored, which is what the second half of a NAMEFRFR lump is.
+// Doom ships five lumps for eight views and lets three of them do double duty
+// that way, because a thing seen from its front left and its front right is
+// the same picture the other way round.
+type SpriteView struct {
+	File   string
+	Mirror bool
+}
+
+// Views is how many angles a frame is drawn from.
+const Views = 8
+
+// SpriteViews is the eight angles of a frame, in the order the engine asks for
+// them: 0 is the front, 4 the back, and they run round the thing's own left.
+// Doom numbers the same eight 1 to 8 in that same order, so the lump for view
+// direction N carries rotation N+1 - pinned by core's
+// TestGetViewDirectionRunsRoundTheThingsOwnLeft, because getting it backwards
+// shows a thing's left side to somebody standing on its right.
+//
+// It reports false for a frame the mod draws once for every angle, and for a
+// set with a hole in it. A partial set is not something to fill in by guessing,
+// and Sprite()'s one picture is the honest answer for it.
+func (a *AssetIndex) SpriteViews(name string) ([Views]SpriteView, bool) {
+	var views [Views]SpriteView
+	upper := strings.ToUpper(name)
+	if len(upper) < 6 {
+		return views, false
+	}
+	if _, whole := a.sprites[strings.ToLower(name)]; whole {
+		// The mod ships this exact frame, which by its own name is the one
+		// picture for every angle.
+		return views, false
+	}
+	frame := upper[4]
+	for _, file := range a.rotations[strings.ToLower(upper[:5])] {
+		base := strings.ToUpper(strings.TrimSuffix(path.Base(file), path.Ext(file)))
+		if len(base) < 6 {
+			continue
+		}
+		put := func(rotation byte, mirror bool) {
+			if rotation < '1' || rotation > '8' {
+				return // rotation 0 is not one of the eight; it is all of them
+			}
+			views[rotation-'1'] = SpriteView{File: file, Mirror: mirror}
+		}
+		if base[4] == frame {
+			put(base[5], false)
+		}
+		if len(base) >= 8 && base[6] == frame {
+			put(base[7], true)
+		}
+	}
+	for _, view := range views {
+		if view.File == "" {
+			return [Views]SpriteView{}, false
+		}
+	}
+	return views, true
+}
+
+// CollapsedViews names the world sprites this weapon still takes one picture
+// of when the sources hold more than one. All eight of a frame are migrated
+// now - see SpriteViews - so what is left in here is a partial set: three
+// views of a thing you can walk all the way round, which is not something to
+// fill in by guessing. Sprite() takes the back one and this says so.
+//
+// A weapon's own frames are never in here: a psprite is always rotation 0, and
+// only the actors a weapon throws are things you can walk around.
+func (a *AssetIndex) CollapsedViews(result *Result) []string {
+	var collapsed []string
+	for _, name := range result.ActorSprites {
+		lower := strings.ToLower(name)
+		if _, direct := a.sprites[lower]; direct || len(lower) < 6 {
+			continue // the sources have this exact frame; nothing was chosen for us
+		}
+		if _, several := a.SpriteViews(name); several {
+			continue // all eight are migrated
+		}
+		if views := a.views(lower[:5]); views > 1 {
+			collapsed = append(collapsed, fmt.Sprintf("%s (%d of 8 views)", name, views))
+		}
+	}
+	sort.Strings(collapsed)
+	return collapsed
+}
+
+// views is how many distinct angles the sources hold for a frame, counting both
+// halves of a NAMEFRFR lump, which holds two.
+func (a *AssetIndex) views(frameKey string) int {
+	seen := map[byte]bool{}
+	for _, file := range a.rotations[frameKey] {
+		base := strings.ToUpper(strings.TrimSuffix(path.Base(file), path.Ext(file)))
+		if len(base) < 6 {
+			continue
+		}
+		seen[base[5]] = true
+		if len(base) >= 8 {
+			seen[base[7]] = true
+		}
+	}
+	return len(seen)
 }
 
 // MissingAssets lists what a compiled weapon needs and the sources do not have,
