@@ -1,6 +1,6 @@
 // Command genshelves writes scenery/shelves/mesh.glb: a storage rack to stand
 // equipment on - two uprights and three boards, every part a box, with one
-// 16x16 wood texture embedded in the .glb the way genstairs does it.
+// 16x16 dirty-metal texture embedded in the .glb the way genstairs does it.
 //
 // It is generated rather than modelled because it is five boxes, and because
 // the board heights are the same numbers the colliders and the weapon range
@@ -79,9 +79,13 @@ func buildShelves() (positions, normals [][3]float32, uvs [][2]float32, indices 
 		&positions, &normals, &uvs, &indices)
 	box([3]float32{halfW - uprightWidth, 0, -halfD}, [3]float32{halfW, board2, halfD},
 		&positions, &normals, &uvs, &indices)
-	// Three boards, each hanging under its own top surface.
+	// Three boards, each hanging under its own top surface, spanning the gap
+	// between the uprights rather than the shelf's own outer width - the full
+	// width used to run the boards straight through both uprights, the same
+	// wood filling the same space twice from directly above and z-fighting
+	// there every time the shelf moved a pixel on screen.
 	for _, top := range []float32{board0, board1, board2} {
-		box([3]float32{-halfW, top - thickness, -halfD}, [3]float32{halfW, top, halfD},
+		box([3]float32{-halfW + uprightWidth, top - thickness, -halfD}, [3]float32{halfW - uprightWidth, top, halfD},
 			&positions, &normals, &uvs, &indices)
 	}
 	return
@@ -92,7 +96,7 @@ func main() {
 
 	doc := gltf.NewDocument()
 
-	imageIndex, err := modeler.WriteImage(doc, "shelves", "image/png", bytes.NewReader(woodTexture()))
+	imageIndex, err := modeler.WriteImage(doc, "shelves", "image/png", bytes.NewReader(metalTexture()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -141,21 +145,30 @@ func main() {
 	log.Printf("wrote %s: %d vertices, %d triangles", out, len(positions), len(indices)/3)
 }
 
-// woodTexture is dull brown planking. Dull on purpose: the mesh shader picks
-// glowing texels out by brightness and colourfulness, and a shelf is not a lamp.
-func woodTexture() []byte {
+// metalTexture is dull, grimy sheet metal: a cool grey base, panel seams every
+// fourth row the way the planking this replaced had plank gaps, and a
+// scatter of darker rust and grease specks so it reads as handled equipment
+// rather than a fresh coat of paint. Dull on purpose, same as the planking
+// was: the mesh shader picks glowing texels out by brightness and
+// colourfulness, and a shelf is not a lamp.
+func metalTexture() []byte {
 	random := rand.New(rand.NewSource(3))
 	img := image.NewNRGBA(image.Rect(0, 0, 16, 16))
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 16; x++ {
-			shade := uint8(0x50 + random.Intn(0x10))
-			// A darker line every fourth row reads as the gap between planks.
+			shade := uint8(0x60 + random.Intn(0x10))
+			// A darker line every fourth row reads as the seam between panels.
 			if y%4 == 0 {
 				shade -= 0x18
 			}
-			img.SetNRGBA(x, y, color.NRGBA{
-				R: shade, G: uint8(float32(shade) * 0.78), B: uint8(float32(shade) * 0.55), A: 0xFF,
-			})
+			r, g, b := shade, shade, uint8(float32(shade)*1.06)
+			// A grease or rust speck here and there, dark and slightly warm so
+			// it reads as grime rather than more panel.
+			if random.Intn(6) == 0 {
+				dirt := uint8(0x18 + random.Intn(0x14))
+				r, g, b = dirt+0x08, dirt, dirt
+			}
+			img.SetNRGBA(x, y, color.NRGBA{R: r, G: g, B: b, A: 0xFF})
 		}
 	}
 	var buf bytes.Buffer
