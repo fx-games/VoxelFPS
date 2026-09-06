@@ -106,11 +106,26 @@ func (t *TextureAtlasPacked) PivotFromCenter(index int) mgl32.Vec2 {
 	if trimWidth <= 0 || trimHeight <= 0 {
 		return mgl32.Vec2{0, 0}
 	}
-	trimOffsetX, trimOffsetY := t.packedInfo.PositionOffsetForLayout(index)
 	hotspotX, hotspotY := t.packedInfo.Hotspot(index)
+	if hotspotX == 0 && hotspotY == 0 {
+		// (0,0) is OffsetsFromPNG's own answer for "no hotspot to speak of" -
+		// no grAb chunk, or one implausible enough to reject, which is exactly
+		// Brutal Doom's TRACA5. Read as a real pixel it puts the pivot deep in
+		// the padding this frame trimmed away, since visible art almost never
+		// starts at a picture's own top-left corner; a weapon frame wants that
+		// literal pixel (see OffsetsFromPNG's own doc comment), but a world
+		// sprite's quad wants its own center when nothing else was said.
+		return mgl32.Vec2{0, 0}
+	}
+	trimOffsetX, trimOffsetY := t.packedInfo.PositionOffsetForLayout(index)
 	fracX := float32(hotspotX-trimOffsetX) / float32(trimWidth)
 	fracY := float32(hotspotY-trimOffsetY) / float32(trimHeight)
-	return mgl32.Vec2{fracX - 0.5, fracY - 0.5}
+	// X pins the hotspot to the anchor by shifting the quad the other way: a
+	// hotspot left of center (fracX < 0.5) needs the quad moved right so that
+	// point lands on the anchor, not left again on top of the error. Y needs
+	// no such flip - image rows run top to bottom while the quad's own local Y
+	// runs bottom to top, and that mismatch already points it the right way.
+	return mgl32.Vec2{0.5 - fracX, fracY - 0.5}
 }
 
 // Hotspot is a frame's own hotspot in its own raw source pixels - the same

@@ -314,3 +314,11 @@ pickups, destructible props, hitscan vs projectile weapons, water, dialog and co
 enemy movement, SDF fonts) plus the rendering optimizations (single draw call for statics,
 octree culling, instanced rendering, texture arrays instead of per-vertex texture indices).
 `design.txt` holds the texture atlas decisions.
+
+- Scenery (`scenery.go`, `MeshDrawer`) still draws one `glDrawElements` call per placed
+  piece - a table, a shelf, a stair step. It never moves once placed, the same way a chunk's
+  own voxel faces never move, so it belongs in the chunk mesh it stands in rather than as its
+  own `MeshComponent`: baked into the chunk's vertex buffer at load (or the first time
+  something spawns one), it costs the chunk's own single draw call instead of its own bind
+  and call. Worth doing once a map places enough scenery for `MeshDrawer.DrawnLastFrame`'s
+  draw-call count to show it - the test range's few dozen shelves do not yet.

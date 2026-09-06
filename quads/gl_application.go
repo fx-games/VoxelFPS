@@ -974,7 +974,7 @@ func (a *GlApplication) DrawAABBs() {
 	a.lineShader.SetUniformAttr(LineShaderModelTransform, mgl32.Ident4())
 
 	a.Sprites.DrawAABBs(a.lineShader, a.Camera)
-	a.Meshes.DrawAABBs(a.lineShader)
+	a.Meshes.DrawAABBs(a.Camera, a.lineShader)
 
 	a.lineShader.End()
 }
@@ -996,7 +996,7 @@ func (a *GlApplication) DrawOBBs() {
 	a.lineShader.SetUniformAttr(LineShaderModelTransform, mgl32.Ident4())
 
 	a.Sprites.DrawOBBs(a.lineShader, a.Camera)
-	a.Meshes.DrawOBBs(a.lineShader)
+	a.Meshes.DrawOBBs(a.Camera, a.lineShader)
 
 	a.lineShader.End()
 }

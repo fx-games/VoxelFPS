@@ -456,11 +456,15 @@ func swapRemove[T any](list []T, i int) []T {
 	return list[:len(list)-1]
 }
 
+// The debug boxes are culled the way the sprites themselves are. They were not,
+// and a box behind the player costs the same as one in front of it: a stress map
+// of a thousand barrels queued a thousand boxes a frame to draw the six that
+// were on screen.
 func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 	defer voxel.DrawDebugLines(lineShader)
 	for _, spriteIndices := range q.spritesPerTexture {
 		for _, sprite := range spriteIndices {
-			if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
+			if !q.hasDebugBox(sprite, cam) {
 				continue
 			}
 			collObj := sprite.GameObject().Physics()
@@ -479,13 +483,21 @@ func (q *SpriteDrawer) DrawOBBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 	defer voxel.DrawDebugLines(lineShader)
 	for _, spriteIndices := range q.spritesPerTexture {
 		for _, sprite := range spriteIndices {
-			if !sprite.GameObject().HasComponent(ComponentTypePhysics) {
+			if !q.hasDebugBox(sprite, cam) {
 				continue
 			}
 			obb := sprite.GameObject().Physics().OBB(cam)
 			obb.AABB.QueueDebugDraw(obb.Transform)
 		}
 	}
+}
+
+// hasDebugBox is whether this sprite has a box to draw and is somewhere the
+// player can see it.
+func (q *SpriteDrawer) hasDebugBox(sprite *SpriteComponent, frustum core.Culler) bool {
+	return !sprite.Hidden &&
+		sprite.GameObject().HasComponent(ComponentTypePhysics) &&
+		sprite.GameObject().IsInViewFrustum(frustum)
 }
 func (q *SpriteDrawer) Clear() {
 	q.spritesPerTexture = make(map[glhf.TextureAtlas][]*SpriteComponent)

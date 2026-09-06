@@ -151,7 +151,9 @@ func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	surfaceNormal := hit.HitInfo.Side.AsDirection().ToVec3()
 	g.createImpactEffects(hitScanEffect.Weapon, hitScanEffect.Shot, hit.HitObject, hitPos, surfaceNormal)
 	if hit.HitObject != nil && hitScanEffect.Shot.Damage > 0 {
-		g.splatterBehind(hitPos, hitScanEffect.Direction)
+		if isNPC(hit.HitObject) {
+			g.splatterBehind(hitPos, hitScanEffect.Direction)
+		}
 		g.damage(hit, hitScanEffect.Shot.Damage)
 	}
 }
@@ -312,12 +314,19 @@ const (
 // names its own puff actor gets that actor's own sprite, drawn exactly as its
 // mod drew it; the particle system is only what is left for a shot with
 // nothing of its own to draw, or for a body, which has no mod sprite for blood.
+// isNPC is who bleeds: a body with somewhere to walk to, which today is only
+// the Scientist. A barrel, a shelf's pickup or a decoration is hit the same
+// way a wall is - it has no blood of its own to spill.
+func isNPC(hitObject *quads.GameObject) bool {
+	return hitObject != nil && hitObject.HasComponent(quads.ComponentTypePathing)
+}
+
 func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
 	if shot.Puff == wep.PuffExplosion {
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
 		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
 		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
-		if hitObject != nil {
+		if isNPC(hitObject) {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}
 		return
@@ -327,7 +336,7 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 	// on whatever the barrel is aimed at. Held on a body it bled thirty
 	// particles a tic, forever. It still spawns its puff below, so the red dot
 	// lands on a barrel the same as it lands on a wall.
-	if hitObject != nil && shot.Damage > 0 {
+	if isNPC(hitObject) && shot.Damage > 0 {
 		g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		return
 	}

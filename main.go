@@ -327,8 +327,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	}
 	g.scenery = scenery
 	g.furniture = make(map[*quads.GameObject]bool)
-	g.ShouldDrawAABBs = os.Getenv("BENCH_AABB") != "" // TEMPORARY
-	g.ShouldDrawOBBs = os.Getenv("BENCH_OBB") != ""   // TEMPORARY
 	g.pickupByObject = make(map[*quads.GameObject]*Pickup)
 
 	g.SetupUnitCubes()
@@ -632,16 +630,7 @@ func (g *Game) Update(elapsed float64) {
 	g.physicsSystem.Update(elapsed)
 	g.updatePickups()
 	g.updateGUI(elapsed)
-	if spec := os.Getenv("SHOT_POS"); spec != "" && !shotAimed { // TEMPORARY
-		shotAimed = true
-		var x, y, z, dx, dz float64
-		fmt.Sscanf(spec, "%f,%f,%f,%f,%f", &x, &y, &z, &dx, &dz)
-		g.player.GameObject().Transform().SetPosition(mgl32.Vec3{float32(x), float32(y), float32(z)})
-		g.Camera.SetForward2D(mgl32.Vec3{float32(dx), 0, float32(dz)}.Normalize())
-	}
 }
-
-var shotAimed bool // TEMPORARY
 
 func (g *Game) printDebugInfo() {
 	forward := g.Camera.GetForward()
@@ -870,7 +859,12 @@ func (g *Game) updateGUI(elapsed float64) {
 	}
 
 	g.uiLabel.Show()
-	g.entityMenu.Show()
+	// The entity menu edits the world - idle frames, deleting a thing - so it
+	// only ever makes sense with the cursor free, and never for a pickup: an
+	// item the player can pick up is not one they can also delete this way.
+	if !g.isMouseCursorCaptured && g.pickupByObject[hoveredObj] == nil {
+		g.entityMenu.Show()
+	}
 }
 
 func (g *Game) getHoveredOBB(hoveredObj *quads.GameObject) (voxel.AABB, mgl32.Mat4) {

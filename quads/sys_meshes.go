@@ -134,11 +134,11 @@ func (q *MeshDrawer) Remove(mesh *MeshComponent) {
 	}
 }
 
-func (q *MeshDrawer) DrawAABBs(lineShader *glhf.Shader) {
+func (q *MeshDrawer) DrawAABBs(frustum core.Culler, lineShader *glhf.Shader) {
 	defer voxel.DrawDebugLines(lineShader)
 	for _, meshes := range q.gameObjectsPerMesh {
 		for _, mesh := range meshes {
-			if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
+			if !hasDebugBox(mesh, frustum) {
 				continue
 			}
 			mesh.GameObject().Physics().AABBAt(mgl32.Vec3{}).
@@ -147,16 +147,24 @@ func (q *MeshDrawer) DrawAABBs(lineShader *glhf.Shader) {
 	}
 }
 
-func (q *MeshDrawer) DrawOBBs(lineShader *glhf.Shader) {
+func (q *MeshDrawer) DrawOBBs(frustum core.Culler, lineShader *glhf.Shader) {
 	defer voxel.DrawDebugLines(lineShader)
 	for _, meshes := range q.gameObjectsPerMesh {
 		for _, mesh := range meshes {
-			if !mesh.GameObject().HasComponent(ComponentTypePhysics) {
+			if !hasDebugBox(mesh, frustum) {
 				continue
 			}
 			mesh.GameObject().Physics().AABBAt(mgl32.Vec3{}).QueueDebugDraw(mesh.Transform())
 		}
 	}
+}
+
+// hasDebugBox is whether this mesh has a box to draw and is somewhere the player
+// can see it - the same two questions the mesh pass itself asks.
+func hasDebugBox(mesh *MeshComponent, frustum core.Culler) bool {
+	return !mesh.IsHidden &&
+		mesh.GameObject().HasComponent(ComponentTypePhysics) &&
+		mesh.GameObject().IsInViewFrustum(frustum)
 }
 
 func (q *MeshDrawer) Clear() {
