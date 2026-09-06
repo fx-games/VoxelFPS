@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
@@ -34,6 +35,12 @@ type WorldActor struct {
 	// worse, it would be something the player bumps into. A shell casing is
 	// scenery, and scenery does not block a doorway.
 	velocity mgl32.Vec3
+	// facing is which way it is pointed, on the floor plane, which is what
+	// decides which of a frame's eight views is drawn. ZDoom keeps it as the
+	// actor's angle: set when the thing is launched and kept afterwards, so a
+	// casing that has come to rest still points the way it was thrown rather
+	// than snapping to whatever the last frame's velocity happened to be.
+	facing mgl32.Vec2
 	// resting is set once it has landed and stopped moving, and dead once
 	// something has killed it - A_Die does nothing to a thing that is already
 	// dead, which is what lets a Death state run past its own A_Die.
@@ -174,6 +181,7 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 
 	g.Sprites.Add(sprite)
 	live.velocity = g.launchVelocity(actor, op, direction, spawner)
+	live.face(live.velocity, mgl32.Vec2{direction.X(), direction.Z()})
 
 	live.showCurrentFrame(g)
 	// ZDoom plays a missile's SeeSound from P_SpawnMissile, which is why it is
@@ -520,6 +528,8 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 		live.velocity = live.velocity.Add(mgl32.Vec3{0, float32(-gravity * elapsed), 0})
 	}
 
+	live.face(live.velocity, live.facing)
+
 	transform := live.object.Transform()
 	from := transform.GetPosition()
 	to := from.Add(live.velocity.Mul(float32(elapsed)))
@@ -727,6 +737,22 @@ const (
 	gravity     = 9.8
 )
 
+// face points the thing along a direction, if there is one to point along. A
+// velocity of nothing much - a puff of smoke hanging in the air, a casing that
+// has landed - leaves it pointed where it already was, which is what ZDoom's
+// angle does: it is set when a thing is spawned and by whatever moves it, and
+// nothing resets it to zero when the thing stops.
+func (live *WorldActor) face(velocity mgl32.Vec3, fallback mgl32.Vec2) {
+	flat := mgl32.Vec2{velocity.X(), velocity.Z()}
+	if flat.Len() < 0.0001 {
+		flat = fallback
+	}
+	if flat.Len() < 0.0001 {
+		return
+	}
+	live.facing = flat.Normalize()
+}
+
 // showCurrentFrame points the sprite at whatever the script is showing, and
 // sizes the quad to the picture, which a packed atlas needs because its frames
 // are all different.
@@ -738,6 +764,21 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 	if step == nil || sprite == "" {
 		live.sprite.Hide()
 		return
+	}
+	// A frame the mod ships all eight views of is drawn from the one the
+	// observer is standing in. What the step names is the view from behind, so
+	// a frame with no others - which is most of them - is unaffected, and a
+	// rocket flying away from the player still shows its exhaust.
+	//
+	// ponytail: the view is chosen here, once a frame, rather than per draw
+	// call in the sprite pass. That means a second viewpoint in the same frame
+	// - the shadow pass - draws the angle the player sees. These are rockets
+	// and casings a few pixels across and they cast no shadows anyway; doing
+	// it properly means per-direction quad sizes and pivots in the batch,
+	// because Doom's rotations are not all the same width.
+	if views := live.data.Views[sprite]; len(views) == core.ViewDirections {
+		sprite = views[core.GetViewDirection(
+			g.Camera.GetPosition(), live.object.Transform().GetPosition(), live.facing)]
 	}
 	index, known := g.sharedSpriteIndex[sprite]
 	if !known {

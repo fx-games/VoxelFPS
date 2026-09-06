@@ -156,6 +156,10 @@ func main() {
 
 		result.Weapon.ID = *prefix + uniqueID(taken, result.Weapon.ID, name)
 
+		if collapsed := assets.CollapsedViews(result); len(collapsed) > 0 {
+			fmt.Fprintf(os.Stderr, "%s: only one view of %s\n",
+				result.Weapon.ID, strings.Join(collapsed, ", "))
+		}
 		missingSprites, missingSounds := assets.MissingAssets(result)
 		if len(missingSprites)+len(missingSounds) > 0 {
 			if *strictAssets {
@@ -437,13 +441,8 @@ func pruneStores(weaponsDir string) (actors, sprites int, err error) {
 	}
 	for _, actor := range library.Actors {
 		for _, one := range actor {
-			for _, step := range one.States.Steps {
-				if step.Sprite != "" && !wep.IsKeepMarker(step.Sprite) {
-					wantedSprites[step.Sprite+".png"] = true
-				}
-				for _, name := range step.SpriteAlt {
-					wantedSprites[name+".png"] = true
-				}
+			for _, name := range one.Pictures() {
+				wantedSprites[name+".png"] = true
 			}
 		}
 	}

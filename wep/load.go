@@ -207,6 +207,20 @@ func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]boo
 		}
 		problems = append(problems,
 			checkStates(id, "actor "+actor.Name, actor.States, sharedSprites, actors, weapon.Sounds, dir)...)
+		// The other seven angles are not named by any step, so checkStates
+		// never sees them.
+		for name, views := range actor.Views {
+			if len(views) != ViewDirections {
+				problems = append(problems, fmt.Sprintf("%s/: actor %s: %s has %d views, want %d",
+					id, actor.Name, name, len(views), ViewDirections))
+			}
+			for _, view := range views {
+				if !sharedSprites[view] {
+					problems = append(problems, fmt.Sprintf("%s/: actor %s: %s is a view of %s, and there is no such picture",
+						id, actor.Name, view, name))
+				}
+			}
+		}
 	}
 
 	if len(problems) > 0 {

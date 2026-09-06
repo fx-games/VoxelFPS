@@ -30,11 +30,11 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 	}
 	// The pictures first, because what they end up called is part of what an
 	// actor says, and an actor is named by the hash of what it says.
-	renamed, err := writeSharedSprites(result, assets, weaponsDir)
+	renamed, views, err := writeSharedSprites(result, assets, weaponsDir)
 	if err != nil {
 		return err
 	}
-	renameActorSprites(result, renamed)
+	renameActorSprites(result, renamed, views)
 	if err := writeActors(result, weaponsDir); err != nil {
 		return err
 	}
@@ -110,39 +110,132 @@ func writeActors(result *Result, weaponsDir string) error {
 // name gave every Brutal Doom weapon Final Doomer's smoke, two and a half
 // times too big, purely because Final Doomer happened to be migrated last.
 // Two mods that really do ship the same bytes still share one file.
-func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) (map[string]string, error) {
+func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) (map[string]string, map[string][]string, error) {
 	if len(result.ActorSprites) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	store := filepath.Join(weaponsDir, wep.SpritesDir)
 	if err := os.MkdirAll(store, 0o755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	renamed := make(map[string]string, len(result.ActorSprites))
+	views := make(map[string][]string)
 	for _, name := range result.ActorSprites {
+		if angles, several := assets.SpriteViews(name); several {
+			stored, err := writeSpriteViews(name, angles, assets, store)
+			if err != nil {
+				return nil, nil, err
+			}
+			views[name] = stored
+			// What a step names is still the view from behind, so a frame that
+			// is never looked at from anywhere else draws exactly what it drew
+			// before this. The other seven hang off the actor.
+			renamed[name] = stored[backView]
+			continue
+		}
 		file, ok := assets.Sprite(name)
 		if !ok {
 			continue // already counted as missing, and already blanked
 		}
 		data, err := assets.ReadAll(file)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		encoded, err := asPNG(data, name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		stored := SharedSpriteName(name, encoded)
 		renamed[name] = stored
-		target := filepath.Join(store, stored+".png")
-		if _, err := os.Stat(target); err == nil {
-			continue // the same picture is already there, by definition
+		if err := writeSharedSprite(store, stored, encoded); err != nil {
+			return nil, nil, err
 		}
-		if err := os.WriteFile(target, encoded, 0o644); err != nil {
+	}
+	return renamed, views, nil
+}
+
+// backView is where in the eight the picture a step names lives: the view from
+// behind, which is what the player who threw the thing is looking at.
+const backView = 4
+
+// writeSpriteViews puts all eight angles of one frame in the store and returns
+// what each went in as, in view-direction order. Three of the eight are
+// commonly the mirrored half of a NAMEFRFR lump, and those are written out
+// mirrored here rather than flipped at draw time: it is the same picture every
+// frame it is drawn, so turning it round once at migration time costs nothing
+// and keeps the draw path unaware that rotations exist.
+//
+// Each view goes in under its own rotation - MISLE1 through MISLE8 - because
+// the store is keyed by name and the eight are eight different pictures.
+func writeSpriteViews(name string, angles [Views]SpriteView, assets *AssetIndex, store string) ([]string, error) {
+	stored := make([]string, Views)
+	for i, angle := range angles {
+		data, err := assets.ReadAll(angle.File)
+		if err != nil {
+			return nil, err
+		}
+		viewName := name[:5] + string(rune('1'+i))
+		encoded, err := asPNG(data, viewName)
+		if err != nil {
+			return nil, err
+		}
+		if angle.Mirror {
+			if encoded, err = mirrorPNG(encoded, viewName); err != nil {
+				return nil, err
+			}
+		}
+		stored[i] = SharedSpriteName(viewName, encoded)
+		if err := writeSharedSprite(store, stored[i], encoded); err != nil {
 			return nil, err
 		}
 	}
-	return renamed, nil
+	return stored, nil
+}
+
+// writeSharedSprite puts one picture in the store. The store is keyed by the
+// hash of what is in the file, so a picture that is already there is the same
+// picture and there is nothing to do.
+func writeSharedSprite(store, stored string, encoded []byte) error {
+	target := filepath.Join(store, stored+".png")
+	if _, err := os.Stat(target); err == nil {
+		return nil
+	}
+	return os.WriteFile(target, encoded, 0o644)
+}
+
+// mirrorPNG turns a picture round, hotspot and all. The hotspot is measured
+// from the left edge, so mirrored it is measured from what used to be the
+// right one - GZDoom does the same arithmetic on a mirrored rotation - and a
+// picture that carried no hotspot still carries none.
+func mirrorPNG(data []byte, name string) ([]byte, error) {
+	decoded, _, err := decodePicture(data, name)
+	if err != nil {
+		return nil, err
+	}
+	bounds := decoded.Bounds()
+	flipped := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	for y := 0; y < bounds.Dy(); y++ {
+		for x := 0; x < bounds.Dx(); x++ {
+			flipped.Set(bounds.Dx()-1-x, y, decoded.At(bounds.Min.X+x, bounds.Min.Y+y))
+		}
+	}
+	var out bytes.Buffer
+	if err := png.Encode(&out, flipped); err != nil {
+		return nil, err
+	}
+	grabX, grabY, has := png_chunks.ReadGrabOffset(bytes.NewReader(data))
+	keptX, keptY := tpack.OffsetsFromPNG(data)
+	if !has || grabX != keptX || grabY != keptY {
+		// No hotspot, or one the atlas packer throws away as implausible.
+		// Either way there is nothing to carry over.
+		return out.Bytes(), nil
+	}
+	var withGrab bytes.Buffer
+	if err := png_chunks.InjectGrabChunk(bytes.NewReader(out.Bytes()), &withGrab,
+		bounds.Dx()-grabX, grabY); err != nil {
+		return nil, err
+	}
+	return withGrab.Bytes(), nil
 }
 
 // SharedSpriteName is what a frame is called in the shared store: its own name,
@@ -157,7 +250,7 @@ func SharedSpriteName(name string, picture []byte) string {
 // pictures actually went into the store under. Only the spawned actors: a
 // weapon's own frames live in its own atlas, where a bare name is unique
 // because the folder holds one mod's weapon.
-func renameActorSprites(result *Result, renamed map[string]string) {
+func renameActorSprites(result *Result, renamed map[string]string, views map[string][]string) {
 	if len(renamed) == 0 {
 		return
 	}
@@ -169,16 +262,28 @@ func renameActorSprites(result *Result, renamed map[string]string) {
 	for _, actor := range result.Actors {
 		for i := range actor.States.Steps {
 			step := &actor.States.Steps[i]
-			if stored, ok := renamed[step.Sprite]; ok {
-				step.Sprite = stored
+			carry := func(name string) string {
+				stored, ok := renamed[name]
+				if !ok {
+					return name
+				}
+				// The other seven angles ride on the actor, keyed by the name
+				// its own step names, so what draws it needs nothing but the
+				// picture it was already going to draw and a direction.
+				if angles, several := views[name]; several {
+					if actor.Views == nil {
+						actor.Views = make(map[string][]string)
+					}
+					actor.Views[stored] = angles
+				}
+				return stored
 			}
+			step.Sprite = carry(step.Sprite)
 			// A keep marker keeps its own name - it is punctuation, not a
 			// picture - but the names it can land on are pictures, and they
 			// went into the store under the store's names.
 			for j, name := range step.SpriteAlt {
-				if stored, ok := renamed[name]; ok {
-					step.SpriteAlt[j] = stored
-				}
+				step.SpriteAlt[j] = carry(name)
 			}
 		}
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/memmaker/goray/wep"
 	_ "image/png"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
@@ -49,6 +50,7 @@ func main() {
 	shotEvery := flag.Int("shot-every", 6, "ticks between screenshots when more than one is asked for")
 	shotCount := flag.Int("shot-count", 1, "how many screenshots to take, numbered, which is how an animation is reviewed")
 	shotFPS := flag.Float64("shot-fps", 60, "the frame time a capture pretends every frame took, so two runs land on the same animation frame")
+	timeFactor := flag.Float64("time-factor", 1, "scale how fast time flows: 0.5 runs the whole world at half speed, 2 at double")
 	shotPitch := flag.Float64("pitch", 0, "start looking this many degrees down, for a capture of something on the floor")
 	autoWalk := flag.Bool("walk", false, "hold the forward key down, for looking at anything that only happens while moving")
 	autoCycle := flag.Float64("cycle", 0, "switch to the next weapon every this many seconds, for walking the whole folder in one run")
@@ -106,6 +108,7 @@ func main() {
 		fmt.Sscanf(*autoTap, "%d,%d", &game.tapDown, &game.tapUp)
 		game.autoWalk = *autoWalk
 		game.autoCycle = *autoCycle
+		game.startTimeFactor = *timeFactor
 		game.startWeapon = *startWeapon
 		game.shot = shotRun{
 			path: *shot, first: *shotFirst, every: *shotEvery, count: *shotCount,
@@ -129,9 +132,10 @@ func main() {
 // NewGame takes a stress config, or nil for a normal run.
 func NewGame(stress *StressConfig) *Game {
 	return &Game{
-		isMouseCursorCaptured: true,
-		stressConfig:          stress,
-		currentGuiScaleIndex:  defaultGuiScaleIndex,
+		isMouseCursorCaptured:  true,
+		stressConfig:           stress,
+		currentGuiScaleIndex:   defaultGuiScaleIndex,
+		currentTimeFactorIndex: defaultTimeFactorIndex,
 	}
 }
 
@@ -173,6 +177,8 @@ type Game struct {
 	shadowDepthBias        float32
 	currentResolutionIndex int
 	currentGuiScaleIndex   int
+	currentTimeFactorIndex int
+	startTimeFactor        float64
 	currentWindowModeIndex int
 
 	isShadowTest bool
@@ -272,6 +278,10 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 	g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
 	g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
+
+	if g.startTimeFactor > 0 {
+		g.setTimeFactor(nearestTimeFactorIndex(g.startTimeFactor))
+	}
 
 	// Weapons and the number keys that select them are data, in the weapons
 	// folder. A folder that does not load stops the game with every problem it
@@ -600,7 +610,7 @@ func (g *Game) printDebugInfo() {
 		core.NewTableRow("Map", fmt.Sprintf("%d tris", g.CubeMap.TriangleDrawCount()), fmt.Sprintf("%d", g.CubeMap.DrawCalls())),
 		core.NewTableRow("GUI", fmt.Sprintf("%d tris", guiTrisDrawn), fmt.Sprintf("%d", guiDrawCalls)),
 		core.NewTableRow("Sprites", fmt.Sprintf("%d tris", spriteTrisDrawn), fmt.Sprintf("%d", spriteDrawCalls)),
-		core.NewTableRow("Spawned", fmt.Sprintf("%d live", g.LiveActorCount()), weaponName(g.currentWeapon())),
+		core.NewTableRow("Spawned", fmt.Sprintf("%d live", g.LiveActorCount()), weaponID(g.currentWeapon())),
 		core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
 		core.NewTableRow("Shadows", fmt.Sprintf("%d/%d lit", shadowPasses, litLights), fmt.Sprintf("gen %d", meshGen)),
 	}
@@ -608,13 +618,15 @@ func (g *Game) printDebugInfo() {
 	g.PrintMulti(debugLines)
 }
 
-// weaponName is what to call the weapon in hand on the overlay, or nothing when
-// the player is empty handed.
-func weaponName(weapon *Weapon) string {
+// weaponID names the weapon in hand on the overlay by its folder name, not its
+// tag, or nothing when the player is empty handed. Five weapons are tagged
+// "Super Shotgun"; only the id says which of them is in your hands, and the id
+// is what -weapon takes to get it back.
+func weaponID(weapon *Weapon) string {
 	if weapon == nil {
 		return ""
 	}
-	return weapon.DisplayName()
+	return weapon.Data.ID
 }
 
 func vec3String(v mgl32.Vec3) string {
@@ -947,6 +959,7 @@ func (g *Game) openWizardMenu() {
 
 		quads.NewGuiOptionList("Window", resolutionOptions, &g.currentResolutionIndex, g.setWindowResolution),
 		quads.NewGuiOptionList("GUI Scale", guiScaleLabels, &g.currentGuiScaleIndex, g.setGuiScale),
+		quads.NewGuiOptionList("Time Factor", timeFactorLabels, &g.currentTimeFactorIndex, g.setTimeFactor),
 	}
 
 	// Only macOS puts a menu bar and Dock over a borderless window, so only there is
@@ -1018,6 +1031,38 @@ const defaultGuiScaleIndex = 2
 func (g *Game) setGuiScale(index int) {
 	g.SetGuiScale(guiScaleSteps[index])
 	g.Toast(fmt.Sprintf("GUI scale: %s", guiScaleLabels[index]))
+}
+
+// timeFactorSteps are the time factors the menu offers. 1.0 is real time; below it
+// the whole world - movement, animation, weapons - runs slower, above it faster.
+var timeFactorSteps = []float64{0.1, 0.25, 0.5, 1.0, 2.0, 4.0}
+
+var timeFactorLabels = func() []string {
+	labels := make([]string, len(timeFactorSteps))
+	for i, factor := range timeFactorSteps {
+		labels[i] = strings.TrimSuffix(fmt.Sprintf("%.2f", factor), "0") + "x"
+	}
+	return labels
+}()
+
+// defaultTimeFactorIndex is the entry for 1.0.
+const defaultTimeFactorIndex = 3
+
+// nearestTimeFactorIndex is how the -time-factor flag meets the menu: the flag takes
+// any number, the menu only holds these, so it opens on the step actually running.
+func nearestTimeFactorIndex(factor float64) int {
+	nearest := defaultTimeFactorIndex
+	for i, step := range timeFactorSteps {
+		if math.Abs(step-factor) < math.Abs(timeFactorSteps[nearest]-factor) {
+			nearest = i
+		}
+	}
+	return nearest
+}
+
+func (g *Game) setTimeFactor(index int) {
+	g.TimeFactor = timeFactorSteps[index]
+	g.Toast(fmt.Sprintf("Time factor: %s", timeFactorLabels[index]))
 }
 
 func (g *Game) setWindowMode(index int) {

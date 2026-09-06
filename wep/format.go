@@ -59,6 +59,11 @@ var EngineDecalSprites = []string{
 	BulletChipSprites[3], BulletChipSprites[4], BloodSplatSprite,
 }
 
+// ViewDirections is how many angles a frame is drawn from, and the length of
+// an Actor.Views list. It is core.ViewDirections, repeated here because the
+// compiled format cannot import the engine.
+const ViewDirections = 8
+
 // The impact kinds a puff can compile to. The migration's policy decides which
 // ZDoom puff actor becomes which; the engine decides what each one looks like.
 // Both ends name them from here rather than writing the string twice.
@@ -518,6 +523,15 @@ type Actor struct {
 	// its own anywhere in Fire, and its whole firing sound is one SeeSound on
 	// the ball it throws.
 	SeeSound string `json:"see_sound,omitempty"`
+	// Views are the other seven angles of a frame this actor is drawn with,
+	// for the frames the mod ships all eight of: a rocket, a thrown axe, a
+	// tracer. Keyed by the name a step names, which is the view from behind,
+	// and each value is the eight names in view-direction order - 0 the front,
+	// 4 the back, running round the thing's own left, which is the order
+	// core.GetViewDirection reports. A frame the mod draws once for every
+	// angle is not in here at all.
+	Views map[string][]string `json:"views,omitempty"`
+
 	// Impact is what this actor does where a hitscan lands, when it is used as
 	// a puff. Empty for actors that are only drawn.
 	Impact string `json:"impact,omitempty"`
@@ -525,6 +539,28 @@ type Actor struct {
 	// provides it: a plain bullet puff, an exploding barrel. It has no states
 	// of its own here, and the engine supplies the behaviour.
 	Stock bool `json:"stock,omitempty"`
+}
+
+// Pictures is every name in the shared store this actor can draw: the frames
+// its steps name, the ones a keep marker can land on, and the other seven
+// angles of any frame the mod shipped all eight of.
+//
+// One list rather than three walks of the same actor, because the two callers
+// - the load check and the store sweep - have to agree about it. They did not
+// when Views was added, and the sweep deleted seven views of every frame
+// because no step named them.
+func (a *Actor) Pictures() []string {
+	var names []string
+	for _, step := range a.States.Steps {
+		if step.Sprite != "" && !IsKeepMarker(step.Sprite) {
+			names = append(names, step.Sprite)
+		}
+		names = append(names, step.SpriteAlt...)
+	}
+	for _, views := range a.Views {
+		names = append(names, views...)
+	}
+	return names
 }
 
 // Weapon is one compiled weapon: weapon.json.

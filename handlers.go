@@ -146,7 +146,7 @@ func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	// object hit has no face, so the decals go on the wall behind it instead.
 	surfaceNormal := hit.HitInfo.Side.AsDirection().ToVec3()
 	g.createImpactEffects(hitScanEffect.Weapon, hitScanEffect.Shot, hit.HitObject, hitPos, surfaceNormal)
-	if hit.HitObject != nil {
+	if hit.HitObject != nil && hitScanEffect.Shot.Damage > 0 {
 		g.splatterBehind(hitPos, hitScanEffect.Direction)
 		g.damage(hit, hitScanEffect.Shot.Damage)
 	}
@@ -318,7 +318,12 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 		}
 		return
 	}
-	if hitObject != nil {
+	// A shot that does no damage is a sight, not a shot: the Blacktail's laser
+	// pointer is a hitscan fired every tic whose whole job is to put its puff
+	// on whatever the barrel is aimed at. Held on a body it bled thirty
+	// particles a tic, forever. It still spawns its puff below, so the red dot
+	// lands on a barrel the same as it lands on a wall.
+	if hitObject != nil && shot.Damage > 0 {
 		g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		return
 	}
@@ -339,12 +344,16 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 // name for the decal. SpawnShootDecal reads the shooter's ready weapon first
 // and only falls back on the puff, and +NODECAL on the puff stops both.
 //
-// A weapon that names nothing and a puff that names nothing mark nothing.
-// That is not an omission in the mods: ZDoom's own BulletPuff carries no
-// decal, Doom's weapons carry "BulletChip" themselves, and the Blacktail's
+// A shot that names no puff at all gets GZDoom's own BulletPuff, and that
+// carries `Decal "BulletChip"` - so a plain hitscan chips the wall even when
+// neither the weapon nor the mod says a word about decals. The Dual 92s are
+// the whole of `A_FireBullets(2.5, 2.5, -1, 5)`, name nothing, and left the
+// wall unmarked until this read the default the way ZDoom does.
+//
+// A puff the mod defines decides for itself, which is how the Blacktail's
 // laser pointer - a hitscan fired every single tic to put a red dot on the
-// wall - says `Decal "None"` on its puff precisely so it does not chip the
-// wall thirty five times a second.
+// wall - says `Decal "None"` and does not chip the wall thirty five times a
+// second.
 func (g *Game) decalFor(weapon *Weapon, puffActor string) string {
 	if weapon == nil {
 		return ""
@@ -356,10 +365,10 @@ func (g *Game) decalFor(weapon *Weapon, puffActor string) string {
 	if weapon.Data.Decal != "" {
 		return weapon.Data.Decal
 	}
-	if puff != nil {
-		return puff.Decal
+	if puff == nil || puff.Stock {
+		return "BulletChip"
 	}
-	return ""
+	return puff.Decal
 }
 
 // leavesABulletHole says whether a decal by that name is one this engine has a

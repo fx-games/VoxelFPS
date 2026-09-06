@@ -208,6 +208,16 @@ func (s *Source) Close() error { return s.close() }
 // Names lists every file in the source, in the order it was found.
 func (s *Source) Names() []string { return s.names }
 
+// LayerOf is which of the stacked sources a name came from: 0 is the first
+// location given to OpenSources, and the ones layered in underneath it count
+// up from there. It is how a caller tells a mod's own lump from the base
+// game's, which matters because the two are searched in opposite directions -
+// see NewAssetIndex.
+func (s *Source) LayerOf(name string) int {
+	found, _ := s.find(name)
+	return found.layer
+}
+
 // Resolve turns a name as a script writes it into the real path in the source,
 // trying an exact match, then case-insensitive, then case-insensitive ignoring
 // the extension.

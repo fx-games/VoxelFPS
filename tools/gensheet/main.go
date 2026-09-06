@@ -2,7 +2,7 @@
 // weapons that were never in a Doom mod.
 //
 //	go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
-//	    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 2
+//	    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 3
 //
 // The format does not care where a weapon came from, and this is the proof: what
 // it writes is the same weapon.json the migration writes, only by hand.
@@ -31,7 +31,7 @@ func main() {
 	size := flag.String("size", "64x64", "one frame's size, as WxH")
 	frames := flag.String("frames", "", "the frames of the firing animation, in order, by index")
 	tics := flag.Int("tics", 2, "how long each firing frame lasts")
-	scale := flag.Float64("scale", 1, "how much to magnify the sprites")
+	scale := flag.Int("scale", 1, "magnify every frame this many times, nearest neighbour")
 	damage := flag.Int("damage", 5, "damage per shot")
 	outDir := flag.String("out", "weapons", "the weapons folder to write into")
 	flag.Parse()
@@ -61,12 +61,16 @@ func main() {
 			(index%perRow+1)*frameWidth, (index/perRow+1)*frameHeight,
 		).Add(sheetImage.Bounds().Min)
 		name := fmt.Sprintf("%s%c0", strings.ToUpper(*prefix), 'A'+rune(position))
+		frame := magnified(cropped(sheetImage, rect), *scale)
+		hotspotX, hotspotY := frameHotspot(frame.Bounds().Dx(), frame.Bounds().Dy())
 		names = append(names, name)
-		images = append(images, tpack.NamedImage{Image: cropped(sheetImage, rect), Name: name})
+		images = append(images, tpack.NamedImage{
+			Image: frame, Name: name, OffsetX: hotspotX, OffsetY: hotspotY,
+		})
 	}
 
 	must(wep.WriteAtlas(images, filepath.Join(dir, wep.AtlasFile)))
-	weapon := buildWeapon(*id, *tag, names, *tics, *scale, *damage, *sheet)
+	weapon := buildWeapon(*id, *tag, names, *tics, *damage, *sheet)
 	must(wep.WriteJSON(filepath.Join(dir, wep.WeaponFile), weapon))
 	fmt.Fprintf(os.Stderr, "wrote %s: %d frames\n", dir, len(names))
 }
@@ -74,7 +78,7 @@ func main() {
 // buildWeapon writes out the smallest weapon that works: an idle frame that
 // accepts the trigger, a firing animation that goes off once and comes back,
 // and the raise and lower a weapon needs to be swapped in and out.
-func buildWeapon(id, tag string, names []string, tics int, scale float64, damage int, sheet string) *wep.Weapon {
+func buildWeapon(id, tag string, names []string, tics, damage int, sheet string) *wep.Weapon {
 	idle := names[0]
 	states := wep.StateMachine{Labels: map[string]int{}}
 
@@ -118,7 +122,7 @@ func buildWeapon(id, tag string, names []string, tics int, scale float64, damage
 		Format: wep.Format,
 		ID:     id,
 		Tag:    tag,
-		Render: wep.Render{Scale: [2]float64{scale, scale}, Alpha: 1},
+		Render: wep.Render{Scale: [2]float64{1, 1}, Alpha: 1},
 		States: states,
 		Provenance: wep.Provenance{
 			Source:     sheet,
@@ -127,6 +131,49 @@ func buildWeapon(id, tag string, names []string, tics int, scale float64, damage
 			Tool:       wep.Format,
 		},
 	}
+}
+
+// frameHotspot is the hotspot every vanilla Doom weapon frame carries, given to
+// a frame that has none: centred across Doom's 320x200 weapon space, with its
+// bottom edge on the line at 168 that the status bar used to cover.
+//
+// A grid sheet has no hotspot to read. One rides in a picture's own grAb chunk
+// and a grid is one picture with no chunk, so every frame cut out of it comes
+// out zero - and zero puts a frame's top left corner in the middle of the
+// space, which is where the Blake Stone pistol was: a thumbnail up in the left
+// of the screen.
+//
+// 168 rather than 200 because the ready state holds a weapon at psy=32, Doom's
+// WEAPONTOP, and 32 + 168 is 200: a frame anchored on that line comes to rest
+// with its bottom edge on the bottom of the screen, which is where a weapon
+// sits. Anchoring at 200 instead hangs it 32 units lower and the hand goes off
+// the bottom.
+func frameHotspot(width, height int) (x, y int) {
+	const spaceWidth, weaponBottom = 320, 168
+	return width/2 - spaceWidth/2, height - weaponBottom
+}
+
+// magnified blows a frame up by a whole number of pixels each way, nearest
+// neighbour, which is the only enlargement that leaves pixel art as pixel art.
+//
+// It happens here rather than at draw time because there is nowhere at draw
+// time to put it: every other weapon in the folder is authored at the size it
+// is drawn, and the engine has no per-weapon magnification to add one for this
+// sheet alone. A 64x64 Wolf3D tile is a fifth of the width of Doom's weapon
+// space, so it is enlarged once, into the folder, and comes out an ordinary
+// weapon.
+func magnified(source image.Image, times int) image.Image {
+	if times <= 1 {
+		return source
+	}
+	bounds := source.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, bounds.Dx()*times, bounds.Dy()*times))
+	for y := 0; y < bounds.Dy()*times; y++ {
+		for x := 0; x < bounds.Dx()*times; x++ {
+			out.Set(x, y, source.At(bounds.Min.X+x/times, bounds.Min.Y+y/times))
+		}
+	}
+	return out
 }
 
 // cropped cuts one frame out of the sheet, into an image whose own origin is
