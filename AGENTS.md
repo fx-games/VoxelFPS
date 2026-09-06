@@ -60,16 +60,11 @@ The flags:
 
 **A capture is deterministic.** `-shot-fps` makes every frame advance the world
 by the same amount whatever the machine took to draw it, so tick 120 of one run
-holds the same animation frame as tick 120 of the next. That is what makes a
-before-and-after comparison mean something; without it a faster machine lands
-on a different frame and every diff looks like a change. The debug overlay and
-the minimap are switched off for the run so they are not in the picture.
-
-On a hidpi display the PNG is the framebuffer, not the window: a 640x480 window
-writes a 1280x960 file.
-
-F12 still saves `screenshot00.png` while playing, for the times a capture needs
-a place you have to walk to.
+holds the same animation frame as tick 120 of the next - what makes a
+before-and-after comparison mean something. The debug overlay and the minimap
+are switched off for the run so they are not in the picture. On a hidpi
+display the PNG is the framebuffer, not the window: a 640x480 window writes a
+1280x960 file. F12 still saves `screenshot00.png` while playing.
 
 ## Seeing why a weapon stops working: DEBUG_WEAPON
 
@@ -81,17 +76,15 @@ next to everything it is carrying that has a capacity:
 ```
 
 A weapon that has gone invisible or will not fire is a weapon whose script has
-walked somewhere unexpected, and this is how you see which state. A counter
-sitting at zero next to a state that keeps jumping away is a weapon waiting on
-something nothing gives it. `shots` next to a known number of simulated seconds
-is a rate of fire.
+walked somewhere unexpected. A counter sitting at zero next to a state that
+keeps jumping away is a weapon waiting on something nothing gives it.
 
 ## Seeing why an effect looks wrong: DEBUG_ACTORS
 
-What a muzzle smoke or a shell casing looks like is decided by five numbers out
-of five different places - the picture, the actor's scale, its alpha, its render
-style and the light where it stands. A screenshot says it looks wrong; this says
-which of the five it is.
+What a muzzle smoke or a shell casing looks like is decided by five numbers -
+the picture, the actor's scale, its alpha, its render style and the light
+where it stands. A screenshot says it looks wrong; this says which of the
+five it is.
 
 ```bash
 DEBUG_ACTORS=1 go run . -weapon bd_chaingun -autofire -shot /tmp/s.png -shot-at 129 2>&1 |
@@ -102,12 +95,11 @@ DEBUG_ACTORS=1 go run . -weapon bd_chaingun -autofire -shot /tmp/s.png -shot-at 
 [actor] HitpuffSmoke SMOKA0 at=[4.5 1.4 8] size=1.13x1.15 scale=0.70 alpha=0.40 style="translucent" emissive=0.00 baked=8
 ```
 
-A negative size means a script wrote a negative scale and something forgot that
-ZDoom reads that as a mirror. `baked=0` on something standing in a lit room
-means it is being lit as if it were in the dark. A size in the tens means the
-pixels-per-unit conversion is wrong for that sprite. And `at=` next to the
-player's own position says whether a spawn landed where the call asked or in
-the camera's lap.
+A negative size means a script wrote a negative scale (ZDoom reads that as a
+mirror). `baked=0` on something standing in a lit room means it is lit as if
+in the dark. A size in the tens means the pixels-per-unit conversion is wrong
+for that sprite. `at=` next to the player's own position says whether a spawn
+landed where the call asked or in the camera's lap.
 
 ## Where the weapons come from
 
@@ -197,116 +189,127 @@ Cut roughly half of every bd_ weapon's own states and 55-90% of its own
 `sprites.png` (43 weapons, 296MB folder down to 240MB). `tools/firecheck`
 still reports all 43 firing after.
 
+**Some mods hide reload behind alt-fire.** Final Doomer's own pistols (five of
+them - `fd_pistol` and friends) never got a real `Reload` label; the script
+reloads from `AltFire` instead and disables the button once the magazine is
+full. `zdwep.Result.UnifyReloadOnAltFire` detects this by behavior, not name -
+`AltFire` reachable, gives back the weapon's own ammo, never fires or zooms
+anywhere in its own closure - and aliases `Reload` onto the same steps, moving
+`AllowAlt` to `AllowReload` wherever the mod had granted it. A weapon with a
+real secondary fire (a scope, a charged shot) never matches and is untouched.
+Runs once, in `genweapons`, right after `PruneDeadStates`.
+
+## Adding something to the map for picking
+
+Two different things get added: a **weapon** (already migrated, see above) or
+a **scenery piece** (furniture - see the next section for its own folder
+format). Getting either one pickable in the world is a third, separate step.
+
+**A weapon needs nothing map-specific.** Every weapon in `weapons/` is
+automatically racked by `spawnWeaponRange` the moment the `WeaponRange` map
+entity loads (`assets/raymap.ldtk`, the room east of spawn) - a rack of
+shelves per tile, a weapon and its own ammo side by side on a board. Add a
+weapon to the folder (migrate it, or hand-write a `weapon.json`) and it shows
+up there on the next run; nothing else has to change. It only needs pickup art
+to look right (`icon`/`ammo_icon`, or `AmmoLine`/`DisplayName` for the text) -
+see "A weapon has a picture of itself" further down.
+
+**Anything else that should be pickable - a new kind of pickup, not a weapon -
+needs the same four pieces `spawnPickup` (`pickup.go`) wires up for a weapon:**
+
+1. A sprite (`quads.NewSpriteFloor`), sized off the picture's own measured box
+   the way `pickupSize` does, not guessed.
+2. A `PhysicsComponent` with `PassThrough = true`, added to the physics system.
+   `PassThrough` is what makes a thing selectable and walkable-through at once:
+   on the grid, so the raycast that drives the selection beam and `Show
+   AABBs`/`Show OBBs` finds it, but skipped by the collision solver, so the
+   player never bumps into it. Never call `PhysicsComponent.OBB`/the plain
+   AABB path for a *stack* of pickups sharing a spot - only one collider comes
+   back per ray unless `rayCast`'s per-cell nearest-first logic (`main.go`)
+   already covers the case.
+3. An entry in `g.pickupByObject[object] = pickup`, which is what
+   `hoveredObj`/`hoveredPickup` reads to outline it, name it, and hand `E` to
+   `take()`.
+4. A `take()` case that does whatever picking it up means - give an item,
+   flip a flag, whatever - and clears the map entry and kills the object.
+
+**Furniture is not itself pickable.** `Game.furniture` is every scenery piece
+in the world, and `hoveredObj` drops anything in it before the selection beam
+or the entity menu ever sees it - a shelf is somewhere to *put* pickups, not
+one. If a new piece of scenery should hold things (like the shelves do), give
+it colliders that leave an open front (see "Where the furniture comes from")
+so the pickup beam can reach in.
+
+**In intentional mode** (the F1-menu default), that is the whole mechanism -
+the ordinary world raycast plus `g.pickupByObject`. Nothing about the beam
+itself is pickup-specific.
+
 ## Where the furniture comes from
 
 `scenery/` is the weapons folder's shape applied to what a room is furnished
-with: one folder per piece, holding `mesh.glb` and a `scenery.json`. There is no
-list of pieces in Go and there must not be one - a map entity's `MeshName` and
-the editor's `Place Scenery` menu both go through `Game.scenery`, which is
-whatever `loadScenery` found on disk.
+with: one folder per piece, holding `mesh.glb` and a `scenery.json` (`name`
+and `colliders`). There is no list of pieces in Go and there must not be one -
+a map entity's `MeshName` and the editor's `Place Scenery` menu both go
+through `Game.scenery`, whatever `loadScenery` found on disk. Only the JSON is
+read at startup; the model loads the first time something spawns one.
 
-**Only the JSON is read at startup.** `MeshDrawer.loadGLTF` caches by filename,
-so a model is loaded the first time something spawns one and never again; a
-folder of scenery nobody has placed costs nothing but a stat.
+**`colliders` replaces the model's box, it does not add to it.** A piece that
+names none collides as one box around the whole model, which is what a table
+wants. A piece that names its own - stairs, shelves - replaces that:
 
-**`colliders` replaces the model's box, it does not add to it.** That is the
-whole reason the file has a body at all, and both existing cases are load-bearing:
+- **Stairs** need a box per step, or the flight is a solid wall to climb into
+  rather than up. `scenery/stairs/scenery.json` holds four boxes;
+  `stairs_test.go` walks the real physics system over them.
+- **Shelves** need an open front, or nothing standing on a board is reachable
+  by the pickup beam or by walking into it. The colliders are the two
+  uprights and the three boards, leaving the middle open.
 
-- **Stairs.** The mesh is one box to the drawer and would be one box to physics,
-  and one box is a wall. Each step has to be its own collider for the step-up to
-  have anything to climb. This used to be `stairColliders` in `stairs.go`, a
-  special case on the mesh name in `spawnEntity`; it is four boxes in
-  `scenery/stairs/scenery.json` now, and `stairs_test.go` walks the real physics
-  system over the boxes the file actually holds.
-- **Shelves.** The front has to be open or nothing standing on a board can be
-  reached - not by the selection beam, and not by walking into it. The colliders
-  are the two uprights and the three boards, so the ray to a gun on a board
-  passes through the space where the model's own bounding box would have been.
+`tools/genstairs` and `tools/genshelves` draw the same numbers their JSON
+collides with - generated because they are boxes, and because the stair rise
+has to stay under the physics system's step height.
+`TestThingsStandOnTheShelfsOwnBoards` checks the weapon range stands things at
+heights the shelf actually has a board at.
 
-`tools/genstairs` and `tools/genshelves` draw the same numbers the JSON collides
-with. They are generated because they are boxes, and because the stair rise has
-to stay under the physics system's step height. **The numbers are in two files
-and nothing checks one against the other for the stairs**; for the shelves,
-`TestThingsStandOnTheShelfsOwnBoards` checks that the heights the weapon range
-stands things at are heights the shelf actually has a board at, with room above
-for a pickup.
-
-`assets/meshes/` still holds the models that are not scenery - the torch, the
-cube, the debug human - and `Game.meshFile` is the one place that knows which
-folder a name lives in.
-
-**A piece of scenery is one thing.** One model, one GameObject, one name - and
-the boxes it collides as all belong to that object. `Scenery.colliders` binds
-them to it with `Init` rather than `SetComponent`, because a GameObject holds one
-component of a type and a shelf is five boxes: the object keeps its own, the one
-around the whole model, and these are extra shapes that answer with its name, its
-transform and its life. So the ray that hits a board reports the shelf, the
-outline is the shelf's own box, and killing a shelf takes its boxes with it.
-
-They were five GameObjects of their own first - "Shelves 0", "Shelves 3" - which
-is why looking at a shelf offered to remove one of its boards, and why the
-outline round it was drawn from a zero matrix.
-
-**Furniture is not selectable.** `Game.furniture` is every piece standing in the
-world and `hoveredObj` drops anything in it: a shelf is somewhere to put things,
-not something to pick out. The ray itself still hits it - it stops a bullet and
-it caps the pickup beam - this is the selection, not the ray.
+**A piece of scenery is one thing**, however many boxes it collides as: one
+model, one GameObject, one name. `Scenery.colliders` binds its extra boxes to
+that one object with `Init` rather than `SetComponent` (a GameObject holds one
+component of a type; a shelf is five boxes), so the ray that hits a board
+reports the shelf, the outline is the shelf's own box, and killing a shelf
+takes its boxes with it.
 
 ## Walking over a thing, and asking for it
 
-`pickupModeIndex` is Doom's rule or a deliberate one, and it is in the F1 menu:
+`pickupModeIndex` is Doom's rule or a deliberate one, and it is in the F1
+menu:
 
 - **Collision Based**, what this has always done: a flat distance test in
-  `updatePickups`, Doom's own radius, no collider. A pickup is something you walk
-  through, not something you bump into, and there are a couple of hundred of them
-  in one room.
-- **Intentional**, the default: `updateHoveredPickup` casts the same ray
-  `updateGUI` already casts and finds the nearest item it passes through, which
-  `DrawGui` outlines and names, and `E` takes.
+  `updatePickups`, Doom's own radius, no collider.
+- **Intentional**, the default: the same ray `updateGUI` already casts finds
+  the nearest pickup it passes through, `DrawGui` outlines and names it, `E`
+  takes it.
 
-The beam is a ray test of its own rather than a physics body, for the same reason
-the distance test is not one - and because a body between the shelf boards would
-be in the ray's way. **The world's own hit caps the reach**, so nothing behind a
-wall is selectable; the shelf's open front is what lets the ray in as far as the
-gun, and the shelf's uprights are what stop it where a post is in the way.
+The world's own hit caps the beam's reach, so nothing behind a wall is
+selectable, and a shelf's open front is what lets the ray in as far as a gun
+on it. `Pickup.hit` is `voxel.IntersectRayOBB` against the pickup's own
+collider under the transform that draws it - the same box `Show AABBs`/`Show
+OBBs` and the selection outline use, so what can be picked out is exactly what
+is outlined. An axis-aligned box round a billboard - what this did at first -
+reads half again as wide as the picture on a diagonal, and on a shelf what
+stands in that extra width is the next item along.
 
-`Pickup.hit` is `voxel.IntersectRayOBB` against the pickup's own collider under
-the transform that draws it - the same box `drawSelectionOutline` puts the
-brackets round, and the same one the F1 debug boxes show. So what can be picked
-out is exactly what is outlined. An axis aligned box round a billboard - which is
-what this did first - is half again as wide as the picture when you look at it
-down a diagonal, and on a shelf what stands in that extra width is the next item
-along. IntersectRayOBB gives the distance back in world units, which matters
-here: the box's transform scales it by the size of the picture.
+A pickup carries its collider but is **never given to the physics system's
+solid list** - `PassThrough` keeps it on the grid (hittable) without making it
+solid (bumpable). `SpriteDrawer.DrawAABBs` scales a sprite's debug box by the
+sprite's own size, since a sprite's box lives in the space of its own quad;
+without that a pickup a fifth of a voxel wide showed a box a whole voxel wide.
 
-A pickup carries that collider but is **never given to the physics system**. In
-this engine being in that system is what makes a thing both solid and hittable by
-the world ray, and a pickup is something you walk through. The component is there
-because it is the shape: the beam tests it, and `Show AABBs`/`Show OBBs` draw it.
-A sprite's box is in the space of its own quad, so `SpriteDrawer.DrawAABBs`
-scales it by the sprite's size - without that a pickup drawn a fifth of a voxel
-wide had a box a whole voxel wide, and everything else in the world is drawn at
-its natural size and so never showed it.
-
-The outline is `drawSelectionOutline`, which is what used to be inline in
-`DrawGui` for a hovered object. One thing is outlined at a time and the label
-belongs to whatever that is.
-
-**A pickup is the size its own picture says**, and that is measured once, by the
-migration: `wep.MeasurePickups` writes `icon_box` and `ammo_icon_box` into
-weapon.json off the opaque pixels of the art in the shared store. The runtime
-never asks the packed atlas, because asking it means reading the texture back off
-the GPU - seventy five megabytes a go, per pickup, for an answer that cannot
-change between runs. `go run ./tools/genweapons -measure` fills in a folder
-migrated before this existed; the runtime still falls back on the atlas for a
-weapon.json without one.
-
-The size is then **capped on both axes** - `pickupMaxHeight` a little under the
-shelf's shortest gap and `pickupMaxWidth` half the space between its uprights -
-because a weapon and its ammo stand side by side on one board. Both caps scale
-the whole picture: a gun squeezed on one axis reads as a different gun. It is
-also what makes a long thin gun a long thin target: a metre-long staff 11cm thick
-comes out 45cm long and 4.5cm thick, and the beam has to be on that.
+**A pickup is the size its own picture says**, measured once at migration
+time: `wep.MeasurePickups` writes `icon_box`/`ammo_icon_box` into weapon.json
+off the opaque pixels of the art, because asking the packed atlas at runtime
+means reading a texture back off the GPU. The size is then capped on both
+axes - `pickupMaxHeight` a little under the shelf's shortest gap,
+`pickupMaxWidth` half the space between its uprights - scaling the whole
+picture together, since a gun squeezed on one axis reads as a different gun.
 
 ## The two references worth reading before guessing
 
@@ -318,7 +321,7 @@ comes out 45cm long and 4.5cm thick, and the beam has to be on that.
   language `zdwep` compiles, and the wiki page for an action function says what
   its arguments mean, which is what `zdwep/policy.go` has to agree with.
 
-## How GZDoom draws a weapon, since everything here depends on it
+## How GZDoom draws a weapon
 
 A weapon is laid out in a fixed 320x200 space and that space is scaled to the
 view, so a gun is the same size on every screen. Only the height matters:
@@ -332,36 +335,29 @@ The frame's top left corner then goes at
     y = viewHeight/2 + (psy - 100 - hotspotY) * scaleY
 
 `hotspotX/Y` is the picture's own offset: the two numbers in a Doom patch's
-header, or in a PNG's `grAb` chunk. It is **not** a pivot fraction and **not** a
-delta against another frame. A vanilla weapon frame's offset is
-`(width/2 - 160, height - 168)`, which is exactly what puts a gun in the middle
-of the screen with its bottom edge on the screen's bottom edge; a mod's recoil
-frame sits a few pixels off that, and that difference *is* the animation.
+header, or in a PNG's `grAb` chunk - **not** a pivot fraction, **not** a delta
+against another frame. A vanilla weapon frame's offset is `(width/2 - 160,
+height - 168)`, which centers a gun with its bottom edge on the screen's; a
+mod's recoil frame sits a few pixels off that, and that difference *is* the
+animation. The fallback for a missing (or implausible - further out than the
+320x200 screen, as Brutal Doom's one bad `TRACA5` chunk is) hotspot is zero,
+not a guessed pivot, for the same reason: guessing `(width/2, height)` throws
+a full-canvas frame most of a screen away.
 
-`psx/psy` is the psprite position, which persists from frame to frame:
+`psx/psy` is the psprite position, persisting frame to frame: starts at `(0,
+32)`; a frame's `offset(x, y)` sets it absolutely, only on the axes it writes;
+`A_WeaponReady` resets it, ending an unmentioned recoil; `A_Raise`/`A_Lower`
+walk it between 32 and 128 at six a tic; a flash overlay's position *adds* to
+the weapon's, so a muzzle flash follows a recoil for free.
 
-- it starts at `(0, 32)` - `WEAPONTOP`;
-- a frame's `offset(x, y)` sets it absolutely, and only on the axes it writes,
-  because ZDoom ignores a zero;
-- `A_WeaponReady` puts it back to `(0, 32)`, which is what ends a recoil the
-  script never mentions again;
-- `A_Raise` and `A_Lower` walk it between `WEAPONTOP` (32) and `WEAPONBOTTOM`
-  (128) at six a tic;
-- a flash overlay's own position is *added* to the weapon's, so a muzzle flash
-  follows the gun through a recoil for free.
-
-The weapon actor's `Scale` property does **not** apply to a weapon sprite -
-GZDoom only scales the pickup lying on the floor by it. Applying it moves every
-Brutal Doom gun off the bottom of the screen. It still applies to spawned world
-actors, which is where `Render.Scale` is read.
+The weapon actor's `Scale` does **not** apply to the weapon sprite - GZDoom
+only scales the pickup on the floor by it. It still applies to spawned world
+actors (`Render.Scale`).
 
 ## How GZDoom places what a weapon spawns
 
 A spawn is measured from the actor that made it, never from its eyes, and the
-two families of spawning function measure differently. Reading a number off the
-wrong argument or the wrong axis is not subtle: it is what put the chainsaw's
-idle exhaust in front of the camera instead of behind the player, and filled
-the screen with grey smoke.
+two families of spawning function measure differently:
 
 | call | arguments | forward | sideways | up, measured from |
 | --- | --- | --- | --- | --- |
@@ -373,992 +369,268 @@ the screen with grey smoke.
 Three of those four order their numbers differently, and `A_SpawnItem` has no
 angle at all - its third argument is `useammo`, a flag.
 
-Every sideways offset is to the **right**, including `A_SpawnItemEx`'s `yofs`.
-That one looks as though it should not be: it is written as a rotation of a
-plain `(x, y)` pair by the yaw, and Doom's +y is 90 degrees anticlockwise from
-its +x. GZDoom flips it on purpose, and says so in the source - *"in relative
-mode negative y values mean 'left' and positive ones mean 'right'. This is the
-inverse orientation of the absolute mode!"*. Reading it the other way puts each
-gun of a dual wielded weapon's muzzle flash beside the other gun, which is what
-the picture shows and no amount of re-deriving the rotation will. A missile has no forward
-offset because it leaves from inside the shooter and gets anywhere under its own
-Speed; giving it one holds it in the player's face for as long as it lives.
-An angle turns the other way from that. ZDoom counts one anticlockwise, so a
-positive angle throws a thing to the spawner's *left*, and it turns the spawn's
-velocity as well as its position - dropping it left every ejected shell casing
-flying down the line of fire to land in front of the player. Brutal Doom names
-the direction itself: `50CaseSpawn2 //right side eject` throws its brass at
-`random(-120,-140)`, and the left handed gun of the same pair at
-`random(120,140)`.
+Every sideways offset is to the **right**, including `A_SpawnItemEx`'s `yofs`
+- GZDoom flips the sign on purpose ("in relative mode negative y values mean
+'left'..."). A missile has no forward offset: it leaves from inside the
+shooter and gets anywhere under its own Speed. An angle turns the other way -
+ZDoom counts anticlockwise, so a positive angle throws left, and it turns
+velocity as well as position (an ejected shell casing's own direction).
 
-Offsets here are rotated by the whole aim rather than by the yaw alone - see
-"The muzzle flash actor rides the aim" below - so stepping something forward
-while looking at the ceiling steps it up along the barrel.
+Offsets here are rotated by the whole aim rather than by yaw alone
+(`aimOffset` in `world_actor.go`), a deliberate departure from GZDoom, so
+something a weapon throws follows the barrel down when aiming at the floor.
 
-Doom's units convert at `worldUnitsPerDoomUnit` (1/64) and there is exactly one
-of those: a wall panel is 64 units and a voxel here is 1, the player is 56 units
-and 0.9 voxels tall, and a sprite is one map unit per pixel before its own
-`Scale`.
+Doom's units convert at `worldUnitsPerDoomUnit` (1/64): a wall panel is 64
+units and a voxel here is 1, the player is 56 units and 0.9 voxels tall, a
+sprite is one map unit per pixel before its own `Scale`.
 
-Two more things that decide what an effect looks like:
+A few more facts that decide what a spawned effect looks like:
 
-- **`BRIGHT` is a property of the frame, not of the actor.** A frame marked
-  BRIGHT ignores the light where it stands; an additive render style does not
-  make anything bright, and a translucent actor's bright frames are.
-- **What lands stops.** A thing that comes to rest on the floor is sent to its
-  Death state, which is the frame a shell casing lies still on. In ZDoom that
-  is `+MISSILE`'s own doing, and the flag does not survive the migration when
-  the mod writes it as DECORATE's `PROJECTILE` keyword, so the engine does not
-  wait for it: a tumble is a Loop with no exit of its own and would otherwise
-  spin on the ground for as long as the casing lives.
-- **A_ChangeVelocity adds; it does not replace.** Only `CVF_REPLACE` replaces,
-  and `CVF_RELATIVE` measures along the thing's own heading. Read as a
-  replacement, Final Doomer's C4 charge - thrown forward as a missile and then
-  given a small upward kick - went straight up out of the player's hands.
-- **Something that lands with its script still running is waiting, not
-  playing out.** It gets `plantedActorLifetime` rather than the eight seconds
-  an effect gets: a C4 charge stuck to a wall is waiting to be told to go off.
-- **A `Stop` destroys the actor.** The state is literally called NULL in
-  ZDoom and nothing runs after it. Kept alive to keep falling - which reads as
-  the kinder thing to do - a casing spawner that had already dropped its brass
-  on the way through `Spawn` landed a moment later, was sent to `Death` by the
-  engine's own hit handling, and dropped a second casing. Every gun in Final
-  Doomer ejected twice. A casing itself never stops: its tumble is a `Loop`,
-  and landing is what ends it.
-- **A zero-tic chain reads what the step before it wrote.** `publishState` runs
-  between ops, not once a frame. A smoke puff shrinks itself to a tenth and
-  then mirrors itself with `scalex - scalex*2`; against a frame-old `scalex`
-  that second step came out as the unshrunk size, and one puff in two filled
-  the screen with grey.
-- **`RenderStyle Add` has to actually be additive.** Drawn with the ordinary
-  blend it darkens instead of glowing, and forty overlapping puffs of a haze
-  authored at six percent alpha turn a lit room black. It also must not write
-  depth, or the nearest puff hides every sprite drawn after it.
+- **`BRIGHT` is a property of the frame, not the actor.** A BRIGHT frame
+  ignores the light where it stands; additive alone does not make anything
+  bright.
+- **What lands stops.** `+MISSILE` sends a thing to its Death state on
+  landing; the flag does not survive DECORATE's `PROJECTILE` keyword through
+  migration, so the engine watches for rest explicitly rather than a tumble
+  spinning forever with no exit.
+- **`A_ChangeVelocity` adds; only `CVF_REPLACE` replaces**, and
+  `CVF_RELATIVE` measures along the thing's own heading.
+- **A `Stop` destroys the actor outright** (it is DECORATE's `NULL` state) -
+  a spawner that already dropped its payload and is only kept "alive to keep
+  falling" will instead be sent to Death by the engine's own hit handling and
+  drop a second one.
+- **A zero-tic chain reads what the previous op just wrote**, not a frame-old
+  value - state publishes between ops, not once a frame.
+- **`RenderStyle Add` has to actually be additive**, and must not write
+  depth, or the nearest translucent sprite hides everything drawn after it.
 
 ## Weapon bob
 
-The gun sways while the player walks, in the same 320x200 space its position is
-in: `weaponBobAt` in `weapon.go`. Doom's own shape - the sweep across is a full
-circle and the dip is that same angle folded into half of one, so the gun goes
-down twice for every sweep and never rises above where it is held. Sixty four
-tics to the cycle, sixteen units at its widest, amplitude the player's speed
-squared and quartered and capped, which means full sway whenever they are moving
-and none the moment they stop. `A_WeaponReady(WRF_NOBOB)` turns it off until the
-next `A_WeaponReady` that does not, which is how a reload holds still.
+The gun sways while walking, in the same 320x200 space as its position:
+`weaponBobAt` in `weapon.go`. Doom's own shape - the sweep across is a full
+circle, the dip is that angle folded into half of one, so the gun dips twice
+per sweep and never rises above where it is held. Sixty-four tics to the
+cycle, sixteen units wide, amplitude the player's speed squared and quartered
+and capped. `A_WeaponReady(WRF_NOBOB)` turns it off until the next
+`A_WeaponReady` that does not, which is how a reload holds still. It is a
+function of speed, so `-walk` is needed to see it in a capture.
 
-It is a function of speed, so it never shows in a capture that stands still.
-`-walk` holds the forward key down.
+## The player-fired muzzle flash is invisible to the player who fired it
 
-## The player never sees the muzzle flash actor, and neither should we
+Brutal Doom's `PlayerMuzzle1` is a world actor spawned in front of the player
+for one tic. **In GZDoom the player who fires never sees it** - a spawn faces
+the way its spawner faces, so the shooter looks at its back (rotation 5),
+which the mod ships with no opaque pixels at all. The flash is for everyone
+*else*; what the shooter sees is the flash drawn into the weapon's own HUD
+frames. All eight rotations are migrated (`AssetIndex.SpriteViews`); the
+shooter still gets rotation 5, still blank, correctly.
 
-Brutal Doom's `PlayerMuzzle1` is a world actor, spawned by `A_SpawnItemEx` at a
-fixed offset from the *player* - 32 units ahead, 28 up from the feet - for one
-tic. **In GZDoom the player who fires never sees it.** The mod ships five lumps
-for its one frame - `PLMZA1`, `PLMZA2A8`, `PLMZA3A7`, `PLMZA4A6`, `PLMZA5` -
-and the last two are authored with no opaque pixels at all. A spawn faces the
-way the spawner faces, so the shooter is looking at its back, which is rotation
-5, which is blank. The flash is there for everyone *else*; what the shooter
-sees is the flash drawn into the weapon's own frames.
-
-`AssetIndex.Sprite` used to take the first lump in sorted order, which is
-rotation 1, the view from the *front* - so every gun in the mod fired a 21 unit
-fireball into the player's face. All eight views are migrated now (below), and
-the shooter still gets rotation 5, still blank.
-
-## All eight views of a spawned frame, not just the one
-
-**A weapon's own frames are always rotation 0. The things it throws are not.**
-A mod ships five lumps for the eight views of a rocket - `MISLE1`, `MISLE5`,
-and three double lumps `MISLE6E4`, `MISLE7E3`, `MISLE8E2`, each carrying one
-view and, mirrored, the view opposite it.
-
-Only rotation 5 used to be migrated, and the other seven were dropped silently:
-the picture went into the store under the name the script asked for, so nothing
-downstream could tell afterwards that they had existed. A rocket showed its own
-exhaust from every angle. Fifty one weapons and forty one frames were affected -
-rockets, tracers, the thrown axe, the ofuda, muzzle flashes.
-
-Now:
-
-- **`AssetIndex.SpriteViews`** returns all eight, in the order the engine asks
-  for them, or false for one all-angle picture and for a partial set. A set with
-  holes in it is not something to fill in by guessing, and
-  `AssetIndex.CollapsedViews` names those so the loss stays visible - it is
-  printed by `genweapons`, and as of the current sources it prints nothing.
-- **View direction 0 is the front, 4 the back, and they run round the thing's
-  own left**, which is what `core.GetViewDirection` reports and what the wolf
-  character sheet's own `dir_ft, dir_fl, dir_lt, ...` comment in `main.go` has
-  always meant. **Doom's rotation number is that plus one**: rotation 1 is the
-  front, 3 the thing's left, 5 the back, 7 its right. Getting this backwards
-  shows a thing's left side to somebody standing on its right, so it is pinned
-  by `core.TestGetViewDirectionRunsRoundTheThingsOwnLeft` rather than left to
-  be re-derived.
-- **A mirrored half is mirrored at migration time**, not at draw time: it is the
-  same picture every frame it is drawn. The hotspot mirrors with it - measured
-  from the left edge, so mirrored it is `width - x`, which is the arithmetic
-  GZDoom does on a mirrored rotation.
-- **Each view goes into the shared store under its own rotation** - `MISLE1`
-  through `MISLE8` - because the store is keyed by name and these are eight
-  different pictures. There is no `MISLE0` any more.
-- **The eight ride on the actor, not on the step**: `wep.Actor.Views` maps the
-  name a step names - which is still the back, view 4 - to the eight. A step
-  that names a frame with no other views is untouched, so the keep markers
-  `####` and `----` need to know nothing about any of this.
-- **`Actor.Pictures()` is every name in the store an actor can draw.** Both the
-  load check and `genweapons -prune` walk it. They did not when `Views` was
-  added, and the sweep deleted seven views of every frame on the first run
-  because no step named them.
-- **The view is chosen once a frame in `showCurrentFrame`**, from the actor's
-  own `facing` - set when it is launched and kept afterwards, the way ZDoom's
-  angle is - rather than per draw call in the sprite pass. A second viewpoint in
-  the same frame, which is the shadow pass, therefore draws the angle the player
-  sees. These are rockets and casings a few pixels across and they cast no
-  shadows anyway. Doing it in the batch means per-direction quad sizes and
-  pivots, because Doom's rotations are not all the same width: the rocket's is
-  15 pixels head on and 49 side on.
-
-The store went from 2182 pictures to 2469, and `weapons/_sprites.png` with it.
-
-Offsets themselves ride the aim rather than the yaw: `aimOffset` in
-`world_actor.go` measures a spawn's forward, sideways and height along the line
-of aim, so what a weapon throws out follows the barrel down. That is a
-deliberate departure from GZDoom, and the only one in how a spawn is placed - a
-level shot puts a spawn exactly where the yaw-only maths does.
-
-What is attached to the barrel is the weapon's own frame. `MP42B0` and `MP42D0`
-are the idle gun with fire drawn on the muzzle, which is why they are 116 pixels
-tall where `MP42A0` is 72. Both are drawn, and the small bright flash at the
-barrel is the frame, not the actor.
-
-What genuinely is missing is **weapon bob**: GZDoom sways the psprite in a
-flattened figure of eight while the player walks, `A_WeaponReady` setting
-`PSPF_ADDBOB` and `P_BobWeapon` adding to `psx`/`psy` at draw time. Nothing here
-does that, so the gun is unnaturally still. It is proportional to the player's
-speed, so it never shows in a `-shot` capture, which stands still.
+**A world actor keeps all eight views, not just the one a step names.** A mod
+ships five lumps for eight rotations (some mirrored pairs); `wep.Actor.Views`
+maps the name a step names to the full eight, and each goes into the shared
+store under its own name (`MISLE1`..`MISLE8`, no bare `MISLE0`). View
+direction 0 is the front, 4 the back, running round the thing's own left
+(pinned by `core.TestGetViewDirectionRunsRoundTheThingsOwnLeft`); Doom's
+rotation number is that plus one. A mirrored half is mirrored once at
+migration time, hotspot included (`width - x`). The view is chosen once a
+frame, from the actor's own facing, in `showCurrentFrame` - not per draw call,
+so the shadow pass draws the same angle the player sees, which is fine at the
+pixel scale these are drawn at.
 
 ## The player is Doom's player, and so is the view
 
 Everything a weapon spawns is placed relative to the player, so the player has
-to be the one the mods were authored against: 56 units tall, looking out at 41,
-which is `playerHeight` and `playerEyeHeight` in `world_actor.go` and the AABB
-in `spawn_entities.go`. The view is `DoomVerticalFOV`, 73.74 degrees, which is
-Doom's 90 across at 4:3.
-
-Both were nearly-but-not-quite before, and it showed. The view was 45 degrees
-vertical, a telephoto lens next to Doom's, which drew everything in the world
-about 1.75 times larger than its authors saw it - Brutal Doom's muzzle flash is
-a 21 unit sprite 32 units in front of the player, 36 degrees across, which is
-half of Doom's view and most of a 45 degree one. And the eye was at 45 units
-instead of 41, which is enough to put that flash below the bottom of the screen
-until you looked down.
-
-A weapon sprite is unaffected by the field of view either way: GZDoom lays those
-out in a fixed 320x200 space rather than through the projection. That is exactly
-why the two only look right together at Doom's number.
+to be the one the mods were authored against: 56 units tall, looking out at
+41 (`playerHeight`/`playerEyeHeight` in `world_actor.go`). The view is
+`DoomVerticalFOV`, 73.74 degrees - Doom's 90 across at 4:3. A weapon sprite
+itself is unaffected by field of view either way, since GZDoom lays those out
+in the fixed 320x200 space rather than through the projection - which is
+exactly why the two numbers only look right together.
 
 ## A magazine starts loaded; a counter does not
 
 Both are `: Ammo` with a maximum, and DECORATE says nothing about which is
-which. The engine hands every weapon out at once with nothing to pick up, so a
-magazine that started empty is a weapon born empty - Brutal Doom's dual MP40
-keeps its right hand magazine in a third ammo pool the weapon never names, and
-that gun did not fire a single shot.
-
-What tells them apart is that **a reload fills a magazine**. `reloadedItems` in
-`zdwep/compile_weapon.go` walks the states a Reload reaches and collects what
-they give. It stops at the labels that are the weapon's other business - the
-kick, the taunt, the sprint - matched anywhere in the name, because a mod writes
-`DoKick` and `FinishExecution`, and because ZDoom's numeric jumps compile to
-invented `@frame` labels part way inside a region and would otherwise let the
-walk in through the side door.
-
-## A sprite name is only unique inside its own mod
-
-`weapons/_sprites/` is one store shared by every weapon, because a smoke puff
-spawned by six guns should be one picture. It is keyed by content, not by the
-frame's name: `SMOKA0.ac80a16d.png`, with the compiled actor naming that.
-
-Keying it by the bare name looks obviously right and is not. Brutal Doom's
-`SMOKA0` is 56 pixels square; Final Doomer's is 141 by 130. Both wrote to
-`_sprites/SMOKA0.png`, the writer skipped a name it had already seen, and Final
-Doomer happened to be migrated last - so every Brutal Doom weapon spat a puff of
-smoke two and a half times too big, and a re-migration could never fix it,
-because the file was already there. Seventeen frames collided, all of them
-smoke.
-
-Two mods that really do ship the same bytes still share one file. `-prune`
-clears both shared stores of anything no installed weapon names - except the
-engine's own decal pictures, which live there too and which no weapon.json will
-ever name, so `wep.EngineDecalSprites` is what keeps the sweep off them.
-
-The sweep is exact, not approximate: after a migration both stores hold the 820
-actors and 2163 pictures the installed weapons reach and nothing else. A name
-that looks like it belongs to a weapon that was removed usually does not -
-`X727B0.a24d62e5.png` reads as a throwing animation nobody has any more, and it
-is Brutal Doom's fists throwing a zombie civilian's corpse.
-
-## The mod's control script, which nothing here runs
-
-Brutal Doom's weapons never read the player's buttons. `BDControls.txt` is an
-ACS loop that reads them, gives an inventory item for each one that is down -
-`FiredPrimary`, `Reloading`, `PressedUse`, `IsCrouching`, `IsRunning` - waits
-four tics and takes them all back. The weapons branch on those items, and a
-full automatic is written as a jump at the end of its firing states:
-
-    SMGR A 1 A_JumpIfInventory("FiredPrimary", 1, "Fire")
-    Goto Ready3
-
-Nothing here runs ACS, so the engine keeps those items itself. Which item stands
-for which button is a decision about a mod's vocabulary, so it lives in
-`ControlItems` in `zdwep/policy.go` next to every other one; the compiler writes
-the ones a weapon actually reads into its `buttons`, and `Runtime.SetButtons`
-gives and takes them. Without it every automatic in the mod fires exactly once
-per press.
-
-That pairs with `+WEAPON.NOAUTOFIRE`, which is on twenty six of these weapons.
-It stops the *ready frame* from re-firing while the trigger is held, so the
-weapon's own script decides the cadence. Both halves are needed: without the
-flag a semi-automatic empties its magazine in two seconds, and without the items
-an automatic is a semi-automatic.
-
-## An item the mod's ACS takes back is an item nothing here takes back
-
-`ControlItems` covers the ones a control script keeps in step with the buttons.
-The other half of the same problem is an item a *weapon* gives itself and hands
-an ACS script the job of clearing.
-
-Brutal Doom's railgun is the case that shows it. Its Fire state opens with
-`A_JumpIfInventory("Pumping", 1, "Ready")`, and all three places that give
-itself `Pumping` - the shot, the alt shot, and the reload's `PutMag` - follow it
-with `ACS_NamedExecuteAlways("RailgunRecharge")`. Nothing here runs ACS, so the
-item stayed for ever: the gun fired exactly once, and every trigger pull after
-that walked out of `Fire` on its first line. It reads as a reload bug, because
-reloading is the other way into it, and it is neither the reload nor the ammo -
-it is a cooldown nobody was counting down.
-
-`scriptHeldItems` in `wep/runtime.go` gives those items a lifetime through the
-same clock `Powerup.Duration` already uses. It is a knob, and the number is not
-invented: 44 tics is the length of `Railgun/Recharge.ogg`, which is what the
-player hears while the gun is not ready.
-
-Ten of these weapons give `Pumping` and two take it back themselves, so the
-shape is normal in this mod. Only the railgun reads one it never clears.
-
-## Firing is GZDoom's own three rules, and they are all in the source
-
-`p_pspr.cpp` moved to ZScript; the three that decide a weapon's rate of fire
-are in `wadsrc/static/zscript/actors/player/player.zs` and
-`actors/inventory/stateprovider.zs`.
-
-- **`CheckWeaponFire` only runs while the weapon is ready.** `TickPSprites`
-  calls it behind a `WF_WEAPONREADY` check, so `attackdown` - our
-  `Runtime.TriggerDown` - is set and cleared *there and nowhere else*. Letting
-  the trigger go in the middle of a firing sequence does not arm the next shot;
-  a semi-automatic waits for a release it can see from a ready frame.
-- **`A_ReFire` goes to Hold, not Fire.** It calls `FireWeapon(null)`, which
-  asks `GetAtkState(!!player.refire)`, which is `FindState('Hold')` with
-  `Fire` as the fallback. Fire is where a wind-up lives: sending a re-fire
-  back through it made the minigun spin up again between every pair of bullets
-  and shoot three times a second instead of seventeen. A state the call names
-  itself is used as written.
-- **A held trigger repeats because the *mod* says so.** `+WEAPON.NOAUTOFIRE`
-  only stops the ready frame from re-firing. Brutal Doom marks its automatics
-  with it too, and every one of them - the pistol as much as the assault rifle
-  - ends its firing states with `A_JumpIfInventory("FiredPrimary",1,"Fire")`,
-  which loops for as long as the control script keeps handing that item out.
-  So the dual pistols really do empty both magazines on one held trigger, at
-  the six tics a pair their script asks for. There is nothing in the data that
-  separates a semi-automatic from an automatic here.
-
-## Alt fire is a second button, and half these weapons have one
-
-`CheckWeaponFire` is one chain of else-ifs over two buttons: `BT_ATTACK` while
-`WF_WEAPONREADY`, then `BT_ALTATTACK` while `WF_WEAPONREADYALT`, with one
-`attackdown` shared between them - so the trigger wins while both are held, and
-the flag is only cleared by a frame that sees neither. `A_WeaponReady` sets the
-two separately, which is why `wep.Op` carries `AllowFire` *and* `AllowAlt`:
-`WRF_NOPRIMARY` is a frame that takes only the second button, and the scoped
-railgun rests on forty-two of them.
-
-`FireWeaponAlt` returns without doing anything when the weapon has no `AltFire`
-state, so it never falls back on the primary one - a weapon with nothing on the
-button ignores it. A repeat goes to `AltHold`, because `A_ReFire` re-enters
-whichever attack `Weapon.bAltFire` says is running (`Runtime.FiringAlt` here).
-
-The button is the right mouse button, which used to toggle mouse capture; F2
-does that now, and the right button only toggles capture when the mouse is
-already free.
-
-## A tag is a name, not a mechanism
-
-Final Doomer's Plutonia shotgun is tagged "Scoped Shotgun" and has a scope
-drawn on its sprite. It has no AltFire state, no `A_ZoomFactor`, and there is
-no `A_ZoomFactor` anywhere in the mod - `grep` the whole pk3. Nothing triggers
-that scope because in Final Doomer nothing ever did; the name is the joke, and
-the two weapons in this folder that really do scope come from other mods. Read
-the mod before hunting for the key binding.
-
-## Doom's pixel aspect is 1.2, and it is not a matter of taste
-
-`psprPixelAspect` was `320/240`, which is 1.333, so every weapon sprite came
-out eleven percent narrower than GZDoom draws it. On a gun that reads as
-nothing; on a scope it is unmistakable, because a round hole becomes an egg.
-All three scoped weapons here - the Sniper Rifle, the Hunting Rifle and the
-Blacktail 51 - were oval.
-
-The number is not a guess. `HUDSprite::GetWeaponRect` has both halves:
-
-    scalex = baseScale.X * (320 / (240 * WidescreenRatio)) * (vw / 320)
-    scale  = baseScale.Y * (SCREENHEIGHT * vw) / (SCREENWIDTH * 240)
-
-WidescreenRatio is the view's own width over its height, so both collapse to
-`viewHeight/240` times the sprite's base scale, and `DPSprite`'s base scale is
-`(1.0, 1.2)`. That is `scaleX = viewHeight/240`, `scaleY = viewHeight/200`, and
-1.2 between them whatever shape the window is.
-
-There used to be a *rule* here - a frame wider than the 320-unit weapon space
-was called an overlay and drawn in square pixels - and it was a wrong diagnosis
-of this bug. Most scope art is authored for Doom's pixels like everything else:
-the Sniper Rifle's hole is 209x171 in its own picture, which is 1.22 wide to
-tall, which is round once it is squeezed by 1.2. Square pixels made it 1.22 the
-other way, and the rule did that to every overlay in the folder to straighten
-the one that needed it.
-
-`squarePixelFrames` in `weapon.go` is what is left of it: a list, not a rule,
-and the only deviation in the weapon drawing. The Blacktail 51's scope really
-is a circle drawn in square pixels - it is an egg in GZDoom too, because the
-mod ships it without setting `Weapon.WeaponScaleY`, whose default is 1.2. That
-property would not have helped anyway: it is per weapon, and the Blacktail's
-*gun* frames are drawn for Doom's pixels like everyone else's, so no single
-number is right for both halves of it. Name the art that is wrong, by weapon
-and by sprite prefix, and leave the rest alone.
-
-## A scope is on the weapon, not on the camera
-
-`A_ZoomFactor` writes `Weapon.FOVScale`, and the view is `desired *=
-abs(ReadyWeapon.FOVScale)` worked out from the weapon in hand every frame. So
-the zoom belongs to the weapon: put a scoped weapon away and the view widens on
-its own, take it out again and it is still scoped. `Weapon.zoom` here, applied
-by `applyWeaponZoom` on every weapon change.
-
-`baseFOV` is the field of view the player plays at and a scope divides it. It
-is never read back off the camera - do that and an unzoomed weapon coming into
-the hands of a scoped player adopts the scope's own field of view as the one to
-go back to, and the view never widens again.
-
-## What decides whether a shot marks the wall
-
-`P_LineAttack` spawns the puff and then, separately, a decal - and only if
-something names one. `SpawnShootDecal` reads the shooter's *ready weapon*
-first and falls back on the puff:
-
-- the weapon's own `Decal` property wins (Doom's hitscan weapons carry
-  `Decal "BulletChip"`, and so do Final Doomer's);
-- else the puff's, inherited;
-- `Decal "None"` or `+NODECAL` means nothing at all.
-
-ZDoom's own `BulletPuff` carries no Decal, so "the puff decides" is wrong in
-both directions. The Blacktail 51's laser pointer is the case that proves it:
-it fires `A_FireBullets(0,0,1,0,"RedDot",FBF_NOFLASH|FBF_NORANDOMPUFFZ)` from
-its *ready* frame, thirty five times a second, and its RedDot puff says
-`Decal "None"` precisely so the wall is not chipped thirty five times a
-second. A katana's puff names nothing either, which is why a sword leaves no
-bullet holes.
-
-`wep.Weapon.Decal` and `wep.Actor.Decal` carry the name; the engine draws its
-one bullet-hole picture for the names that mean a chip in a wall and nothing
-for the rest - a scorch, a crack, a sword slash and a blood smear have no
-picture here yet, and drawing a bullet hole for them is worse than drawing
-nothing.
-
-## A firing function spends its own ammo
-
-`A_FireBullets` and `A_FireCustomMissile` call `DepleteAmmo` themselves -
-`flags & FBF_USEAMMO`, which is the default when no flags are written, and
-`useammo`, which defaults to true. A weapon whose script never takes its own
-ammo is not a weapon with infinite ammo; it is one whose ammo the engine
-spends. Without that, Final Doomer's C4 launcher could throw charges for ever
-and never reach the state that arms the detonator.
-
-`A_TakeInventory(item, 0)` means take *all* of it, not one.
-
-## An item can be a pulse, and A_Die is not a delete
-
-Two things stood between Final Doomer's C4 charges and going off, and neither
-of them was ACS.
-
-- **`Powerup.Duration` is a clock on an item.** `FDHellboundC4Detonate` is a
-  Powerup that lasts *two tics*: the launcher gives it to itself, every charge
-  in the air sees it through `A_JumpIfInTargetInventory`, and it is gone before
-  the next charge is thrown. Kept for ever, the next charge blows up on the way
-  out of the barrel. `wep.Item.Duration` carries it and `Runtime.Tick` counts
-  it down. A negative duration is written in seconds, which is how a mod says
-  "until something takes it".
-- **`A_Die` sends the actor to its Death state, and does nothing at all to
-  something already dead.** The planted charge's Death state opens with
-  `A_Die` and then runs on into the explosion, so the second pass through that
-  frame has to fall through rather than jump back. Deleting the actor there -
-  which is what "die" reads like - meant the charge vanished silently and
-  nothing ever exploded.
-
-## A thing a weapon spawns can talk to the player who fired it
-
-`A_GiveInventory(item, amount, AAPTR_TARGET)` from a missile hands the item to
-whoever fired it, and `A_JumpIfInTargetInventory` asks that same actor what it
-is carrying. That is a whole mechanism, not a detail: Final Doomer's C4 charge
-tells the launcher it exists the moment it spawns, and every charge in the air
-watches the player's inventory for the item that means "go off". A
-`WorldActor` keeps the runtime of the weapon that spawned it for exactly this.
-
-## DECORATE is tokens, not lines
-
-Two shapes broke a line-at-a-time reader, and both are common:
-
-- `Projectile` is a keyword standing for `+MISSILE +NOGRAVITY +NOBLOCKMAP
-  +DROPOFF +ACTIVATEIMPACT +ACTIVATEPCROSS +NOTELEPORT`, not a property. Read
-  as one, every missile in the mods kept its gravity and fell at the player's
-  feet, and none of them counted as a missile at all.
-- `{ +NOEXTREMEDEATH DamageType "Bullet" Decal "BulletChip" }` is three
-  statements on one line. Read as one, all three were lost.
-
-And a missile class the mod never defines carries its own flags **and its own
-speed**: `FDTNTMissile : Rocket` says nothing about gravity because `Rocket`
-says it, and `SuperBFGBall : BFGBall` says nothing about how fast it travels
-because BFGBall says 25. Read as nothing, Brutal Doom's BFG ball hung in the
-air at the end of the barrel. `stockProjectiles` in `zdwep/compile.go` names
-the ZDoom classes and what each one's Speed is.
-
-## A puff and a decal are two different things
-
-`P_LineAttack` spawns the puff *and* then spawns a decal, from
-`puffDefaults->DecalGenerator`, and neither is conditional on the other. Drawn
-as an either/or - the mod's puff, else the engine's bullet hole - half these
-weapons marked nothing at all, because their puff is a spark that fades in
-three tics.
-
-`P_SpawnPuff` also picks the state: a puff that hit *no actor* starts in
-**Crash** when it has one. Final Doomer's puff answers `Spawn` with a flesh-hit
-sound and no picture, and keeps its sparks, its ricochet and its little cloud
-of smoke in `Crash` - started in `Spawn` on a wall, every hitscan in that mod
-landed invisibly. That is what the Tactical Shotgun was doing.
-
-The decal is lit by the baked light of the block *in front of* the surface it
-is stuck to. Sampled at the hit position it lands inside the wall as often as
-not, where the flood fill never reached, and the hole is drawn black on black.
-
-## The bullet hole is GZDoom's bullet hole
-
-`assets/base/decals/chip1.png` .. `chip5.png` are ZDoom's own decal graphics,
-copied out of `wadsrc/static/graphics`. They are seven pixels across and five
-to nine tall, and the grey in them is **alpha, not colour**: `decaldef.txt`
-gives every one of BulletChip1..5 `shade "00 00 00"` and `translucent 0.85`, so
-a shaded decal is the picture's grey used as coverage and the shade painted
-through it. `tools/gendecals` does that conversion, and a shot picks one of the
-five at random, which is what `decalgroup BulletChip` means.
-
-**A decal picture keeps its own resolution.** They go into the shared picture
-store, `weapons/_sprites`, and are packed at startup into the same atlas as
-everything else a weapon throws at a wall - `wep.BulletChipSprites` and
-`wep.BloodSplatSprite` name them, and the engine finds them there by name.
-`assets/base/sprites_64x64.png` is for 64x64 sprites; a seven pixel chip blown
-up sixty-four wide to fit one of its tiles is not a 64x64 sprite, it is a
-smudge, and the atlas it was stretched into is not the one it belongs in.
-
-The size follows from the same place. A decal's size in map units is its
-picture's own size and the group scales by a half on both axes, so a seven by
-nine chip is three and a half by four and a half units of wall - `decalSize`,
-which reads the picture's dimensions off the atlas rather than keeping a number
-next to it, because five chips are five different shapes. Worth saying out loud
-because it is a *sixth* of the blob that was here before. It is a chip. On a
-dark wall you will not see it, and that is also what GZDoom does; the floor is
-where you can tell.
-
-A decal quad is scaled on both axes separately for the same reason. One number
-is right for one of the five and squashes the other four.
-
-## Fog tints a colour; it does not decide coverage
-
-`applyFog` mixed the whole vec4, alpha included, so a fragment far enough away
-came out with the *fog's* alpha - which is one. Any translucent sprite at
-distance was therefore painted solid: Final Doomer's bullet puff, which fades
-to nothing inside a loop that also grows it ten percent a tic, ended up as a
-sixty-five voxel opaque grey quad hanging over the sky, and firing a shotgun
-turned the screen white. Fog mixes `rgb` and keeps `inColor.a`.
-
-The growth was the other half of it. `A_FadeTo`'s third argument is
-`FTF_REMOVE` and every one of these scripts passes it; the migration does not
-carry it, so the engine removes anything that fades to zero - see
-`WorldActor.fade`. Six hundred invisible puffs were alive at once, holding the
-actor budget shut against everything that came after them.
-
-## An instance buffer is read a stride at a time
-
-Decals go into the same instance buffer as sprites, one `QuadInstanceFloats`
-run each. `DrawDecals` wrote 23 of the 24 - everything but the baked light -
-and that is not a decal with a default: every decal after the first was drawn
-from the tail of the one before it, and the draw count, being the float count
-divided by the stride, came out one short. No bullet hole had been drawn at all
-since sprites learned their baked light. `appendDecalInstance` is one function
-now, with a test that counts its floats.
-
-## A sound can be shorter than its own header says
-
-Two of Final Doomer's WAVs - `plutbfg9000/fire1` and `fire2` - declare a data
-chunk fifty six bytes longer than the file actually holds. beep's decoder
-counts towards the length in the header, so past the end of the file it answers
-every read with no samples and "still going", and `Buffer.Append`, which only
-stops when a streamer says it is done, spins there for ever. On the main
-thread, inside the fire loop: the Quantum Accelerator froze the game solid the
-first time it fired, and it read as a crash.
-
-`endWhenSilent` in `audio/player.go` treats a streamer that produced nothing as
-finished. It is one wrapper on the way into `Append`, it is not specific to
-WAV, and it is the difference between a truncated sound and a hung game. A mod
-you migrate tomorrow may ship another one - the scan is four lines of python
-over `weapons/**/*.wav` comparing the data chunk's size against the file's.
-
-## A sound can also be longer than its own header says, and that one is ours
-
-The other direction, and the broken header is this migration's own doing.
-ffmpeg is handed a sound on a pipe and writes the WAV back on one, and a pipe
-cannot be seeked - so it never returns to patch the two sizes it could not know
-in advance and leaves both at `0xFFFFFFFF`, the "read until the stream ends"
-marker. beep keeps a data size in an `int32`, where that is **-1**, and its
-decoder stops before the first sample: `d.pos >= d.h.DataSize` is true at
-position zero.
-
-So the three sounds these mods ship as FLAC - the BFG10K's idle hum and its
-spin-down, the Unmaker's shot - were written out as twenty-seven kilobytes of
-silence each, and the weapons were mute. `repairWAV` in `zdwep/write.go` sets
-both sizes to what the file actually holds, on the way out of ffmpeg and on a
-mod's own WAV that lies the same way.
-
-The check for the next migration is a dozen lines of Go: walk
-`weapons/**/*.{wav,ogg}`, decode each into a `beep.Buffer` the way `loadCue`
-does, and print the ones that come out with `Len() == 0`. Three of 4492 did;
-none does now.
-
-**An empty buffer is one step from silencing the whole game.** `beep.Loop`
-asked to loop no samples never returns from `Stream` at all - it drains the
-streamer, seeks back to nothing, and tries again, for ever, on the audio
-callback's own goroutine. `loadCue` therefore refuses a cue that decoded to
-nothing rather than keeping an empty buffer that something may later loop.
-
-## A mixer handed to the speaker never leaves it
-
-`beep.Mixer` does not drain: empty, it streams silence for ever, and the
-speaker's own mixer only drops a streamer that reports itself finished. So
-every per-channel mixer `playOnChannel` gave to the speaker stayed in the
-speaker's list for the rest of the run.
-
-That is not a small leak, because **a channel belongs to an origin and every
-spawned thing has an origin of its own** - `g.lastActorOrigin++`. Cycling the
-folder with the trigger held stacked up 244 dead mixers in fifty seconds, each
-one stepped through on every audio callback; enough of them and the callback
-stops keeping up with the device and the sound stops for good, which is what
-"the audio gets stuck and nothing plays any more" turned out to be.
-
-A `channel` is a Streamer of its own now rather than the mixer being handed
-over directly, and `DropOrigin` retires the channels of something that has left
-the world - called from `WorldActor.remove`, which every path that ends an
-actor goes through. Retired, the channel reports itself drained and the speaker
-drops it. The same run now sits at fifteen and goes down as well as up. Origin
-zero is the listener and is never dropped.
-
-## Loop goes to a label the mod wrote, not one we invented
-
-`Loop` returns to the top of the state block, which the runtime works out by
-scanning back to the nearest label. A label beginning with `@` is not one of
-the mod's - it is the landing spot of a `Goto Ready+6`, or the engine's own
-stop - and counting it as a state start puts `Loop` in the middle of the block
-instead of at the top.
-
-Brutal Doom's MP40 is thirteen zero-tic `A_JumpIfInventory` lines under
-`Ready:`, one 1-tic `A_WeaponReady` at the top of them, and a `Loop` at the
-bottom; another state does `Goto Ready+6`. With the synthetic label counted,
-the loop ran the last nine lines over and over and never reached the only frame
-in the block that costs a tic - ten thousand steps an update, `OpSpin`, and the
-cursor abandoned wherever it stopped, which has a picture about two thirds of
-the time. The gun flickered. `labelStarts` skips `@` now.
-
-## The last lump with a name wins
-
-GZDoom's `FileSystem::CheckNumForName` searches the lump list backwards, so a
-later file shadows an earlier one with the same name. That is how a mod
-overrides a sound with a better take in an `hd/` folder, and it is how Brutal
-Doom means `PLSTA0` to be `sprites/weapons/plasmagun/PLSTA0.png` and not
-`sprites/vehicles/bike/PLSTA0.png`.
-
-`AssetIndex` kept the *first*, so the plasma gun's firing frames were a 43x24
-bike part carrying a world sprite's hotspot - drawn off the left edge of the
-screen, which looked exactly like the gun vanishing when you pulled the
-trigger. It is a narrow rule: 44 of Brutal Doom's 11971 sprite lumps are named
-twice, and 3 of its 750 sounds.
-
-**Inside one lump list only.** A `-source` list is several lists stacked, and it
-is searched the *other* way round on purpose: the mod first and `doom2.wad`
-last, because the mods want the base game only for what they did not ship
-themselves. Run over the whole stack, "last wins" hands every name the base game
-also uses straight back to the base game. Brutal Doom shares **655** lump names
-with `doom2.wad`, and what came out vanilla was not obscure: every frame of the
-super shotgun, the rocket, the ejected shell casing, and `SAWGA0` through
-`SAWGD0` - four of the seven frames of the chainsaw's idle. The idle animation
-flicked between two entirely different chainsaws, in two different pairs of
-hands, seven times a second.
-
-So a lump name belongs to the **first layer that has one**, and only lumps from
-that same layer may shadow it afterwards. `Source.LayerOf` says which layer a
-name came from and `NewAssetIndex` claims on it; the rotations a `NAMEA0` lookup
-falls back on are still filled from wherever they are, because `NAMEE1` and
-`NAMEE5` are different lump names and a mod that overrode only some of the eight
-meant to keep the rest. Only Brutal Doom was affected - Final Doomer and all ten
-single-weapon mods share no lump name with `doom2.wad` at all.
-
-## A_ReFire repeats the attack that is running
-
-`A_ReFire` with no state of its own does not mean "go to Fire". It re-enters
-whichever attack is running - `A_ReFire` calls `FireWeaponAlt` when
-`Weapon.bAltFire` is set and `FireWeapon` when it is not, and each asks its own
-`GetAtkState` for **Hold** or **AltHold**. Compiling the default to the literal
-`"Fire"` named the primary's state on an alt attack too: Brutal Doom's hand
-grenade, whose `AltHold` is two tics and an `A_ReFire`, walked out of the alt
-chain into `Fire` and pulled the pin again, for ever. The op carries no target
-at all now and the runtime picks.
-
-Holding alt fire on that grenade rests on `AltHold`, which is `TNT1` - the
-weapon layer shows nothing while the pin is out. That is the mod, not us.
-
-## Only a missile is launched with its Speed
-
-`P_SpawnMissile` works a velocity out from `Speed` along the line of fire.
-`A_SpawnItem` and `A_SpawnItemEx` call none of that: they put an actor
-somewhere and leave it, and any velocity it has is the one written in the call.
-Handing every spawn its Speed set Brutal Doom's `BigBlackSmoke` drifting - it
-is `Speed 1` with `+MISSILE` on it - so `launchVelocity` reads Speed only for
-`OpFireProjectile`.
-
-The smoke that *is* launched by `A_CustomMissile` genuinely moves, and that is
-the mod: `A_CustomMissile("BigBlackSmoke", 40, 0, random(0,360), 2,
-random(40,160))` is aimmode 2, which spawns at Speed with no vertical velocity
-and then applies the pitch.
-
-## A pitch aims down, and a random angle is a range
-
-`Op.AimPitch` carries the pitch a missile-spawning call fires at, in ZDoom's
-sign, where **positive is down**. The two callers mean different things by it
-and ZDoom implements them differently, so `pitchedBy` takes a flag:
-
-- `A_FireCustomMissile` does `self.Pitch += pitch` around the spawn, so its
-  pitch is an *adjustment* to where the player is already looking.
-- `A_CustomMissile` under `CMF_ABSOLUTEPITCH` - which includes aimmode 2,
-  because the C++ sets that flag itself after spawning - throws the aim away:
-  `missilespeed = |cos(pitch)| * Speed` across, `Vel.Z = -sin(pitch) * Speed`
-  up. The absolute value is ZDoom's own and it matters: Brutal Doom's smoke is
-  fired at `random(40, 160)`, and past ninety a plain cosine sends it out
-  backwards. In every other aimmode ZDoom ignores the argument, so the
-  migration drops it rather than aiming things ZDoom does not.
-
-The angle beside it has to be a **range**, not a number. `Op.Angle` was
-`Range.Value()`, the middle of the span, so `random(0, 360)` came out as 180
-and every puff in a cloud left on the same bearing - straight back at the
-player, in the flamethrower's case. `Angle`/`AngleTo` now, rolled once per
-spawn by `rollRange`, the same way the offsets and velocities already were.
-
-A hand-built `wep.Op` has to write both halves of a range: a constant compiles
-with `To` equal to itself, and `Angle: -90` with `AngleTo` left at zero is the
-range -90..0, not the number -90.
-
-**Re-run `genweapons -prune` after a migration that changes what actors
-compile to.** The shared actor files are named by the hash of their contents,
-so an old one stays on disk until something deletes it - and reading
-`weapons/_actors/*.json` to check what the compiler did will show you the
-stale copy right next to the new one.
+which - the engine hands every weapon out at once with nothing to pick up, so
+a magazine that started empty is a weapon born empty. **A reload fills a
+magazine**: `reloadedItems` in `zdwep/compile_weapon.go` walks the states a
+Reload reaches and collects what they give, stopping at the weapon's other
+business (kick, taunt, sprint) matched anywhere in the name.
+
+## Sprite and actor lookup gotchas
+
+- **A sprite name is only unique inside its own mod.** `weapons/_sprites/` is
+  one store shared by every weapon, keyed by content hash
+  (`SMOKA0.ac80a16d.png`), not by bare name - two mods' same-named, different
+  pictures would otherwise collide. `-prune` clears anything no installed
+  weapon names, except the engine's own decal pictures
+  (`wep.EngineDecalSprites`), which no weapon.json ever names but which live
+  in the same store.
+- **The mod's own control script is read, never run.** Brutal Doom's weapons
+  branch on inventory items (`FiredPrimary`, `Reloading`, ...) that an ACS
+  loop gives and takes every four tics; nothing here runs ACS, so
+  `ControlItems` in `zdwep/policy.go` says which item stands for which button
+  and the engine keeps them itself. Paired with `+WEAPON.NOAUTOFIRE`, which
+  stops the ready frame (not the script) from re-firing on its own.
+- **An item a script gives itself, expecting its *own* ACS to clear it, never
+  gets cleared here.** Brutal Doom's railgun gives itself `Pumping` on every
+  shot and relies on `ACS_NamedExecuteAlways` to take it back; unhandled, the
+  gun fires once and locks up forever after. `scriptHeldItems` in
+  `wep/runtime.go` gives such items a lifetime instead, sized off the sound
+  that plays while the gun is not ready.
+- **`A_ReFire` re-enters whichever attack is running** (Hold or AltHold via
+  `Weapon.bAltFire`/`Runtime.FiringAlt`), not literally "Fire" - compiling it
+  to a fixed target sent an alt-fire's refire into the primary's own state.
+- **Alt-fire is a second, independent button** (`AllowFire/AllowAlt` on
+  `weapon_ready`, from `WRF_NOPRIMARY`/`WRF_NOSECONDARY`), and
+  `FireWeaponAlt` does nothing at all on a weapon with no `AltFire` state -
+  it never falls back to the primary.
+- **A weapon's tag can lie.** Final Doomer's "Scoped Shotgun" has a scope
+  drawn on its sprite and no `A_ZoomFactor` anywhere in the mod. Read the mod,
+  not the name, before hunting for a mechanism that was never wired up.
+- **Doom's pixel aspect is 1.2, not `320/240`.** `HUDSprite::GetWeaponRect`
+  reduces to `scaleX = viewHeight/240`, `scaleY = viewHeight/200`. Getting
+  this wrong turns a round scope into an egg; `squarePixelFrames` in
+  `weapon.go` is the (short) list of art that really is authored in square
+  pixels, kept as named exceptions rather than a general rule.
+- **A scope belongs to the weapon, not the camera.** `A_ZoomFactor` writes
+  `Weapon.FOVScale`; the view multiplies the player's own `baseFOV` by
+  whatever weapon is currently in hand, read fresh every frame - never cached
+  off the camera, or an unzoomed weapon picks up the last zoom level.
+
+## Decals, puffs and sound-file gotchas
+
+- **A puff and a decal are separate, unconditional spawns** from the same
+  hit - not an either/or. `SpawnShootDecal` reads the shooter's ready
+  weapon's own `Decal` property first, then the puff's, inherited.
+  `P_SpawnPuff` also picks the puff's *state*: a puff that hit nothing
+  starts in `Crash` if the actor has one, `Spawn` otherwise - reversed, a
+  hitscan on a wall draws nothing at all.
+- **A firing function spends its own ammo** (`A_FireBullets`,
+  `A_FireCustomMissile` call `DepleteAmmo` unless told not to) - a weapon
+  whose script never takes its own ammo is not a weapon with infinite ammo,
+  it is one whose ammo this engine spends for it regardless.
+- **`Powerup.Duration` is a clock on an inventory item**, not ACS - it is how
+  a spawned charge tells itself (and whoever is watching via
+  `A_JumpIfInTargetInventory`) that its window has passed.
+- **DECORATE is tokens, not lines.** `Projectile` is shorthand for seven
+  flags at once, not a property; several statements can share one line in
+  braces; an undefined subclass (`FDTNTMissile : Rocket`) still inherits its
+  parent's flags and Speed. `stockProjectiles` in `zdwep/compile.go` is the
+  fallback table for classes a mod never redefines.
+- **`Loop` returns to the nearest real label, not a synthetic `@frame...`
+  one** invented for a numeric jump target - counting a synthetic label as
+  the block's start put `Loop` in the wrong place and starved the one frame
+  in the block that cost any time.
+- **The last lump with a name wins**, GZDoom's own rule
+  (`FileSystem::CheckNumForName` searches backward) - and it only applies
+  *within* one source layer. A `-source` list stacks several layers and
+  later layers must not silently shadow the base game's own lumps just
+  because they happen to share a name; `Source.LayerOf` keeps each name's
+  match to its own layer.
+- **A sound can be shorter than its header claims.** Two Final Doomer WAVs
+  declare more data than they contain; naively decoded, the stream never
+  reports itself finished and hangs the audio thread forever.
+  `endWhenSilent` in `audio/player.go` treats "read, got nothing" as done.
+- **ffmpeg on a pipe can't seek back to fix a WAV header it just wrote**,
+  leaving both sizes at the streaming placeholder `0xFFFFFFFF` - read as a
+  signed 32-bit size, that's -1, and decoding stops before sample zero.
+  `repairWAV` in `zdwep/write.go` patches both sizes from the file's actual
+  length, for ffmpeg's own output and for a mod's WAV that lies the same way.
+- **An empty decoded buffer is one step from silencing the whole game** -
+  `beep.Loop` on zero samples spins forever on the audio callback's own
+  goroutine. `loadCue` refuses a cue that decodes to nothing.
+- **A per-channel mixer must be retired when its origin leaves the world**,
+  or dead mixers accumulate and every audio callback pays for stepping
+  through all of them - `DropOrigin`, called from `WorldActor.remove`.
 
 ## A thing on the ground stops turning to face you
 
-Every world sprite here is an XY billboard: it follows the camera's pitch as
-well as its yaw. That is what `+FORCEXYBILLBOARD` asks for and it is what keeps
-a puff of smoke from going edge-on when you look down at it.
-
-A shell casing that has landed is the one case where it reads as a defect. The
-quad ends up lying almost flat on the floor, so turning on the spot sweeps the
-shell round the floor with you, and a thing on the ground visibly spinning is
-the first thing anybody notices. `move` drops a resting actor to a plain Y
-billboard - GZDoom's own default (`gl_billboard_mode 0`): upright, facing you,
-never pitching.
-
-Note what this is **not**. Its animation had already stopped: landing sends a
-casing to its Death state, and `DEBUG_ACTORS=1` shows the frame and the
-position both frozen there. The tumble ending and the sprite still turning are
-two different things, and only the second one was left.
+World sprites are XY billboards (follow the camera's pitch too), which keeps
+a puff of smoke from going edge-on when you look down at it - but a landed
+shell casing lying flat on the floor then visibly spins in place as the
+camera turns. `move` drops a resting actor to a plain Y billboard once it
+lands (upright, facing you, never pitching), which is GZDoom's own default.
 
 ## A velocity can name the thing that threw it
 
-`A_SpawnItemEx("FDGunSmoke", 0,0,0, velx, vely+frandom(-0.2,0.2), velz, 0,
-SXF_NOCHECKPOSITION | SXF_ORIGINATOR | SXF_ABSOLUTEVELOCITY)` is how Final
-Doomer hands a puff of gun smoke the throw of the spawner it came out of.
-Folded to a number at migration time, `velx` is zero, and so is every other
-one: the whole compiled op said "no velocity", so every puff hung in the muzzle
-instead of leaving it. `Op.VelExprs` keeps all three as programs, the way
-`ArgExprs` already does for `A_SetScale`, and they are read off the spawner's
-own published `velx`/`vely`/`velz` when the spawn happens.
+`SXF_ORIGINATOR` hands a spawn a velocity read off its spawner's own published
+velocity rather than a fixed number - `Op.VelExprs` keeps the three
+expressions rather than folding them to zero at migration time. The two
+halves have to travel together: `SXF_ABSOLUTEVELOCITY` means those three
+numbers are already world axes, not forward/sideways/up from the spawner's
+facing, and reading a spawner's own `velx`/`vely`/`velz` is already in world
+axes too.
 
-The two halves have to land together. `SXF_ABSOLUTEVELOCITY` says the three
-numbers are Doom's own world axes, not forward/sideways/up from the spawner's
-facing - and `velx`/`vely` read off another actor are already in world axes. Fix
-the expressions without the flag and the smoke leaves sideways for every
-heading but the one the test map happens to face; `Op.AbsoluteVelocity` is what
-stops that. `publishState` writes Doom x to world X, Doom y to world Z and Doom
-z to world Y, so reading them back is the same mapping inverted, and a spawn
-inherits exactly the throw it was given.
+## A weapon has a picture of itself, in the shared store
 
-## A hotspot can be a lie
+`weapon.json`'s `icon` (on the floor) and `ammo_icon` (the box beside it) name
+pictures in the **shared** store, not the weapon's own atlas, because a
+pickup on the ground and the inventory list draw weapons nobody is holding.
+Two places to look, nearest first:
 
-`grAb` says where a picture is anchored, and GZDoom believes it. So does this,
-with one bound: an offset further out than Doom's whole 320x200 screen is not
-an anchor anybody authored. Brutal Doom ships exactly one - `TRACA5` says
-`(27, -1232)` on a 32x32 tracer - and that drew every `DecorativeTracer` about
-three voxels away from the shot that made it, eight of them on every shot of
-the assault shotgun.
+- **The `Spawn` state** - what most mods (and Doom itself) use.
+- **`Inventory.Icon`**, the status-bar picture. Final Doomer's weapons have no
+  `Spawn` state at all (nothing is ever dropped - a separate `CustomInventory`
+  actor is the pickup, driven by its own ACS and tokens), so this is the only
+  picture there is to use.
 
-Nobody ever saw it in GZDoom, because the same mod replaces that actor's sprite
-with an MD3 model and the lump is never rendered. That is the shape of this
-whole class of bug: a mod's broken data stays invisible until an engine reads
-the part of it GZDoom skips.
+**`Inventory.Icon` can be a `TEXTURES` lump name, not a sprite lump** -
+`zdwep/textures.go` reads every lump named `TEXTURES*` and resolves through
+it first. **Which of a weapon's two ammo pools you pick up is decided by
+which one has pickup art**, not by which slot it is in - `Weapon.AmmoType1`
+is the magazine on some weapons and the reserve on others. **Doom's own four
+ammo classes** (`Clip`, `Shell`, `RocketAmmo`, `Cell`) are in no mod's own
+DECORATE, so `stockAmmoSprites`/`stockAmmoMax` answer for them directly.
 
-The fallback is zero, not a guess at the middle, for the reason
-`OffsetsFromPNG` already gives: for a weapon frame the hotspot is subtracted
-from the middle of the 320x200 space rather than used as a pivot, and guessing
-`(width/2, height)` throws a full-canvas frame most of a screen away.
+## A weapon you always have is not one you pick up
 
-Two atlases carry these and both are cached against what they were packed from.
-`weapons/<name>/sprites.png` is rebuilt by `genweapons`; **`weapons/_sprites.png`
-is not** - it is rebuilt by the game at startup, and only when the store's names
-or sizes change. A fix to how an offset is *read* changes neither, so delete
-`weapons/_sprites.png` and run the game once, or the old numbers stay.
+`Player.StartItem` (fists and pistol, in every one of these mods) is handed
+out before the first frame, so it is never lying around to find -
+`weapon.json`'s `starting` marks it, and `Actor.StartItems` collects the
+union across every player class a mod defines (Final Doomer has nine). The
+one that ends up in your hands on spawn is the first starting weapon that
+costs ammo - Doom's own rule.
 
-## Two weapons with one name is the mod's doing
+## The test range
 
-Brutal Doom's KEYCONF puts `AssaultShotgun2` and `AssaultShotgun` on slot 3,
-`ClassicMP40` and `MP40` on slot 2, `ClassicPlasmaRifle` and `Plasma_Gun` on
-slot 6 - separate actors that share a `Tag`. The `2` ones are the mod's own
-variants (`AssaultShotgun2` is the slug-loaded shotgun, reached through the
-ChangeAmmo state, which gives it and selects it); the `Classic` ones belong to
-the mod's classic mode. A folder per actor is right; they read as duplicates
-only because the list shows the tag.
-
-## Only the weapon in hand is loaded
-
-A migrated mod is 134 weapons: half a gigabyte of atlas and a quarter of a
-gigabyte of sound, which decodes to several times that. Held onto, a player who
-cycles through the folder ends up carrying every one of them - the heap grew to
-1.4 GB and every weapon's sprite batch stayed in the 2D pass being begun, ended
-and drawn every frame.
-
-- Pictures: `keepLoaded` keeps the last few weapons and gives the rest back
-  (`Weapon.unload`, `GlApplication.DropSpriteBatch`). Loading one costs about
-  fifty milliseconds, so a handful are kept for swapping between two guns.
-- Sounds: `Unequip` unloads the cues, and `LoadCueTree` now only *indexes* the
-  folder - a cue is decoded the first time it is played. Decoding a weapon's
-  whole folder on equip cost a third of a second of silence per switch, and
-  most of it is never played. It also means two weapons whose folders hold a
-  sound of the same name no longer have to be the same sound.
-
-`-cycle 0.2 -autofire` walks the whole folder while firing; watch RSS.
-
-## A tic is a slice of a second, not a frame
-
-`Cursor.Update` is given the elapsed seconds and spends them against the current
-frame's duration. Two things make that come out right:
-
-- **The overshoot is carried.** A frame ends part way through an update; if the
-  remainder is dropped, every frame lasts up to one extra frame of wall time and
-  a weapon's rate of fire becomes a function of the machine's frame rate. The
-  same pistol fired 13.5 times a second at 60fps and 16 at 240.
-- **Time is only charged to a frame the cursor is sitting on.** Charging before
-  the first one has been entered banks a debt against a frame that does not
-  exist, and the machine starts a step further along than it should.
-
-`-shot-fps` is how to check it: run the same weapon at 30 and at 240 for the
-same number of *simulated* seconds and count with `DEBUG_WEAPON`.
-
-## Zero-tic loops are how a reload is written
-
-`maxStepsPerUpdate` is ZDoom's ten thousand and has to be. The dual MP40 refills
-its magazine one round at a time through a ten step zero-tic loop it runs sixty
-four times, all inside one tic. At five hundred the cursor gave up a fifth of
-the way through.
-
-And giving up no longer stops the weapon. A cursor that stops has no frame to
-draw, so the gun goes invisible and can never fire again - which reads exactly
-like a missing frame and is nothing of the sort. It now abandons the update,
-keeps its place, says so once, and tries again next frame: a weapon that
-stutters is one somebody can still see and still put down.
-
-## A weapon has a picture of itself, and there are two places to look
-
-`weapon.json`'s `icon` is the weapon lying on the floor and `ammo_icon` is the
-box of ammo beside it. Both name pictures in the **shared** store,
-`weapons/_sprites`, and not in the weapon's own atlas - a pickup on the ground,
-the inventory list and the HUD all draw weapons nobody is holding, and only the
-weapon in hand has its own atlas loaded.
-
-GZDoom has two answers and a mod uses whichever suits it, so both are read,
-nearest first:
-
-- **The `Spawn` state**, which is what the engine draws where a weapon has been
-  dropped. Brutal Doom, Doom itself and all ten single-weapon mods answer this
-  way.
-- **`Inventory.Icon`**, the picture for the status bar. Final Doomer answers
-  this way and nothing else: **its weapons have no `Spawn` state at all**,
-  because none of them is ever dropped. What lies on the floor is a separate
-  `FDBFG9000Pickup : FDWeaponPickup replaces BFG9000` - a `CustomInventory`
-  whose `Pickup` state reads the player's set token and gives one of nine
-  weapons, and whose `Spawn` state spawns one of nine decorative
-  `FD...PickupVisual<Set>` actors to be the picture. There is no engine-level
-  link from that back to a weapon; the mapping is the mod's own ACS and tokens.
-  What *is* on the weapon is its icon.
-
-**`Inventory.Icon` is a texture name, not a lump name.** Final Doomer's
-`PLCHAING` is not a lump anywhere in the pk3: `TEXTURES.hud` defines it as a
-half-scale copy of the sprite `PCHGZ0`, which is that weapon's own pickup
-sprite. So `zdwep/textures.go` reads every lump called TEXTURES - GZDoom takes
-any extension, which is how one mod ships `TEXTURES.hud` beside
-`TEXTURES.weapons` - and keeps each texture's first patch. `Index.Textures` is
-that map, and an icon name goes through it before it is looked for as a sprite.
-A mod that points its icon straight at a sprite needs none of this and is read
-as it stands.
-
-Reading the icon took the weapons with no pickup art of their own from 81 to
-**one**: Brutal Doom's fists, which have no `Spawn` state and no icon because
-in that mod nobody ever picks them up. That one falls back to the first frame of
-`Ready` - the gun as it is held - and it is recorded in `defaulted` as
-`no pickup sprite, using the first-person frame NAMEA0` rather than passed off
-as pickup art. `pickupMaxHeight` exists for that case: a whole first-person
-frame is three voxels tall lying on the floor otherwise.
-
-**Which of the two ammo pools you pick up is decided by which one has a
-picture**, not by which slot it is in. `Weapon.AmmoType1` is the magazine and
-`AmmoType2` the reserve on the Dual 92s and the other way round elsewhere;
-nobody draws a magazine lying on the floor, so the pool with a `Spawn` state is
-the reserve. `ammo_pickup` carries the item name.
-
-**Doom's own four ammo classes are in no mod's DECORATE.** `Clip`, `Shell`,
-`RocketAmmo` and `Cell` are the base game's, so `stockAmmoSprites` answers for
-them the way `stockAmmoMax` already answers how much of one you may carry - and
-the mod's own actor wins when it redefines one, which Brutal Doom does.
-
-`Weapon.Pictures()` is what the weapon itself names in that store, and it exists
-for the same reason `Actor.Pictures()` does: `genweapons -prune` deleted every
-icon on its first run, because no actor named them.
-
-`tools/gensheet` writes an icon too - the idle frame, into the same store -
-because the format does not care where a weapon came from and neither should the
-inventory.
-
-## A weapon you always have is not a weapon you pick up
-
-`Player.StartItem` on a player class is what the player is handed before the
-first frame, and in every one of these mods that is the fists and the pistol.
-Such a weapon is never anywhere to be found, so `weapon.json`'s `starting` marks
-it: the engine owns it from the start and the test range lays out its ammo and
-no weapon.
-
-It is a **list**, not a property, and `Actor.Properties` keeps one value per
-key - so `Actor.StartItems` collects them separately as the file is read.
-`StartsWith` takes the union over every player class in the mod, because Final
-Doomer has nine of them, one per weapon set, and all nine fists and nine pistols
-are somebody's starting weapon. 23 of the 134 come out starting.
-
-The one that comes up in your hands is the first starting weapon that costs
-ammo, which is Doom's own answer - you begin with the fists and the pistol and
-it is the pistol you are holding. It matters more here than it does there:
-several of these bare hands draw nothing at all (Alien Vendetta's fist is an
-invisible ready frame), and coming up holding one reads exactly like coming up
-holding nothing.
-
-## The test range, and the player starting empty handed
-
-The player no longer holds the whole folder. `Weapon.owned` is what has been
-walked over plus what `starting` says they were born with, and the number keys
-and `,`/`.` only reach those. A folder with no starting weapon in it leaves the
-player empty handed - `currentWeapon()` returns nil, which every drawing and
-firing path already had to handle.
-
-The two capture flags are the exception, because what they are for is looking at
-a weapon: `-weapon ID` hands over the one it names, and `-cycle N` owns the whole
-folder so it can still walk it. Everything in "Seeing what a change did" works
-exactly as it did.
-
-`assets/raymap.ldtk` has a room east of the spawn room, through a doorway in the
-shared wall, with a `WeaponRange` entity in its north-west corner. That entity is
-not a thing in the world: `spawnWeaponRange` racks every weapon in the folder from
-it - a rack of shelves to a tile, a weapon and its own ammo side by side on a
-board, two boards to a rack - skipping the tiles the room's own pillars stand on.
-All 134 fit; a folder that grows past the room simply racks fewer, and the count
-is logged.
-
-**Every other row is left empty.** A rack is a tile wide, so a row of them is a
-wall, and racking every row leaves aisles a tenth of a voxel wider than the player
-- a room you cannot walk through is a room where nothing can be picked up either
-way round. The pillar row at z=7 is the map's, not the range's, and the player
-walking dead east from the spawn stops against it.
-
-The doorway is worth knowing about, because it is not a hole in the wall: three
-`Mod` entities at the end of the WallMods layer give those tiles `WallHeight 1`
-and `WallOffset 3`, which puts the wall block up at head height and leaves the
-tiles under it open. A later `Mod` wins over an earlier one, so the doorway is
-three appended entities and nothing was deleted from the map.
-
-A pickup is a distance test, not a collider - Doom's own radius, the player's 16
-plus an item's 20 - because a pickup is something you walk *through*, and two
-hundred physics bodies in one room is two hundred things to bump into.
+`assets/raymap.ldtk` has a room east of spawn with a `WeaponRange` entity in
+its corner; `spawnWeaponRange` racks every weapon the folder holds from
+there - a rack of shelves per tile, a weapon and its own ammo side by side on
+a board, two boards to a rack, skipping tiles the room's own pillars stand
+on and leaving every other row empty so the aisles stay walkable. All 134
+weapons fit today; a folder that outgrows the room simply racks fewer, and
+the count is logged.
 
 ## The HUD counts the magazine, not the pool
 
-`AmmoLine` is what is in the clip out of what the clip holds, and the reserve
-behind it: `9/31  +300`. Which of the two ammo pools is the clip is
-`Ammo.Clip`, and DECORATE does not say - Brutal Doom's assault rifle spends
-`Clip2` and reloads `RifleAmmo` into it, and the Dual 92s have them the other
-way round. What tells them apart is that **a reload fills a magazine**, which
-is the same walk over the Reload states that already decides which pools start
-loaded; `clipOf` picks the one of `AmmoType1`/`AmmoType2` that walk reaches.
-Only a pool the weapon actually spends counts: a dual wielded gun reloads two
-magazines and one of them is the off hand's, which is not what the HUD is
-counting down. 22 of the 134 have a clip; the rest have one pool and no reload,
-and their one pool is the whole line.
+`AmmoLine` (`9/31  +300`) is the clip out of its capacity, then the reserve.
+Which pool is the clip (`Ammo.Clip`) is not something DECORATE states
+directly - it is found the same way a reload's starting fill is, by walking
+which pool the Reload states actually give back into. Only a pool the weapon
+itself spends counts; a dual-wielded gun's off-hand magazine is not what the
+HUD counts down.
 
 ## The inventory and the HUD
 
-`I` opens `quads.GuiInventory`: what is carried down the left, the highlighted
-one of them down the right. The left pane is a `GuiList`, the right is a
-`GuiBorder` and two `BitmapFontMesh`es, and the only new drawing is
-`quads.DrawIconInBox`.
-
-**An icon is not a weapon sprite and must not be placed like one.**
-`GetSourceAndDestRects` puts a frame where its own canvas and hotspot say to,
-which is exactly right in GZDoom's 320x200 weapon space and exactly wrong in a
-panel: a fist frame authored a third of the way down a full-screen canvas landed
-six hundred pixels outside its own pane. `DrawIconInBox` places the picture
-itself, centred and scaled to fit.
-
-The same call fixed a bug in `BitmapFontMesh.Draw` that had been there all along:
-a second line went back to `x=0` rather than to the mesh's own left edge. Nothing
-noticed while the only multi-line text was the debug overlay in that corner.
+`I` opens `quads.GuiInventory`: carried items down the left (a `GuiList`, with
+its own scrollbar once there are more than fit), the highlighted one's detail
+page down the right (`GuiBorder` + `BitmapFontMesh`). **An icon is not a
+weapon sprite and must not be placed like one** - `GetSourceAndDestRects`
+places a frame by its own canvas and hotspot, correct for GZDoom's 320x200
+weapon space and wrong in a panel; `DrawIconInBox` centers and scales the
+picture to fit instead.
 
 ## Keep the unused packages
 
 `dungen/`, `audio/`, `geometry/` (including `jps.go` and `cc.go`) and
 `quads/glhf/texture3d.go` currently have no callers in the main loop. **Do not
-delete them.** They are kept deliberately - procedural generation, sound and the
-3D texture path are all expected to be wired up later.
-
-An audit that flags them as dead code is correct about the fact and wrong about
-the conclusion. Leave them as they are.
+delete them.** They are kept deliberately - procedural generation, sound and
+the 3D texture path are all expected to be wired up later. An audit that
+flags them as dead code is correct about the fact and wrong about the
+conclusion.
 
 ## Run gofmt
 
 The tree is gofmt'd and CI fails if it is not (`.github/workflows/test.yml`).
-It used to be space-indented, so every edit came back tab-indented and buried
-the real change in a whole-file diff. `gofmt -w .` before committing.
-`.git-blame-ignore-revs` holds the reformat commit.
+`gofmt -w .` before committing. `.git-blame-ignore-revs` holds the reformat
+commit that made every future diff readable again.
