@@ -6,6 +6,14 @@ import (
 	"math"
 )
 
+// scrollbarThickness and scrollbarGap are the bar's own width and how far it
+// stands off from the text beside it, in the same pixels everything else in
+// this file is measured in.
+const (
+	scrollbarThickness = 6
+	scrollbarGap       = 4
+)
+
 type GuiList struct {
 	labels        []*BitmapFontMesh
 	selectedIndex int
@@ -23,7 +31,8 @@ type GuiList struct {
 	keyHandler       func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool
 	mouseHandler     func(selectedIndex int, xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) bool
 
-	border *GuiBorder
+	border    *GuiBorder
+	scrollbar *GuiScrollbar
 
 	scale       mgl32.Vec2
 	shouldClose bool
@@ -32,6 +41,10 @@ type GuiList struct {
 	maxHeight      float32
 	originIsCenter bool
 	layoutIsDirty  bool
+
+	// scrollbarReserve is how much of size.X() the scrollbar is taking up
+	// this layout, 0 when every item fits and there is nothing to scroll.
+	scrollbarReserve float32
 
 	closeCallback func()
 	uiContext     UIContext
@@ -49,6 +62,7 @@ func NewGuiList(uiContext UIContext) *GuiList {
 		maxWidth:        math.MaxFloat32,
 		maxHeight:       math.MaxFloat32,
 		layoutIsDirty:   true,
+		scrollbar:       NewGuiScrollbar(uiContext),
 	}
 }
 
@@ -88,12 +102,21 @@ func (g *GuiList) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action
 	return false
 }
 
+// HandleMousePosEvents only tests the rows Draw actually put on screen: an
+// off-screen label keeps whatever position it was last drawn at, which is
+// wherever it happened to scroll past, and it would ghost-hit for a click
+// nowhere near it if this walked the whole list the way it used to when
+// every label's position was fixed for good at layout.
 func (g *GuiList) HandleMousePosEvents(xpos float64, ypos float64) (consumed bool) {
 	listWidth := g.size[0]
-	for idx, label := range g.labels {
-		pos, size := label.GetRect()
+	for idx := 0; idx < min(g.linesShown(), len(g.labels)); idx++ {
+		itemIndex := idx + g.vertScrollOffset
+		if itemIndex >= len(g.labels) {
+			break
+		}
+		pos, size := g.labels[itemIndex].GetRect()
 		if float32(xpos) >= pos[0] && float32(xpos) <= pos[0]+listWidth && float32(ypos) >= pos[1] && float32(ypos) <= pos[1]+size[1] {
-			g.selectedIndex = idx
+			g.selectedIndex = itemIndex
 			return true
 		}
 	}
@@ -247,7 +270,13 @@ func (g *GuiList) SetOrigin(x, y float32) {
 }
 
 func (g *GuiList) layout() {
-	g.size = mgl32.Vec2{float32(g.widthNeeded(g.items, int(g.maxWidth))), float32(g.heightNeeded(g.items, int(g.maxHeight)))}
+	g.scrollbarReserve = 0
+	textMaxWidth := g.maxWidth
+	if g.needsScrollbarFor(len(g.items)) {
+		g.scrollbarReserve = scrollbarGap + scrollbarThickness
+		textMaxWidth -= g.scrollbarReserve
+	}
+	g.size = mgl32.Vec2{float32(g.widthNeeded(g.items, int(textMaxWidth))) + g.scrollbarReserve, float32(g.heightNeeded(g.items, int(g.maxHeight)))}
 	g.vertScrollOffset = 0
 	topLeft := g.topLeft()
 	size := g.size
@@ -258,20 +287,47 @@ func (g *GuiList) layout() {
 	g.border.SetBackground(mgl32.Vec4{0, 0, 0, 0.6})
 	g.border.SetBorderColor(g.textColor)
 
+	if g.scrollbarReserve > 0 {
+		barPos := topLeft.Add(mgl32.Vec2{size.X() - scrollbarThickness, 0})
+		g.scrollbar.SetBounds(barPos, mgl32.Vec2{scrollbarThickness, size.Y()})
+	}
+
 	g.labels = nil
 	for idx := 0; idx < len(items); idx++ {
 		mesh := g.newFontMesh(items[idx])
-		//curPos := mgl32.Vec2{g.size.X() / 2, g.yFromIndex(idx) + float32(g.lineHeight()/2)}
-		curPos := mgl32.Vec2{0, g.yFromIndex(idx)}
-		if g.isCentered {
-			curPos = curPos.Add(mgl32.Vec2{g.size.X() / 2, float32(g.lineHeight() / 2)})
-		}
-
-		drawPos := topLeft.Add(curPos)
-
-		mesh.SetPosition(drawPos)
+		mesh.SetPosition(g.rowPosition(idx))
 		g.labels = append(g.labels, mesh)
 	}
+}
+
+// rowPosition is where the row-th line on screen belongs, top-left or
+// centred to match isCentered. It takes a screen row rather than an item
+// index on purpose: Draw calls it with the row a scrolled-to item currently
+// occupies, not the fixed place it would sit at unscrolled, which is what
+// actually moves the text when the list scrolls rather than just changing
+// which already-positioned mesh gets drawn where it always was.
+func (g *GuiList) rowPosition(row int) mgl32.Vec2 {
+	curPos := mgl32.Vec2{0, g.yFromIndex(row)}
+	if g.isCentered {
+		curPos = curPos.Add(mgl32.Vec2{g.textWidth() / 2, float32(g.lineHeight() / 2)})
+	}
+	return g.topLeft().Add(curPos)
+}
+
+// needsScrollbarFor is verticalScrollingNeeded's own question, asked before
+// layout has anywhere to store the answer - about to lay out itemCount items,
+// will they all fit in the height this list was given.
+func (g *GuiList) needsScrollbarFor(itemCount int) bool {
+	if itemCount == 0 {
+		return false
+	}
+	return int(g.maxHeight)/g.lineHeight() < itemCount
+}
+
+// textWidth is how much of size.X() text actually gets to use - all of it,
+// unless the scrollbar standing at the right edge is taking a slice.
+func (g *GuiList) textWidth() float32 {
+	return g.size.X() - g.scrollbarReserve
 }
 
 func (g *GuiList) ReplaceText(index int, text string) {
@@ -280,8 +336,8 @@ func (g *GuiList) ReplaceText(index int, text string) {
 	}
 	width, _ := g.uiContext.Font.MeasureString([]string{text}, g.scale, 0, 2)
 	//width, _ := g.labels[index].CalculateSizeScaled([]string{text})
-	if width > int(g.size.X()) {
-		g.labels[index].SetScale(mgl32.Vec2{(float32(g.size.X()) / float32(width)) * g.scale.X(), g.scale.Y()})
+	if float32(width) > g.textWidth() {
+		g.labels[index].SetScale(mgl32.Vec2{(g.textWidth() / float32(width)) * g.scale.X(), g.scale.Y()})
 	} else {
 		g.labels[index].SetScale(g.scale)
 	}
@@ -289,7 +345,7 @@ func (g *GuiList) ReplaceText(index int, text string) {
 }
 
 func (g *GuiList) newFontMesh(label string) *BitmapFontMesh {
-	size := g.size
+	size := mgl32.Vec2{g.textWidth(), g.size.Y()}
 	mesh := NewBitmapFontMesh(g.uiContext.Shader, g.uiContext.Font, g.uiContext.ColorBatch)
 	mesh.SetWidth(int(size.X()))
 	mesh.SetCenterOrigin(g.isCentered)
@@ -334,6 +390,7 @@ func (g *GuiList) Draw() {
 			break
 		}
 		mesh := g.labels[itemIndex]
+		mesh.SetPosition(g.rowPosition(idx))
 		if itemIndex == g.selectedIndex {
 			mesh.SetTintColor(g.textSelectColor)
 			mesh.SetBackground(g.textColor)
@@ -343,6 +400,11 @@ func (g *GuiList) Draw() {
 		}
 
 		mesh.Draw()
+	}
+
+	if g.verticalScrollingNeeded() {
+		g.scrollbar.SetRange(len(g.labels), g.linesShown(), g.vertScrollOffset)
+		g.scrollbar.Draw()
 	}
 }
 
