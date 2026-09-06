@@ -12,3 +12,6 @@ blake_stone/
 temp/
 /goray
 /go-fps
+
+# F12 writes this while playing; it is a scratch capture, not an asset.
+/screenshot00.png
