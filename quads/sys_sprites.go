@@ -141,6 +141,16 @@ func (q *SpriteDrawer) textureIndex(sprite *SpriteComponent, viewDirection int) 
 // Draw paints the opaque sprites. forShadows leaves out the ones that do not
 // cast, which is the same set that is left out of the scene signature.
 func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, forShadows bool) {
+	// A shadow map wants the depth the sprite actually has; only the pass the
+	// player looks at is biased.
+	if !forShadows {
+		gl.Enable(gl.POLYGON_OFFSET_FILL)
+		gl.PolygonOffset(spriteDepthBiasFactor, spriteDepthBiasUnits)
+		defer func() {
+			gl.PolygonOffset(0, 0)
+			gl.Disable(gl.POLYGON_OFFSET_FILL)
+		}()
+	}
 	spriteShader.Begin()
 
 	if q.quadVertices == nil {
@@ -210,6 +220,14 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glhf.Shader, forShadows bool) {
 	if len(q.transparentSprites) == 0 {
 		return
+	}
+	if !forShadows {
+		gl.Enable(gl.POLYGON_OFFSET_FILL)
+		gl.PolygonOffset(spriteDepthBiasFactor, spriteDepthBiasUnits)
+		defer func() {
+			gl.PolygonOffset(0, 0)
+			gl.Disable(gl.POLYGON_OFFSET_FILL)
+		}()
 	}
 	spriteShader.Begin()
 
@@ -341,6 +359,23 @@ func (q *SpriteDrawer) drawAdditiveBatch(instances []float32) int {
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	return calls
 }
+
+// spriteDepthBias pulls every world sprite a little towards the viewer before
+// it is depth tested, which is GZDoom's own `state.SetDepthBias(-1, -128)` on
+// the masked sprite pass and the same two numbers.
+//
+// It does not stop a sprite being cut by geometry - GZDoom's are cut too, and
+// a big flash standing in a doorway is sliced there as well. What it stops is
+// the other half of the problem: an effect sat flush against the wall or floor
+// it belongs to, which without a bias z-fights the surface and comes out half
+// eaten by it, one row of pixels at a time as the camera moves.
+//
+// ponytail: the constant slope-scaled pair, not a distance-aware one. GZDoom
+// has run these two numbers for every sprite in every map for years.
+const (
+	spriteDepthBiasFactor = -1
+	spriteDepthBiasUnits  = -128
+)
 
 // drawBatch submits one instanced draw and reports the number of draw calls it cost.
 func (q *SpriteDrawer) drawBatch(instances []float32, cullFace bool) int {

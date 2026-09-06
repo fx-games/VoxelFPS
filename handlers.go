@@ -203,6 +203,9 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int) {
 	g.physicsSystem.AddObject(physics)
 	physics.SetVelocity(direction.Mul(10))
 
+	// The bolt takes the one tracked light off whatever had it, so the muzzle
+	// flash no longer owns it and A_Light0 must not reach in and switch it off.
+	g.muzzleFlashLit = false
 	g.AttachLightTo(newProjectile, projectileLightColor, projectileLightIntensity, projectileLightReach)
 }
 

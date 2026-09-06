@@ -29,13 +29,35 @@ type Player struct {
 	currentStream beep.StreamSeekCloser
 	cuesLoaded    bool
 	disabled      bool
-	// channels holds one mixer per ZDoom sound channel, so a new sound on a
-	// channel can replace what was playing there.
-	channels map[int]*beep.Mixer
+	// channels holds one mixer per sound channel, keyed by the thing making
+	// the sound as well as the channel number. ZDoom's channels belong to an
+	// origin - a new sound on the player's CHAN_WEAPON replaces the player's
+	// weapon sound, not the ricochet a puff on the far wall is playing on its
+	// own CHAN_WEAPON. Keyed by number alone they all shared one slot, and
+	// every hitscan silenced its own gun: the pistol's fire sound was cleared
+	// by the puff's ricochet in the same tic it started.
+	channels map[channelKey]*channel
+}
+
+// channelKey names one sound channel: whose it is, and which of ZDoom's
+// numbers. Origin zero is the player - the weapon in hand and anything else
+// heard from where the listener stands.
+type channelKey struct {
+	origin int
+	number int
+}
+
+// channel is one origin's channel: the mixer it plays through, and what is on
+// it. The cue and the loop flag are kept because a looping sound that is
+// already playing must not be restarted - see playOnChannel.
+type channel struct {
+	mixer   *beep.Mixer
+	cue     string
+	looping bool
 }
 
 func NewPlayer(sampleRate int32) *Player {
-	p := &Player{channels: make(map[int]*beep.Mixer)}
+	p := &Player{channels: make(map[channelKey]*channel)}
 	p.UnloadAllCues()
 	p.init(sampleRate)
 	return p
@@ -292,7 +314,18 @@ type CueOptions struct {
 	// Channel is ZDoom's notion: a new sound on a channel replaces whatever was
 	// playing there. Channel 0 mixes freely.
 	Channel int
+	// Origin is whose channel that is. Channels belong to the thing making the
+	// sound in ZDoom, so a puff's own CHAN_WEAPON is not the player's; zero is
+	// the player, and anything else in the world passes its own id.
+	Origin int
 }
+
+// debugSound makes every cue say whether it was found and where it went. A
+// sound that does not play is otherwise indistinguishable from one that plays
+// silently: the cue may be missing from the folder, the channel it landed on
+// may have been overwritten a tic later, or the volume may have come out at
+// nothing. DEBUG_SOUND=1 in the environment.
+var debugSound = os.Getenv("DEBUG_SOUND") != ""
 
 // PlayCueAt plays a cue with volume, pitch, panning and channel behaviour.
 func (p *Player) PlayCueAt(name string, options CueOptions) {
@@ -300,6 +333,11 @@ func (p *Player) PlayCueAt(name string, options CueOptions) {
 		return
 	}
 	buffers := p.buffers(name)
+	if debugSound {
+		log.Printf("[sound] %-34s takes=%d origin=%d chan=%d vol=%.2f pitch=%.2f loop=%v",
+			name, len(buffers), options.Origin, options.Channel, options.Volume,
+			options.Pitch, options.Looping)
+	}
 	if len(buffers) == 0 {
 		return
 	}
@@ -331,12 +369,12 @@ func (p *Player) PlayCueAt(name string, options CueOptions) {
 	// A sound that loops has to be stoppable, and a channel is the only handle
 	// there is on one. A script that asks for a looping sound on no channel
 	// gets one of its own rather than a sound that plays until the game ends.
-	channel := options.Channel
-	if options.Looping && channel <= 0 {
-		channel = loopChannel
+	number := options.Channel
+	if options.Looping && number <= 0 {
+		number = loopChannel
 	}
-	if channel > 0 {
-		p.playOnChannel(channel, streamer)
+	if number > 0 {
+		p.playOnChannel(channelKey{options.Origin, number}, name, options.Looping, streamer)
 		return
 	}
 	speaker.Play(streamer)
@@ -346,32 +384,59 @@ func (p *Player) PlayCueAt(name string, options CueOptions) {
 // was on it. Each channel is a mixer that stays in the speaker for good, so
 // replacing a sound is emptying its mixer rather than reaching into the
 // speaker's own list.
-func (p *Player) playOnChannel(channel int, streamer beep.Streamer) {
+//
+// A looping sound already playing on the channel is left alone, which is
+// ZDoom's own rule and not a refinement. These weapons start their idle hum
+// from a Ready frame, and a Ready frame runs every tic: restarted each time,
+// the loop never got past its first thirty-fifth of a second and the Prism
+// Cannon's hum came out as a buzz thirty five times a second.
+func (p *Player) playOnChannel(key channelKey, cue string, looping bool, streamer beep.Streamer) {
 	speaker.Lock()
-	mixer, exists := p.channels[channel]
-	if !exists {
-		mixer = &beep.Mixer{}
-		p.channels[channel] = mixer
+	if p.sameLoopAlreadyPlaying(key, cue, looping) {
+		speaker.Unlock()
+		if debugSound {
+			log.Printf("[sound] %-34s already looping on origin=%d chan=%d, left alone",
+				cue, key.origin, key.number)
+		}
+		return
 	}
-	mixer.Clear()
-	mixer.Add(streamer)
+	open, exists := p.channels[key]
+	if !exists {
+		open = &channel{mixer: &beep.Mixer{}}
+		p.channels[key] = open
+	}
+	open.cue, open.looping = cue, looping
+	open.mixer.Clear()
+	open.mixer.Add(streamer)
 	speaker.Unlock()
 	if !exists {
-		speaker.Play(mixer)
+		speaker.Play(open.mixer)
 	}
+}
+
+// sameLoopAlreadyPlaying reports whether this exact looping cue is the thing
+// already running on that origin's channel, in which case ZDoom leaves it be
+// rather than starting it again. Held apart from playOnChannel because it is
+// the whole of the rule and the only part worth testing without a speaker.
+func (p *Player) sameLoopAlreadyPlaying(key channelKey, cue string, looping bool) bool {
+	if !looping {
+		return false
+	}
+	open, playing := p.channels[key]
+	return playing && open.looping && open.cue == cue
 }
 
 // StopChannel silences whatever is playing on one of ZDoom's channels, which
 // is what A_StopSound asks for: a weapon that stops its own idle hum before it
 // fires.
-func (p *Player) StopChannel(channel int) {
+func (p *Player) StopChannel(origin, number int) {
 	if p.disabled {
 		return
 	}
 	speaker.Lock()
 	defer speaker.Unlock()
-	if mixer, playing := p.channels[channel]; playing {
-		mixer.Clear()
+	if open, playing := p.channels[channelKey{origin, number}]; playing {
+		open.clear()
 	}
 }
 
@@ -383,9 +448,16 @@ func (p *Player) StopChannels() {
 	}
 	speaker.Lock()
 	defer speaker.Unlock()
-	for _, mixer := range p.channels {
-		mixer.Clear()
+	for _, open := range p.channels {
+		open.clear()
 	}
+}
+
+// clear silences a channel and forgets what was on it, so the next sound of
+// the same name starts rather than being taken for one already playing.
+func (c *channel) clear() {
+	c.mixer.Clear()
+	c.cue, c.looping = "", false
 }
 
 // loopChannel is where a looping sound goes when its script named no channel.

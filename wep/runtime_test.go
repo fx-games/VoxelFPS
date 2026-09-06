@@ -442,3 +442,44 @@ func TestWaitRepeatsTheFrameAboveItActionAndAll(t *testing.T) {
 	assert.False(t, cursor.Stopped(), "and it is still going")
 	assert.Equal(t, "CASGI0", cursor.Sprite(), "still on the frame above the Wait")
 }
+
+// GZDoom clears attackdown only from a frame that reads a button:
+//
+//	if (player.WeaponState & (WF_WEAPONREADY | WF_WEAPONREADYALT))
+//		CheckWeaponFire();
+//
+// and A_WeaponReady(WRF_NOFIRE) sets neither bit. Cleared by such a frame, the
+// Dual 92s' own recoil - three WRF_NOFIRE frames, then three plain ones - re-armed
+// the trigger the player was still holding down, and the guns fired again through
+// the middle of their own animation.
+func TestARecoilFrameThatReadsNoButtonDoesNotRearmTheTrigger(t *testing.T) {
+	states := StateMachine{
+		Steps: []Step{
+			{Tics: 1, Ops: []Op{{Op: OpWeaponReady, AllowFire: true, AllowAlt: true}}},
+			{Tics: 0, Ops: []Op{{Op: OpLoop}}},
+			// Fire: the shot, one recoil frame that reads no button, and one
+			// that reads the trigger - the Dual 92s' own shape.
+			{Tics: 0, Ops: []Op{{Op: OpFireBullets, Count: 1}}},
+			{Tics: 1, Ops: []Op{{Op: OpWeaponReady}}},
+			{Tics: 1, Ops: []Op{{Op: OpWeaponReady, AllowFire: true}}},
+			{Tics: 0, Ops: []Op{{Op: OpGoto, To: "Ready"}}},
+		},
+		Labels: map[string]int{"ready": 0, "fire": 2},
+	}
+	runtime := &Runtime{Inventory: Inventory{}, Caps: Caps{}, Vars: map[string]float64{},
+		NoAutoFire: true}
+	runtime.Input.Trigger = true
+
+	cursor := NewCursor(&states, "Ready")
+	shots := 0
+	for tic := 0; tic < 20; tic++ {
+		for _, op := range cursor.Update(runtime, 1/TicRate) {
+			if op.Op == OpFireBullets {
+				shots++
+			}
+		}
+	}
+	if shots != 1 {
+		t.Errorf("a semi-automatic fired %d times on one held trigger, want 1", shots)
+	}
+}

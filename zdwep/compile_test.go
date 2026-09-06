@@ -878,3 +878,130 @@ func mustLabel(t *testing.T, machine wep.StateMachine, name string) int {
 	require.True(t, ok, "the jump names a label that exists")
 	return index
 }
+
+// A mod's puff is `: BulletPuff` and writes nothing about gravity, because
+// BulletPuff carries +NOGRAVITY and is in doom2.wad rather than in the mod.
+// Read as a plain actor the puff fell: the glow a hitscan leaves sank away
+// below the bullet chip it was drawn beside, while the chip stayed on the wall.
+func TestAPuffInheritsNoGravityFromTheStockClassItNames(t *testing.T) {
+	const mod = `
+ACTOR TestPuffGun : Weapon
+{
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_FireBullets (4, 0.5, 1, 5, "TestSparkPuff", 0)
+    TNT1 A 0 A_FireCustomMissile ("TestFallingBit")
+    TSHT A 1
+    Goto Ready
+  }
+}
+
+ACTOR TestSparkPuff : BulletPuff
+{
+  RenderStyle Add
+  States { Spawn: TSMK A 4 Stop }
+}
+
+ACTOR TestFallingBit
+{
+  Gravity 0.7
+  States { Spawn: TSMK A 4 Stop }
+}
+`
+	idx := indexFromFiles(t, map[string]string{"DECORATE": mod})
+	policy := DefaultPolicy()
+	policy.Spawns["testsparkpuff"] = "sprite"
+	policy.Spawns["testfallingbit"] = "sprite"
+
+	result, err := CompileWeapon(idx, policy, "TestPuffGun")
+	require.NoError(t, err)
+
+	puff, ok := result.Actors["testsparkpuff"]
+	require.True(t, ok, "the puff is compiled")
+	assert.True(t, puff.NoGravity, "a BulletPuff subclass hangs where it is put")
+
+	bit, ok := result.Actors["testfallingbit"]
+	require.True(t, ok)
+	assert.False(t, bit.NoGravity, "something that inherits nothing still falls")
+}
+
+// SeeSound is played from P_SpawnMissile and appears in no state, so a weapon
+// whose only firing sound is one - Final Doomer's plasma rifle - compiled
+// silent, and the sound file was never even copied out of the mod.
+func TestAMissilesSeeSoundIsCompiledAndAskedFor(t *testing.T) {
+	const mod = `
+ACTOR TestSeeGun : Weapon
+{
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_FireCustomMissile ("TestLoudBall")
+    TSHT A 1
+    Goto Ready
+  }
+}
+
+ACTOR TestLoudBall
+{
+  Speed 25
+  Projectile
+  SeeSound "testplasma/fire"
+  States { Spawn: TSMK A 4 Stop }
+}
+`
+	idx := indexFromFiles(t, map[string]string{"DECORATE": mod})
+	policy := DefaultPolicy()
+	policy.Spawns["testloudball"] = "sprite"
+
+	result, err := CompileWeapon(idx, policy, "TestSeeGun")
+	require.NoError(t, err)
+
+	ball, ok := result.Actors["testloudball"]
+	require.True(t, ok)
+	assert.Equal(t, "testplasma/fire", ball.SeeSound)
+	assert.Contains(t, result.Sounds, "testplasma/fire",
+		"the migration has to copy the file too, or the sound is named and missing")
+}
+
+// Doom's own ammo classes are in the game rather than in the mod, so a weapon
+// that reloads out of "Clip" found no maximum to read and was given one. One
+// is not a small reserve, it is a weapon that stops after a single round.
+func TestStockAmmoKeepsItsRealCapacity(t *testing.T) {
+	const mod = `
+ACTOR TestClipGun : Weapon
+{
+  Weapon.AmmoType "TestMag"
+  Weapon.AmmoType2 "Clip"
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady(WRF_ALLOWRELOAD)
+    Loop
+  Fire:
+    TNT1 A 0 A_FireBullets (4, 0.5, 1, 5, "BulletPuff", 0)
+    TSHT A 1
+    Goto Ready
+  Reload:
+    TNT1 A 0 A_TakeInventory("Clip", 1)
+    TNT1 A 0 A_GiveInventory("TestMag", 1)
+    TSHT A 1
+    Goto Ready
+  }
+}
+
+ACTOR TestMag : Ammo { Inventory.MaxAmount 30 }
+`
+	idx := indexFromFiles(t, map[string]string{"DECORATE": mod})
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestClipGun")
+	require.NoError(t, err)
+
+	assert.Equal(t, 200, result.Weapon.Items["Clip"].Max)
+	assert.Equal(t, 30, result.Weapon.Items["TestMag"].Max)
+}

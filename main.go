@@ -253,6 +253,13 @@ type Game struct {
 	sharedSpriteIndex map[string]int
 	worldActors       []*WorldActor
 	warnedSprites     map[string]bool
+	// lastActorOrigin hands each spawned thing a sound origin of its own, so
+	// its channels are its own rather than the player's - see playerOrigin.
+	lastActorOrigin int
+	// muzzleFlashLit says whether the one tracked light is currently the
+	// muzzle flash's, so putting the flash out does not put a projectile's
+	// light out with it.
+	muzzleFlashLit bool
 
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig

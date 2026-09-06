@@ -59,6 +59,11 @@ type WorldActor struct {
 	// thrown charge tells its owner that it exists and watches the owner's
 	// inventory for the word to go off.
 	owner *wep.Runtime
+	// origin is what this thing's sound channels belong to. A ZDoom channel is
+	// the origin's channel, not the world's: a puff playing a ricochet on its
+	// own CHAN_WEAPON must not stop the gun that spawned it playing its shot
+	// on the player's. Zero is the player, so these start at one.
+	origin int
 }
 
 // worldUnitsPerDoomUnit converts the numbers a script writes into ours. Doom
@@ -151,7 +156,9 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	object.SetComponent(sprite)
 	object.SetLifeTime(worldActorLifetime)
 
+	g.lastActorOrigin++
 	live := &WorldActor{
+		origin:  g.lastActorOrigin,
 		data:    actor,
 		cursor:  wep.NewCursor(&actor.States, label),
 		runtime: &wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}, Vars: map[string]float64{}, Rand: weapon.runtime.Rand},
@@ -169,10 +176,22 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	live.velocity = g.launchVelocity(actor, op, direction, spawner)
 
 	live.showCurrentFrame(g)
+	// ZDoom plays a missile's SeeSound from P_SpawnMissile, which is why it is
+	// on the actor and in none of its states. Only for a missile actually
+	// fired: A_SpawnItem drops a thing into the world and makes no such noise.
+	if op.Op == wep.OpFireProjectile && actor.SeeSound != "" {
+		g.playSoundAt(wep.Op{Sound: actor.SeeSound, Volume: 1, Pitch: 1, Channel: seeSoundChannel},
+			position, live.origin)
+	}
 	g.worldActors = append(g.worldActors, live)
 	g.capWorldActors()
 	return live
 }
+
+// seeSoundChannel is where a missile's launch noise goes. ZDoom uses
+// CHAN_VOICE for it, which is channel 2, and it is the missile's own channel
+// rather than the player's - a stream of plasma balls each keep their own.
+const seeSoundChannel = 2
 
 // maxWorldActors is how many spawned things may be in the air at once. A
 // weapon that fires fast makes several a shot, and while their own scripts do
@@ -775,8 +794,9 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 	pivot := g.sharedAtlas.PivotFromCenter(index)
 	live.sprite.PivotOverride = &pivot
 	if debugActors {
-		log.Printf("[actor] %-22s %-8s at=%v size=%.2fx%.2f scale=%.2f alpha=%.2f style=%q emissive=%.2f baked=%.0f",
+		log.Printf("[actor] %-22s %-8s at=%v pivot=%+.2f,%+.2f size=%.2fx%.2f scale=%.2f alpha=%.2f style=%q emissive=%.2f baked=%.0f",
 			live.data.Name, sprite, live.object.Transform().GetPosition(),
+			pivot.X(), pivot.Y(),
 			live.sprite.Size.X(), live.sprite.Size.Y(),
 			live.scale.X(), live.sprite.Tint.W(), live.data.Render.Style,
 			live.sprite.Emissive, live.sprite.BakedLight)
@@ -788,7 +808,7 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 func (live *WorldActor) apply(g *Game, op wep.Op) {
 	switch op.Op {
 	case wep.OpPlaySound:
-		g.playSoundAt(op, live.object.Transform().GetPosition())
+		g.playSoundAt(op, live.object.Transform().GetPosition(), live.origin)
 	case wep.OpExplode:
 		g.explodeAt(live.object.Transform().GetPosition(), op)
 	case wep.OpSetAlpha:

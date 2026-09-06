@@ -1,0 +1,1 @@
+{"format":1,"name":"FDHarmlessPuff","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":5,"tics_max":5},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"melee":0,"spawn":0}},"no_gravity":true}

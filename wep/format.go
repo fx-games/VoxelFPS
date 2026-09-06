@@ -512,6 +512,12 @@ type Actor struct {
 	// NoDecal is +NODECAL, which stops a shot marking the wall whatever the
 	// weapon that fired it says.
 	NoDecal bool `json:"no_decal,omitempty"`
+	// SeeSound is what a missile makes as it leaves the barrel. ZDoom plays it
+	// from P_SpawnMissile rather than from any state, so it appears nowhere in
+	// the actor's script: Final Doomer's plasma rifle has no A_PlaySound of
+	// its own anywhere in Fire, and its whole firing sound is one SeeSound on
+	// the ball it throws.
+	SeeSound string `json:"see_sound,omitempty"`
 	// Impact is what this actor does where a hitscan lands, when it is used as
 	// a puff. Empty for actors that are only drawn.
 	Impact string `json:"impact,omitempty"`

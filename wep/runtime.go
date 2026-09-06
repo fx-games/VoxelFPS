@@ -636,6 +636,23 @@ func (c *Cursor) takeReadyInput(runtime *Runtime) (string, bool) {
 	// firing sequence does not arm the next shot, and a semi-automatic waits
 	// for a release it can see from a ready frame.
 	//
+	// That check is the two ready bits together:
+	//
+	//	if (player.WeaponState & (WF_WEAPONREADY | WF_WEAPONREADYALT))
+	//		CheckWeaponFire();
+	//
+	// and A_WeaponReady(WRF_NOFIRE) sets neither, so a frame that reads no
+	// button never reaches the code that clears attackdown. Cleared there too,
+	// the latch a semi-automatic waits on was dropped by its own recoil: the
+	// Dual 92s answer three WRF_NOFIRE frames and then three plain ones, and
+	// the plain ones found the held trigger apparently freshly pressed and
+	// fired again through the middle of the animation.
+	if !c.ready.AllowFire && !c.ready.AllowAlt {
+		if runtime.Input.Reload && c.ready.AllowReload {
+			return "Reload", true
+		}
+		return "", false
+	}
 	// The two buttons are one chain of else-ifs in CheckWeaponFire, with one
 	// attackdown between them: the trigger wins while both are held, and the
 	// flag is only cleared by a frame that sees neither.

@@ -165,6 +165,11 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 		return nil, nil, fmt.Errorf("%s (%s):\n%s", actor.Name, actor.SourceFile, err)
 	}
 
+	// Read before the sounds are handed over: seeSoundOf asks for the file as
+	// well as naming it, and asked for afterwards the plasma rifle's whole
+	// firing sound was left behind in the mod.
+	seeSound := inner.seeSoundOf(actor.Name)
+
 	shared.actorSprites = inner.sprites
 	for sound := range inner.neededSounds {
 		shared.needSound(sound)
@@ -188,6 +193,7 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 		Missile:   inner.actorIsMissile(actor.Name),
 		Decal:     decalOf(idx, actor.Name),
 		NoDecal:   inner.mergedFlag(actor.Name, "nodecal"),
+		SeeSound:  seeSound,
 	}
 	return compiled, sortedNames(inner.neededActors), nil
 }
@@ -352,7 +358,10 @@ func (c *Compiler) items(states wep.StateMachine) map[string]wep.Item {
 	magazines := reloadedItems(states)
 	items := make(map[string]wep.Item, len(c.neededItems))
 	for _, name := range sortedNames(c.neededItems) {
-		item := wep.Item{Max: 1}
+		item := wep.Item{Max: stockAmmoMax[strings.ToLower(name)]}
+		if item.Max == 0 {
+			item.Max = 1
+		}
 		if actor, ok := c.idx.Actor(name); ok {
 			if max := c.intProperty(actor.Name, "inventory.maxamount"); max > 0 {
 				item.Max = max
@@ -377,6 +386,19 @@ func (c *Compiler) items(states wep.StateMachine) map[string]wep.Item {
 		items[name] = item
 	}
 	return items
+}
+
+// stockAmmoMax is how much of Doom's own ammo a player may carry. These four
+// classes are in doom2.wad's own code rather than in any mod, so a weapon that
+// names one as its reserve - `Weapon.AmmoType2 "Clip"` - finds nothing in the
+// index to read a maximum from and used to be given the fallback of one.
+//
+// One is not a small reserve, it is a broken weapon. The Dual 92s reload a
+// round at a time out of Clip, so with a reserve of one they came back from an
+// empty magazine with a single round, fired it, and went back to a reload that
+// had nothing left to load: the guns stopped for good on the first magazine.
+var stockAmmoMax = map[string]int{
+	"clip": 200, "shell": 50, "rocketammo": 50, "cell": 300,
 }
 
 // mainLoopLabels are where a reload comes back to when it is done. The walk
@@ -489,7 +511,26 @@ func (c *Compiler) actorFloats(name string) bool {
 	if value, written := c.mergedFlagSet(name, "nogravity"); written {
 		return value
 	}
-	return c.inheritsAStockProjectile(name)
+	return c.inheritsAStockProjectile(name) || c.inheritsAStockFloater(name)
+}
+
+// seeSoundOf is the sound a missile makes when it is fired, which ZDoom plays
+// from P_SpawnMissile and not from any state the actor writes. Inherited, like
+// every other property, and asked for as an asset here because nothing else
+// names it: the migration only copies the sounds it has seen, and the plasma
+// rifle's fire sound was left behind in the mod because no A_PlaySound in the
+// weapon or the ball ever mentioned it.
+func (c *Compiler) seeSoundOf(name string) string {
+	sound, ok := c.mergedProperty(name, "seesound")
+	if !ok {
+		return ""
+	}
+	sound = strings.Trim(strings.TrimSuffix(strings.TrimSpace(sound), ";"), `"`)
+	if sound == "" || strings.EqualFold(sound, "none") {
+		return ""
+	}
+	c.needSound(sound)
+	return sound
 }
 
 // decalOf is the mark this actor leaves on a wall: ZDoom's Decal property,
@@ -721,6 +762,9 @@ func (r *Result) DropSounds(missing []string) {
 	}
 	silence(&r.Weapon.States)
 	for _, actor := range r.Actors {
+		if gone[actor.SeeSound] {
+			actor.SeeSound = ""
+		}
 		silence(&actor.States)
 	}
 

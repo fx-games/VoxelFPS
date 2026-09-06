@@ -117,6 +117,34 @@ var stockProjectiles = map[string]float64{
 	"revenanttracer": 10, "spidermastermindplasma": 25,
 }
 
+// stockFloaters are ZDoom's own classes that carry +NOGRAVITY and are not in
+// any mod to be read, the same blind spot stockProjectiles covers for missiles.
+// Every puff in these mods is `: BulletPuff`, which is +NOGRAVITY, and nothing
+// the subclass writes says so; read as a plain actor the puff fell, so the
+// glow a hitscan leaves sank away below the bullet chip it was drawn beside
+// while the chip stayed on the wall.
+//
+// ponytail: the classes actually inherited from here, not ZDoom's whole
+// hierarchy. A migration that meets a new one fails loudly at the same place
+// this list is read from, which is better than a table nobody can check.
+var stockFloaters = map[string]bool{
+	"bulletpuff": true,
+	// The melee equivalent, and Heretic's, which several of these mods reach
+	// for when a blade hits a wall.
+	"woodpuff": true, "metalpuff": true,
+}
+
+// inheritsAStockFloater reports whether the actor's line ends at one of them.
+// The last actor a mod defines names its parent even when that parent is not
+// in the index, which is exactly the case this has to answer.
+func (c *Compiler) inheritsAStockFloater(name string) bool {
+	chain := c.idx.Ancestry(name)
+	if len(chain) == 0 {
+		return false
+	}
+	return stockFloaters[strings.ToLower(chain[len(chain)-1].Parent)]
+}
+
 // stockProjectileParent is the ZDoom missile class the actor's line ends at,
 // if any. The last actor the mod defines names its parent even when that
 // parent is not in the index, which is exactly the case this has to answer.

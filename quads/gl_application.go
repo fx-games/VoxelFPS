@@ -175,8 +175,14 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
 		window, terminateFunc := InitOpenGLWindow("fps", screenW, screenH, false)
 
-		primaryMonitor := glfw.GetPrimaryMonitor()
-		uiScaleX, uiScaleY := primaryMonitor.GetContentScale()
+		// No monitor at all is not an error worth crashing on: GLFW answers
+		// nil when the display is asleep or the session has none, and a
+		// screenshot run wants to go on rendering into the back buffer
+		// regardless. One to one is what an unscaled display reports anyway.
+		uiScaleX, uiScaleY := float32(1), float32(1)
+		if primaryMonitor := glfw.GetPrimaryMonitor(); primaryMonitor != nil {
+			uiScaleX, uiScaleY = primaryMonitor.GetContentScale()
+		}
 		println(fmt.Sprintf("UI scale: %.2f, %.2f", uiScaleX, uiScaleY))
 
 		winSizeX, winSizeY := window.GetSize()

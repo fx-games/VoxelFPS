@@ -87,7 +87,7 @@ func (w *Weapon) DisplayName() string { return w.Data.Tag }
 // Equip puts the weapon in hand, running its raise animation when it has one.
 func (w *Weapon) Equip() {
 	w.load()
-	w.flash = nil
+	w.endFlash()
 	if w.cursor.Goto("Select") {
 		w.cursor.StartRaise()
 		return
@@ -108,10 +108,21 @@ func (w *Weapon) Equip() {
 // named per weapon folder, two weapons with a sound of the same name no longer
 // have to be the same sound.
 func (w *Weapon) Unequip() {
-	w.flash = nil
+	w.endFlash()
 	if w.game != nil && w.game.audio != nil {
 		w.game.audio.StopChannels()
 		w.game.audio.UnloadAllCues()
+	}
+}
+
+// endFlash is dropFlash for the two places that drop the overlay outside
+// Update, where there is nobody to hand an op back to and the game is right
+// here to be told.
+func (w *Weapon) endFlash() {
+	for _, op := range w.dropFlash() {
+		if w.game != nil {
+			w.game.applyWeaponOp(w, op)
+		}
 	}
 }
 
@@ -159,10 +170,28 @@ func (w *Weapon) Update(input wep.Input, elapsed float64) []wep.Op {
 	if w.flash != nil {
 		effects = append(effects, w.flash.Update(w.runtime, elapsed)...)
 		if w.flash.Stopped() {
-			w.flash = nil
+			effects = append(effects, w.dropFlash()...)
 		}
 	}
 	return effects
+}
+
+// dropFlash ends the overlay and puts out the light that went with it.
+//
+// A_Light1 lights the room and A_Light0 puts it out, and every one of these
+// mods writes the pair - but only along the overlay's own path. An overlay
+// that ends any other way never reaches its A_Light0: switching weapons
+// mid-flash left the light on, parented to the player, and the player walked
+// the rest of the level carrying a muzzle flash. Firing again started a new
+// overlay that did reach its A_Light0, which is why it looked like it fixed
+// itself.
+func (w *Weapon) dropFlash() []wep.Op {
+	if w.flash == nil {
+		return nil
+	}
+	w.flash = nil
+	return []wep.Op{{Op: wep.OpFlashLight, Level: 0,
+		Source: "the flash overlay ending"}}
 }
 
 // ammoSummary is what the weapon is carrying of everything it spends, in the
@@ -501,7 +530,7 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 
 	case wep.OpStopSound:
 		if g.audio != nil {
-			g.audio.StopChannel(op.Channel)
+			g.audio.StopChannel(playerOrigin, op.Channel)
 		}
 	case wep.OpPrint:
 		if op.Text != "" {
@@ -608,14 +637,14 @@ func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
 
 // playSoundAt plays a cue from somewhere in the world, panned and quietened by
 // where that is relative to the listener.
-func (g *Game) playSoundAt(op wep.Op, position mgl32.Vec3) {
+func (g *Game) playSoundAt(op wep.Op, position mgl32.Vec3, origin int) {
 	if g.audio == nil {
 		return
 	}
 	pan, volume := g.listenerFor(position, op.Volume)
 	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
 		Volume: volume, Pitch: op.Pitch, Looping: op.Looping,
-		Channel: op.Channel, Pan: pan,
+		Channel: op.Channel, Pan: pan, Origin: origin,
 	})
 }
 
@@ -800,8 +829,14 @@ func (g *Game) playWeaponSound(op wep.Op) {
 		Pitch:   op.Pitch,
 		Looping: op.Looping,
 		Channel: op.Channel,
+		Origin:  playerOrigin,
 	})
 }
+
+// playerOrigin is whose sound channels the weapon in hand plays on. ZDoom
+// channels belong to an origin, and everything heard from where the listener
+// stands - the gun, its reload, its idle hum - is the player's.
+const playerOrigin = 0
 
 // LoadPackedAtlas reads a packed sprite atlas off disk.
 func (g *Game) LoadPackedAtlas(path string) *glhf.TextureAtlasPacked {
@@ -839,9 +874,22 @@ var muzzleFlashColor = mgl32.Vec3{1.0, 0.85, 0.55}
 // slot each needs the light system to hand out more than one tracked slot.
 func (g *Game) setMuzzleFlash(level int) {
 	if level <= 0 || g.player == nil {
-		g.DetachLight()
+		// Only if the flash is what is lit. The tracked slot is shared with
+		// projectiles, and an A_Light0 arriving while a plasma bolt is in the
+		// air used to put the bolt out.
+		if g.muzzleFlashLit {
+			if debugWeapon {
+				log.Printf("[light] muzzle flash off")
+			}
+			g.muzzleFlashLit = false
+			g.DetachLight()
+		}
 		return
 	}
+	if debugWeapon && !g.muzzleFlashLit {
+		log.Printf("[light] muzzle flash on")
+	}
+	g.muzzleFlashLit = true
 	g.AttachLightTo(g.player, muzzleFlashColor,
 		muzzleFlashIntensity*float32(level), muzzleFlashReach)
 }
