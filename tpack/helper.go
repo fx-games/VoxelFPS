@@ -20,15 +20,45 @@ func clampInt16(v int) int16 {
 	return int16(v)
 }
 
-// OffsetsFromPNG reads a picture's own hotspot out of its grAb chunk, falling
-// back to the vanilla Doom convention - centered horizontally, anchored at
-// the bottom - for a picture that never had one set, which keeps a plain
-// unannotated PNG looking exactly as it did before this was read at all.
-func OffsetsFromPNG(data []byte, width, height int) (x, y int) {
-	if grabX, grabY, ok := png_chunks.ReadGrabOffset(bytes.NewReader(data)); ok {
-		return grabX, grabY
+// OffsetsFromPNG reads a picture's own hotspot out of its grAb chunk. A picture
+// without one has no hotspot, which is GZDoom's own answer for it: a weapon
+// frame authored on the full 320x200 canvas - which is most of the ones that
+// have no chunk - lands exactly where its artist meant it to, because zero is
+// what that canvas was drawn against.
+//
+// Guessing instead (centred horizontally, anchored at the bottom) reads as
+// harmless and is not: for a weapon sprite the hotspot is not a pivot, it is
+// subtracted from the middle of Doom's 320x200 weapon space, and a guess of
+// (width/2, height) throws a full-canvas frame most of a screen up and to the
+// left. That is where Brutal Doom's minigun went.
+func OffsetsFromPNG(data []byte) (x, y int) {
+	grabX, grabY, _ := png_chunks.ReadGrabOffset(bytes.NewReader(data))
+	if !offsetIsPlausible(grabX, grabY) {
+		return 0, 0
 	}
-	return width / 2, height
+	return grabX, grabY
+}
+
+// offsetIsPlausible rejects a grAb chunk that cannot be describing a Doom
+// offset at all. Doom measures both numbers against its own 320x200 screen -
+// a weapon frame's hotspot is subtracted from the middle of it, and a world
+// sprite's is a handful of pixels around its own art - so an offset further
+// out than a whole screen is not an anchor anybody authored, it is a corrupt
+// chunk.
+//
+// There is exactly one in the mods migrated so far, and it is instructive:
+// Brutal Doom's tracer ships TRACA5 with grAb (27, -1232) on a 32x32 picture,
+// which drew the tracer about three voxels away from the shot that made it.
+// Nobody ever saw it in GZDoom, because the same mod replaces that actor's
+// sprite with an MD3 model and the lump is never rendered.
+//
+// Zero is the fallback rather than a guess at the middle for the reason the
+// doc comment above gives: for a weapon frame the hotspot is not a pivot, and
+// a guess throws a full-canvas frame most of a screen away.
+func offsetIsPlausible(x, y int) bool {
+	const doomScreenWidth, doomScreenHeight = 320, 200
+	return x >= -doomScreenWidth && x <= doomScreenWidth &&
+		y >= -doomScreenHeight && y <= doomScreenHeight
 }
 
 func writeImageToPNG(image image.Image, dstPath string) error {

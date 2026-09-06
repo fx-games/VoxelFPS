@@ -8,11 +8,13 @@ import (
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -124,10 +126,19 @@ type GlApplication struct {
 	drawCallCountParticles              int
 	benchmark                           *Benchmark
 	benchmarkLabel                      string
-	drawCallCountMeshes                 int
-	drawCallCountSprites                int
-	drawCallCountVoxels                 int
-	drawCallCountGui                    int
+
+	// A capture run: the frames to grab, where to write them, and the frame
+	// time to pretend every frame took. See Screenshots and FixedStep.
+	shotPath             string
+	shotFirst            int
+	shotEvery            int
+	shotCount            int
+	shotsTaken           int
+	fixedStep            float64
+	drawCallCountMeshes  int
+	drawCallCountSprites int
+	drawCallCountVoxels  int
+	drawCallCountGui     int
 
 	minimap *Minimap
 
@@ -406,6 +417,12 @@ func (a *GlApplication) StartEventLoop() {
 			// the next frame a delta of several seconds, and physics integrates
 			// straight through the level in one step.
 			elapsed = math.Min(elapsed, maxFrameDelta)
+			// A capture run advances the world by the same amount every frame,
+			// whatever the machine took to draw it, so tick 90 of one run holds
+			// the same animation frame as tick 90 of the next.
+			if a.fixedStep > 0 {
+				elapsed = a.fixedStep
+			}
 			deltaTime := elapsed * a.TimeFactor
 
 			{ // Update BEGIN
@@ -530,7 +547,11 @@ func (a *GlApplication) StartEventLoop() {
 					a.minimap.Draw()
 				}
 
-				a.drawToasts()
+				// A capture is a picture of the weapon, or of the map. Whatever
+				// the game last said about the fog is neither.
+				if a.shotPath == "" {
+					a.drawToasts()
+				}
 
 				a.guiQuadsDrawn, a.guiDrawCalls = 0, 0
 				for _, batch := range a.spriteBatches {
@@ -563,6 +584,12 @@ func (a *GlApplication) StartEventLoop() {
 			}
 
 			glhf.CheckGLError("end of frame") // no-op unless built with -tags debugGL
+
+			// Grabbed off the back buffer, so it has to happen before the swap.
+			if a.captureDue() {
+				a.capture()
+				shouldQuit = a.shotsTaken >= a.shotCount
+			}
 
 			a.Window.SwapBuffers()
 			glfw.PollEvents()
@@ -717,6 +744,18 @@ func (a *GlApplication) LoadPackedGuiAtlasWithBatch(filename string, maxSprites 
 	atlasFixed.SetMaxSprites(maxSprites)
 	a.spriteBatches = append(a.spriteBatches, atlasFixed.GetSpriteBatch())
 	return atlasFixed
+}
+
+// DropSpriteBatch takes a batch out of the 2D pass. Everything that owns one
+// is drawn every frame for as long as it is in the list, so something loaded
+// on demand - a weapon's own atlas - has to be able to leave again.
+func (a *GlApplication) DropSpriteBatch(batch *glhf.SpriteBatch) {
+	for i, candidate := range a.spriteBatches {
+		if candidate == batch {
+			a.spriteBatches = append(a.spriteBatches[:i], a.spriteBatches[i+1:]...)
+			return
+		}
+	}
 }
 
 func (a *GlApplication) SetupSpriteBatch(atlas glhf.TextureAtlas) {
@@ -1085,6 +1124,53 @@ func (a *GlApplication) Gamma() float32    { return a.gamma }
 // texels the sample position is pushed along the surface normal, and the flat depth
 // bias left over for depth-buffer quantisation. Exposed because the useful value
 // depends on the shadow resolution and the scale of the map.
+// Screenshots turns this run into a capture: it saves the finished frame at
+// tick `first`, then one every `every` ticks after that until it has `count`
+// of them, and quits. More than one screenshot writes them as name-00.png,
+// name-01.png and so on, which is what makes a weapon's animation reviewable
+// as a strip rather than as one lucky frame.
+//
+// `step` is the frame time every frame is told it took. A capture is compared
+// against another capture, so it has to be the same run twice; with the real
+// clock a slower machine lands on a different animation frame. Pass 0 to keep
+// the real one.
+func (a *GlApplication) Screenshots(path string, first, every, count int, step float64) {
+	if every < 1 {
+		every = 1
+	}
+	if count < 1 {
+		count = 1
+	}
+	a.shotPath, a.shotFirst, a.shotEvery, a.shotCount = path, first, every, count
+	a.fixedStep = step
+	// Nothing waits for vblank in a capture: the frame time is fixed anyway, so
+	// waiting only makes the run take longer.
+	a.ShouldUseVsync = false
+	a.SetVSync(false)
+}
+
+func (a *GlApplication) captureDue() bool {
+	if a.shotPath == "" || a.shotsTaken >= a.shotCount {
+		return false
+	}
+	tick := int(a.Ticks)
+	return tick >= a.shotFirst && (tick-a.shotFirst)%a.shotEvery == 0
+}
+
+func (a *GlApplication) capture() {
+	path := a.shotPath
+	if a.shotCount > 1 {
+		extension := filepath.Ext(path)
+		path = fmt.Sprintf("%s-%02d%s", strings.TrimSuffix(path, extension), a.shotsTaken, extension)
+	}
+	if err := a.SaveScreenshot(path); err != nil {
+		log.Printf("[capture] %s: %v", path, err)
+	} else {
+		fmt.Printf("[capture] tick %d -> %s\n", a.Ticks, path)
+	}
+	a.shotsTaken++
+}
+
 // StartBenchmark makes this run a measurement: it quits after the benchmark's warm
 // up plus duration, having printed one report. VSync goes off, because a frame time
 // capped at the refresh rate measures the monitor and not the renderer.

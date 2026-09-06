@@ -188,3 +188,55 @@ ACTOR Commented : Weapon // trailing
 	// line numbers still match the file a human opens.
 	assert.Equal(t, 11, actor.States.Lines[0].Line)
 }
+
+// DECORATE is tokens, not lines: a short actor written on one line says the
+// same as one spread over five. Read a line at a time, `{ +NOEXTREMEDEATH
+// DamageType "Bullet" Decal "BulletChip" }` came out as a single property
+// called "{" and the puff lost the decal that decides whether the gun that
+// fires it marks the wall.
+func TestAnActorBodyOnOneLineIsStillProperties(t *testing.T) {
+	actor := &Actor{Flags: map[string]bool{}, Properties: map[string]string{}}
+	parseActorBodyLine(actor, `+NOEXTREMEDEATH DamageType "Bullet" Decal "BulletChip"`)
+
+	assert.True(t, actor.Flags["noextremedeath"])
+	damage, _ := actor.Property("damagetype")
+	assert.Equal(t, `"Bullet"`, damage)
+	decal, ok := actor.Property("decal")
+	assert.True(t, ok)
+	assert.Equal(t, `"BulletChip"`, decal)
+}
+
+// And a whole actor written on the header's own line, which is how a mod
+// writes something with two properties and nothing else.
+func TestAnActorWrittenEntirelyOnOneLine(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR BTPuff : BulletPuff
+{ +NOEXTREMEDEATH DamageType "Bullet" Decal "BulletChip" }
+
+Actor ScopedIn : Inventory { Inventory.Maxamount 1 }
+
+ACTOR After { Speed 20 }
+`})
+
+	puff, ok := idx.Actor("BTPuff")
+	assert.True(t, ok)
+	decal, _ := puff.Property("decal")
+	assert.Equal(t, `"BulletChip"`, decal)
+	assert.True(t, puff.Flags["noextremedeath"])
+
+	scoped, ok := idx.Actor("ScopedIn")
+	assert.True(t, ok, "an actor after a one-line body is still read")
+	amount, _ := scoped.Property("inventory.maxamount")
+	assert.Equal(t, "1", amount)
+
+	after, ok := idx.Actor("After")
+	assert.True(t, ok)
+	speed, _ := after.Property("speed")
+	assert.Equal(t, "20", speed)
+
+	// And a value with spaces of its own is still one property.
+	expr := &Actor{Flags: map[string]bool{}, Properties: map[string]string{}}
+	parseActorBodyLine(expr, `Damage (30 * random(1,3))`)
+	damage, _ := expr.Property("damage")
+	assert.Equal(t, "(30 * random(1,3))", damage)
+}

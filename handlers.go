@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/events"
 	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
 	"github.com/memmaker/goray/wep"
 )
@@ -69,12 +72,37 @@ func (g *Game) selectWeapon(index int) {
 	g.currentWeaponIndex = index
 	weapon := g.currentWeapon()
 	weapon.Equip()
+	g.keepLoaded(weapon)
+	// The view belongs to the weapon in hand: a scope put away stops zooming.
+	g.applyWeaponZoom()
 	if ammo := weapon.AmmoLine(); ammo != "" {
 		g.Toast(fmt.Sprintf("%s (%s)", weapon.DisplayName(), ammo))
 		return
 	}
 	g.Toast(weapon.DisplayName())
 }
+
+// keepLoaded remembers which weapons have their pictures in memory and gives
+// back the ones nobody has held for a while. Loading an atlas costs something
+// like fifty milliseconds, which is a stutter to pay on every switch, and the
+// whole folder at once is half a gigabyte of texture - so a handful of the
+// most recent are kept, which is what swapping between two guns needs.
+func (g *Game) keepLoaded(weapon *Weapon) {
+	for i, kept := range g.recentWeapons {
+		if kept == weapon {
+			g.recentWeapons = append(g.recentWeapons[:i], g.recentWeapons[i+1:]...)
+			break
+		}
+	}
+	g.recentWeapons = append(g.recentWeapons, weapon)
+	for len(g.recentWeapons) > weaponsKeptLoaded {
+		g.recentWeapons[0].unload()
+		g.recentWeapons = g.recentWeapons[1:]
+	}
+}
+
+// weaponsKeptLoaded is how many weapons' pictures stay in memory at once.
+const weaponsKeptLoaded = 4
 
 func (g *Game) currentWeapon() *Weapon {
 	if len(g.weapons) == 0 {
@@ -231,15 +259,45 @@ func (g *Game) splatterBehind(hitPos, direction mgl32.Vec3) {
 	if !behind.HitInfo.Hit || behind.HitObject != nil || behind.HitInfo.Distance > bloodSplatterRange {
 		return
 	}
-	g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBloodSplatter,
-		behind.HitInfo.CollisionWorldPosition, behind.HitInfo.Side.AsDirection().ToVec3(), bloodSplatterSize)
+	g.addDecal(wep.BloodSplatSprite, behind.HitInfo.CollisionWorldPosition,
+		behind.HitInfo.Side.AsDirection().ToVec3())
+}
+
+// addDecal sticks one of the engine's own decal pictures on a wall. They live
+// in the shared picture store with everything else a weapon throws at a wall,
+// so they are packed into the same atlas as the rest and are found by name
+// rather than by a tile number somebody has to keep in step with a sheet.
+func (g *Game) addDecal(sprite string, pos, normal mgl32.Vec3) {
+	index, known := g.sharedSpriteIndex[sprite]
+	if !known {
+		return
+	}
+	width, height := decalSize(g.sharedAtlas, index)
+	g.Sprites.AddDecal(g.sharedAtlas, uint16(index), pos, normal,
+		width, height, g.bakedLightAt(pos, normal))
+}
+
+// decalSize is how much wall a decal covers, which is ZDoom's own rule: a
+// decal's size in map units is its picture's own size in pixels, times the
+// scale decaldef.txt gives it. So a seven by nine bullet chip is three and a
+// half by four and a half units of wall - a chip, and worth saying out loud
+// because it is a sixth of the blob that used to be here.
+//
+// It comes off the atlas rather than out of a constant because the picture is
+// the only thing that knows: five bullet chips are five different shapes, and
+// a number written down next to them is a number that goes stale the first
+// time one of them is redrawn.
+func decalSize(atlas *glhf.TextureAtlasPacked, index int) (float32, float32) {
+	left, top, right, bottom := atlas.GetUVInPx(index)
+	return float32(right-left) * decalScale * worldUnitsPerDoomUnit,
+		float32(bottom-top) * decalScale * worldUnitsPerDoomUnit
 }
 
 // How big the decals are, in world units where a voxel is 1, and how far behind a
 // body a wall can be and still catch the blood.
 const (
-	bulletHoleSize     = float32(0.22)
-	bloodSplatterSize  = float32(0.5)
+	// decalScale is what decaldef.txt scales BulletChip1..5 by, on both axes.
+	decalScale         = float32(0.5)
 	bloodSplatterRange = 4.0
 )
 
@@ -261,9 +319,57 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 		g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		return
 	}
-	if weapon != nil && g.spawnPuffAt(weapon, shot.PuffActor, pos, surfaceNormal) != nil {
-		return
+	// The mod's own puff and the mark on the wall are two separate things in
+	// ZDoom, spawned by the same hit and neither in place of the other:
+	// P_LineAttack spawns the puff, and then spawns a decal - if anything
+	// names one.
+	puff := g.spawnPuffAt(weapon, shot.PuffActor, pos, surfaceNormal)
+	if puff == nil {
+		g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
 	}
-	g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
-	g.Sprites.AddDecal(g.AtlasSprites, quads.DecalBulletHole, pos, surfaceNormal, bulletHoleSize)
+	if name := g.decalFor(weapon, shot.PuffActor); leavesABulletHole(name) {
+		g.addDecal(wep.BulletChipSprites[rand.Intn(len(wep.BulletChipSprites))], pos, surfaceNormal)
+	}
+}
+
+// decalFor is what a shot from this weapon marks the wall with, by ZDoom's own
+// name for the decal. SpawnShootDecal reads the shooter's ready weapon first
+// and only falls back on the puff, and +NODECAL on the puff stops both.
+//
+// A weapon that names nothing and a puff that names nothing mark nothing.
+// That is not an omission in the mods: ZDoom's own BulletPuff carries no
+// decal, Doom's weapons carry "BulletChip" themselves, and the Blacktail's
+// laser pointer - a hitscan fired every single tic to put a red dot on the
+// wall - says `Decal "None"` on its puff precisely so it does not chip the
+// wall thirty five times a second.
+func (g *Game) decalFor(weapon *Weapon, puffActor string) string {
+	if weapon == nil {
+		return ""
+	}
+	puff := weapon.Actors[lowerName(puffActor)]
+	if puff != nil && puff.NoDecal {
+		return ""
+	}
+	if weapon.Data.Decal != "" {
+		return weapon.Data.Decal
+	}
+	if puff != nil {
+		return puff.Decal
+	}
+	return ""
+}
+
+// leavesABulletHole says whether a decal by that name is one this engine has a
+// picture for.
+//
+// ponytail: one picture, the bullet hole, for the names that mean a chip in a
+// wall. A mod names a dozen others - scorches, cracks, sword slashes, blood
+// smears - and drawing a bullet hole for a katana is worse than drawing
+// nothing, which is what the rest get until there are pictures for them.
+func leavesABulletHole(decal string) bool {
+	switch strings.ToLower(decal) {
+	case "bulletchip", "bulletchipsmall", "chip", "impact":
+		return true
+	}
+	return false
 }

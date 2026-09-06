@@ -1,1 +1,0 @@
-{"format":1,"name":"FDJPCPPrismProjectileTrail2","render":{"scale":[0.48,0.48],"alpha":0.8,"style":"add"},"states":{"steps":[{"sprite":"PBFCD0","tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

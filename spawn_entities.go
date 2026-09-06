@@ -28,12 +28,15 @@ func (g *Game) spawnPlayer(cam *core.FPSCamera, spawn mgl32.Vec3, dir mgl32.Vec2
 	player := quads.NewGameObject("Player")
 	player.Transform().SetPosition(startPos)
 
+	// Doom's player is 56 units tall and looks out of it at 41. Everything a
+	// weapon spawns is placed relative to those two numbers, so they are the
+	// ones to be, rather than approximately them.
 	physics := quads.NewPhysicsComponent(true, voxel.NewAABB(
 		mgl32.Vec3{-0.2, 0.0, -0.2},
-		mgl32.Vec3{0.2, 0.9, 0.2},
+		mgl32.Vec3{0.2, playerHeight, 0.2},
 	))
 	player.SetComponent(physics)
-	player.SetComponent(quads.NewCameraComponent(cam, 0.7))
+	player.SetComponent(quads.NewCameraComponent(cam, float64(playerEyeHeight)))
 
 	g.physicsSystem.AddObject(physics)
 	return player

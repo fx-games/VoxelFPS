@@ -1,0 +1,1 @@
+{"format":1,"name":"BFGTrailParticle","render":{"scale":[0.05,0.05],"alpha":1,"style":"add"},"speed":3,"states":{"steps":[{"sprite":"SPKGA0.2a854146","tics":2,"tics_max":2,"bright":true,"ops":[{"op":"fade_to","args":[0,0.02]}]},{"sprite":"----","tics":0,"ops":[{"op":"loop"}]}],"labels":{"spawn":0}},"no_gravity":true,"missile":true}

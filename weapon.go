@@ -6,7 +6,9 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
@@ -36,12 +38,16 @@ type Weapon struct {
 	spriteIndex map[string]int
 
 	runtime *wep.Runtime
+	// shots counts what this weapon has fired, for DEBUG_WEAPON. A rate of
+	// fire is only measurable against a clock, and this is the numerator.
+	shots int
 	// cursor runs the weapon's own animation and flash runs the overlay
 	// A_GunFlash starts over it, at the same time.
 	cursor *wep.Cursor
 	flash  *wep.Cursor
-
-	uiScale mgl32.Vec2
+	// zoom is how far this weapon's own scope magnifies the view, 0 or 1 for
+	// one that does not. ZDoom keeps it as Weapon.FOVScale, on the weapon.
+	zoom float32
 }
 
 // NewWeapon wires a loaded weapon to where its pictures and sounds are. They
@@ -54,7 +60,6 @@ func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlas
 		soundsPath: soundsPath,
 		game:       game,
 		runtime:    wep.NewRuntime(data, rand.New(rand.NewSource(1))),
-		uiScale:    game.UIScale,
 	}
 	weapon.cursor = wep.NewCursor(&data.States, "Ready")
 	return weapon
@@ -64,6 +69,10 @@ func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlas
 func (w *Weapon) load() {
 	if w.Atlas != nil {
 		return
+	}
+	if debugWeapon {
+		started := time.Now()
+		defer func() { log.Printf("[weapon] %s loaded in %v", w.Data.ID, time.Since(started)) }()
 	}
 	w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
 	w.spriteIndex = make(map[string]int)
@@ -86,14 +95,36 @@ func (w *Weapon) Equip() {
 	w.cursor.Goto("Ready")
 }
 
-// Unequip stops the overlay and anything the weapon was still playing. Several
-// of these guns hum while they are held, on a looping sound their script starts
-// and never stops, so putting one away has to.
+// Unequip stops the overlay and anything the weapon was still playing, and
+// gives back what it was holding. Several of these guns hum while they are
+// held, on a looping sound their script starts and never stops, so putting one
+// away has to stop that.
+//
+// It also gives back the weapon's sounds. A migrated mod brings well over a
+// hundred weapons and a quarter of a gigabyte of sound between them, which
+// decodes to several times that; kept, a player who cycles through the whole
+// folder ends up carrying every weapon's sounds at once. Only the weapon in
+// hand can make a sound, so only its cues are kept - and because the cues are
+// named per weapon folder, two weapons with a sound of the same name no longer
+// have to be the same sound.
 func (w *Weapon) Unequip() {
 	w.flash = nil
 	if w.game != nil && w.game.audio != nil {
 		w.game.audio.StopChannels()
+		w.game.audio.UnloadAllCues()
 	}
+}
+
+// unload gives back the weapon's pictures: out of the 2D pass, and out of the
+// weapon, so nothing is left pointing at the texture and it can be collected.
+// Half a gigabyte of atlas is what the whole folder comes to.
+func (w *Weapon) unload() {
+	if w.Atlas == nil {
+		return
+	}
+	w.game.DropSpriteBatch(w.Atlas.GetSpriteBatch())
+	w.Atlas = nil
+	w.spriteIndex = nil
 }
 
 // AmmoLine is what the HUD says about how loaded the weapon is, or empty for a
@@ -106,10 +137,24 @@ func (w *Weapon) AmmoLine() string {
 		w.runtime.Caps[w.Data.Ammo.Type])
 }
 
+// debugWeapon makes the weapon in hand say where its script is, once a tic.
+// A weapon that goes invisible or stops firing is a weapon whose script has
+// walked somewhere unexpected, and the only way to see which state that is, is
+// to watch it move. DEBUG_WEAPON=1 in the environment.
+var debugWeapon = os.Getenv("DEBUG_WEAPON") != ""
+
 // Update steps the weapon and its overlay and returns what they asked the world
 // to do, in the order it was asked.
 func (w *Weapon) Update(input wep.Input, elapsed float64) []wep.Op {
 	w.runtime.Input = input
+	// The mod's own control script, which this engine does not run: the items
+	// its weapons read in place of the player's buttons.
+	w.runtime.SetButtons(input, elapsed)
+	// The items that take themselves back: a script's own pulses.
+	w.runtime.Tick(elapsed)
+	if debugWeapon {
+		log.Printf("[weapon] %-28s shots=%d %s", w.cursor.Describe(), w.shots, w.ammoSummary())
+	}
 	effects := w.cursor.Update(w.runtime, elapsed)
 	if w.flash != nil {
 		effects = append(effects, w.flash.Update(w.runtime, elapsed)...)
@@ -120,49 +165,192 @@ func (w *Weapon) Update(input wep.Input, elapsed float64) []wep.Op {
 	return effects
 }
 
+// ammoSummary is what the weapon is carrying of everything it spends, in the
+// order the folder wrote it, so a state that will not fire can be read next to
+// the counter it is waiting on.
+func (w *Weapon) ammoSummary() string {
+	names := make([]string, 0, len(w.Data.Items))
+	for name := range w.Data.Items {
+		if w.runtime.Caps[name] > 1 {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	var out strings.Builder
+	for _, name := range names {
+		fmt.Fprintf(&out, "%s=%d/%d ", name, w.runtime.Inventory[name], w.runtime.Caps[name])
+	}
+	return out.String()
+}
+
 // StartFlash puts the overlay on the label A_GunFlash named.
 func (w *Weapon) StartFlash(label string) {
-	w.flash = wep.NewCursor(&w.Data.States, label)
+	w.flash = wep.NewOverlayCursor(&w.Data.States, label)
 }
 
 // Draw paints the weapon and, over it, whatever the flash overlay is showing.
-func (w *Weapon) Draw(screenWidth, screenHeight int32) {
-	w.drawCursor(w.cursor, screenWidth, screenHeight)
+// The overlay's own position is a shift from the weapon's, so a muzzle flash
+// rides the gun through a recoil without the script saying so.
+func (w *Weapon) Draw(screenWidth, screenHeight int32, bobX, bobY float64) {
+	w.drawCursor(w.cursor, screenWidth, screenHeight, bobX, bobY)
 	if w.flash != nil {
-		w.drawCursor(w.flash, screenWidth, screenHeight)
+		x, y := w.cursor.Offsets()
+		w.drawCursor(w.flash, screenWidth, screenHeight, x+bobX, y+bobY)
 	}
 }
 
-func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32) {
+// weaponBob is how far the gun has swung from where it is held, in the same
+// 320x200 space the rest of its position is in.
+//
+// Doom traces a flattened figure of eight: the sway across is a full circle and
+// the dip is that same angle folded into half of one, so the gun goes down twice
+// for every sweep across and never rises above where it is held. The amplitude
+// is the player's speed squared and quartered, capped - which in practice means
+// it is at the cap whenever they are moving at all and nothing the moment they
+// stop, so a weapon reads as still or walking rather than as a dial.
+func (g *Game) weaponBob() (x, y float64) {
+	weapon := g.currentWeapon()
+	if weapon == nil || g.player == nil || !weapon.cursor.Bobs() {
+		return 0, 0
+	}
+	// Doom measures its own speed in units a tic, and this engine in voxels a
+	// second.
+	velocity := g.player.Physics().Velocity()
+	speed := math.Hypot(float64(velocity.X()), float64(velocity.Z())) /
+		worldUnitsPerDoomUnit / wep.TicRate
+	x, y = weaponBobAt(speed, g.bobTics)
+	if debugWeapon {
+		log.Printf("[bob] speed=%.1f units/tic x=%+.1f y=%+.1f", speed, x, y)
+	}
+	return x, y
+}
+
+// weaponBobAt is the sway itself: how fast the player is going, in Doom units
+// a tic, and how far into the level's clock they are, in tics.
+func weaponBobAt(speed, tics float64) (x, y float64) {
+	bob := math.Min(speed*speed/4, maxWeaponBob)
+	angle := 2 * math.Pi * tics / weaponBobCycleTics
+	return bob * math.Cos(angle), bob * math.Abs(math.Sin(angle))
+}
+
+// How the sway is shaped: sixty four tics to go round once, and sixteen of the
+// 320x200 space's units at its widest, which are Doom's own numbers.
+const (
+	weaponBobCycleTics = 64.0
+	maxWeaponBob       = 16.0
+)
+
+func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32, shiftX, shiftY float64) {
 	step := cursor.Step()
-	if step == nil || step.Sprite == "" || w.Atlas == nil {
+	sprite := cursor.Sprite()
+	if step == nil || sprite == "" || w.Atlas == nil {
 		return // a frame that shows nothing, which is most of a firing state
 	}
-	index, known := w.spriteIndex[step.Sprite]
+	index, known := w.spriteIndex[sprite]
 	if !known {
 		return // loading rejects this, so only hand-edited data gets here
 	}
-	scale := mgl32.Vec2{
-		w.uiScale.X() * float32(w.Data.Render.Scale[0]),
-		w.uiScale.Y() * float32(w.Data.Render.Scale[1]),
+
+	// GZDoom positions a weapon in a fixed 320x200 space and scales that to the
+	// view, so a gun is the same size and in the same place on every screen. Only
+	// the height matters: the horizontal scale is the same number divided by
+	// Doom's pixel aspect, which is why a wider window shows more room either
+	// side of the gun rather than a wider gun.
+	// Where this layer is holding its sprite, plus the weapon's own vertical
+	// adjustment - a mod's way of saying its art sits higher or lower than the
+	// space assumes, and one GZDoom only applies with no status bar in the way,
+	// which is every frame here.
+	x, y := cursor.Offsets()
+	x += shiftX
+	y += shiftY + float64(w.Data.Render.YAdjust)
+
+	// And this is the whole of it: the picture's own hotspot, the pair of
+	// numbers a Doom patch carries in its header and a PNG in its grAb chunk,
+	// is subtracted from the middle of that 320x200 space. It is not a pivot
+	// fraction and it is not a delta against some other frame - it is where
+	// the frame's top left corner goes, and every weapon sprite in every one
+	// of these mods is authored against it. A vanilla weapon frame's hotspot
+	// is (width/2 - 160, height - 168), which is what puts a gun in the
+	// middle of the screen with its bottom edge on the bottom edge; a mod's
+	// recoil frame moves it a few pixels off that, and that difference is the
+	// animation.
+	hotspotX, hotspotY := w.Atlas.Hotspot(index)
+	scale := psprScale(float32(screenHeight))
+	if prefix, listed := squarePixelFrames[w.Data.ID]; listed && strings.HasPrefix(sprite, prefix) {
+		scale = mgl32.Vec2{scale.Y(), scale.Y()}
 	}
-	// A weapon being swapped in or out is held part of the way off the bottom
-	// of the screen, which is what makes the swap read as one.
-	_, top, _, bottom := w.Atlas.GetUVInPx(index)
-	swap := float32(cursor.Raised()) * float32(bottom-top) * scale.Y()
-	position := mgl32.Vec2{
-		float32(screenWidth)/2 + float32(step.OffsetX)*scale.X(),
-		float32(screenHeight) + swap + float32(w.Data.Render.YAdjust+step.OffsetY)*scale.Y(),
-	}
-	// Anchored on the picture's own hotspot, not a fixed corner or center: a
-	// recoil or a swing is often carried entirely in how a weapon's frames
-	// move that hotspot from one to the next, nothing the state script itself
-	// writes. A frame with no hotspot of its own (an unannotated PNG) falls
-	// back to vanilla Doom's own convention, centered and bottom-anchored,
-	// which is what every frame was drawn at before this was read at all.
-	source, destination := w.Atlas.GetSourceAndDestRects(index, position, w.Atlas.NormalizedHotspot(index), scale)
+	position := psprCorner(float32(screenWidth), float32(screenHeight),
+		float32(x), float32(y), hotspotX, hotspotY, scale)
+	// The position is the top left of the frame's own full canvas, before the
+	// packer trimmed the transparent edges off it, which is the corner the
+	// hotspot is measured from.
+	source, destination := w.Atlas.GetSourceAndDestRects(index, position, mgl32.Vec2{0, 0}, scale)
 	w.Atlas.GetSpriteBatch().DrawTextured(source, destination, mgl32.Vec4{1, 1, 1, 1})
 }
+
+// squarePixelFrames names art a mod drew in square pixels and never said so,
+// by the weapon it belongs to and the sprite name it starts with.
+//
+// GZDoom has a property for this - `Weapon.WeaponScaleY`, which defaults to
+// Doom's 1.2 - and the honest fix is for a mod to set it. The Blacktail 51
+// does not: its scope overlay is a circle drawn in square pixels, so Doom's
+// aspect makes an egg of it, and it makes the same egg in GZDoom. But its
+// *gun* frames are drawn for Doom's pixels like everyone else's, so the
+// property GZDoom offers is no use here - it is per weapon, and one number
+// cannot be right for both halves of this one.
+//
+// So this is a list and not a rule. A rule was tried - anything wider than the
+// 320-unit weapon space is an overlay - and it was wrong: the Sniper Rifle and
+// the Hunting Rifle ship overlays wider than that which are drawn for Doom's
+// pixels correctly, and the rule turned both of those into eggs to straighten
+// this one. Name the art that is wrong; leave everything else alone.
+var squarePixelFrames = map[string]string{
+	"blacktail_51_connector": "SCOP",
+}
+
+// psprScale is how far one unit of that 320x200 space reaches on this screen.
+// Only the height decides it: a wider window shows more room either side of the
+// gun rather than a wider gun, which is why the horizontal is the same number
+// divided by Doom's pixel aspect instead of anything to do with the width.
+func psprScale(viewHeight float32) mgl32.Vec2 {
+	scaleY := viewHeight / psprHeight
+	return mgl32.Vec2{scaleY / psprPixelAspect, scaleY}
+}
+
+// psprCorner is where the top left of a weapon frame's own full canvas goes:
+// the picture's hotspot subtracted from where the layer is holding it, in the
+// middle of GZDoom's weapon space. This is the whole of GZDoom's own weapon
+// placement, and everything else about drawing a weapon is either the scale
+// above or which numbers to pass in here.
+func psprCorner(viewWidth, viewHeight, x, y float32, hotspotX, hotspotY int, scale mgl32.Vec2) mgl32.Vec2 {
+	return mgl32.Vec2{
+		viewWidth/2 + (x-psprCenterX-float32(hotspotX))*scale.X(),
+		viewHeight/2 + (y-psprCenterY-float32(hotspotY))*scale.Y(),
+	}
+}
+
+// The 320x200 space GZDoom lays a weapon out in. A sprite's hotspot is
+// measured from the top left of that space's middle column and horizon.
+//
+// Doom's pixels are 1.2 times taller than they are wide, and that number is
+// not a guess - it is what falls out of GZDoom's own two lines in
+// HUDSprite::GetWeaponRect:
+//
+//	scalex = baseScale.X * (320 / (240 * WidescreenRatio)) * (vw / 320)
+//	scale  = baseScale.Y * (SCREENHEIGHT * vw) / (SCREENWIDTH * 240)
+//
+// WidescreenRatio is the view's own width over its height, so both collapse to
+// viewHeight/240 times the sprite's base scale, and DPSprite's base scale is
+// (1.0, 1.2). That is scaleX = viewHeight/240 and scaleY = viewHeight/200, and
+// the ratio between them is 1.2 on every screen shape - a wider window shows
+// more room either side of the gun rather than a wider gun.
+const (
+	psprWidth       = 320.0
+	psprHeight      = 200.0
+	psprCenterX     = 160.0
+	psprCenterY     = 100.0
+	psprPixelAspect = 1.2
+)
 
 // LoadWeapons reads the weapons folder and puts every weapon in it into the
 // player's hands. A folder that does not load stops the game rather than
@@ -202,6 +390,7 @@ func (g *Game) LoadWeapons(dir string) error {
 			g.currentWeaponIndex = index
 		}
 		g.currentWeapon().Equip()
+		g.keepLoaded(g.currentWeapon())
 	}
 	return nil
 }
@@ -264,7 +453,12 @@ func (g *Game) updateWeapon(elapsed float64) {
 	if weapon == nil {
 		return
 	}
-	input := wep.Input{Trigger: g.triggerHeld, Reload: g.reloadPressed}
+	// The sway's phase is the level's own clock, so it keeps turning while a
+	// weapon is being put away and the next one comes up mid swing rather than
+	// starting its own.
+	g.bobTics += elapsed * wep.TicRate
+
+	input := wep.Input{Trigger: g.triggerHeld, Alt: g.altHeld, Reload: g.reloadPressed}
 	g.reloadPressed = false // a reload is a press, not a state
 
 	for _, op := range weapon.Update(input, elapsed) {
@@ -277,6 +471,7 @@ func (g *Game) updateWeapon(elapsed float64) {
 func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	switch op.Op {
 	case wep.OpFireBullets:
+		weapon.shots++
 		g.fireBullets(weapon, op, weapon.runtime.Rand)
 	case wep.OpRailAttack:
 		// A beam rather than a spread: one ray straight down the line of fire.
@@ -294,10 +489,16 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 	case wep.OpRecoil:
 		g.Camera.ChangeAngles(0, float32(op.Delta))
 	case wep.OpZoom:
-		g.setWeaponZoom(op)
+		g.setWeaponZoom(weapon, op)
 
 	case wep.OpPlaySound:
 		g.playWeaponSound(op)
+	case wep.OpSpin:
+		// The weapon's script walked a circle of frames that cost no time. It
+		// keeps running - a gun that goes invisible is worse than one that
+		// stutters - but somebody has to hear about it.
+		g.warnSpinningWeapon(weapon, op)
+
 	case wep.OpStopSound:
 		if g.audio != nil {
 			g.audio.StopChannel(op.Channel)
@@ -332,6 +533,19 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 		// the mod's own scripts, screen shake, and the world sprites that
 		// spawned actors need before any of their movement means anything.
 	}
+}
+
+// warnSpinningWeapon says so once per weapon, rather than once a frame for as
+// long as the player holds a gun whose script cannot settle.
+func (g *Game) warnSpinningWeapon(weapon *Weapon, op wep.Op) {
+	if g.warnedSpinning == nil {
+		g.warnedSpinning = make(map[string]bool)
+	}
+	if g.warnedSpinning[weapon.Data.ID] {
+		return
+	}
+	g.warnedSpinning[weapon.Data.ID] = true
+	log.Printf("[weapons] %s: %s, at %s", weapon.Data.ID, op.Source, weapon.cursor.Describe())
 }
 
 // selectWeaponByTag puts a weapon in hand by the name its script uses, which is
@@ -384,9 +598,12 @@ func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
 	}
 	// ponytail: the child appears where the parent is and drifts, rather than
 	// inheriting its heading. A trail behind a rocket looks right either way,
-	// and anything that needs the heading needs seeking first.
-	position := parent.object.Transform().GetPosition()
-	g.spawnActorAt(weapon, actor, op, position).setMaster(parent)
+	// and anything that needs the heading needs seeking first. The height the
+	// call asked for is still honoured, because a script that lays its smoke
+	// eight units under the rocket means it.
+	position := parent.object.Transform().GetPosition().
+		Add(mgl32.Vec3{0, float32(op.SpawnHeight * worldUnitsPerDoomUnit), 0})
+	g.spawnActorAt(weapon, actor, op, position, "Spawn", parent.runtime).setMaster(parent)
 }
 
 // playSoundAt plays a cue from somewhere in the world, panned and quietened by
@@ -442,7 +659,7 @@ func (g *Game) fireMelee(op wep.Op) {
 	origin, direction := g.aim()
 	reach := float64(meleeReach)
 	if len(op.Args) > 0 && op.Args[0] > 0 {
-		reach = op.Args[0] / worldUnitsPerVoxel
+		reach = op.Args[0] * worldUnitsPerDoomUnit
 	}
 	hit := g.rayCast(origin, direction)
 	if !hit.HitInfo.Hit || hit.HitInfo.Distance > reach {
@@ -471,24 +688,56 @@ func (g *Game) explode(op wep.Op) {
 
 // setWeaponZoom narrows the view the way a scope does. A factor of one or less
 // puts it back.
-func (g *Game) setWeaponZoom(op wep.Op) {
+//
+// A_ZoomFactor writes Weapon.FOVScale, and the view is worked out from the
+// weapon in hand every frame - `desired *= abs(ReadyWeapon.FOVScale)` - so the
+// zoom belongs to the weapon rather than to the camera. Kept on the camera, a
+// scope stayed on after the player switched to something else and there was no
+// way back to a normal view but to scope and unscope again.
+func (g *Game) setWeaponZoom(weapon *Weapon, op wep.Op) {
 	factor := float32(1)
 	if len(op.Args) > 0 && op.Args[0] > 0 {
 		factor = float32(op.Args[0])
 	}
+	weapon.zoom = factor
+	g.applyWeaponZoom()
+}
+
+// changeBaseFOV widens or narrows the view the player plays at, keeping
+// whatever the weapon in hand is doing to it.
+func (g *Game) changeBaseFOV(degrees float32) {
 	if g.baseFOV == 0 {
 		g.baseFOV = g.Camera.GetFOV()
 	}
-	g.Camera.SetFOV(g.baseFOV / factor)
+	g.baseFOV += degrees
+	g.applyWeaponZoom()
 }
 
-// How far a melee swing reaches when the script does not say, and how many of
-// ZDoom's units make one of our voxels. Doom's world is 32 units to a wall
-// panel, and ours is one.
-const (
-	meleeReach         = 1.6
-	worldUnitsPerVoxel = 32.0
-)
+// applyWeaponZoom puts the view where the weapon in hand says it should be.
+func (g *Game) applyWeaponZoom() {
+	zoom := float32(1)
+	if weapon := g.currentWeapon(); weapon != nil && weapon.zoom > 0 {
+		zoom = weapon.zoom
+	}
+	if g.baseFOV == 0 {
+		g.baseFOV = g.Camera.GetFOV()
+	}
+	// Divided from what the player plays at, never from what the camera is at:
+	// read back from the camera, an unzoomed weapon coming into the hands of a
+	// player who was scoped would adopt the scope's own field of view as the
+	// one to go back to, and the view would never widen again.
+	g.Camera.SetFOV(g.baseFOV / zoom)
+}
+
+// meleeReach is how far a swing reaches when the script does not say, in
+// voxels. Doom's own default melee range is 64 units, which is one of these.
+//
+// How many of Doom's units make one voxel is worldUnitsPerDoomUnit, in
+// world_actor.go, and there is only one answer: this file used to keep a
+// second one saying 32, so a script asking for a reach of 80 units got two and
+// a half voxels of it while everything a weapon spawned was placed by the
+// other number.
+const meleeReach = 1.0
 
 // fireBullets casts one ray per pellet, spread the way the script asked. The
 // weapon's own source of randomness is used, so a seeded run scatters the same

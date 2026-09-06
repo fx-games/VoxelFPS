@@ -32,6 +32,18 @@ type lensParams struct {
 	far    float32
 }
 
+// DoomVerticalFOV is what Doom looks out of: 90 degrees across at 4:3, which
+// is 73.74 up and down. The view used to be 45 degrees vertical, which is a
+// telephoto lens by comparison - it draws everything in the world about 1.75
+// times larger than the mods whose weapons this engine loads were authored
+// against, spawned effects included. A weapon sprite is unaffected either way,
+// because GZDoom lays those out in a fixed 320x200 space rather than through
+// the projection, so the two only look right together at this number.
+//
+// A wider window widens the view rather than stretching it, which is why this
+// is the vertical one.
+const DoomVerticalFOV = float32(73.74)
+
 func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
 	return &PerspectiveTransform{
 		Transform: &Transform{
@@ -39,8 +51,8 @@ func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
 			rotation:    mgl32.QuatIdent(),
 			scale:       mgl32.Vec3{1, 1, 1},
 		},
-		fov:           float32(45.0),
-		defaultFOV:    float32(45.0),
+		fov:           DoomVerticalFOV,
+		defaultFOV:    DoomVerticalFOV,
 		nearPlaneDist: 0.15,
 		farPlaneDist:  100.0,
 		windowWidth:   width,

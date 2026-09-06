@@ -1,0 +1,1 @@
+{"format":1,"name":"FDBTSXFancyPlasmaProjectileTrail2","render":{"scale":[0.58,0.58],"alpha":0.9,"style":"add"},"states":{"steps":[{"sprite":"XPSGA0.c03b636b","tics":2,"tics_max":2,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]},{"sprite":"XPSGG0.dbd339c7","tics":2,"tics_max":2,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":2}}}

@@ -43,13 +43,15 @@ type SpriteDrawer struct {
 	// Decals are quads stuck to the world geometry - see decals.go. They live
 	// here because they are drawn with the same quad vertex array and shader.
 	decals     []decal
-	decalAtlas *glhf.TextureAtlasFixed
+	decalAtlas glhf.TextureAtlas
 	nextDecal  int
 
 	// Instance attribute scratch, reused every frame so the per-frame draw does
-	// not allocate. Two batches because a static sprite needs face culling off.
+	// not allocate. Three batches: a static sprite needs face culling off, and
+	// an additive one needs a blend function of its own.
 	culledBatch   []float32
 	unculledBatch []float32
+	additiveBatch []float32
 }
 
 func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
@@ -159,6 +161,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 
 		q.culledBatch = q.culledBatch[:0]
 		q.unculledBatch = q.unculledBatch[:0]
+		q.additiveBatch = q.additiveBatch[:0]
 		for _, sprite := range spriteList {
 			if forShadows && sprite.NoShadow {
 				continue
@@ -176,9 +179,12 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 			// A static sprite keeps its own orientation, so the observer can end
 			// up behind it and its back face has to survive culling. A billboard
 			// is turned to face the observer and never shows its back.
-			if sprite.DrawMode() == SpriteModeStatic {
+			switch {
+			case sprite.Additive:
+				q.additiveBatch = appendInstance(q.additiveBatch, observer, sprite, texIndex)
+			case sprite.DrawMode() == SpriteModeStatic:
 				q.unculledBatch = appendInstance(q.unculledBatch, observer, sprite, texIndex)
-			} else {
+			default:
 				q.culledBatch = appendInstance(q.culledBatch, observer, sprite, texIndex)
 			}
 			spritesDrawn++
@@ -186,6 +192,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 
 		drawCalls += q.drawBatch(q.culledBatch, true)
 		drawCalls += q.drawBatch(q.unculledBatch, false)
+		drawCalls += q.drawAdditiveBatch(q.additiveBatch)
 
 		currentAtlas.End()
 	}
@@ -233,14 +240,21 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 	// were a handful; everything a weapon throws into the world is translucent
 	// smoke and it comes out of one shared atlas, so a run is now usually the
 	// whole list.
+	// A run also ends where the render style changes, because an additive
+	// sprite is drawn with a blend function of its own.
 	var runAtlas glhf.TextureAtlas
+	runAdditive := false
 	q.culledBatch = q.culledBatch[:0]
 	flush := func() {
 		if runAtlas == nil || len(q.culledBatch) == 0 {
 			return
 		}
 		runAtlas.Begin()
-		drawCalls += q.drawBatch(q.culledBatch, true)
+		if runAdditive {
+			drawCalls += q.drawAdditiveBatch(q.culledBatch)
+		} else {
+			drawCalls += q.drawBatch(q.culledBatch, true)
+		}
 		runAtlas.End()
 		q.culledBatch = q.culledBatch[:0]
 	}
@@ -261,9 +275,11 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		}
 		// A static sprite needs culling off, so it ends the run as surely as a
 		// different atlas would.
-		if sprite.AtlasTexture != runAtlas || sprite.DrawMode() == SpriteModeStatic {
+		if sprite.AtlasTexture != runAtlas || sprite.Additive != runAdditive ||
+			sprite.DrawMode() == SpriteModeStatic {
 			flush()
 			runAtlas = sprite.AtlasTexture
+			runAdditive = sprite.Additive
 		}
 		q.culledBatch = appendInstance(q.culledBatch, observer, sprite, texIndex)
 		spritesDrawn++
@@ -305,7 +321,25 @@ func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComp
 	dst = append(dst, model[:]...)
 	return append(dst, originOffset[0], originOffset[1],
 		float32(leftU), float32(topV), float32(rightU), float32(bottomV),
-		sprite.Emissive)
+		sprite.Emissive, sprite.BakedLight)
+}
+
+// drawAdditiveBatch is the same draw under ZDoom's Add render style: what the
+// sprite paints is added to the scene rather than blended over it, and it does
+// not write depth. Both halves matter. Blended, a muzzle haze authored at six
+// percent alpha darkens everything behind it instead of glowing, and forty
+// overlapping puffs of it turn a lit room black. Writing depth, the nearest
+// puff would hide every sprite drawn after it, because a batch is not sorted.
+func (q *SpriteDrawer) drawAdditiveBatch(instances []float32) int {
+	if len(instances) == 0 {
+		return 0
+	}
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE)
+	gl.DepthMask(false)
+	calls := q.drawBatch(instances, true)
+	gl.DepthMask(true)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+	return calls
 }
 
 // drawBatch submits one instanced draw and reports the number of draw calls it cost.

@@ -510,6 +510,112 @@ func stripLineComment(raw string) string {
 
 var labelRegexp = regexp.MustCompile(`^([A-Za-z_][\w.]*)\s*:\s*$`)
 
+// oneLineBody splits `{ +NOEXTREMEDEATH DamageType "Bullet" Decal "BulletChip" }`
+// into the three things it says. DECORATE is tokens, not lines, and a mod that
+// writes a short actor on one line means the same as one that spreads it out -
+// but read a line at a time, the whole of it came out as a single property
+// named "{" and everything in it was lost, including the Decal that decides
+// whether the gun firing that puff marks the wall.
+// severalStatements reports whether a body line says more than one thing.
+//
+// A property's value can be an expression with spaces in it - `Damage (30 *
+// random(1,3))` - so this only answers yes to the shapes that cannot be
+// anything else: a flag with something after it, and a finished quoted value
+// with a bare word after it.
+func severalStatements(tokens []string) bool {
+	if len(tokens) < 2 {
+		return false
+	}
+	if tokens[0][0] == '+' || tokens[0][0] == '-' {
+		return true
+	}
+	for i := 0; i+1 < len(tokens); i++ {
+		if !strings.HasSuffix(tokens[i], `"`) || !strings.HasPrefix(tokens[i], `"`) {
+			continue
+		}
+		if next := tokens[i+1]; isPropertyName(next) {
+			return true
+		}
+	}
+	return false
+}
+
+// isPropertyName reports whether a token could start a property: a bare word,
+// not a number and not an operator.
+func isPropertyName(token string) bool {
+	first := token[0]
+	if !(first >= 'A' && first <= 'Z' || first >= 'a' && first <= 'z' || first == '_') {
+		return false
+	}
+	for _, r := range token {
+		if !(r == '.' || r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// bodyStatements splits a line that says several things into the things it
+// says. DECORATE is tokens, not lines: `+NOEXTREMEDEATH DamageType "Bullet"
+// Decal "BulletChip"` is three, and read as one the puff lost the decal that
+// decides whether the gun firing it marks the wall.
+func bodyStatements(tokens []string) []string {
+	var parts []string
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		if token[0] == '+' || token[0] == '-' {
+			parts = append(parts, token)
+			continue
+		}
+		// A property takes one value, plus whatever a comma keeps attached to
+		// it - `DamageFactor "Radiation", 0` is one property, not two - and a
+		// bare keyword such as Projectile takes none.
+		property := token
+		for i+1 < len(tokens) && !startsAProperty(tokens[i+1]) {
+			i++
+			property += " " + tokens[i]
+			if i+1 >= len(tokens) || !strings.HasPrefix(tokens[i+1], ",") {
+				break
+			}
+		}
+		parts = append(parts, property)
+	}
+	return parts
+}
+
+// startsAProperty reports whether a token can only be the start of the next
+// thing rather than the value of the one being read.
+func startsAProperty(token string) bool {
+	return token[0] == '+' || token[0] == '-'
+}
+
+// decorateTokens splits an actor body into words, keeping a quoted string
+// whole and a comma attached to what follows it.
+func decorateTokens(text string) []string {
+	var tokens []string
+	var current strings.Builder
+	inQuotes := false
+	flush := func() {
+		if current.Len() > 0 {
+			tokens = append(tokens, current.String())
+			current.Reset()
+		}
+	}
+	for _, r := range text {
+		switch {
+		case r == '"':
+			inQuotes = !inQuotes
+			current.WriteRune(r)
+		case !inQuotes && (r == ' ' || r == '\t' || r == ';'):
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return tokens
+}
+
 func stateLabel(line string) (string, bool) {
 	match := labelRegexp.FindStringSubmatch(line)
 	if match == nil {
@@ -518,13 +624,37 @@ func stateLabel(line string) (string, bool) {
 	return match[1], true
 }
 
+// projectileFlags is what DECORATE's `Projectile` keyword stands for. It is a
+// shorthand for a handful of flags, not a property, and reading it as one -
+// which is what a bare word in an actor body otherwise is - left every missile
+// in the mods without the two flags that matter here: a rocket kept its
+// gravity and fell at the player's feet, and nothing knew it was a missile at
+// all, so it never reached its Death state to explode.
+//
+// Written where the keyword appears, so a `-NOGRAVITY` after it still wins -
+// which is how Final Doomer's C4 charge is a projectile that falls.
+var projectileFlags = []string{"missile", "nogravity", "noblockmap", "dropoff",
+	"activateimpact", "activatepcross", "noteleport"}
+
 func parseActorBodyLine(actor *Actor, line string) {
+	if tokens := decorateTokens(line); severalStatements(tokens) {
+		for _, statement := range bodyStatements(tokens) {
+			parseActorBodyLine(actor, statement)
+		}
+		return
+	}
 	switch line[0] {
 	case '+':
 		actor.Flags[strings.ToLower(strings.TrimSpace(line[1:]))] = true
 		return
 	case '-':
 		actor.Flags[strings.ToLower(strings.TrimSpace(line[1:]))] = false
+		return
+	}
+	if strings.EqualFold(strings.TrimSuffix(strings.TrimSpace(line), ";"), "projectile") {
+		for _, flag := range projectileFlags {
+			actor.Flags[flag] = true
+		}
 		return
 	}
 	fields := strings.SplitN(line, " ", 2)

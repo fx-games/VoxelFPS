@@ -2,6 +2,7 @@ package zdwep
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,7 +132,15 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 
 	sort.Strings(c.defaultedNames)
 	weapon.Defaulted = c.defaultedNames
-	weapon.Items = c.items()
+	// Both spellings: ZDoom declares the flag on the Weapon class, so a mod may
+	// write it scoped or bare and mean the same thing. Read only as
+	// weapon.noautofire, the Blacktail - which writes +NOAUTOFIRE - fired and
+	// re-scoped for as long as a button was held.
+	weapon.NoAutoFire = actorHasFlag(idx, actorName, "weapon.noautofire") ||
+		actorHasFlag(idx, actorName, "noautofire")
+	weapon.Decal = decalOf(idx, actorName)
+	weapon.Buttons = c.buttons()
+	weapon.Items = c.items(weapon.States)
 	result.Sprites = c.sprites
 	result.ActorSprites = c.actorSprites
 	result.Sounds = sortedNames(c.neededSounds)
@@ -173,10 +182,12 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 	compiled := &wep.Actor{
 		Name:      actor.Name,
 		Render:    inner.render(actor.Name, false),
-		Speed:     inner.floatProperty(actor.Name, "speed"),
+		Speed:     inner.speedOf(actor.Name),
 		States:    states,
-		NoGravity: inner.mergedFlag(actor.Name, "nogravity"),
+		NoGravity: inner.actorFloats(actor.Name),
 		Missile:   inner.actorIsMissile(actor.Name),
+		Decal:     decalOf(idx, actor.Name),
+		NoDecal:   inner.mergedFlag(actor.Name, "nodecal"),
 	}
 	return compiled, sortedNames(inner.neededActors), nil
 }
@@ -314,10 +325,31 @@ func (c *Compiler) render(name string, isWeapon bool) wep.Render {
 // items reads the cap and starting amount of everything the weapon's script
 // touches. The caps are what make an amount of zero in A_JumpIfInventory mean
 // something, and they live on actors the weapon never names outside the call.
-func (c *Compiler) items() map[string]wep.Item {
+// powerupDuration is how long an item lasts once it is given, in tics.
+// ZDoom's Powerup.Duration counts tics, or seconds when it is written
+// negative, and an item that is not a Powerup at all lasts until something
+// takes it.
+func (c *Compiler) powerupDuration(name string) int {
+	value, written := c.mergedProperty(name, "powerup.duration")
+	if !written {
+		return 0
+	}
+	tics := atoiOr(strings.TrimSpace(value), 0)
+	if tics < 0 {
+		seconds := -tics
+		if seconds > math.MaxInt32/int(wep.TicRate) {
+			return math.MaxInt32 // "for the rest of the level", written as a huge number
+		}
+		return seconds * int(wep.TicRate)
+	}
+	return tics
+}
+
+func (c *Compiler) items(states wep.StateMachine) map[string]wep.Item {
 	if len(c.neededItems) == 0 {
 		return nil
 	}
+	magazines := reloadedItems(states)
 	items := make(map[string]wep.Item, len(c.neededItems))
 	for _, name := range sortedNames(c.neededItems) {
 		item := wep.Item{Max: 1}
@@ -325,13 +357,190 @@ func (c *Compiler) items() map[string]wep.Item {
 			if max := c.intProperty(actor.Name, "inventory.maxamount"); max > 0 {
 				item.Max = max
 			}
-			if amount := c.intProperty(actor.Name, "inventory.amount"); amount > 0 {
-				item.Initial = 0
+			// A magazine starts loaded. ZDoom has the player pick a weapon up
+			// with ammo already in it, and this engine hands out every weapon
+			// at once with nothing to pick up, so a magazine that started
+			// empty is a weapon born empty. Brutal Doom's dual MP40 is the
+			// clearest case: its right hand magazine is a third ammo pool the
+			// weapon itself never names, so it stayed at zero and the right
+			// gun never fired a shot.
+			// A magazine has a capacity; a flag is one or nothing. The walk
+			// below can wander from a reload into the kick and the taunt a
+			// Brutal Doom weapon shares with it, and those hand out flags,
+			// so a weapon that started with Kicking already set would kick
+			// the moment it was drawn.
+			if item.Max > 1 && magazines[strings.ToLower(name)] {
+				item.Initial = item.Max
 			}
+			item.Duration = c.powerupDuration(actor.Name)
 		}
 		items[name] = item
 	}
 	return items
+}
+
+// mainLoopLabels are where a reload comes back to when it is done. The walk
+// below stops at them: past one it is no longer reading the reload, it is
+// reading the whole weapon, and every counter a script keeps would look like
+// a magazine.
+// Matched anywhere in the name, not only at the front: a mod writes DoKick and
+// FinishExecution and BerserkerKick, and a prefix test reaches none of them.
+var mainLoopLabels = []string{"ready", "fire", "althold", "select", "spawn",
+	"noammo", "sprint", "kick", "punch", "taunt", "salute", "execut",
+	"grenade", "special", "slide", "stomp"}
+
+// reloadedItems is what a weapon's reload puts in, which is what a magazine
+// is. Nothing in DECORATE says so directly: a magazine and a counter are both
+// `: Ammo` with a maximum, and the shells chambered in a pump shotgun look
+// exactly like the rounds in an MP40's clip until you notice that only one of
+// them is what the reload fills.
+//
+// So this walks the states a reload reaches - falling through, and following
+// the jumps it takes - and collects what they give. Brutal Doom's dual MP40
+// hands its two magazines a round at a time in a loop; Final Doomer's pump
+// shotgun chambers its shell in the firing states, and never appears here.
+// ownedByStoppedLabel marks every step that sits under one of the labels a
+// reload walk must not wander into, whichever way it is entered.
+func ownedByStoppedLabel(states wep.StateMachine) []bool {
+	owner := make([]string, len(states.Steps))
+	starts := make(map[int]string, len(states.Labels))
+	for label, index := range states.Labels {
+		// An invented label names no region of its own; the region is whatever
+		// the mod's own label called it.
+		if !strings.HasPrefix(label, "@") {
+			starts[index] = label
+		}
+	}
+	current := ""
+	for i := range owner {
+		if name, ok := starts[i]; ok {
+			current = name
+		}
+		owner[i] = current
+	}
+
+	stopped := make([]bool, len(states.Steps))
+	for i, name := range owner {
+		for _, word := range mainLoopLabels {
+			if strings.Contains(name, word) {
+				stopped[i] = true
+				break
+			}
+		}
+	}
+	return stopped
+}
+
+func reloadedItems(states wep.StateMachine) map[string]bool {
+	given := map[string]bool{}
+	start, ok := states.Label("Reload")
+	if !ok {
+		return given
+	}
+	// Which named label each step belongs to. ZDoom's numeric jumps compile to
+	// invented "@frame" labels part way inside a region, so checking only the
+	// step a name starts at lets the walk in through the side door - which is
+	// how it used to reach the kick, the taunt and the sprint, and come back
+	// thinking a stamina meter was a magazine.
+	stop := ownedByStoppedLabel(states)
+
+	seen := make(map[int]bool, len(states.Steps))
+	queue := []int{start}
+	for len(queue) > 0 {
+		at := queue[0]
+		queue = queue[1:]
+		if at < 0 || at >= len(states.Steps) || seen[at] || (at != start && stop[at]) {
+			continue
+		}
+		seen[at] = true
+
+		step := states.Steps[at]
+		leaves := false
+		for _, op := range step.Ops {
+			switch op.Op {
+			case wep.OpGive:
+				given[strings.ToLower(op.Item)] = true
+			case wep.OpStop:
+				leaves = true
+			case wep.OpGoto:
+				leaves = true
+			}
+			if op.To != "" {
+				if index, found := states.Label(op.To); found {
+					queue = append(queue, index)
+				}
+			}
+		}
+		if !leaves {
+			queue = append(queue, at+1)
+		}
+	}
+	return given
+}
+
+// actorHasFlag reads one of a DECORATE actor's flags, honouring the chain it
+// inherits from and a subclass that turns an inherited flag back off.
+// actorFloats reports whether this thing hangs where it is put instead of
+// falling: +NOGRAVITY, or a missile class that carries the flag itself and is
+// not in this mod to be read. A mod that means the exception writes it -
+// Final Doomer's C4 charge is `Projectile` and then `-NOGRAVITY`, and it
+// arcs.
+func (c *Compiler) actorFloats(name string) bool {
+	if value, written := c.mergedFlagSet(name, "nogravity"); written {
+		return value
+	}
+	return c.inheritsAStockProjectile(name)
+}
+
+// decalOf is the mark this actor leaves on a wall: ZDoom's Decal property,
+// which is what P_LineAttack spawns a shot's decal from. It is inherited, and
+// "None" or an empty name means the actor marks nothing - which is how a laser
+// pointer fires a hitscan every tic without chipping the wall every tic.
+//
+// Nothing anywhere in the line means no generator either: ZDoom's own
+// BulletPuff carries no Decal, and Doom's bullet chips come from the weapon,
+// which declares `Decal "BulletChip"` itself.
+func decalOf(idx *Index, name string) string {
+	for _, actor := range idx.Ancestry(name) {
+		value, written := actor.Property("decal")
+		if !written {
+			continue
+		}
+		value = strings.Trim(strings.TrimSuffix(strings.TrimSpace(value), ";"), `"`)
+		if value == "" || strings.EqualFold(value, "none") {
+			return ""
+		}
+		return value
+	}
+	return ""
+}
+
+func actorHasFlag(idx *Index, name, flag string) bool {
+	for _, actor := range idx.Ancestry(name) {
+		if set, written := actor.Flags[flag]; written {
+			return set
+		}
+	}
+	return false
+}
+
+// buttons is which of the items this weapon reads are really the player's
+// buttons under another name. Only the ones it actually names: the map is what
+// the engine has to keep for this weapon, and a weapon that never asks about
+// the trigger does not need one kept for it.
+func (c *Compiler) buttons() map[string]string {
+	var buttons map[string]string
+	for _, name := range sortedNames(c.neededItems) {
+		input, ok := ControlItems[strings.ToLower(name)]
+		if !ok {
+			continue
+		}
+		if buttons == nil {
+			buttons = map[string]string{}
+		}
+		buttons[name] = input
+	}
+	return buttons
 }
 
 func hasLabel(machine wep.StateMachine, name string) bool {
@@ -457,8 +666,17 @@ func (r *Result) DropSprites(missing []string) {
 
 	blank := func(machine *wep.StateMachine) {
 		for i := range machine.Steps {
-			if gone[machine.Steps[i].Sprite] {
-				machine.Steps[i].Sprite = ""
+			step := &machine.Steps[i]
+			if gone[step.Sprite] {
+				step.Sprite = ""
+			}
+			// A keep marker with none of its alternatives left shows nothing,
+			// which is what a missing picture looks like everywhere else here.
+			if len(step.SpriteAlt) > 0 {
+				step.SpriteAlt = without(step.SpriteAlt, gone)
+				if len(step.SpriteAlt) == 0 {
+					step.Sprite = ""
+				}
 			}
 		}
 	}

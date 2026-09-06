@@ -30,7 +30,7 @@ func (g *Game) pollInput(elapsed float64) {
 	moveDir := [2]int{0, 0}
 	upDown := int(0)
 	inputSrc := g.GlApplication.Window
-	if inputSrc.GetKey(glfw.KeyW) == glfw.Press {
+	if g.autoWalk || inputSrc.GetKey(glfw.KeyW) == glfw.Press {
 		moveDir[1] = 1
 	} else if inputSrc.GetKey(glfw.KeyS) == glfw.Press {
 		moveDir[1] = -1
@@ -170,12 +170,15 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 
 	*/
 
+	// The field of view the player plays at, which a scope divides rather than
+	// replaces - so widening the view while scoped widens what unscoping goes
+	// back to, and does not fight the scope for the camera.
 	if key == glfw.KeyF9 {
-		g.Camera.SetFOV(g.Camera.GetFOV() + 5)
+		g.changeBaseFOV(5)
 		g.Camera.LookSensitivity += 0.01
 	}
 	if key == glfw.KeyF10 {
-		g.Camera.SetFOV(g.Camera.GetFOV() - 5)
+		g.changeBaseFOV(-5)
 		g.Camera.LookSensitivity -= 0.01
 	}
 
@@ -313,8 +316,18 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		}
 	}
 
-	if button == glfw.MouseButtonRight && action == glfw.Press {
-		g.toggleMouseCapture()
+	if button == glfw.MouseButtonRight {
+		// While the game has the mouse, the right button is ZDoom's
+		// +altattack: a scope, a bayonet, a grenade under the barrel. It only
+		// goes back to being the way out of mouse capture once the mouse is
+		// already free, and F2 does that from either side.
+		if !g.isMouseCursorCaptured {
+			if action == glfw.Press {
+				g.toggleMouseCapture()
+			}
+			return
+		}
+		g.altHeld = action == glfw.Press
 		return
 	}
 

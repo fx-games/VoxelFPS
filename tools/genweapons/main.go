@@ -43,11 +43,12 @@ func main() {
 	flag.Parse()
 
 	if *prune {
-		removed, err := pruneActors(*outDir)
+		actors, sprites, err := pruneStores(*outDir)
 		if err != nil {
 			fail("%v", err)
 		}
-		fmt.Fprintf(os.Stderr, "removed %d actor file(s) nothing points at\n", removed)
+		fmt.Fprintf(os.Stderr, "removed %d actor file(s) and %d picture(s) nothing points at\n",
+			actors, sprites)
 		return
 	}
 
@@ -413,18 +414,48 @@ func hashFile(path string) (string, error) {
 // are left behind when a weapon is re-migrated or removed, and they cost disk
 // and nothing else, so sweeping them is a thing you ask for rather than
 // something that happens while you are trying to build something.
-func pruneActors(weaponsDir string) (int, error) {
+// pruneStores deletes what the shared stores hold that no installed weapon
+// points at any more. Both stores are content addressed, so a re-migration
+// that changes anything writes a new file and leaves the old one behind; this
+// is what stops the folder growing a copy of every version it ever had.
+func pruneStores(weaponsDir string) (actors, sprites int, err error) {
 	library, err := wep.Load(weaponsDir)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	wanted := make(map[string]bool)
+	wantedActors := make(map[string]bool)
+	wantedSprites := make(map[string]bool)
+	// The engine's own decal pictures live in the same store and no weapon.json
+	// names them, so the sweep below would take them every single time.
+	for _, name := range wep.EngineDecalSprites {
+		wantedSprites[name+".png"] = true
+	}
 	for _, weapon := range library.Weapons {
 		for _, file := range weapon.Actors {
-			wanted[file] = true
+			wantedActors[file] = true
 		}
 	}
-	store := filepath.Join(weaponsDir, wep.ActorsDir)
+	for _, actor := range library.Actors {
+		for _, one := range actor {
+			for _, step := range one.States.Steps {
+				if step.Sprite != "" && !wep.IsKeepMarker(step.Sprite) {
+					wantedSprites[step.Sprite+".png"] = true
+				}
+				for _, name := range step.SpriteAlt {
+					wantedSprites[name+".png"] = true
+				}
+			}
+		}
+	}
+	actors, err = pruneStore(filepath.Join(weaponsDir, wep.ActorsDir), wantedActors)
+	if err != nil {
+		return actors, 0, err
+	}
+	sprites, err = pruneStore(filepath.Join(weaponsDir, wep.SpritesDir), wantedSprites)
+	return actors, sprites, err
+}
+
+func pruneStore(store string, wanted map[string]bool) (int, error) {
 	entries, err := os.ReadDir(store)
 	if err != nil {
 		if os.IsNotExist(err) {

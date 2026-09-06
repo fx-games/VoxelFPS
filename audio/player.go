@@ -8,6 +8,7 @@ import (
 	"github.com/gopxl/beep/vorbis"
 	"github.com/gopxl/beep/wav"
 	"io/fs"
+	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -18,7 +19,13 @@ import (
 )
 
 type Player struct {
-	loadedCues    map[string][]*beep.Buffer
+	loadedCues map[string][]*beep.Buffer
+	// cueFiles is what a cue could be played from, filled by LoadCueTree
+	// without reading any of it. Decoding a weapon's whole sound folder as it
+	// comes into the player's hands cost a third of a second of silence on
+	// every switch, and most of it is never played: a mod ships several takes
+	// of every sound and a dozen sounds the weapon only makes underwater.
+	cueFiles      map[string][]string
 	currentStream beep.StreamSeekCloser
 	cuesLoaded    bool
 	disabled      bool
@@ -83,6 +90,7 @@ func (p *Player) StartStream(streamer beep.StreamSeekCloser, shouldLoop bool) {
 func (p *Player) UnloadAllCues() {
 	p.stopAndCloseStream()
 	p.loadedCues = make(map[string][]*beep.Buffer)
+	p.cueFiles = make(map[string][]string)
 }
 
 func (p *Player) stopAndCloseStream() {
@@ -145,8 +153,41 @@ func (p *Player) LoadCueTree(root string) error {
 		if tilde := strings.LastIndexByte(cue, '~'); tilde >= 0 {
 			cue = cue[:tilde]
 		}
-		return p.loadCue(name, cue)
+		p.cueFiles[cue] = append(p.cueFiles[cue], name)
+		return nil
 	})
+}
+
+// buffers are the decoded takes of a cue, decoded the first time it is played
+// and kept until the cues are unloaded.
+func (p *Player) buffers(name string) []*beep.Buffer {
+	if loaded, done := p.loadedCues[name]; done {
+		return loaded
+	}
+	for _, file := range p.cueFiles[name] {
+		if err := p.loadCue(file, name); err != nil {
+			log.Printf("[audio] %s: %v", file, err)
+		}
+	}
+	if p.loadedCues[name] == nil {
+		// Remembered as nothing rather than looked for again on every shot.
+		p.loadedCues[name] = []*beep.Buffer{}
+	}
+	return p.loadedCues[name]
+}
+
+// endWhenSilent stops a streamer that has run out of file but not out of
+// header. A WAV whose data chunk claims more bytes than the file holds - two
+// of Final Doomer's are 56 bytes short - never reaches the end beep's decoder
+// is counting towards, so it answers every read with no samples and "still
+// going", and Buffer.Append, which only stops when a streamer says it is done,
+// spins there for ever. The Quantum Accelerator froze the game the first time
+// it fired, on the main thread, inside its own fire sound.
+type endWhenSilent struct{ beep.Streamer }
+
+func (s endWhenSilent) Stream(samples [][2]float64) (int, bool) {
+	n, ok := s.Streamer.Stream(samples)
+	return n, ok && n > 0
 }
 
 func (p *Player) loadCue(fileName string, cueName string) error {
@@ -172,7 +213,7 @@ func (p *Player) loadCue(fileName string, cueName string) error {
 	}
 
 	buffer := beep.NewBuffer(format)
-	buffer.Append(streamer)
+	buffer.Append(endWhenSilent{streamer})
 
 	closeErr := streamer.Close()
 	if closeErr != nil {
@@ -193,8 +234,8 @@ func (p *Player) PlayCue(name string) {
 	if !p.cuesLoaded {
 		return
 	}
-	buffers, bufExists := p.loadedCues[name]
-	if !bufExists || len(buffers) == 0 {
+	buffers := p.buffers(name)
+	if len(buffers) == 0 {
 		return
 	}
 
@@ -258,8 +299,8 @@ func (p *Player) PlayCueAt(name string, options CueOptions) {
 	if p.disabled || !p.cuesLoaded {
 		return
 	}
-	buffers, exists := p.loadedCues[name]
-	if !exists || len(buffers) == 0 {
+	buffers := p.buffers(name)
+	if len(buffers) == 0 {
 		return
 	}
 	buffer := buffers[0]

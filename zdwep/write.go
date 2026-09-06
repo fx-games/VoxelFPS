@@ -2,6 +2,8 @@ package zdwep
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -26,10 +28,14 @@ func Write(result *Result, assets *AssetIndex, source *Source, weaponsDir string
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := writeActors(result, weaponsDir); err != nil {
+	// The pictures first, because what they end up called is part of what an
+	// actor says, and an actor is named by the hash of what it says.
+	renamed, err := writeSharedSprites(result, assets, weaponsDir)
+	if err != nil {
 		return err
 	}
-	if err := writeSharedSprites(result, assets, weaponsDir); err != nil {
+	renameActorSprites(result, renamed)
+	if err := writeActors(result, weaponsDir); err != nil {
 		return err
 	}
 
@@ -92,39 +98,90 @@ func writeActors(result *Result, weaponsDir string) error {
 }
 
 // writeSharedSprites puts the frames of the things a weapon spawns into the
-// shared picture store, one file each. They are not packed here: which weapons
-// are installed is the game's business, not the migration's, so the game packs
-// them into one atlas when it starts and keeps it until the set changes.
-func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) error {
+// shared picture store, one file each, and reports what each one is now
+// called. They are not packed here: which weapons are installed is the game's
+// business, not the migration's, so the game packs them into one atlas when it
+// starts and keeps it until the set changes.
+//
+// The name is the frame's own plus a short hash of the picture, because a
+// sprite name is only unique inside the mod that defines it. Brutal Doom and
+// Final Doomer both ship a SMOKA0 and they are not the same picture - one is
+// 56 pixels square and the other is 141 by 130 - so a store keyed by the bare
+// name gave every Brutal Doom weapon Final Doomer's smoke, two and a half
+// times too big, purely because Final Doomer happened to be migrated last.
+// Two mods that really do ship the same bytes still share one file.
+func writeSharedSprites(result *Result, assets *AssetIndex, weaponsDir string) (map[string]string, error) {
 	if len(result.ActorSprites) == 0 {
-		return nil
+		return nil, nil
 	}
 	store := filepath.Join(weaponsDir, wep.SpritesDir)
 	if err := os.MkdirAll(store, 0o755); err != nil {
-		return err
+		return nil, err
 	}
+	renamed := make(map[string]string, len(result.ActorSprites))
 	for _, name := range result.ActorSprites {
-		target := filepath.Join(store, name+".png")
-		if _, err := os.Stat(target); err == nil {
-			continue // another weapon spawns the same thing
-		}
 		file, ok := assets.Sprite(name)
 		if !ok {
 			continue // already counted as missing, and already blanked
 		}
 		data, err := assets.ReadAll(file)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		encoded, err := asPNG(data, name)
 		if err != nil {
-			return err
+			return nil, err
+		}
+		stored := SharedSpriteName(name, encoded)
+		renamed[name] = stored
+		target := filepath.Join(store, stored+".png")
+		if _, err := os.Stat(target); err == nil {
+			continue // the same picture is already there, by definition
 		}
 		if err := os.WriteFile(target, encoded, 0o644); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return renamed, nil
+}
+
+// SharedSpriteName is what a frame is called in the shared store: its own name,
+// so a folder full of them is still readable, plus enough of the hash of the
+// picture to tell two mods' versions of that name apart.
+func SharedSpriteName(name string, picture []byte) string {
+	sum := sha256.Sum256(picture)
+	return name + "." + hex.EncodeToString(sum[:4])
+}
+
+// renameActorSprites points the things a weapon spawns at the names their
+// pictures actually went into the store under. Only the spawned actors: a
+// weapon's own frames live in its own atlas, where a bare name is unique
+// because the folder holds one mod's weapon.
+func renameActorSprites(result *Result, renamed map[string]string) {
+	if len(renamed) == 0 {
+		return
+	}
+	for i, name := range result.ActorSprites {
+		if stored, ok := renamed[name]; ok {
+			result.ActorSprites[i] = stored
+		}
+	}
+	for _, actor := range result.Actors {
+		for i := range actor.States.Steps {
+			step := &actor.States.Steps[i]
+			if stored, ok := renamed[step.Sprite]; ok {
+				step.Sprite = stored
+			}
+			// A keep marker keeps its own name - it is punctuation, not a
+			// picture - but the names it can land on are pictures, and they
+			// went into the store under the store's names.
+			for j, name := range step.SpriteAlt {
+				if stored, ok := renamed[name]; ok {
+					step.SpriteAlt[j] = stored
+				}
+			}
+		}
+	}
 }
 
 // asPNG makes sure a picture is one, whatever the mod stored it as.
@@ -195,8 +252,7 @@ func writeAtlas(result *Result, assets *AssetIndex, outPath string) error {
 		if err != nil {
 			return err
 		}
-		bounds := decoded.Bounds()
-		offsetX, offsetY := tpack.OffsetsFromPNG(data, bounds.Dx(), bounds.Dy())
+		offsetX, offsetY := tpack.OffsetsFromPNG(data)
 		images = append(images, tpack.NamedImage{Image: decoded, Name: name, OffsetX: offsetX, OffsetY: offsetY})
 	}
 	if len(missing) > 0 {

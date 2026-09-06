@@ -1,1 +1,0 @@
-{"format":1,"name":"SpawnedExplosion","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":0},{"tics":2,"tics_max":2,"ops":[{"op":"play_sound","volume":1,"attenuation":1,"pitch":1}]},{"tics":0,"ops":[{"op":"fire_projectile","actor":"HighExplosiveFlamesSmall","angle":180}]},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}},"no_gravity":true}

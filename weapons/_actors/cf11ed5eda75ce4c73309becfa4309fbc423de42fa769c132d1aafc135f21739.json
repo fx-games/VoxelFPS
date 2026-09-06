@@ -1,1 +1,0 @@
-{"format":1,"name":"FDHellboundTotenheimMissileFlare","render":{"scale":[0.4,0.4],"alpha":0.5,"style":"add"},"states":{"steps":[{"sprite":"OGLOA0","tics":1,"tics_max":1,"bright":true,"ops":[{"op":"warp","args":[-24,0,0,0],"flags":"AAPTR_MASTER|WARPF_INTERPOLATE"}]},{"tics":0,"ops":[{"op":"loop"}]},{"tics":0},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":2,"spawn":0}}}

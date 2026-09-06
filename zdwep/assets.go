@@ -48,15 +48,25 @@ func NewAssetIndex(src *Source) *AssetIndex {
 		lower := strings.ToLower(name)
 		base := strings.TrimSuffix(path.Base(lower), path.Ext(lower))
 		switch {
+		// The last file with a lump's name wins, which is GZDoom's rule and
+		// not an arbitrary one: FileSystem::CheckNumForName searches the lump
+		// list backwards, so a later entry shadows an earlier one of the same
+		// name. That is how a mod overrides a sound with a better take in an
+		// `hd/` folder, and it is how Brutal Doom means PLSTA0 to be the
+		// plasma gun's firing frame in sprites/weapons/plasmagun and not the
+		// 43x24 exhaust flare in sprites/vehicles/bike. Keeping the first one
+		// instead handed the plasma gun a bike part with a world sprite's
+		// hotspot on it, drawn off the left edge of the screen: firing made
+		// the gun disappear.
+		//
+		// It is a narrow rule in practice. Brutal Doom has 11971 sprite lumps
+		// and 44 of them are named twice, most being a folder duplicated
+		// inside itself.
 		case strings.HasPrefix(lower, "sprites/"):
-			if _, taken := index.sprites[base]; !taken {
-				index.sprites[base] = name
-			}
+			index.sprites[base] = name
 			index.noteRotations(base, name)
 		case strings.HasPrefix(lower, "sounds/"):
-			if _, taken := index.sounds[base]; !taken {
-				index.sounds[base] = name
-			}
+			index.sounds[base] = name
 		}
 	}
 	index.sndinfo = readSndInfoFrom(src)
@@ -89,11 +99,44 @@ func (a *AssetIndex) Sprite(name string) (string, bool) {
 	if len(files) == 0 {
 		return "", false
 	}
-	// Several views of the same frame, and we draw one flat billboard, so take
-	// the first: sorted, that is rotation 1, the view from the front.
+	// Several views of the same frame, and we draw one flat billboard, so one
+	// of them has to be the picture. It is the back: what a weapon throws into
+	// the world is spawned facing the way the player faces, and the player is
+	// the only one looking at it, so the view they get is the one from behind.
+	// Doom numbers that rotation 5, and GZDoom picks it the same way - the
+	// angle from the viewer to the thing, less the thing's own, lands in the
+	// fifth of eight sectors.
+	//
+	// It is not a detail. Brutal Doom's muzzle flash is authored blank from
+	// rotations 4 to 6, so in GZDoom the player who fires never sees the
+	// flash actor at all - only the flash drawn into the weapon's own frames.
+	// Taking the front view instead, which is what sorting these and picking
+	// the first does, put a 21 unit fireball in the player's face on every
+	// shot of every gun in the mod.
 	sorted := append([]string(nil), files...)
 	sort.Strings(sorted)
+	for _, wanted := range []byte{'5', '0'} {
+		for _, file := range sorted {
+			if rotationOf(file) == wanted {
+				return file, true
+			}
+		}
+	}
 	return sorted[0], true
+}
+
+// rotationOf is the rotation a sprite lump holds, as the digit Doom writes
+// after the frame letter: NAMEFR, or NAMEFRFR for a lump that holds two views
+// at once, the second mirrored. Zero means one picture used from every angle.
+func rotationOf(file string) byte {
+	base := strings.ToUpper(strings.TrimSuffix(path.Base(file), path.Ext(file)))
+	if len(base) < 6 {
+		return 0
+	}
+	if len(base) >= 8 && base[7] == '5' {
+		return '5'
+	}
+	return base[5]
 }
 
 // Sounds finds the files holding a sound named the way a script names it, such

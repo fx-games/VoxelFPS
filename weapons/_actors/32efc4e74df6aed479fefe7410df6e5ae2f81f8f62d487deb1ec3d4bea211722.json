@@ -1,1 +1,0 @@
-{"format":1,"name":"FDWhitemareFireDOTDamage2","render":{"scale":[1,1],"alpha":1},"speed":5,"states":{"steps":[{"tics":2,"tics_max":2},{"tics":0,"ops":[{"op":"loop"}]},{"tics":4,"tics_max":4},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":2,"spawn":0}}}

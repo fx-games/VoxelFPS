@@ -2,6 +2,7 @@ package zdwep
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/memmaker/goray/wep"
@@ -382,12 +383,65 @@ func lowerWarp(c *Compiler, call Call) ([]wep.Op, error) {
 // its own trail with `A_CustomMissile("Smoke", 0, 0, 180)` means angle 180,
 // no height - read the other way round it lands 180 units above the gun.
 func lowerSpawnMissile(c *Compiler, call Call) ([]wep.Op, error) {
-	return c.spawn(call, wep.OpFireProjectile, 3, 2, 1)
+	ops, err := c.spawn(call, wep.OpFireProjectile, spawnArgs{angle: 3, offset: 2, height: 1, pitch: 5})
+	if err != nil {
+		return nil, err
+	}
+	// The sixth argument is a pitch, and ZDoom does not always read it. It
+	// works a velocity out of the pitch only under CMF_ABSOLUTEPITCH or
+	// CMF_OFFSETPITCH - and under aimmode 2, where the C++ sets
+	// CMF_ABSOLUTEPITCH itself right after spawning. In every other aimmode
+	// the missile goes where the spawner is aiming and the argument does
+	// nothing, so carrying it there would aim things ZDoom does not.
+	flags := customMissileFlags(call.Arg(4, "0"))
+	absolute := flags&cmfAimMode == cmfAimDirection || flags&cmfAbsolutePitch != 0
+	if !absolute && flags&cmfOffsetPitch == 0 {
+		ops[0].AimPitch, ops[0].AimPitchTo = 0, 0
+	}
+	ops[0].AbsolutePitch = absolute
+	return ops, nil
 }
 
-// A_SpawnItem(actor, distance, height, angle).
+// A_CustomMissile's flag bits, only the ones that decide what happens to the
+// pitch. A script writes them by name or as the plain number, and Brutal Doom
+// writes the number.
+const (
+	cmfAimMode       = 3
+	cmfAimDirection  = 2
+	cmfAbsolutePitch = 16
+	cmfOffsetPitch   = 32
+)
+
+func customMissileFlags(text string) int {
+	bits := 0
+	for _, word := range strings.Split(text, "|") {
+		word = strings.ToUpper(strings.TrimSpace(word))
+		switch word {
+		case "CMF_AIMOFFSET":
+			bits |= 1
+		case "CMF_AIMDIRECTION":
+			bits |= cmfAimDirection
+		case "CMF_ABSOLUTEPITCH":
+			bits |= cmfAbsolutePitch
+		case "CMF_OFFSETPITCH":
+			bits |= cmfOffsetPitch
+		default:
+			if number, err := strconv.Atoi(word); err == nil {
+				bits |= number
+			}
+		}
+	}
+	return bits
+}
+
+// A_SpawnItem(itemtype, distance, zheight, useammo, transfer_translation).
+// Unlike every other spawner here it has no angle at all, and its one distance
+// is straight out in front rather than sideways: reading it as the sideways
+// offset put a muzzle flash beside the player's shoulder, and reading argument
+// three - which is useammo, a flag - as an angle turned every one of them by a
+// degree of nothing in particular.
 func lowerSpawnItem(c *Compiler, call Call) ([]wep.Op, error) {
-	return c.spawn(call, wep.OpSpawnItem, 3, 1, 2)
+	return c.spawn(call, wep.OpSpawnItem, spawnArgs{height: 2, forward: 1})
 }
 
 // A_SpawnItemEx(itemtype, xofs, yofs, zofs, xvel, yvel, zvel, angle, flags,
@@ -422,36 +476,65 @@ func lowerSpawnItemEx(c *Compiler, call Call) ([]wep.Op, error) {
 		}
 		ranges[i] = value.Range
 	}
-	yofs, zofs := ranges[1], ranges[2]
+	// yofs is to the right, the same way spawnofs_xy is. It looks as though it
+	// should not be - rotating a plain (x, y) pair by the yaw would put +y on
+	// the left - and A_SpawnItemEx deliberately flips it, with a comment in
+	// GZDoom's own source saying so: "in relative mode negative y values mean
+	// 'left' and positive ones mean 'right'. This is the inverse orientation
+	// of the absolute mode!". Read the other way, every dual wielded weapon
+	// puts each gun's muzzle flash beside the other gun.
+	xofs, yofs, zofs := ranges[0], ranges[1], ranges[2]
 	xvel, yvel, zvel := ranges[3], ranges[4], ranges[5]
 	angle := ranges[6]
-	// xofs (ranges[0]) is a forward offset from the spawner, which nothing
-	// else here has a field for - spawn()'s "offset" is sideways only. Left
-	// unread rather than folded into something it is not; it is 0 in every
-	// call this mod set makes.
+
+	// The three velocities have to survive as expressions when they name the
+	// spawner rather than a number: `velx, vely+frandom(-0.2,0.2), velz` is
+	// how a mod hands a puff of smoke the throw of the thing that made it,
+	// and folded to a number at migration time every one of them is zero.
+	velocityPrograms, err := c.velocityExprs(call, 4)
+	if err != nil {
+		return nil, err
+	}
 
 	c.needActor(actorName)
 	return []wep.Op{{
-		Op:            wep.OpSpawnItem,
-		Actor:         actorName,
-		Angle:         angle.Value(),
-		SpawnOffset:   yofs.Min,
-		SpawnOffsetTo: yofs.Max,
-		SpawnHeight:   zofs.Value(),
-		VelX:          xvel.Min,
-		VelXTo:        xvel.Max,
-		VelY:          yvel.Min,
-		VelYTo:        yvel.Max,
-		VelZ:          zvel.Min,
-		VelZTo:        zvel.Max,
-		Flags:         flagWords(call),
-		Source:        call.Raw,
+		Op:               wep.OpSpawnItem,
+		Actor:            actorName,
+		VelExprs:         velocityPrograms,
+		AbsoluteVelocity: strings.Contains(strings.ToUpper(flagWords(call)), "SXF_ABSOLUTEVELOCITY"),
+		Angle:            angle.Min,
+		AngleTo:          angle.Max,
+		SpawnOffset:      yofs.Min,
+		SpawnOffsetTo:    yofs.Max,
+		SpawnHeight:      zofs.Value(),
+		SpawnForward:     xofs.Min,
+		SpawnForwardTo:   xofs.Max,
+		VelX:             xvel.Min,
+		VelXTo:           xvel.Max,
+		VelY:             yvel.Min,
+		VelYTo:           yvel.Max,
+		VelZ:             zvel.Min,
+		VelZTo:           zvel.Max,
+		Flags:            flagWords(call),
+		Source:           call.Raw,
 	}}, nil
 }
 
-// spawn is the shape all four spawning functions share: an actor name that the
-// policy has to have decided about, and three numbers whose positions differ.
-func (c *Compiler) spawn(call Call, op string, angleArg, offsetArg, heightArg int) ([]wep.Op, error) {
+// spawnArgs says which argument of a spawning function carries which number.
+// The functions share a shape and disagree about the order. Argument zero is
+// always the actor's name, so a zero here is a number the function does not
+// have at all - which is what A_SpawnItem does with angle, having none.
+type spawnArgs struct {
+	angle   int
+	offset  int
+	height  int
+	forward int
+	pitch   int
+}
+
+// spawn is the shape the spawning functions share: an actor name the policy
+// has to have decided about, and up to four numbers whose positions differ.
+func (c *Compiler) spawn(call Call, op string, args spawnArgs) ([]wep.Op, error) {
 	actorName := call.NameArg(0, "")
 	if actorName == "" {
 		return nil, fmt.Errorf("%s with no actor", call.Name)
@@ -463,29 +546,56 @@ func (c *Compiler) spawn(call Call, op string, angleArg, offsetArg, heightArg in
 	if disposition == "drop" {
 		return []wep.Op{{Op: wep.OpNop, Source: call.Raw}}, nil
 	}
-	angle, err := c.eval(call.Arg(angleArg, "0"))
+	angle, err := c.spawnArg(call, args.angle)
 	if err != nil {
 		return nil, err
 	}
-	offset, err := c.eval(call.Arg(offsetArg, "0"))
+	offset, err := c.spawnArg(call, args.offset)
 	if err != nil {
 		return nil, err
 	}
-	height, err := c.eval(call.Arg(heightArg, "0"))
+	height, err := c.spawnArg(call, args.height)
+	if err != nil {
+		return nil, err
+	}
+	forward, err := c.spawnArg(call, args.forward)
+	if err != nil {
+		return nil, err
+	}
+	pitch, err := c.spawnArg(call, args.pitch)
 	if err != nil {
 		return nil, err
 	}
 	c.needActor(actorName)
 	return []wep.Op{{
-		Op:            op,
-		Actor:         actorName,
-		Angle:         angle.Range.Value(),
-		SpawnOffset:   offset.Range.Min,
-		SpawnOffsetTo: offset.Range.Max,
-		SpawnHeight:   height.Range.Value(),
-		Flags:         flagWords(call),
-		Source:        call.Raw,
+		Op:             op,
+		Actor:          actorName,
+		Angle:          angle.Min,
+		AngleTo:        angle.Max,
+		SpawnOffset:    offset.Min,
+		SpawnOffsetTo:  offset.Max,
+		SpawnHeight:    height.Value(),
+		SpawnForward:   forward.Min,
+		SpawnForwardTo: forward.Max,
+		AimPitch:       pitch.Min,
+		AimPitchTo:     pitch.Max,
+		Flags:          flagWords(call),
+		Source:         call.Raw,
 	}}, nil
+}
+
+// spawnArg reads one of those numbers, or nothing for a slot the function does
+// not have. An unset slot has to answer zero rather than read argument zero,
+// which is the actor's name and not a number at all.
+func (c *Compiler) spawnArg(call Call, index int) (Range, error) {
+	if index <= 0 {
+		return Range{}, nil
+	}
+	value, err := c.eval(call.Arg(index, "0"))
+	if err != nil {
+		return Range{}, err
+	}
+	return value.Range, nil
 }
 
 // A_SpawnParticle(colour, flags, lifetime, size, angle, ...). The colour is
@@ -643,4 +753,27 @@ func lowerCheckFlag(c *Compiler, call Call) ([]wep.Op, error) {
 	return []wep.Op{{
 		Op: wep.OpCheckFlag, Text: call.NameArg(0, ""), To: target, Source: call.Raw,
 	}}, nil
+}
+
+// velocityExprs keeps a spawn's three velocities as programs when at least one
+// of them depends on the actor doing the spawning, and returns nothing when
+// they are all plain numbers - the ranges already carry those, rolled per
+// spawn. first is the argument index of xvel.
+func (c *Compiler) velocityExprs(call Call, first int) ([]wep.Expr, error) {
+	programs := make([]wep.Expr, 0, 3)
+	varies := false
+	for i := first; i < first+3; i++ {
+		value, err := c.eval(call.Arg(i, "0"))
+		if err != nil {
+			return nil, err
+		}
+		programs = append(programs, value.program())
+		if !value.Folded() {
+			varies = true
+		}
+	}
+	if !varies {
+		return nil, nil
+	}
+	return programs, nil
 }

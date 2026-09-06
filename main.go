@@ -13,6 +13,7 @@ import (
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/goray/wep"
 	_ "image/png"
 	"log"
 	"os"
@@ -40,7 +41,19 @@ func main() {
 	benchSeconds := flag.Float64("bench", 0, "run this many seconds, print frame time percentiles and quit (turns vsync off)")
 	startWeapon := flag.String("weapon", "", "start holding this weapon, by its folder name")
 	autoFire := flag.Bool("autofire", false, "hold the trigger down, for looking at a weapon or measuring what it costs")
+	autoAlt := flag.Bool("altfire", false, "hold the second attack button down, which is what a scope or a bayonet is on")
+	autoTap := flag.String("tap", "", "tap the trigger instead of holding it: \"down,up\" in tics, for a weapon that only does something on a fresh press")
 	cpuProfile := flag.String("cpuprofile", "", "write a CPU profile here while the benchmark runs")
+	shot := flag.String("shot", "", "save a screenshot here and quit, for looking at what a change did without playing")
+	shotFirst := flag.Int("shot-at", 90, "which tick to take the first screenshot on")
+	shotEvery := flag.Int("shot-every", 6, "ticks between screenshots when more than one is asked for")
+	shotCount := flag.Int("shot-count", 1, "how many screenshots to take, numbered, which is how an animation is reviewed")
+	shotFPS := flag.Float64("shot-fps", 60, "the frame time a capture pretends every frame took, so two runs land on the same animation frame")
+	shotPitch := flag.Float64("pitch", 0, "start looking this many degrees down, for a capture of something on the floor")
+	autoWalk := flag.Bool("walk", false, "hold the forward key down, for looking at anything that only happens while moving")
+	autoCycle := flag.Float64("cycle", 0, "switch to the next weapon every this many seconds, for walking the whole folder in one run")
+	width := flag.Int("width", 0, "window width, 0 for the default")
+	height := flag.Int("height", 0, "window height, 0 for the default")
 	stressSize := flag.Int("stress-size", defaults.Size, "stress map edge length in tiles")
 	stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
 	stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
@@ -89,13 +102,27 @@ func main() {
 		game.shadowDepthBias = float32(*shadowBias)
 		game.benchSeconds = *benchSeconds
 		game.autoFire = *autoFire
+		game.autoAlt = *autoAlt
+		fmt.Sscanf(*autoTap, "%d,%d", &game.tapDown, &game.tapUp)
+		game.autoWalk = *autoWalk
+		game.autoCycle = *autoCycle
 		game.startWeapon = *startWeapon
-		// The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
-		width, height := 640, 480
-		if shadowTestMap {
-			width, height = 1280, 800
+		game.shot = shotRun{
+			path: *shot, first: *shotFirst, every: *shotEvery, count: *shotCount,
+			step: 1 / *shotFPS, pitch: *shotPitch,
 		}
-		quads.Start(game, mapLoad, width, height)
+		// The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
+		windowWidth, windowHeight := 640, 480
+		if shadowTestMap {
+			windowWidth, windowHeight = 1280, 800
+		}
+		if *width > 0 {
+			windowWidth = *width
+		}
+		if *height > 0 {
+			windowHeight = *height
+		}
+		quads.Start(game, mapLoad, windowWidth, windowHeight)
 	})
 }
 
@@ -148,8 +175,14 @@ type Game struct {
 	currentGuiScaleIndex   int
 	currentWindowModeIndex int
 
-	isShadowTest          bool
-	benchSeconds          float64
+	isShadowTest bool
+	benchSeconds float64
+	// bobTics is the clock the weapon's sway is a function of, in Doom tics.
+	bobTics float64
+	// warnedSpinning keeps a weapon whose script cannot settle from saying so
+	// every frame for as long as it is held.
+	warnedSpinning        map[string]bool
+	shot                  shotRun
 	watchFileChanges      bool
 	isMouseCursorCaptured bool
 	projectileFlyingAnim  int
@@ -171,15 +204,42 @@ type Game struct {
 	// weaponKeys and weaponByID come out of the weapons folder's key map.
 	weaponKeys map[int]string
 	weaponByID map[string]int
+	// recentWeapons is which weapons still have their pictures loaded, oldest
+	// first. See keepLoaded.
+	recentWeapons []*Weapon
 	// triggerHeld is a state and reloadPressed is an edge; the weapon's script
-	// decides whether either does anything.
+	// decides whether either does anything. altHeld is the second attack
+	// button, ZDoom's +altattack, which a weapon with an AltFire state of its
+	// own reads as a mode of its own.
 	triggerHeld   bool
+	altHeld       bool
 	reloadPressed bool
 
 	audio *audio.Player
-	// baseFOV is what the view goes back to when a scope is lowered.
+	// baseFOV is the view the player plays at, which a scope divides. The zoom
+	// itself lives on the weapon, the way ZDoom keeps it in Weapon.FOVScale,
+	// so putting a scoped weapon away puts the view back on its own.
 	baseFOV float32
 
+	// autoWalk holds the forward key down for the whole run. A weapon's sway is
+	// a function of how fast the player is going, so it is invisible in a
+	// capture that stands still - which every capture does.
+	autoWalk bool
+
+	// autoCycle puts the next weapon in hand every so many seconds, and
+	// autoCycleClock is how long the one in hand has been held. Cycling the
+	// whole folder is what a player does with a mod this size and it is where
+	// anything that outlives the weapon that made it shows up.
+	autoCycle      float64
+	autoCycleClock float64
+	// autoAlt does the same for the second attack button.
+	autoAlt bool
+	// tapDown and tapUp are -tap: how many tics the trigger is held and let go
+	// of, over and over. A weapon that only acts on a fresh press - a
+	// semi-automatic, a detonator - does nothing at all under a held trigger,
+	// and that is exactly the kind that needs looking at.
+	tapDown, tapUp int
+	tapClock       float64
 	// autoFire holds the trigger down for the whole run, which is how a weapon
 	// is looked at or measured without a hand on the mouse.
 	autoFire bool
@@ -316,7 +376,37 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		g.StartBenchmark(quads.NewBenchmark(g.benchSeconds), g.benchmarkLabel())
 	}
 
+	if g.shot.path != "" {
+		// The overlay would be in the picture, and what a capture is for is
+		// looking at the weapon, not at a frame time.
+		g.ShouldDrawDebugInfo = false
+		g.ShouldDrawMinimap = false
+		g.Screenshots(g.shot.path, g.shot.first, g.shot.every, g.shot.count, g.shot.step)
+	}
+	if g.shot.pitch != 0 {
+		// Set outright rather than as a mouse movement: ChangeAngles drops a
+		// delta over 200, and at the mouse sensitivity that is any pitch past
+		// twenty degrees - which is every capture of something on the floor.
+		yaw, _ := g.Camera.GetRotation()
+		g.Camera.Reposition(g.Camera.GetPosition(), yaw, float32(-g.shot.pitch))
+	}
+
 	g.HandleResize(g.WindowWidth, g.WindowHeight)
+}
+
+// shotRun is what -shot and its companions asked for: where to write the
+// screenshots, which ticks to take them on, and the frame time to pretend
+// every frame took so two runs animate identically.
+type shotRun struct {
+	path  string
+	first int
+	every int
+	count int
+	step  float64
+	// pitch is how far down to look, in degrees. What a weapon throws into
+	// the world often lands on the floor, and a capture that only ever looks
+	// at the horizon never sees it.
+	pitch float64
 }
 
 // benchmarkLabel names the run in the report, so two reports pasted next to each
@@ -468,6 +558,11 @@ func (g *Game) Update(elapsed float64) {
 	if g.autoFire {
 		g.triggerHeld = true
 	}
+	g.updateAutoTap(elapsed)
+	if g.autoAlt {
+		g.altHeld = true
+	}
+	g.updateAutoCycle(elapsed)
 	g.updateWeapon(elapsed)
 	g.physicsSystem.Update(elapsed)
 	g.updateGUI(elapsed)
@@ -596,7 +691,8 @@ func (g *Game) DrawGui(elapsed float64) {
 
 	if weapon := g.currentWeapon(); weapon != nil {
 		guiWidth, guiHeight := g.GuiSize()
-		weapon.Draw(int32(guiWidth), int32(guiHeight))
+		bobX, bobY := g.weaponBob()
+		weapon.Draw(int32(guiWidth), int32(guiHeight), bobX, bobY)
 	}
 
 	if g.textLabel != nil { //&& g.shouldDrawDebugInfo {
@@ -991,6 +1087,7 @@ func (g *Game) toggleMouseCapture() {
 	// Letting go of the mouse has to let go of the trigger with it, or a
 	// weapon whose script keeps firing while it is held never stops.
 	g.triggerHeld = false
+	g.altHeld = false
 }
 
 func (g *Game) HandleDrop(names []string, screenDropX, screenDropY float64) {
@@ -1200,4 +1297,31 @@ func getWolfCharAnimations() []quads.SpriteAnimation {
 		fireAnim,        // 5
 	}
 	return animations
+}
+
+// updateAutoCycle is -cycle: the next weapon every so often, for a run that
+// walks the whole folder.
+func (g *Game) updateAutoCycle(elapsed float64) {
+	if g.autoCycle <= 0 {
+		return
+	}
+	g.autoCycleClock += elapsed
+	if g.autoCycleClock < g.autoCycle {
+		return
+	}
+	g.autoCycleClock = 0
+	g.cycleWeapon(1)
+}
+
+// updateAutoTap is -tap: the trigger pressed and let go of on a fixed cycle.
+func (g *Game) updateAutoTap(elapsed float64) {
+	if g.tapDown <= 0 {
+		return
+	}
+	cycle := float64(g.tapDown + g.tapUp)
+	g.tapClock += elapsed * wep.TicRate
+	for g.tapClock >= cycle {
+		g.tapClock -= cycle
+	}
+	g.triggerHeld = g.tapClock < float64(g.tapDown)
 }

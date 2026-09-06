@@ -1,6 +1,7 @@
 package zdwep
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -196,19 +197,126 @@ func TestASpawnedActorRunsAndFinishes(t *testing.T) {
 	assert.Len(t, seen, 5, "all five smoke frames were shown")
 }
 
+// A semi-automatic fires once for each time the trigger goes down, and a full
+// automatic fires for as long as it is held. ZDoom writes the difference as one
+// flag, and Brutal Doom writes it on every pistol and shotgun it has; without
+// it a weapon whose firing states take two tics reads as a machine gun.
+func TestASemiAutomaticFiresOncePerPress(t *testing.T) {
+	const decorate = `
+ACTOR TestShells : Ammo { Inventory.MaxAmount 50 }
+
+ACTOR %s : Weapon
+{
+  Weapon.AmmoType "TestShells"
+  Weapon.AmmoUse 1
+  %s
+  Tag "Test"
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TSHT B 1 A_FireBullets(0, 0, 1, 5, "BulletPuff", 0)
+    TSHT C 1
+    Goto Ready
+  }
+}`
+
+	fire := func(name, flags string, hold int) int {
+		t.Helper()
+		idx := indexFromFiles(t, map[string]string{"DECORATE": fmt.Sprintf(decorate, name, flags)})
+		result, err := CompileWeapon(idx, DefaultPolicy(), name)
+		require.NoError(t, err)
+
+		runtime := wep.NewRuntime(result.Weapon, rand.New(rand.NewSource(1)))
+		cursor := wep.NewCursor(&result.Weapon.States, "Ready")
+		shots := 0
+		for tic := 0; tic < hold; tic++ {
+			runtime.Input.Trigger = true
+			for _, op := range cursor.Update(runtime, oneTic) {
+				if op.Op == wep.OpFireBullets {
+					shots++
+				}
+			}
+		}
+		return shots
+	}
+
+	auto := fire("TestAuto", "", 30)
+	assert.Greater(t, auto, 5, "a held trigger keeps an ordinary weapon firing")
+
+	semi := fire("TestSemi", "+WEAPON.NOAUTOFIRE", 30)
+	assert.Equal(t, 1, semi, "a semi-automatic fires once however long the trigger is held")
+}
+
+// And letting go is what arms it again.
+func TestASemiAutomaticFiresAgainAfterTheTriggerIsReleased(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestShells : Ammo { Inventory.MaxAmount 50 }
+
+ACTOR TestSemi2 : Weapon
+{
+  Weapon.AmmoType "TestShells"
+  +WEAPON.NOAUTOFIRE
+  Tag "Test"
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TSHT B 1 A_FireBullets(0, 0, 1, 5, "BulletPuff", 0)
+    Goto Ready
+  }
+}`})
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestSemi2")
+	require.NoError(t, err)
+	require.True(t, result.Weapon.NoAutoFire)
+
+	runtime := wep.NewRuntime(result.Weapon, rand.New(rand.NewSource(1)))
+	cursor := wep.NewCursor(&result.Weapon.States, "Ready")
+
+	shots := 0
+	for press := 0; press < 3; press++ {
+		for tic := 0; tic < 8; tic++ {
+			// Held for four tics, then let go for four.
+			runtime.Input.Trigger = tic < 4
+			for _, op := range cursor.Update(runtime, oneTic) {
+				if op.Op == wep.OpFireBullets {
+					shots++
+				}
+			}
+		}
+	}
+	assert.Equal(t, 3, shots, "three presses, three shots")
+}
+
 // A weapons folder somebody edited into a circle of instant steps has to
-// complain rather than lock the frame up.
-func TestACircleOfInstantStepsGivesUp(t *testing.T) {
+// complain rather than lock the frame up - and it has to keep the weapon, too.
+// A gun that stops is a gun that has gone invisible and can never fire again,
+// which looks like a missing frame and is nothing of the sort; a gun that
+// stutters is one somebody can still see and still put down.
+func TestACircleOfInstantStepsGivesUpOnTheUpdateAndNotOnTheWeapon(t *testing.T) {
 	machine := wep.StateMachine{
 		Steps: []wep.Step{
-			{Tics: 0, Ops: []wep.Op{{Op: wep.OpGoto, To: "spin"}}},
+			{Sprite: "SPINA0", Tics: 0, Ops: []wep.Op{{Op: wep.OpGoto, To: "spin"}}},
 		},
 		Labels: map[string]int{"spin": 0},
 	}
 	cursor := wep.NewCursor(&machine, "spin")
-	effects := cursor.Update(&wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}}, oneTic)
+	runtime := &wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}}
+	effects := cursor.Update(runtime, oneTic)
 
 	require.NotEmpty(t, effects)
-	assert.Equal(t, wep.OpStop, effects[len(effects)-1].Op)
-	assert.True(t, cursor.Stopped())
+	assert.Equal(t, wep.OpSpin, effects[len(effects)-1].Op)
+	assert.NotEmpty(t, effects[len(effects)-1].Source, "and says what it gave up on")
+
+	assert.False(t, cursor.Stopped(), "the weapon is still in the player's hands")
+	require.NotNil(t, cursor.Step(), "and still has a frame to draw")
+	assert.Equal(t, "SPINA0", cursor.Step().Sprite)
+
+	// The next update is no worse: it gives up again rather than compounding.
+	assert.Equal(t, wep.OpSpin, cursor.Update(runtime, oneTic)[0].Op)
+	assert.False(t, cursor.Stopped())
 }

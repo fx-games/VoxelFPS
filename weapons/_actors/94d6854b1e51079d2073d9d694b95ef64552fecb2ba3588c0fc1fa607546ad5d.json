@@ -1,1 +1,0 @@
-{"format":1,"name":"FDJPCPPrismAfterglow","render":{"scale":[1,1],"alpha":0.15,"style":"add"},"states":{"steps":[{"tics":1,"tics_max":1,"ops":[{"op":"fade_to","args":[0,0.03]}]},{"tics":0,"ops":[{"op":"loop"}]}],"labels":{"spawn":0}}}

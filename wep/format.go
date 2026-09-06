@@ -29,14 +29,35 @@ const (
 	// SharedAtlasKey is the chunk in it saying what it was packed from.
 	SharedAtlasFile = "_sprites.png"
 	SharedAtlasKey  = "spKY"
-	AtlasFile       = "sprites.png"
-	SoundsDir       = "sounds"
-	SourceFile      = "source.txt"
+	// BulletChipSprites and BloodSplatSprite are the engine's own decal
+	// pictures, which live in SpritesDir with everything else a weapon throws
+	// at a wall. They are packed into the same atlas, in the resolution they
+	// were authored: the 64x64 sheet next door is for 64x64 sprites, and a
+	// seven pixel bullet chip blown up to fill one of its tiles is not a
+	// 64x64 sprite, it is a smudge. `go run ./tools/gendecals` writes them.
+	BloodSplatSprite = "BLOODSPLAT"
+	AtlasFile        = "sprites.png"
+	SoundsDir        = "sounds"
+	SourceFile       = "source.txt"
 	// KeyMapFile lives in the weapons folder itself, not in a weapon's folder.
 	KeyMapFile = "keys.txt"
 	// AtlasChunk is the PNG chunk the frame table rides in.
 	AtlasChunk = "atLS"
 )
+
+// BulletChipSprites are ZDoom's five bullet holes, by their names in the
+// shared picture store. Five because decaldef.txt puts BulletChip1..5 in one
+// `decalgroup BulletChip` with equal weights, so a burst does not read as the
+// same stamp printed in a row.
+var BulletChipSprites = [5]string{"BULLETCHIP1", "BULLETCHIP2", "BULLETCHIP3", "BULLETCHIP4", "BULLETCHIP5"}
+
+// EngineDecalSprites is every one of them together, for the sweep that deletes
+// what the store holds and no weapon names: no weapon.json names these, so
+// -prune would take them every single time.
+var EngineDecalSprites = []string{
+	BulletChipSprites[0], BulletChipSprites[1], BulletChipSprites[2],
+	BulletChipSprites[3], BulletChipSprites[4], BloodSplatSprite,
+}
 
 // The impact kinds a puff can compile to. The migration's policy decides which
 // ZDoom puff actor becomes which; the engine decides what each one looks like.
@@ -67,8 +88,18 @@ type Op struct {
 	To string `json:"to,omitempty"`
 
 	// weapon_ready.
-	AllowFire   bool `json:"allow_fire,omitempty"`
+	AllowFire bool `json:"allow_fire,omitempty"`
+	// AllowAlt is the other half of it: ZDoom sets WF_WEAPONREADY and
+	// WF_WEAPONREADYALT separately, so a frame can take the alt fire button
+	// and refuse the trigger. The scoped railgun rests on such a frame - only
+	// the second button, which zooms back out, does anything there.
+	AllowAlt    bool `json:"allow_alt,omitempty"`
 	AllowReload bool `json:"allow_reload,omitempty"`
+	// NoBob is A_WeaponReady's WRF_NOBOB: the weapon holds still while it is
+	// resting on this frame, however fast the player is moving. Scripts use it
+	// for the frames of a reload, where the gun is being handled rather than
+	// carried and a walking sway would fight the animation.
+	NoBob bool `json:"no_bob,omitempty"`
 
 	// play_sound. Attenuation is how fast the sound falls off with distance,
 	// which is A_PlaySound's fifth argument; pitch is its seventh.
@@ -92,13 +123,39 @@ type Op struct {
 	PuffActor string `json:"puff_actor,omitempty"`
 
 	// spawn_actor and fire_projectile.
-	Actor       string  `json:"actor,omitempty"`
-	Angle       float64 `json:"angle,omitempty"`
+	Actor string  `json:"actor,omitempty"`
+	Angle float64 `json:"angle,omitempty"`
+	// AngleTo above Angle means the script wrote a range - `random(0, 360)`,
+	// which is how a cloud of smoke is scattered. Collapsed to one number it
+	// is not a scatter at all: every puff leaves on the same bearing, and
+	// Brutal Doom's flame smoke, fired at random(0,360), all came back at the
+	// player because the middle of nought to three hundred and sixty is a
+	// hundred and eighty.
+	AngleTo     float64 `json:"angle_to,omitempty"`
 	SpawnOffset float64 `json:"spawn_offset,omitempty"`
 	// SpawnOffsetTo above SpawnOffset means the script asked for a random
 	// sideways offset, as the shell casings do.
 	SpawnOffsetTo float64 `json:"spawn_offset_to,omitempty"`
 	SpawnHeight   float64 `json:"spawn_height,omitempty"`
+	// SpawnForward is how far out in front of the spawner the thing appears,
+	// along the way it is facing and level with it whatever it is looking at.
+	// Only A_SpawnItem and A_SpawnItemEx have one: a missile leaves from where
+	// the shooter stands and gets there under its own speed, so reading a
+	// forward offset into one of those puts a puff of smoke in the player's
+	// face for as long as it lives.
+	SpawnForward   float64 `json:"spawn_forward,omitempty"`
+	SpawnForwardTo float64 `json:"spawn_forward_to,omitempty"`
+	// AimPitch is the angle a missile-spawning call fires at, in degrees and
+	// in ZDoom's sign, where **positive aims down**: A_FireCustomMissile adds
+	// it to the shooter's own pitch, and A_CustomMissile works a velocity out
+	// of it directly. AimPitchTo above it means the script wrote a range.
+	// (Op.Pitch above is a sound's pitch, which is a different thing.)
+	AimPitch   float64 `json:"aim_pitch,omitempty"`
+	AimPitchTo float64 `json:"aim_pitch_to,omitempty"`
+	// AbsolutePitch means the pitch is the whole answer rather than an
+	// adjustment to where the shooter is looking - A_CustomMissile's
+	// CMF_ABSOLUTEPITCH, and its aimmode 2, which sets that flag itself.
+	AbsolutePitch bool `json:"absolute_pitch,omitempty"`
 	// VelX, VelY and VelZ are A_SpawnItemEx's own xvel/yvel/zvel, in Doom
 	// units a tic, relative to the direction the spawn faces: X forward, Y
 	// sideways, Z up. A spawned thing with no Speed of its own otherwise
@@ -116,6 +173,21 @@ type Op struct {
 	VelYTo float64 `json:"vel_y_to,omitempty"`
 	VelZ   float64 `json:"vel_z,omitempty"`
 	VelZTo float64 `json:"vel_z_to,omitempty"`
+	// VelExprs replaces the three ranges above when the call writes its
+	// velocity in terms of the thing doing the spawning. Final Doomer's gun
+	// smoke is spawned with `A_SpawnItemEx("FDGunSmoke", 0,0,0, velx,
+	// vely+frandom(-0.2,0.2), velz, ...)` - it inherits the throw of the
+	// spawner it came out of - and folding `velx` to a number at migration
+	// time makes it zero, which leaves every puff hanging in the muzzle
+	// instead of leaving it. Three entries: x, y, z.
+	VelExprs []Expr `json:"vel_exprs,omitempty"`
+	// AbsoluteVelocity is SXF_ABSOLUTEVELOCITY: the three numbers are Doom's
+	// own world axes rather than forward, sideways and up from the spawner's
+	// facing. It travels with VelExprs more often than not, because velx and
+	// vely read off another actor are already in world axes and re-rotating
+	// them by a facing sends the spawn off at whatever angle the player
+	// happens to be standing at.
+	AbsoluteVelocity bool `json:"absolute_velocity,omitempty"`
 
 	// flash_light and recoil.
 	Level int     `json:"level,omitempty"`
@@ -169,20 +241,35 @@ const (
 	OpJumpIfNoAmmo    = "jump_if_no_ammo"
 	OpJumpRandom      = "jump_random"
 	OpRefire          = "refire"
-	OpFireBullets     = "fire_bullets"
-	OpFireProjectile  = "fire_projectile"
-	OpSpawnActor      = "spawn_actor"
-	OpPlaySound       = "play_sound"
-	OpStopSound       = "stop_sound"
-	OpPrint           = "print"
-	OpGunFlash        = "gun_flash"
-	OpFlashLight      = "flash_light"
-	OpRecoil          = "recoil"
-	OpMakeNoise       = "make_noise"
-	OpJumpIf          = "jump_if"
-	OpSetVar          = "set_var"
-	OpCountdown       = "countdown"
-	OpSetTics         = "set_tics"
+	// OpSpin is not something a script asks for: it is the stepper saying it
+	// walked a circle of steps that cost no time and gave up for this update.
+	OpSpin = "spin"
+)
+
+// The inputs a control item can stand for. They are the names the compiled
+// weapon uses, so the engine and the migration agree without either knowing a
+// mod's own vocabulary.
+const (
+	ButtonAttack = "attack"
+	// ButtonAlt is the second attack button. Final Doomer's own control script
+	// keeps an item for it as well as for the trigger, and its C4 charge is
+	// detonated by reading them.
+	ButtonAlt        = "alt"
+	ButtonReload     = "reload"
+	OpFireBullets    = "fire_bullets"
+	OpFireProjectile = "fire_projectile"
+	OpSpawnActor     = "spawn_actor"
+	OpPlaySound      = "play_sound"
+	OpStopSound      = "stop_sound"
+	OpPrint          = "print"
+	OpGunFlash       = "gun_flash"
+	OpFlashLight     = "flash_light"
+	OpRecoil         = "recoil"
+	OpMakeNoise      = "make_noise"
+	OpJumpIf         = "jump_if"
+	OpSetVar         = "set_var"
+	OpCountdown      = "countdown"
+	OpSetTics        = "set_tics"
 
 	// What a shot or a blast does to the world.
 	OpExplode      = "explode"
@@ -246,7 +333,6 @@ const (
 	OpGoto = "goto"
 	OpLoop = "loop"
 	OpStop = "stop"
-	OpWait = "wait"
 	// OpNop is an action the policy deliberately drops. It carries its Source so
 	// the decision stays visible in the compiled weapon.
 	OpNop = "nop"
@@ -262,7 +348,7 @@ var KnownOps = map[string]bool{
 	OpPlaySound: true, OpStopSound: true, OpPrint: true,
 	OpGunFlash: true, OpFlashLight: true,
 	OpRecoil: true, OpMakeNoise: true,
-	OpGoto: true, OpLoop: true, OpStop: true, OpWait: true, OpNop: true,
+	OpGoto: true, OpLoop: true, OpStop: true, OpNop: true,
 
 	OpJumpIf: true, OpSetVar: true, OpCountdown: true, OpSetTics: true,
 
@@ -303,8 +389,25 @@ func (o Op) ArgValues(vars Vars, random *rand.Rand) []float64 {
 type Step struct {
 	// Sprite names a frame in the folder's atlas. Empty means show nothing,
 	// which is what ZDoom's TNT1 frames are for.
+	//
+	// It can also be one of DECORATE's keep markers, which name no picture of
+	// their own and are read against whatever the actor is already showing:
+	// "####" for the sprite, "----" for the sprite and the frame letter, and a
+	// frame letter of "#" for the letter alone. They stay markers here rather
+	// than being folded in at migration time because what they keep is a
+	// runtime fact: an actor whose child overrides Spawn shows the child's
+	// picture in the parent's "####" states, which is a thing only the cursor
+	// knows. Cursor.Sprite resolves them; nothing else should read Sprite
+	// directly.
 	Sprite string `json:"sprite,omitempty"`
-	Tics   int    `json:"tics"`
+	// SpriteAlt is the pictures such a marker can land on - one per sprite the
+	// actor uses - because a name half taken from the actor and half from the
+	// step cannot be spelled out until both halves are known, and in the shared
+	// store the name carries a hash of the picture that no amount of spelling
+	// will produce. Empty when the marker keeps both halves, which needs no
+	// name at all.
+	SpriteAlt []string `json:"sprite_alt,omitempty"`
+	Tics      int      `json:"tics"`
 	// TicsMax above Tics means the script wrote a range and the duration is
 	// picked per visit.
 	TicsMax int  `json:"tics_max,omitempty"`
@@ -359,6 +462,13 @@ type Item struct {
 	Max int `json:"max"`
 	// Initial is what the player starts with.
 	Initial int `json:"initial,omitempty"`
+	// Duration is ZDoom's Powerup.Duration in tics: an item that takes itself
+	// back after a while. Several of these mods use one as a pulse rather than
+	// as a power - Final Doomer's C4 detonator is an item that exists for two
+	// tics, which is long enough for every charge in the air to notice it and
+	// short enough that the next charge thrown is not blown up on the way out.
+	// Zero for an item that stays until something takes it.
+	Duration int `json:"duration,omitempty"`
 }
 
 // Provenance records where a compiled weapon came from, so a shipped weapon
@@ -393,6 +503,15 @@ type Actor struct {
 	// Death the moment it lands. Speed alone does not say this - a casing is
 	// launched by the spawner's own velocity, not a Speed property on itself.
 	Missile bool `json:"missile,omitempty"`
+	// Decal is the mark this actor leaves on the wall it hits, by ZDoom's own
+	// name for it - "BulletChip", "Scorch", "HeatSlash". Empty for an actor
+	// that marks nothing, which is what `Decal "None"` says and what an actor
+	// with no Decal property anywhere in its line inherits: ZDoom's BulletPuff
+	// carries none, and Doom's bullet chips come from the weapon.
+	Decal string `json:"decal,omitempty"`
+	// NoDecal is +NODECAL, which stops a shot marking the wall whatever the
+	// weapon that fired it says.
+	NoDecal bool `json:"no_decal,omitempty"`
 	// Impact is what this actor does where a hitscan lands, when it is used as
 	// a puff. Empty for actors that are only drawn.
 	Impact string `json:"impact,omitempty"`
@@ -412,6 +531,29 @@ type Weapon struct {
 	Ammo   Ammo            `json:"ammo"`
 	Items  map[string]Item `json:"items,omitempty"`
 	Render Render          `json:"render"`
+
+	// NoAutoFire is ZDoom's +WEAPON.NOAUTOFIRE: the weapon fires once for each
+	// time the trigger goes down, rather than for as long as it is held. It is
+	// what makes a pistol a pistol - without it a semi-automatic reads as a
+	// machine gun, because its firing states take two tics and its ready frame
+	// starts them again the moment they end.
+	NoAutoFire bool `json:"no_auto_fire,omitempty"`
+
+	// Buttons are the items a mod's own control script keeps in step with what
+	// the player is holding down, mapped to the input that drives each. Brutal
+	// Doom runs an ACS loop that gives FiredPrimary while the attack button is
+	// down and takes it back four tics later, and its weapons read that rather
+	// than the button: a full automatic loops on it at the end of its firing
+	// states, and a weapon with no such loop fires once a press. Nothing here
+	// runs ACS, so the engine keeps these items itself.
+	Buttons map[string]string `json:"buttons,omitempty"`
+
+	// Decal is the mark this weapon's shots leave on a wall, which in ZDoom
+	// takes precedence over the puff's own: SpawnShootDecal reads the shooter's
+	// ready weapon first and only falls back on the puff. Doom's hitscan
+	// weapons carry "BulletChip"; a weapon that names nothing leaves the
+	// decision to the puff.
+	Decal string `json:"decal,omitempty"`
 
 	// Reloadable is set when the weapon has a Reload label to jump to. Weapons
 	// that pump inside their own firing states, as the Borstal shotgun does,

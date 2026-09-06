@@ -18,17 +18,31 @@ const TicRate = 35.0
 // through in one update. Compiled weapons are checked on load and should not
 // need it, but the weapons folder is editable and a jump that closes a circle
 // of zero tic steps would otherwise hang the game rather than complain.
-const maxStepsPerUpdate = 512
+//
+// It is ZDoom's own ten thousand, and it has to be: a zero length loop is how
+// a reload is written. Brutal Doom's dual MP40 refills its magazine one round
+// at a time through a ten step loop it runs sixty four times, all inside one
+// tic. At five hundred it ran out a fifth of the way through, the cursor
+// stopped, and the weapon went invisible and could not be fired again -
+// which reads as a missing frame and is not one.
+const maxStepsPerUpdate = 10000
 
 // ticEpsilon is the slack in the tic countdown. A frame time of a whole tic
 // does not multiply back to exactly one, so without it a two tic frame is
 // occasionally three.
 const ticEpsilon = 1e-6
 
-// raisePerTic is how much of the way a weapon travels each tic while it is
-// being brought up or put away. Doom moves a weapon six of its thirty two
-// units per tic, which is the same six tics.
-const raisePerTic = 6.0 / 32.0
+// WeaponTop and WeaponBottom are where a weapon is held and where it is
+// carried while it is off the bottom of the screen, in the 320x200 space
+// GZDoom positions every weapon sprite in. A weapon's own frames move it
+// between and around them with offset(), which is how a recoil or a swing is
+// written; RaiseSpeed is how far A_Raise and A_Lower travel in one tic, so a
+// swap takes the sixteen tics it takes in Doom.
+const (
+	WeaponTop    = 32.0
+	WeaponBottom = 128.0
+	RaiseSpeed   = 6.0
+)
 
 // Inventory is what the player is carrying: reserve ammo, rounds chambered, and
 // the counters scripts use as flags. One map for all three, because in ZDoom
@@ -70,7 +84,11 @@ func (inv Inventory) AtMax(caps Caps, item string) bool {
 // Input is what the player is doing this frame.
 type Input struct {
 	Trigger bool
-	Reload  bool
+	// Alt is ZDoom's BT_ALTATTACK: the second attack button. A weapon with an
+	// AltFire state of its own is a different gun on it - a scope, a bayonet,
+	// a grenade under the barrel - and a weapon without one ignores it.
+	Alt    bool
+	Reload bool
 }
 
 // World answers the questions a script asks about its surroundings. Every one
@@ -128,20 +146,51 @@ type Cursor struct {
 	holding bool
 	// stopped is set by a Stop, and by a machine that has nowhere left to go.
 	stopped bool
-	// raised is how far down the weapon is being held while it is swapped in or
-	// out: 0 is up and ready, 1 is fully out of sight. A_Raise and A_Lower walk
-	// it, and the script loops on them until it arrives.
-	raised float64
+	// psx and psy are where this layer holds its sprite, in the 320x200 space
+	// GZDoom draws weapons in: the psprite position. They persist from frame
+	// to frame the way ZDoom's do rather than resetting - a frame that writes
+	// offset() moves the gun and it stays moved until another frame, or
+	// A_WeaponReady, puts it back - which is the whole of how a recoil that
+	// the script never mentions again still ends.
+	psx, psy float64
 	// ready mirrors the weapon_ready op on the step being rested on, so input
 	// is only accepted where the script says it is.
 	ready Op
 	// onReady is set while the rested-on step carries a weapon_ready.
 	onReady bool
+	// bobs is whether the weapon sways with the player's walk. ZDoom keeps it
+	// on the layer rather than the frame: A_WeaponReady turns it on, or off
+	// for WRF_NOBOB, and it stays that way until the next one - so a reload
+	// that asked for no bob holds still for all of its frames and not only
+	// the one that said so.
+	bobs bool
+	// sprite is the picture this layer is showing, which is what a "####"
+	// frame keeps. ZDoom holds it on the actor and the psprite rather than on
+	// the state, and only a state that names a sprite writes it - which is why
+	// it survives a jump into somebody else's states. It starts empty: a fresh
+	// psprite's sprite is SPR_TNT1, so a "####" with nothing before it shows
+	// nothing.
+	sprite string
 }
 
-// NewCursor starts a cursor at a label.
+// NewCursor starts a cursor at a label, holding its sprite where a weapon is
+// held. An overlay reads its own position as a shift from the weapon's rather
+// than an absolute one, so NewOverlayCursor starts at nothing instead.
 func NewCursor(machine *StateMachine, label string) *Cursor {
-	c := &Cursor{machine: machine, labelStarts: labelStarts(machine)}
+	c := newCursor(machine, label)
+	c.psy = WeaponTop
+	return c
+}
+
+// NewOverlayCursor starts a cursor for a layer drawn over the weapon: a muzzle
+// flash. ZDoom adds the weapon's own position to an overlay's, so a flash
+// authored on top of the gun's frames follows it through a recoil for free.
+func NewOverlayCursor(machine *StateMachine, label string) *Cursor {
+	return newCursor(machine, label)
+}
+
+func newCursor(machine *StateMachine, label string) *Cursor {
+	c := &Cursor{machine: machine, labelStarts: labelStarts(machine), bobs: true}
 	c.stopped = true
 	c.Goto(label)
 	return c
@@ -150,10 +199,23 @@ func NewCursor(machine *StateMachine, label string) *Cursor {
 // labelStarts works out, for every step, which label it belongs to. ZDoom's
 // Loop goes back to the label the state sits under, and states fall through
 // from one label into the next, so this is a scan rather than a lookup.
+//
+// A label beginning with "@" is not one of the mod's: it is somewhere the
+// compiler had to be able to name - the landing spot of a `Goto Ready+6`, or
+// the engine's own stop - and it does not begin a state. Counted as one, a
+// `Loop` at the bottom of a Ready block whose middle is the target of some
+// other state's `Goto Ready+6` goes back to the sixth line instead of the
+// first, and misses the one frame in the block that costs any time. Brutal
+// Doom's MP40 did exactly that: ten thousand steps an update, none of them
+// taking a tic, the cursor abandoned wherever it happened to stop - which is a
+// frame with a picture about two thirds of the time. The gun flickered.
 func labelStarts(machine *StateMachine) []int {
 	starts := make([]int, len(machine.Steps))
 	isStart := make(map[int]bool, len(machine.Labels))
-	for _, index := range machine.Labels {
+	for name, index := range machine.Labels {
+		if strings.HasPrefix(name, "@") {
+			continue
+		}
 		isStart[index] = true
 	}
 	current := 0
@@ -180,11 +242,22 @@ func (c *Cursor) Goto(label string) bool {
 
 func (c *Cursor) jump(index int) {
 	c.index = index
-	c.ticsLeft = 0
+	// Leaving a frame early gives up whatever it had left, but not the debt:
+	// a negative count is time already spent that the next frame owes back.
+	if c.ticsLeft > 0 {
+		c.ticsLeft = 0
+	}
 	c.resting = false
 	c.holding = false
 	c.stopped = false
 	c.onReady = false
+}
+
+// has reports whether the machine has a label at all, which is how ZDoom
+// decides whether the alt fire button does anything.
+func (c *Cursor) has(label string) bool {
+	_, ok := c.machine.Label(label)
+	return ok
 }
 
 // Stopped reports whether the cursor has run out, which for a spawned actor
@@ -200,17 +273,112 @@ func (c *Cursor) Step() *Step {
 	return &c.machine.Steps[c.index]
 }
 
+// Sprite is the picture to draw for the step the cursor is on, with DECORATE's
+// keep markers read against what this layer is already showing. Everything that
+// draws a cursor asks this rather than reading Step().Sprite, which can be a
+// marker naming no picture at all.
+func (c *Cursor) Sprite() string {
+	step := c.Step()
+	if step == nil {
+		return ""
+	}
+	return ResolveSprite(step.Sprite, step.SpriteAlt, c.sprite)
+}
+
+// The DECORATE keep markers, as the migration writes them into a step's sprite
+// name. `"####"` keeps the sprite the actor is showing and lets the frame
+// letter change, `"----"` keeps both, and a frame letter of `#` keeps the
+// letter. GZDoom stores the first two as reserved sprite indices - SPR_NOCHANGE
+// and SPR_FIXED - and the third as STF_SAMEFRAME on the state, and reads all
+// three in AActor::SetState.
+//
+// A step that keeps both halves is written as KeepBoth on its own, whichever of
+// the two spellings the mod used, because there is nothing left to say. The
+// migration puts it on its Loop, Goto, Stop and Wait steps too: those are not
+// states in ZDoom at all, they are links between them, and a link changes
+// nothing about what is being shown. Leaving their sprite empty instead said
+// "show nothing", which blanked every kept frame reached through a loop.
+const (
+	KeepSprite = "####"
+	KeepBoth   = "----"
+	KeepFrame  = '#'
+)
+
+// IsKeepMarker says whether a step's sprite name is one of the keep markers
+// rather than the name of a picture.
+func IsKeepMarker(name string) bool {
+	if name == KeepBoth {
+		return true
+	}
+	if len(name) < 5 {
+		return false
+	}
+	return name[:4] == KeepSprite || name[4] == KeepFrame
+}
+
+// ResolveSprite turns a step's frame name into the picture to show, given what
+// the layer is showing now. Ordinary names - which is nearly all of them - come
+// straight back.
+//
+// A marker that keeps both halves is the name it is keeping. A marker that
+// keeps one half has to be spelled out, and the spelling is not enough on its
+// own: the shared picture store names a frame after its own bytes as well, so
+// the answer is looked up among the names the migration listed for this step.
+func ResolveSprite(name string, alt []string, current string) string {
+	if name == KeepBoth {
+		return current
+	}
+	if len(name) < 5 {
+		return name
+	}
+	head, frame := name[:4], name[4]
+	sameSprite := head == KeepSprite
+	sameFrame := frame == KeepFrame
+	if !sameSprite && !sameFrame {
+		return name
+	}
+	if sameSprite {
+		if len(current) < 5 {
+			// An actor's sprite is SPR_TNT1 until a state names one, so a kept
+			// sprite with nothing before it keeps nothing and shows nothing.
+			return ""
+		}
+		head = current[:4]
+	}
+	if sameFrame {
+		// Its frame, though, starts at 0 - which is 'A'. A "#" letter on a
+		// state that does name a sprite therefore draws that sprite's first
+		// frame rather than nothing.
+		frame = 'A'
+		if len(current) >= 5 {
+			frame = current[4]
+		}
+	}
+	wanted := head + string(frame) + name[5:]
+	for _, one := range alt {
+		if strings.HasPrefix(one, wanted) {
+			return one
+		}
+	}
+	// A weapon's own frames are in its own atlas under the name they were
+	// written with, so there is nothing to look up.
+	return wanted
+}
+
 // Ready reports whether the cursor is resting on a frame that accepts input,
 // and what that frame allows.
 func (c *Cursor) Ready() (Op, bool) { return c.ready, c.onReady }
 
-// Raised is how far out of sight the weapon is being held, from 0 for fully up
-// to 1 for fully away. Drawing shifts the sprite down by this much of its own
-// height, which is what makes a weapon swap look like one.
-func (c *Cursor) Raised() float64 { return c.raised }
+// Offsets are where this layer is holding its sprite, in GZDoom's 320x200
+// weapon space: x from the middle of it, y down from the top.
+func (c *Cursor) Offsets() (x, y float64) { return c.psx, c.psy }
+
+// Bobs reports whether the weapon sways with the player's walk right now. The
+// last A_WeaponReady decides it.
+func (c *Cursor) Bobs() bool { return c.bobs }
 
 // StartRaise puts the weapon fully out of sight, ready to be brought up.
-func (c *Cursor) StartRaise() { c.raised = 1 }
+func (c *Cursor) StartRaise() { c.psy = WeaponBottom }
 
 // Runtime is the state a machine needs while it runs: the inventory it branches
 // on, what the player is doing, and a source of randomness for the durations
@@ -227,12 +395,128 @@ type Runtime struct {
 	// FireLabel is where a ready frame sends the weapon when the trigger goes
 	// down, and where a refire goes back to.
 	FireLabel string
+	// NoAutoFire is the weapon's own +WEAPON.NOAUTOFIRE, and TriggerDown is
+	// ZDoom's attackdown: whether the trigger has already been read as a press.
+	// A semi-automatic will not fire again until it has been let go.
+	NoAutoFire  bool
+	TriggerDown bool
+	// FiringAlt is ZDoom's Weapon.bAltFire: which of the two buttons started
+	// the attack that is running. A_ReFire reads it to decide whether a held
+	// button goes back to Hold or to AltHold.
+	FiringAlt bool
+	// Buttons are the items this weapon reads instead of the player's buttons,
+	// and held is how many tics each has left before it is taken back. See
+	// Weapon.Buttons and SetButtons.
+	Buttons map[string]string
+	held    map[string]float64
+
+	// Durations is how long each item lasts once it is given, in tics, and
+	// expiring is how much of that is left. ZDoom's Powerup.Duration: an item
+	// given as a pulse rather than as a state. See Tick.
+	Durations map[string]int
+	expiring  map[string]float64
 
 	// Vars is the actor's own scratch space: the user_ variables its script
 	// keeps timers and counters in, and the few properties it reads off itself.
 	Vars map[string]float64
 	// World answers what a script asks about its surroundings. Nil answers no.
 	World World
+}
+
+// buttonHoldTics is how long one of a mod's control items lingers after the
+// button that stands behind it is let go. Brutal Doom's own control loop takes
+// them back four tics after it gave them, so a script that only looks at its
+// trigger every few frames still sees the press.
+const buttonHoldTics = 4.0
+
+// scriptHeldItems are the items a mod's own ACS script gives back, and how
+// long it takes to do it. Nothing here runs ACS, so an item given by a weapon
+// and taken by a script is an item that stays for ever - and a weapon that
+// branches on one is a weapon that works exactly once.
+//
+// Brutal Doom's railgun is the case that shows it. Its firing states open with
+// A_JumpIfInventory("Pumping", 1, "Ready"), and every one of the three places
+// that gives itself Pumping - the shot, the alt shot, the reload's PutMag -
+// hands the taking back to ACS_NamedExecuteAlways("RailgunRecharge"). So the
+// gun fired once, or reloaded once, and every trigger pull after that walked
+// out of Fire on its first line. It is not that the gun is out of ammo and it
+// is not the reload: it is a cooldown nobody was counting down.
+//
+// The number is the recharge's own length - Railgun/Recharge.ogg is 1.26
+// seconds, which is what the player hears while the gun is not ready - and it
+// is a knob: a mod that means a different cooldown by the same item wants its
+// own entry here rather than a different constant.
+var scriptHeldItems = map[string]int{
+	"pumping": 44,
+}
+
+// SetButtons keeps the items a mod's control script would have kept: given
+// while the player holds the button, and taken back a few tics after they let
+// go. Without them a weapon that ends its firing states with a jump on one -
+// which is how every Brutal Doom automatic loops - fires exactly once a press.
+func (r *Runtime) SetButtons(input Input, elapsedSeconds float64) {
+	if len(r.Buttons) == 0 {
+		return
+	}
+	if r.held == nil {
+		r.held = make(map[string]float64, len(r.Buttons))
+	}
+	for item, button := range r.Buttons {
+		var down bool
+		switch button {
+		case ButtonAttack:
+			down = input.Trigger
+		case ButtonAlt:
+			down = input.Alt
+		case ButtonReload:
+			down = input.Reload
+		}
+		if down {
+			r.held[item] = buttonHoldTics
+			r.Inventory.Give(r.Caps, item, 1)
+			continue
+		}
+		if r.held[item] <= 0 {
+			continue
+		}
+		r.held[item] -= elapsedSeconds * TicRate
+		if r.held[item] <= 0 {
+			r.held[item] = 0
+			r.Inventory.Take(item, r.Inventory[item])
+		}
+	}
+}
+
+// StartItemTimer starts an item's clock, if it is one that expires. Called
+// wherever an item is given: by the script itself, and by something the weapon
+// put into the world handing an item back to it.
+func (r *Runtime) StartItemTimer(item string) {
+	duration := r.Durations[item]
+	if duration <= 0 {
+		return
+	}
+	if r.expiring == nil {
+		r.expiring = make(map[string]float64, 4)
+	}
+	r.expiring[item] = float64(duration)
+}
+
+// Tick counts down the items that take themselves back, and takes them.
+//
+// A pulse is what several of these scripts are built on: Final Doomer's C4
+// detonator gives itself an item that lasts two tics, and every charge in the
+// air is watching for it. Without the clock the item stays for ever, and the
+// next charge thrown goes off in the player's face.
+func (r *Runtime) Tick(elapsedSeconds float64) {
+	for item, left := range r.expiring {
+		left -= elapsedSeconds * TicRate
+		if left > 0 {
+			r.expiring[item] = left
+			continue
+		}
+		delete(r.expiring, item)
+		r.Inventory.Take(item, r.Inventory[item])
+	}
 }
 
 // Var reads one of the actor's values, which is what a shipped expression does.
@@ -292,8 +576,13 @@ func (c *Cursor) Update(runtime *Runtime, elapsedSeconds float64) []Op {
 	if c.stopped {
 		return nil
 	}
-
-	c.ticsLeft -= elapsedSeconds * TicRate
+	// Only a frame the cursor is actually sitting on can be charged for the
+	// time that passed. Charging before the first one has been entered banks a
+	// debt against a frame that does not exist yet, and the machine starts one
+	// step further along than it should.
+	if c.resting {
+		c.ticsLeft -= elapsedSeconds * TicRate
+	}
 
 	for steps := 0; steps < maxStepsPerUpdate; steps++ {
 		if c.stopped {
@@ -323,21 +612,54 @@ func (c *Cursor) Update(runtime *Runtime, elapsedSeconds float64) []Op {
 		c.advance()
 	}
 
-	// Only reachable when the data walks a circle of zero length steps, which
-	// loading is supposed to have made impossible.
-	c.stopped = true
-	return append(effects, Op{Op: OpStop, Source: "gave up: too many steps in one update"})
+	// A circle of steps that costs no time. Give up on this update rather than
+	// on the weapon: a machine that spins is a bug in the data or in what the
+	// engine tells it, and one that stops is a gun that has gone invisible and
+	// will never fire again, which is far harder to see for what it is. The
+	// cursor is left exactly as it was, so there is still a frame to draw and
+	// the next update tries again from the same place.
+	return append(effects, Op{Op: OpSpin, Source: fmt.Sprintf(
+		"%d steps in one update, none of which took any time", maxStepsPerUpdate)})
 }
 
 // takeReadyInput decides whether the player's input moves the weapon off its
 // ready frame.
+//
+// A held trigger fires a weapon again and again, which is what a ready frame is
+// for - unless the weapon is semi-automatic, and then the trigger has to be let
+// go and pulled again. ZDoom keeps that as one flag on the player, set when a
+// ready frame reads the trigger and cleared the moment it is released.
 func (c *Cursor) takeReadyInput(runtime *Runtime) (string, bool) {
-	if runtime.Input.Trigger && c.ready.AllowFire {
-		label := runtime.FireLabel
-		if label == "" {
-			label = "Fire"
+	// P_CheckWeaponFire, which GZDoom runs only while the weapon is ready -
+	// TickPSprites calls it behind a WF_WEAPONREADY check. So attackdown is
+	// cleared here and nowhere else: letting the trigger go in the middle of a
+	// firing sequence does not arm the next shot, and a semi-automatic waits
+	// for a release it can see from a ready frame.
+	//
+	// The two buttons are one chain of else-ifs in CheckWeaponFire, with one
+	// attackdown between them: the trigger wins while both are held, and the
+	// flag is only cleared by a frame that sees neither.
+	if c.ready.AllowFire && runtime.Input.Trigger {
+		if !runtime.TriggerDown || !runtime.NoAutoFire {
+			runtime.TriggerDown = true
+			runtime.FiringAlt = false
+			label := runtime.FireLabel
+			if label == "" {
+				label = "Fire"
+			}
+			return label, true
 		}
-		return label, true
+	} else if c.ready.AllowAlt && runtime.Input.Alt {
+		// FireWeaponAlt does nothing at all without an AltFire state - it does
+		// not fall back on the primary one - so a weapon with no second mode
+		// simply ignores the button.
+		if (!runtime.TriggerDown || !runtime.NoAutoFire) && c.has("AltFire") {
+			runtime.TriggerDown = true
+			runtime.FiringAlt = true
+			return "AltFire", true
+		}
+	} else {
+		runtime.TriggerDown = false
 	}
 	if runtime.Input.Reload && c.ready.AllowReload {
 		return "Reload", true
@@ -354,6 +676,22 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 		return true, nil
 	}
 	c.onReady = false
+	// The sprite is settled on the way in, before the frame's own action runs,
+	// which is the order ZDoom sets a state in - and it is settled for every
+	// step including the zero-tic ones a jump passes straight through, because
+	// those set the actor's sprite too.
+	c.sprite = ResolveSprite(step.Sprite, step.SpriteAlt, c.sprite)
+	// ZDoom reads a frame's offset() as an absolute position rather than a
+	// nudge, and only where it is written: a zero axis leaves that axis where
+	// the last frame that did write it put it. Applied before the frame's own
+	// action, because that is the order ZDoom sets a state in, and it is what
+	// lets A_WeaponReady on an offset frame still put the weapon back.
+	if step.OffsetX != 0 {
+		c.psx = float64(step.OffsetX)
+	}
+	if step.OffsetY != 0 {
+		c.psy = float64(step.OffsetY)
+	}
 
 	for _, op := range step.Ops {
 		switch op.Op {
@@ -363,13 +701,18 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 
 		case OpWeaponReady:
 			c.ready, c.onReady = op, true
+			c.bobs = !op.NoBob
+			// A_WeaponReady is also where ZDoom puts the sprite back where a
+			// weapon is held, which is what ends the recoil a Fire state's
+			// offset() frames left behind.
+			c.psx, c.psy = 0, WeaponTop
 
 		case OpRaise:
 			// The script loops on this frame; each pass brings the weapon up a
 			// little, and arriving is what sends it to Ready.
-			c.raised -= raisePerTic
-			if c.raised <= 0 {
-				c.raised = 0
+			c.psy -= RaiseSpeed
+			if c.psy <= WeaponTop {
+				c.psy = WeaponTop
 				if c.Goto("Ready") {
 					return false, effects
 				}
@@ -378,20 +721,33 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 			}
 
 		case OpLower:
-			c.raised += raisePerTic
-			if c.raised >= 1 {
-				c.raised = 1
+			c.psy += RaiseSpeed
+			if c.psy >= WeaponBottom {
+				c.psy = WeaponBottom
 				c.stopped = true // fully out of sight, and out of the way
 				return true, effects
 			}
 
 		case OpGive:
 			runtime.Inventory.Give(runtime.Caps, op.Item, max(op.N, 1))
+			runtime.StartItemTimer(op.Item)
 		case OpTake:
-			runtime.Inventory.Take(op.Item, max(op.N, 1))
+			// An amount of zero is ZDoom's "take all of it", which is how a
+			// script clears a counter it has been adding to - the C4 launcher
+			// writes `A_TakeInventory("FDHellboundC4Active", 0)` to forget
+			// every charge it has in the air at once.
+			if op.N <= 0 {
+				runtime.Inventory.Take(op.Item, runtime.Inventory[op.Item])
+				break
+			}
+			runtime.Inventory.Take(op.Item, op.N)
 		case OpTakeAmmo:
 			if runtime.Ammo != "" {
-				runtime.Inventory.Take(runtime.Ammo, max(op.N, 1))
+				amount := op.N
+				if amount <= 0 {
+					amount = runtime.Inventory[runtime.Ammo]
+				}
+				runtime.Inventory.Take(runtime.Ammo, amount)
 			}
 
 		case OpJumpIfInventory:
@@ -441,8 +797,38 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 			}
 
 		case OpRefire:
-			if runtime.Input.Trigger && c.Goto(op.To) {
-				return false, effects
+			// ZDoom's A_ReFire does not go back to Fire: it re-enters the
+			// weapon's attack state for a repeat shot, which is Hold when the
+			// weapon has one - P_FireWeapon asks GetAtkState(refire) for it.
+			// Fire is where the wind-up lives, so going back through it made
+			// the minigun spin up again between every pair of bullets and
+			// shoot three times a second. A state the call named itself is
+			// left alone.
+			//
+			// Which button repeats is the one that started the attack, which
+			// is what Weapon.bAltFire says: A_ReFire calls FireWeaponAlt for
+			// an alt attack and FireWeapon for a primary one, and each asks
+			// its own GetAtkState for Hold or AltHold.
+			held, hold, fire := runtime.Input.Trigger, "Hold", "Fire"
+			if runtime.FiringAlt {
+				held, hold, fire = runtime.Input.Alt, "AltHold", "AltFire"
+			}
+			if held {
+				// No state of its own: repeat the attack that is running,
+				// which is Hold when the weapon has one and the attack's own
+				// entry state when it does not.
+				if op.To == "" {
+					if c.Goto(hold) || c.Goto(fire) {
+						return false, effects
+					}
+					break
+				}
+				if strings.EqualFold(op.To, fire) && c.Goto(hold) {
+					return false, effects
+				}
+				if c.Goto(op.To) {
+					return false, effects
+				}
 			}
 
 		case OpGoto:
@@ -460,20 +846,21 @@ func (c *Cursor) enter(runtime *Runtime) (stayed bool, effects []Op) {
 			c.stopped = true
 			return true, effects
 
-		case OpWait:
-			// Stay on this frame until something moves it.
-			c.holding = true
-			return true, effects
-
 		default:
 			// Everything else happens out in the world.
 			effects = append(effects, op)
 		}
 	}
 
-	c.ticsLeft = float64(step.Tics)
+	// Added, not assigned. A frame ends part way through an update - the clock
+	// runs in seconds and a tic is a fixed slice of one - so the overshoot has
+	// to be carried onto the next frame or every frame lasts up to a whole
+	// extra frame of wall time. Thrown away, a weapon's rate of fire came out
+	// of the machine's frame rate: the same pistol fired thirteen and a half
+	// times a second at sixty and sixteen times at two hundred and forty.
+	c.ticsLeft += float64(step.Tics)
 	if step.TicsMax > step.Tics {
-		c.ticsLeft = runtime.roll(step.Tics, step.TicsMax)
+		c.ticsLeft += runtime.roll(step.Tics, step.TicsMax) - float64(step.Tics)
 	}
 	if step.Tics < 0 {
 		c.holding = true
@@ -556,17 +943,30 @@ func (c *Cursor) advance() {
 // filling once there are pickups.
 func NewRuntime(weapon *Weapon, random *rand.Rand) *Runtime {
 	runtime := &Runtime{
-		Inventory: make(Inventory, len(weapon.Items)),
-		Caps:      make(Caps, len(weapon.Items)),
-		Vars:      make(map[string]float64),
-		Rand:      random,
-		Ammo:      weapon.Ammo.Type,
-		AmmoUse:   weapon.Ammo.Use,
-		FireLabel: "Fire",
+		Inventory:  make(Inventory, len(weapon.Items)),
+		Caps:       make(Caps, len(weapon.Items)),
+		Vars:       make(map[string]float64),
+		Rand:       random,
+		Ammo:       weapon.Ammo.Type,
+		AmmoUse:    weapon.Ammo.Use,
+		FireLabel:  "Fire",
+		NoAutoFire: weapon.NoAutoFire,
+		Buttons:    weapon.Buttons,
+		held:       map[string]float64{},
 	}
 	for name, item := range weapon.Items {
 		runtime.Caps[name] = item.Max
 		runtime.Inventory[name] = item.Initial
+		duration := item.Duration
+		if duration == 0 {
+			duration = scriptHeldItems[strings.ToLower(name)]
+		}
+		if duration > 0 {
+			if runtime.Durations == nil {
+				runtime.Durations = make(map[string]int, 4)
+			}
+			runtime.Durations[name] = duration
+		}
 	}
 	if weapon.Ammo.Type != "" {
 		runtime.Inventory[weapon.Ammo.Type] = runtime.Caps[weapon.Ammo.Type]
@@ -594,5 +994,5 @@ func (c *Cursor) Describe() string {
 			break
 		}
 	}
-	return fmt.Sprintf("%s[%d] %s %.0ft", label, c.index, step.Sprite, c.ticsLeft)
+	return fmt.Sprintf("%s[%d] %s %.0ft", label, c.index, c.Sprite(), c.ticsLeft)
 }

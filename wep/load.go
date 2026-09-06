@@ -226,8 +226,16 @@ func checkStates(id, what string, machine StateMachine, sprites map[string]bool,
 	}
 
 	for index, step := range machine.Steps {
-		if step.Sprite != "" && !sprites[step.Sprite] {
+		// A keep marker names no picture of its own - what it shows is
+		// whatever the actor is showing - so it is its alternatives that have
+		// to be there.
+		if step.Sprite != "" && !IsKeepMarker(step.Sprite) && !sprites[step.Sprite] {
 			note("step %d shows %s, and there is no such picture", index, step.Sprite)
+		}
+		for _, name := range step.SpriteAlt {
+			if !sprites[name] {
+				note("step %d can show %s, and there is no such picture", index, name)
+			}
 		}
 		if step.Tics < -1 {
 			note("step %d lasts %d tics", index, step.Tics)

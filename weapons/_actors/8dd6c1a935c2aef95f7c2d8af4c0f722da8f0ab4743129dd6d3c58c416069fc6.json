@@ -1,0 +1,1 @@
+{"format":1,"name":"FDWhitemareHeatOverloadDamage","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":1,"tics_max":1},{"tics":1,"tics_max":1,"ops":[{"op":"explode","args":[10,128]}]},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]},{"tics":4,"tics_max":4},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":3,"spawn":0}},"no_gravity":true,"missile":true}

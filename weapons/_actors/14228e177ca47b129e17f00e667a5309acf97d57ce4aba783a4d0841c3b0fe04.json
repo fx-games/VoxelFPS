@@ -1,0 +1,1 @@
+{"format":1,"name":"FDBTSXFancyRocketProjectileTrail","render":{"scale":[0.18,0.18],"alpha":0.95,"style":"add"},"states":{"steps":[{"sprite":"XRKPA0.669d52b1","tics":2,"tics_max":2,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]},{"sprite":"OGLPB0.bb9a4990","tics":2,"tics_max":2,"bright":true},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":2}}}

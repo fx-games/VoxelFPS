@@ -1,1 +1,0 @@
-{"format":1,"name":"LabGuyHead","render":{"scale":[1,1],"alpha":1},"speed":7,"states":{"steps":[{"tics":0},{"sprite":"FSHDB0","tics":4,"tics_max":4},{"sprite":"FSHDC0","tics":4,"tics_max":4},{"tics":0,"ops":[{"op":"loop"}]},{"tics":1,"tics_max":1},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":4,"spawn":0}},"missile":true}

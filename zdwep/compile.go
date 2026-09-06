@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/memmaker/goray/wep"
 )
@@ -90,7 +91,62 @@ func (c *Compiler) actorIsMissile(n string) bool {
 			return true
 		}
 	}
-	return actor.Flags["missile"]
+	return actor.Flags["missile"] || c.inheritsAStockProjectile(n)
+}
+
+// stockProjectiles are ZDoom's own missile classes. A mod inherits from one and
+// writes nothing about how it flies, because all of that - +MISSILE, +NOGRAVITY
+// and the rest - is in the class, which the mod never ships and this index
+// therefore never sees. Final Doomer's rocket is `FDTNTMissile : Rocket` and
+// nothing else, and read as a plain actor it fell out of the launcher and
+// landed at the player's feet.
+// The value is the class's own Speed, which the mod inherits along with the
+// flags and just as invisibly. `SuperBFGBall : BFGBall` writes a damage, a
+// decal and a death, and not one word about how fast it travels, because
+// BFGBall says 25; read as nothing, Brutal Doom's BFG ball hung in the air at
+// the end of the barrel. A zero means the class has no speed of its own -
+// FastProjectile is a behaviour, not a missile, and every mod that inherits it
+// writes its own.
+var stockProjectiles = map[string]float64{
+	"rocket": 20, "fastprojectile": 0, "plasmaball": 25, "bfgball": 25,
+	// BFGExtra is the spray's hit effect. It is not actually a Projectile in
+	// ZDoom - it carries +NOBLOCKMAP +NOGRAVITY and nothing else - but those
+	// are the two flags that matter here and Projectile implies both.
+	"bfgextra": 0, "doomimpball": 10, "cacodemonball": 10, "baronball": 15,
+	"hellknightball": 15, "fatshot": 20, "arachnotronplasma": 25,
+	"revenanttracer": 10, "spidermastermindplasma": 25,
+}
+
+// stockProjectileParent is the ZDoom missile class the actor's line ends at,
+// if any. The last actor the mod defines names its parent even when that
+// parent is not in the index, which is exactly the case this has to answer.
+func (c *Compiler) stockProjectileParent(name string) (string, bool) {
+	chain := c.idx.Ancestry(name)
+	if len(chain) == 0 {
+		return "", false
+	}
+	parent := strings.ToLower(chain[len(chain)-1].Parent)
+	_, known := stockProjectiles[parent]
+	return parent, known
+}
+
+// inheritsAStockProjectile reports whether the actor's line ends at one of
+// them.
+func (c *Compiler) inheritsAStockProjectile(name string) bool {
+	_, ok := c.stockProjectileParent(name)
+	return ok
+}
+
+// speedOf is the actor's Speed, falling back on the stock class it inherits
+// from when nothing in the mod's own chain writes one.
+func (c *Compiler) speedOf(name string) float64 {
+	if speed := c.floatProperty(name, "speed"); speed != 0 {
+		return speed
+	}
+	if parent, ok := c.stockProjectileParent(name); ok {
+		return stockProjectiles[parent]
+	}
+	return 0
 }
 
 // eval works out what a DECORATE expression comes to, against the mod's own
@@ -366,12 +422,21 @@ func (c *Compiler) mergedProperty(name, property string) (string, bool) {
 }
 
 func (c *Compiler) mergedFlag(name, flag string) bool {
+	value, _ := c.mergedFlagSet(name, flag)
+	return value
+}
+
+// mergedFlagSet also says whether anything in the actor's line wrote the flag
+// at all, which is a different answer from writing it off: a missile that
+// inherits from a class this mod never defines is one whose flags are all in
+// that class, and only a mod that writes `-NOGRAVITY` itself means it.
+func (c *Compiler) mergedFlagSet(name, flag string) (value, written bool) {
 	for _, actor := range c.idx.Ancestry(name) {
 		if value, set := actor.Flags[strings.ToLower(flag)]; set {
-			return value
+			return value, true
 		}
 	}
-	return false
+	return false, false
 }
 
 // lowerStates turns a state block into a state machine.
@@ -394,7 +459,14 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 		}
 	}
 
-	previousSprite, previousFrame := "", byte('A')
+	// What a keep marker can land on. A "####" frame takes its sprite from the
+	// actor it is running on rather than from the line it is written on, and a
+	// "#" frame letter takes the letter the same way, so the name of the
+	// picture is only known while the thing is running. The atlas is packed
+	// long before then, so every name it could be is worked out here: every
+	// sprite these states name, and every frame letter they use.
+	prefixes, letters := keepCandidates(block)
+
 	var problems []string
 
 	for i, line := range block.Lines {
@@ -409,14 +481,15 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 			continue
 		}
 
-		sprite := line.Sprite
-		if sprite == "####" || sprite == "----" {
-			sprite = previousSprite
-		}
-		frames := expandFrames(line.Frames)
-		for _, frame := range frames {
-			if frame == '#' || frame == '-' {
-				frame = rune(previousFrame)
+		// A sprite name and a frame letter are what they are whichever case
+		// they are written in, and mods write both. Uppercasing them here
+		// keeps one name for one picture, in the atlas and in the shared store
+		// alike, and leaves the keep markers - which are punctuation - alone.
+		sprite := strings.ToUpper(line.Sprite)
+		for _, frame := range expandFrames(line.Frames) {
+			frame = unicode.ToUpper(frame)
+			if frame == '-' {
+				frame = wep.KeepFrame
 			}
 			c.currentFrame = frameOfLine[i] + (len(machine.Steps) - lineSteps[i])
 			step := wep.Step{
@@ -427,11 +500,31 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 				OffsetY: line.OffsetY,
 			}
 			if visibleSprite(sprite) {
-				// A frame letter is a letter whichever case it is written in,
-				// and mods write both. Uppercasing it here keeps one name for
-				// one picture, in the atlas and in the shared store alike.
-				step.Sprite = strings.ToUpper(fmt.Sprintf("%s%c0", sprite, frame))
-				c.useSprite(step.Sprite)
+				step.Sprite = fmt.Sprintf("%s%c0", sprite, frame)
+				// A marker goes through as written; the engine reads it
+				// against whatever the actor is showing. What has to be in the
+				// atlas is the other thing: the names it can resolve to.
+				sameSprite := sprite == wep.KeepSprite || sprite == wep.KeepBoth
+				sameFrame := frame == wep.KeepFrame || sprite == wep.KeepBoth
+				switch {
+				case sameSprite && sameFrame:
+					// It keeps the whole name, so there is nothing to spell
+					// out and no picture of its own to pack.
+					step.Sprite = wep.KeepBoth
+				case sameSprite:
+					for _, prefix := range prefixes {
+						step.SpriteAlt = append(step.SpriteAlt, fmt.Sprintf("%s%c0", prefix, frame))
+					}
+				case sameFrame:
+					for _, letter := range letters {
+						step.SpriteAlt = append(step.SpriteAlt, sprite+letter+"0")
+					}
+				default:
+					c.useSprite(step.Sprite)
+				}
+				for _, name := range step.SpriteAlt {
+					c.useSprite(name)
+				}
 			}
 			ops, err := c.lowerAction(line)
 			if err != nil {
@@ -440,7 +533,6 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 			step.Ops = ops
 			c.frameSteps = append(c.frameSteps, len(machine.Steps))
 			machine.Steps = append(machine.Steps, step)
-			previousSprite, previousFrame = sprite, byte(frame)
 		}
 	}
 
@@ -461,6 +553,33 @@ func (c *Compiler) lowerStates(block StateBlock) (wep.StateMachine, error) {
 		return machine, errors.New(strings.Join(problems, "\n"))
 	}
 	return machine, nil
+}
+
+// keepCandidates lists what the keep markers in a block of states can be read
+// as: the sprites it names and the frame letters it uses, both uppercased and
+// in first use order so the packed atlas stays stable between runs.
+func keepCandidates(block StateBlock) (prefixes, letters []string) {
+	seenPrefix := make(map[string]bool)
+	seenLetter := make(map[rune]bool)
+	for _, line := range block.Lines {
+		if !line.IsFrame() {
+			continue
+		}
+		sprite := strings.ToUpper(line.Sprite)
+		if visibleSprite(sprite) && sprite != wep.KeepSprite && sprite != wep.KeepBoth && !seenPrefix[sprite] {
+			seenPrefix[sprite] = true
+			prefixes = append(prefixes, sprite)
+		}
+		for _, frame := range expandFrames(line.Frames) {
+			frame = unicode.ToUpper(frame)
+			if frame == wep.KeepFrame || frame == '-' || seenLetter[frame] {
+				continue
+			}
+			seenLetter[frame] = true
+			letters = append(letters, string(frame))
+		}
+	}
+	return prefixes, letters
 }
 
 // expandFrames turns a frame sequence into its characters. ZDoom writes several
@@ -485,17 +604,41 @@ func (c *Compiler) useSprite(name string) {
 	c.sprites = append(c.sprites, name)
 }
 
+// previousFrameLabel names the frame a Wait sends the cursor back to: the last
+// one lowered, which is the one written above it. It is the label a `Goto 0`
+// would resolve to, and resolveJumps places it like any other.
+func (c *Compiler) previousFrameLabel() string {
+	return fmt.Sprintf("@frame%d", c.currentFrame)
+}
+
 func (c *Compiler) lowerFlowLine(line StateLine) (wep.Step, error) {
-	step := wep.Step{Tics: 0}
+	// A Loop, Goto, Stop or Wait is not a state in ZDoom - it is how one state
+	// links to the next - so it shows nothing of its own and changes nothing
+	// about what is being shown. An empty sprite here would say the opposite,
+	// and blank every "####" frame reached through a loop.
+	step := wep.Step{Tics: 0, Sprite: wep.KeepBoth}
 	switch line.Flow {
 	case "loop":
 		step.Ops = []wep.Op{{Op: wep.OpLoop, Source: "Loop"}}
 	case "stop":
 		step.Ops = []wep.Op{{Op: wep.OpStop, Source: "Stop"}}
-	case "wait":
-		step.Ops = []wep.Op{{Op: wep.OpWait, Source: "Wait"}}
-	case "fail":
-		step.Ops = []wep.Op{{Op: wep.OpStop, Source: "Fail"}}
+	case "wait", "fail":
+		// A Wait is a link back to the frame above it, pointed at itself:
+		// FStateDefinitions::SetWait marks that frame SDF_WAIT and FinishStates
+		// resolves it to `NextState = &itself`. So the frame repeats - its
+		// duration runs out and it is entered again, action and all - which is
+		// how `"####" I 1 A_FadeTo(0, 0.01, 1)` followed by Wait fades a shell
+		// casing out a hundredth at a time rather than fading it once. Held on
+		// the Wait itself instead, the casing stayed where it was at full
+		// alpha until something else took it away.
+		//
+		// Fail is the same statement: GZDoom's state parser sends WAIT and
+		// FAIL to the same SetWait.
+		source := "Wait"
+		if line.Flow == "fail" {
+			source = "Fail"
+		}
+		step.Ops = []wep.Op{{Op: wep.OpGoto, To: c.previousFrameLabel(), Source: source}}
 	case "goto":
 		target := line.FlowTarget
 		if line.FlowOffset > 0 {

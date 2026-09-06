@@ -113,6 +113,18 @@ func (t *TextureAtlasPacked) PivotFromCenter(index int) mgl32.Vec2 {
 	return mgl32.Vec2{fracX - 0.5, fracY - 0.5}
 }
 
+// Hotspot is a frame's own hotspot in its own raw source pixels - the same
+// number regardless of how big that frame's own canvas happens to be, unlike
+// a fraction of it. Two frames of one weapon are routinely authored on
+// differently sized canvases (a recoil frame's flash needs more canvas than
+// the idle pose does), and a hotspot delta only means the same physical
+// distance both frames agree on when it stays in this space; dividing each
+// one by its own canvas size first and subtracting the fractions answers a
+// different, wrong question.
+func (t *TextureAtlasPacked) Hotspot(index int) (int, int) {
+	return t.packedInfo.Hotspot(index)
+}
+
 // NormalizedHotspot is where this frame's own picture says to anchor it, as a
 // fraction of its full (untrimmed) size - the same space GetSourceAndDestRects
 // already takes normalizedOrigin in, so a caller uses this in place of a

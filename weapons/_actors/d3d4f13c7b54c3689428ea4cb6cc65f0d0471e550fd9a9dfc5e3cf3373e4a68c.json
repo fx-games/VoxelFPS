@@ -1,0 +1,1 @@
+{"format":1,"name":"FDAliensPhotonShockwaveAfterimage","render":{"scale":[1,1],"alpha":0.95,"style":"add"},"states":{"steps":[{"sprite":"----","tics":1,"tics_max":1,"ops":[{"op":"fade_to","args":[0,0.03]}]},{"sprite":"----","tics":0,"ops":[{"op":"loop"}]}],"labels":{"spawn":0}}}

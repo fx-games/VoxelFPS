@@ -1,1 +1,0 @@
-{"format":1,"name":"DetectFloorBullet","render":{"scale":[0.4,0.4],"alpha":0.7,"style":"translucent"},"states":{"steps":[{"tics":0},{"tics":5,"tics_max":5},{"tics":0,"ops":[{"op":"stop"}]},{"sprite":"XXX1A0","tics":2000,"tics_max":2000},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"death":3,"spawn":0}},"missile":true}

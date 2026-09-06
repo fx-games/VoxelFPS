@@ -1,0 +1,1 @@
+{"format":1,"name":"RifleCaseSpawn","render":{"scale":[1,1],"alpha":1},"speed":20,"states":{"steps":[{"tics":0},{"tics":1,"tics_max":1,"ops":[{"op":"fire_projectile","actor":"EmptyBrass","angle":-140,"angle_to":-120,"aim_pitch":40,"aim_pitch_to":60,"absolute_pitch":true}]},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}},"no_gravity":true,"missile":true}

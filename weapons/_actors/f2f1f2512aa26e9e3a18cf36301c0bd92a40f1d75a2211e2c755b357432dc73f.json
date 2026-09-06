@@ -1,1 +1,0 @@
-{"format":1,"name":"FDBTSXChaingunProjectileTrail","render":{"scale":[0.2,0.2],"alpha":0.95,"style":"add"},"states":{"steps":[{"sprite":"XCHPA0","tics":2,"tics_max":2,"bright":true},{"tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":0}}}

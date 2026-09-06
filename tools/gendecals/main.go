@@ -1,14 +1,25 @@
-// Command gendecals paints the decal tiles into assets/base/sprites_64x64.png:
-// a bullet hole and a blood splatter, in the two tiles named by the constants
-// below. They are generated rather than drawn because both are a noisy blob
-// around a centre - a handful of numbers each - and generating them keeps the
-// tile indices the engine uses and the pixels that fill them in one place.
+// Command gendecals writes the engine's own decal pictures into the shared
+// picture store, weapons/_sprites: GZDoom's five bullet chips and a blood
+// splatter. The game packs that store into one atlas when it starts, so these
+// end up in the same sheet as everything else a weapon throws at a wall, and
+// they go in at the resolution they were authored - a seven pixel chip stays
+// seven pixels.
 //
-// Run with `go run ./tools/gendecals` from the repository root. It rewrites the
-// atlas in place and is idempotent: every tile it touches is cleared first.
+// The blood is generated: it is a noisy blob around a centre, a handful of
+// numbers. The bullet chips are not ours to invent - they are the pictures
+// ZDoom itself marks a wall with, and they live in assets/base/decals. What
+// this does with them is what decaldef.txt says to: BulletChip1..5 each carry
+// `shade "00 00 00"` and `translucent 0.85`, and a shaded decal in ZDoom uses
+// the picture's grey as *alpha* and paints the shape in the shade colour. So a
+// chip is a small black splotch, and the greyscale is its coverage.
+//
+// Run with `go run ./tools/gendecals` from the repository root. It is
+// idempotent, and it deletes weapons/_sprites.png afterwards so the next run
+// of the game repacks the atlas with what it just wrote.
 package main
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -17,57 +28,57 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
+
+	"github.com/memmaker/goray/wep"
 )
 
 const (
-	atlasPath = "assets/base/sprites_64x64.png"
-	tileSize  = 64
-	// Must match DecalBulletHole and DecalBloodSplatter in package quads.
-	bulletHoleIndex = 185
-	bloodIndex      = 186
+	weaponsDir = "weapons"
+	chipPath   = "assets/base/decals/chip%d.png"
+	// bloodSize is the blood splatter's own canvas. The numbers below - the
+	// blob's radius, how far the droplets are thrown - are pixels in it.
+	bloodSize = 64
+	// chipShade is decaldef.txt's `translucent 0.85` on every one of
+	// BulletChip1..5.
+	chipShade = 0.85
 )
 
 func main() {
-	atlas := loadRGBA(atlasPath)
-	tilesPerRow := atlas.Bounds().Dx() / tileSize
-
-	writeTile(atlas, tilesPerRow, bulletHoleIndex, bulletHole(rand.New(rand.NewSource(1))))
-	writeTile(atlas, tilesPerRow, bloodIndex, bloodSplatter(rand.New(rand.NewSource(2))))
-
-	out, err := os.Create(atlasPath)
-	if err != nil {
+	store := filepath.Join(weaponsDir, wep.SpritesDir)
+	if err := os.MkdirAll(store, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	defer out.Close()
-	if err = png.Encode(out, atlas); err != nil {
+	for i, name := range wep.BulletChipSprites {
+		write(store, name, bulletChip(fmt.Sprintf(chipPath, i+1)))
+	}
+	write(store, wep.BloodSplatSprite, bloodSplatter(rand.New(rand.NewSource(2))))
+
+	// The packed atlas is cached against the names and sizes of what went into
+	// it, and a picture replaced by one of exactly the same size would not
+	// change that. Deleting it is what makes this show up in the game.
+	if err := os.Remove(filepath.Join(weaponsDir, wep.SharedAtlasFile)); err != nil && !os.IsNotExist(err) {
 		log.Fatal(err)
 	}
 }
 
-// bulletHole is a black core inside a bright scorched rim, with dust fading out
-// around it. The rim carries the shape: on a dark wall a black hole alone reads as
-// nothing at all, so the ring around it is what makes the hit visible.
-func bulletHole(rng *rand.Rand) *image.RGBA {
-	return paint(func(dx, dy float64) color.RGBA {
-		// The jitter breaks up the outline so the hole does not read as a stamped
-		// circle. It stays under a pixel and a half, or the edge turns to speckles.
-		r := math.Hypot(dx, dy) + rng.Float64()*1.4 - 0.7
-		switch {
-		case r < 11:
-			return color.RGBA{6, 5, 5, 255}
-		case r < 15:
-			// Scorched rim, brightest right at the hole.
-			t := (r - 11) / 4
-			shade := uint8(150 - 70*t)
-			return color.RGBA{shade, uint8(float64(shade) * 0.92), uint8(float64(shade) * 0.85), 255}
-		case r < 27:
-			t := 1 - (r-15)/12
-			alpha := uint8(150 * t * t)
-			shade := uint8(70 + 50*t)
-			return premultiplyAlpha(color.RGBA{shade, shade, shade, alpha})
+// bulletChip turns one of ZDoom's chip pictures into a decal. The grey is
+// alpha and the colour is flat black, which is what `shade "00 00 00"` means.
+// Nothing is scaled: seven pixels across is the picture, and how big it ends
+// up on a wall is the engine's business, not the atlas's.
+func bulletChip(path string) *image.RGBA {
+	source := loadRGBA(path)
+	bounds := source.Bounds()
+	chip := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	for y := 0; y < bounds.Dy(); y++ {
+		for x := 0; x < bounds.Dx(); x++ {
+			grey := source.RGBAAt(bounds.Min.X+x, bounds.Min.Y+y)
+			alpha := uint8(float64(grey.R) * chipShade)
+			// Black at that coverage, and black premultiplied is still black.
+			chip.SetRGBA(x, y, color.RGBA{0, 0, 0, alpha})
 		}
-		return color.RGBA{}
-	})
+	}
+	return chip
 }
 
 // bloodSplatter is one wobbly central blob plus droplets thrown around it.
@@ -105,35 +116,27 @@ func bloodSplatter(rng *rand.Rand) *image.RGBA {
 	})
 }
 
-// paint fills a tile from a function of the offset from its centre in pixels.
+// paint fills the blood's canvas from a function of the offset from its centre.
 func paint(shade func(dx, dy float64) color.RGBA) *image.RGBA {
-	tile := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
-	const center = tileSize/2 - 0.5
-	for y := 0; y < tileSize; y++ {
-		for x := 0; x < tileSize; x++ {
+	tile := image.NewRGBA(image.Rect(0, 0, bloodSize, bloodSize))
+	const center = bloodSize/2 - 0.5
+	for y := 0; y < bloodSize; y++ {
+		for x := 0; x < bloodSize; x++ {
 			tile.SetRGBA(x, y, shade(float64(x)-center, float64(y)-center))
 		}
 	}
 	return tile
 }
 
-// premultiplyAlpha converts a straight-alpha colour to the premultiplied form
-// image/png writes, which is what image.RGBA stores.
-func premultiplyAlpha(c color.RGBA) color.RGBA {
-	a := uint32(c.A)
-	return color.RGBA{
-		uint8(uint32(c.R) * a / 255),
-		uint8(uint32(c.G) * a / 255),
-		uint8(uint32(c.B) * a / 255),
-		c.A,
+func write(store, name string, picture image.Image) {
+	out, err := os.Create(filepath.Join(store, name+".png"))
+	if err != nil {
+		log.Fatal(err)
 	}
-}
-
-func writeTile(atlas *image.RGBA, tilesPerRow, index int, tile image.Image) {
-	origin := image.Pt((index%tilesPerRow)*tileSize, (index/tilesPerRow)*tileSize)
-	target := image.Rectangle{Min: origin, Max: origin.Add(image.Pt(tileSize, tileSize))}
-	draw.Draw(atlas, target, image.Transparent, image.Point{}, draw.Src)
-	draw.Draw(atlas, target, tile, image.Point{}, draw.Src)
+	defer out.Close()
+	if err := png.Encode(out, picture); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func loadRGBA(path string) *image.RGBA {

@@ -86,11 +86,31 @@ func TestWriteProducesALoadableWeaponsFolder(t *testing.T) {
 	assert.Equal(t, "test_shotgun", library.Keys[1])
 
 	// The weapon's own frames came through into its atlas, and what it spawns
-	// went to the store the whole folder shares.
+	// went to the store the whole folder shares - under its own name plus a
+	// hash of the picture, because two mods ship different pictures called the
+	// same thing and the store holds them all at once.
 	assert.Contains(t, library.Sprites[weapon.ID], "TSHTA0")
 	assert.NotContains(t, library.Sprites[weapon.ID], "TSMKA0")
-	_, err = os.Stat(filepath.Join(dir, wep.SpritesDir, "TSMKA0.png"))
-	assert.NoError(t, err)
+	stored, err := filepath.Glob(filepath.Join(dir, wep.SpritesDir, "TSMKA0.*.png"))
+	require.NoError(t, err)
+	require.Len(t, stored, 1, "the spawned actor's first frame is in the shared store")
+
+	// And every frame the actor names is a file that is there under that
+	// name, or nothing can be drawn. Loading checks this too, which is why
+	// the load above passed.
+	smoke := library.Actors[weapon.ID]["testsmoke"]
+	require.NotNil(t, smoke)
+	var named int
+	for _, step := range smoke.States.Steps {
+		if step.Sprite == "" || wep.IsKeepMarker(step.Sprite) {
+			continue
+		}
+		named++
+		assert.Regexp(t, `^TSMK[A-E]0\.[0-9a-f]{8}$`, step.Sprite)
+		_, err := os.Stat(filepath.Join(dir, wep.SpritesDir, step.Sprite+".png"))
+		assert.NoError(t, err)
+	}
+	assert.NotZero(t, named, "the smoke shows at least one frame")
 
 	assert.Contains(t, library.Actors[weapon.ID], "testsmoke")
 

@@ -66,8 +66,7 @@ func BuildSharedAtlas(weaponsDir string) (SharedAtlas, error) {
 		if err != nil {
 			return SharedAtlas{}, fmt.Errorf("%s: %w", name, err)
 		}
-		bounds := decoded.Bounds()
-		offsetX, offsetY := tpack.OffsetsFromPNG(data, bounds.Dx(), bounds.Dy())
+		offsetX, offsetY := tpack.OffsetsFromPNG(data)
 		images = append(images, tpack.NamedImage{Image: decoded, Name: name, OffsetX: offsetX, OffsetY: offsetY})
 	}
 

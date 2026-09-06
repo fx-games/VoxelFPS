@@ -4,6 +4,8 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"os"
+	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/quads"
@@ -32,8 +34,14 @@ type WorldActor struct {
 	// worse, it would be something the player bumps into. A shell casing is
 	// scenery, and scenery does not block a doorway.
 	velocity mgl32.Vec3
-	// resting is set once it has landed and stopped moving.
+	// resting is set once it has landed and stopped moving, and dead once
+	// something has killed it - A_Die does nothing to a thing that is already
+	// dead, which is what lets a Death state run past its own A_Die.
 	resting bool
+	dead    bool
+	// drawn is set once the thing has been through a frame, which is what
+	// makes the point blank test below a first-frame test and nothing else.
+	drawn bool
 	// seeking is where a homing missile is trying to get to, and homing says
 	// whether it is trying.
 	homing   bool
@@ -46,12 +54,25 @@ type WorldActor struct {
 	// master is what spawned it, when something did: a rocket's smoke trail
 	// hangs off the rocket.
 	master *WorldActor
+	// owner is the weapon that put this into the world, which for anything a
+	// weapon spawns is ZDoom's target pointer: the player who fired it. A
+	// thrown charge tells its owner that it exists and watches the owner's
+	// inventory for the word to go off.
+	owner *wep.Runtime
 }
 
 // worldUnitsPerDoomUnit converts the numbers a script writes into ours. Doom
 // measures in units where a wall panel is 64 and a player is 56 tall; a voxel
 // here is one, and a wall panel is one.
 const worldUnitsPerDoomUnit = 1.0 / 64.0
+
+// debugActors makes every spawned effect say what it drew and how, once a
+// frame. What a muzzle smoke or a shell casing looks like is decided by five
+// numbers that come out of five different places - the picture, the actor's
+// scale, its alpha, its render style and the light where it stands - and a
+// screenshot of it looking wrong says which of them, only after you can see
+// all five. DEBUG_ACTORS=1 in the environment.
+var debugActors = os.Getenv("DEBUG_ACTORS") != ""
 
 // spritePixelsPerUnit is how big a sprite is drawn: a Doom sprite is authored
 // against that same 64-unit wall, so its pixels convert the same way.
@@ -69,13 +90,19 @@ func (g *Game) spawnWorldActor(weapon *Weapon, op wep.Op) {
 		return
 	}
 
-	origin, direction := g.aim()
-	g.spawnActorAt(weapon, actor, op, g.spawnPosition(origin, direction, op))
+	g.spawnActorAt(weapon, actor, op, g.spawnPosition(op), "Spawn", weapon.runtime)
 }
 
 // spawnPuffAt draws a hitscan's own puff exactly where it says: a spark, a
-// splinter of wood, whatever the mod's own actor animates - in place of the
-// engine's generic bullet hole. Reports whether it found one to draw.
+// splinter of wood, whatever the mod's own actor animates. It is drawn as well
+// as the bullet hole, not instead of it - ZDoom spawns the puff and the decal
+// from the same hit and neither knows about the other.
+//
+// A puff that hit no actor starts in its Crash state when it has one, which is
+// P_SpawnPuff's own rule and not a detail: Final Doomer's puff answers its
+// Spawn state by playing a flesh-hit sound and showing nothing, and its wall
+// hit - the sparks, the ricochet, the little cloud of smoke - is all in Crash.
+// Started in Spawn on a wall, every hitscan in that mod landed invisibly.
 func (g *Game) spawnPuffAt(weapon *Weapon, actorName string, pos, surfaceNormal mgl32.Vec3) *WorldActor {
 	if weapon == nil || actorName == "" || g.sharedAtlas == nil {
 		return nil
@@ -84,12 +111,15 @@ func (g *Game) spawnPuffAt(weapon *Weapon, actorName string, pos, surfaceNormal 
 	if !known || actor.Stock {
 		return nil
 	}
-	if _, hasSpawn := actor.States.Label("Spawn"); !hasSpawn {
+	label := "Spawn"
+	if _, hasCrash := actor.States.Label("Crash"); hasCrash {
+		label = "Crash"
+	} else if _, hasSpawn := actor.States.Label("Spawn"); !hasSpawn {
 		return nil
 	}
 	// Sat a hair off the surface it marks, facing along its normal, so it
 	// does not fight the wall or floor it is drawn on for depth.
-	return g.spawnActorAt(weapon, actor, wep.Op{}, pos.Add(surfaceNormal.Mul(0.01)))
+	return g.spawnActorAt(weapon, actor, wep.Op{}, pos.Add(surfaceNormal.Mul(0.01)), label, weapon.runtime)
 }
 
 // setMaster records what spawned this, so a warp knows what to sit on.
@@ -99,8 +129,12 @@ func (live *WorldActor) setMaster(master *WorldActor) {
 	}
 }
 
-// spawnActorAt is the rest of it, once where has been decided.
-func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, position mgl32.Vec3) *WorldActor {
+// spawnActorAt is the rest of it, once where has been decided. The label is
+// where the new thing's script starts, which is Spawn for everything but a
+// puff that landed on a wall.
+// spawner is whatever ran the call, so a velocity written as `velx` reads off
+// the thing that did the spawning rather than off nothing at all.
+func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, position mgl32.Vec3, label string, spawner *wep.Runtime) *WorldActor {
 	_, direction := g.aim()
 
 	sprite := quads.NewSprite(g.sharedAtlas, []uint16{0})
@@ -109,10 +143,7 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	// puffs that did would have every light redraw its shadow map every frame.
 	sprite.NoShadow = true
 	if actor.Render.Style == "add" || actor.Render.Style == "additive" {
-		// An additive sprite is its own light as far as the bloom pass cares.
-		// Scaled by its own alpha: a script that draws its smoke at 0.06 alpha
-		// wants a haze, not the same bloom a full-strength muzzle flash gets.
-		sprite.Emissive = additiveEmissive * float32(alphaOf(actor))
+		sprite.Additive = true
 	}
 
 	object := quads.NewGameObject("Spawned:" + actor.Name)
@@ -122,7 +153,7 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 
 	live := &WorldActor{
 		data:    actor,
-		cursor:  wep.NewCursor(&actor.States, "Spawn"),
+		cursor:  wep.NewCursor(&actor.States, label),
 		runtime: &wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}, Vars: map[string]float64{}, Rand: weapon.runtime.Rand},
 		object:  object,
 		sprite:  sprite,
@@ -131,10 +162,11 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 			float32(actor.Render.Scale[1]),
 		},
 		world: g.CubeMap,
+		owner: weapon.runtime,
 	}
 
 	g.Sprites.Add(sprite)
-	live.velocity = g.launchVelocity(actor, op, direction)
+	live.velocity = g.launchVelocity(actor, op, direction, spawner)
 
 	live.showCurrentFrame(g)
 	g.worldActors = append(g.worldActors, live)
@@ -158,39 +190,108 @@ func (g *Game) capWorldActors() {
 	}
 }
 
-// spawnPosition puts it where the script asked, relative to the player: out
-// along the line of fire, and up or down by the spawn height.
-func (g *Game) spawnPosition(origin, direction mgl32.Vec3, op wep.Op) mgl32.Vec3 {
-	sideways := direction.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
-	offset := op.SpawnOffset
-	if op.SpawnOffsetTo > op.SpawnOffset {
-		offset += rand.Float64() * (op.SpawnOffsetTo - op.SpawnOffset)
+// spawnPosition puts a spawned thing where the weapon that made it is
+// pointing. The offsets are ZDoom's own - a forward reach, a sideways one and
+// a height above the player's feet - but they are measured along the line of
+// aim rather than along a flat facing with a world-vertical height, so what a
+// weapon throws out rides the gun up and down.
+//
+// ZDoom rotates them by the yaw alone, and a muzzle flash spawned that way
+// hangs at one fixed height whatever the player is looking at: fire at the
+// floor and the flash stays up at chest height, well above the barrel it is
+// meant to be leaving. That is faithful and it looks broken from behind a gun
+// this engine draws with a pitch.
+//
+// The two families still differ in what they measure from. A_SpawnItem and
+// A_SpawnItemEx place a thing outright, up from the player's feet. A missile -
+// A_FireCustomMissile, A_CustomMissile - has no forward offset, because it
+// leaves from where the shooter stands and gets anywhere under its own speed;
+// its height is measured from the middle of the shooter rather than the feet.
+//
+// Getting the offsets themselves wrong is not subtle. Everything used to be
+// put half a voxel in front of the eye whatever it asked for, so the
+// chainsaw's idle exhaust - two puffs of smoke a second, each about a voxel
+// across, which in ZDoom leave from inside the player and drift away behind
+// him - hung in front of the camera instead and filled the screen with grey.
+func (g *Game) spawnPosition(op wep.Op) mgl32.Vec3 {
+	_, aim := g.aim()
+
+	height := float32(op.SpawnHeight * worldUnitsPerDoomUnit)
+	if op.Op != wep.OpSpawnItem {
+		height += playerCenterHeight + attackOffset
 	}
-	return origin.
-		Add(direction.Mul(spawnDistanceInFront)).
-		Add(sideways.Mul(float32(offset * worldUnitsPerDoomUnit))).
-		Add(mgl32.Vec3{0, float32(op.SpawnHeight * worldUnitsPerDoomUnit), 0})
+	eye := g.playerFeet().Add(mgl32.Vec3{0, playerEyeHeight, 0})
+	return eye.Add(aimOffset(aim,
+		float32(rollRange(op.SpawnForward, op.SpawnForwardTo)*worldUnitsPerDoomUnit),
+		float32(rollRange(op.SpawnOffset, op.SpawnOffsetTo)*worldUnitsPerDoomUnit),
+		height-playerEyeHeight))
 }
+
+// aimOffset is a spawn's three offsets as one step from the eye: forward along
+// the line of aim, sideways to its right, and up across the two. Measured that
+// way rather than along a flat facing, a height stays a height above the gun
+// however the gun is pointed.
+func aimOffset(aim mgl32.Vec3, forward, sideways, up float32) mgl32.Vec3 {
+	across := aim.Cross(mgl32.Vec3{0, 1, 0})
+	if across.Len() < 0.001 {
+		// Straight up or down, where there is no right hand side to speak of.
+		across = aim.Cross(mgl32.Vec3{0, 0, 1})
+	}
+	right := across.Normalize()
+	return aim.Mul(forward).
+		Add(right.Mul(sideways)).
+		Add(right.Cross(aim).Normalize().Mul(up))
+}
+
+// playerFeet is where the player stands, which is what ZDoom measures a spawn
+// from. The camera sits an eye height above it.
+func (g *Game) playerFeet() mgl32.Vec3 {
+	if g.player == nil {
+		return g.Camera.GetPosition().Sub(mgl32.Vec3{0, playerEyeHeight, 0})
+	}
+	return g.player.GameObject().Transform().GetPosition()
+}
+
+// playerEyeHeight is how far above its own feet the player looks out, and
+// playerCenterHeight is the middle of it, which is where ZDoom launches a
+// missile from. Doom's player is 56 units tall and this one is 0.9 of a voxel,
+// which is the same player.
+const (
+	playerEyeHeight    = float32(41 * worldUnitsPerDoomUnit)
+	playerHeight       = float32(56 * worldUnitsPerDoomUnit)
+	playerCenterHeight = playerHeight / 2
+	// attackOffset is what ZDoom adds on top of the middle before it launches
+	// a missile: AttackZOffset is 8 and P_SpawnPlayerMissile takes 4 back off
+	// it. Small, and it is the difference between a tracer that leaves level
+	// with the gun and one that leaves visibly under it.
+	attackOffset = float32(4 * worldUnitsPerDoomUnit)
+)
 
 // launchVelocity is how fast it leaves. A missile has a speed of its own and
 // goes where the player is looking; anything else drifts, so that smoke does
 // not sit in a rigid dot.
-func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3) mgl32.Vec3 {
-	if velocity, ok := explicitVelocity(op, direction); ok {
+func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) mgl32.Vec3 {
+	if velocity, ok := explicitVelocity(op, direction, spawner); ok {
 		return velocity
 	}
-	if actor.Speed > 0 {
-		angled := direction
-		if op.Angle != 0 {
-			angled = rotateAroundY(direction, op.Angle)
-		}
-		return angled.Mul(float32(actor.Speed * worldUnitsPerDoomUnit * wep.TicRate))
+	// Speed is a missile's speed, and only a missile is launched with it.
+	// P_SpawnMissile works the velocity out from Speed along the line of fire;
+	// A_SpawnItem and A_SpawnItemEx call none of that - they put an actor
+	// somewhere and leave it there, and any velocity it has is the one the
+	// call wrote out itself. Handing every spawn its Speed set Brutal Doom's
+	// BigBlackSmoke drifting: it is `Speed 1` with +MISSILE on it, spawned by
+	// A_SpawnItemEx where a flame lands, and the last cloud over the scorch
+	// mark wandered a voxel and a half off it instead of sitting still.
+	if actor.Speed > 0 && op.Op == wep.OpFireProjectile {
+		heading := pitchedBy(turnedBy(direction, rollRange(op.Angle, op.AngleTo)),
+			rollRange(op.AimPitch, op.AimPitchTo), op.AbsolutePitch)
+		return heading.Mul(float32(actor.Speed * worldUnitsPerDoomUnit * wep.TicRate))
 	}
-	return mgl32.Vec3{
-		float32(rand.NormFloat64()) * driftSpeed,
-		float32(rand.Float64()) * driftSpeed,
-		float32(rand.NormFloat64()) * driftSpeed,
-	}
+	// Nothing said to move it, so it does not move. ZDoom spawns a thing where
+	// it is told and leaves it there; the random drift that used to be here
+	// meant a muzzle flash wandered away from the barrel it belongs to, and it
+	// was also what kept every one of them from ever coming to rest.
+	return mgl32.Vec3{}
 }
 
 // explicitVelocity is A_SpawnItemEx's own xvel/yvel/zvel: a real push the
@@ -199,18 +300,51 @@ func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3)
 // SpawnOffset already is, not folded to a fixed number at migration time, so
 // a scatter of pickups actually scatters. X is along the direction it
 // spawned facing, Y sideways across it, Z straight up.
-func explicitVelocity(op wep.Op, direction mgl32.Vec3) (mgl32.Vec3, bool) {
-	if op.VelX == 0 && op.VelXTo == 0 && op.VelY == 0 && op.VelYTo == 0 && op.VelZ == 0 && op.VelZTo == 0 {
+//
+// The call's own angle turns that pair, exactly as it turns the position
+// offsets - ZDoom rotates both by the same angle, and a spawn that says
+// "seven units a tic, ninety two degrees round" means seven units a tic
+// sideways. Dropping the angle here left every ejected shell casing flying
+// straight down the line of fire to land in front of the player.
+func explicitVelocity(op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) (mgl32.Vec3, bool) {
+	forward, sideways, up, written := spawnVelocity(op, spawner)
+	if !written {
 		return mgl32.Vec3{}, false
 	}
-	forward := rollRange(op.VelX, op.VelXTo)
-	sideways := rollRange(op.VelY, op.VelYTo)
-	up := rollRange(op.VelZ, op.VelZTo)
-	side := direction.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
-	velocity := direction.Mul(float32(forward)).
-		Add(side.Mul(float32(sideways))).
-		Add(mgl32.Vec3{0, float32(up), 0})
+	var velocity mgl32.Vec3
+	if op.AbsoluteVelocity {
+		// SXF_ABSOLUTEVELOCITY: the numbers are Doom's own world axes, not
+		// forward and sideways from a facing. Doom's x and y are the ground
+		// plane and its z is up; ours has y up, which is the mapping the
+		// spawner's own velx/vely/velz were published under, so reading them
+		// back this way hands a spawn exactly the throw it inherited.
+		velocity = mgl32.Vec3{float32(forward), float32(up), float32(sideways)}
+	} else {
+		heading := turnedBy(direction, rollRange(op.Angle, op.AngleTo))
+		side := heading.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+		velocity = heading.Mul(float32(forward)).
+			Add(side.Mul(float32(sideways))).
+			Add(mgl32.Vec3{0, float32(up), 0})
+	}
 	return velocity.Mul(float32(worldUnitsPerDoomUnit * wep.TicRate)), true
+}
+
+// spawnVelocity is the three numbers themselves: the call's own expressions
+// when it wrote any, read against the actor doing the spawning, and the rolled
+// ranges otherwise. A call that wrote nothing at all reports so, because a
+// spawn with no velocity of its own is left to whatever launchVelocity decides
+// rather than pinned to a standstill.
+func spawnVelocity(op wep.Op, spawner *wep.Runtime) (forward, sideways, up float64, written bool) {
+	if len(op.VelExprs) == 3 && spawner != nil {
+		forward = op.VelExprs[0].Eval(spawner, spawner.Rand)
+		sideways = op.VelExprs[1].Eval(spawner, spawner.Rand)
+		up = op.VelExprs[2].Eval(spawner, spawner.Rand)
+		return forward, sideways, up, forward != 0 || sideways != 0 || up != 0
+	}
+	if op.VelX == 0 && op.VelXTo == 0 && op.VelY == 0 && op.VelYTo == 0 && op.VelZ == 0 && op.VelZTo == 0 {
+		return 0, 0, 0, false
+	}
+	return rollRange(op.VelX, op.VelXTo), rollRange(op.VelY, op.VelYTo), rollRange(op.VelZ, op.VelZTo), true
 }
 
 // rollRange picks a value the way a compiled frandom(min, max) is meant to:
@@ -223,14 +357,61 @@ func rollRange(min, max float64) float64 {
 	return min
 }
 
-func rotateAroundY(direction mgl32.Vec3, degrees float64) mgl32.Vec3 {
-	radians := degrees * math.Pi / 180
+// turnedBy swings a heading sideways by a DECORATE angle, about the world's
+// own up, so a pitch survives the turn the way ZDoom's does.
+//
+// The sign is the whole of it. ZDoom counts an angle anticlockwise, so a
+// positive one turns to the spawner's left - which is the opposite of a
+// positive sideways offset, and that inversion is deliberate on ZDoom's part.
+// Brutal Doom says which is which in its own words: `50CaseSpawn2 //right side
+// eject` throws its brass with `random(-120,-140)`, and the left handed gun of
+// the same pair uses `random(120,140)`.
+func turnedBy(direction mgl32.Vec3, degrees float64) mgl32.Vec3 {
+	if degrees == 0 {
+		return direction
+	}
+	radians := -degrees * math.Pi / 180
 	sin, cos := float32(math.Sin(radians)), float32(math.Cos(radians))
 	return mgl32.Vec3{
 		direction.X()*cos - direction.Z()*sin,
 		direction.Y(),
 		direction.X()*sin + direction.Z()*cos,
 	}.Normalize()
+}
+
+// pitchedBy tilts a heading by a DECORATE pitch. ZDoom's sign is the whole of
+// it: a positive pitch aims **down**, which is why the vertical comes out
+// negative.
+//
+// The two callers mean different things by the number, and ZDoom implements
+// them differently. A_FireCustomMissile does `self.Pitch += pitch` around the
+// spawn, so its pitch is an adjustment to where the player is already looking.
+// A_CustomMissile under CMF_ABSOLUTEPITCH - which includes aimmode 2, because
+// the C++ sets that flag itself - throws the aim away and works the velocity
+// out of the pitch alone: `missilespeed = |cos(pitch)| * Speed` across and
+// `Vel.Z = -sin(pitch) * Speed` up. The absolute value is ZDoom's own and it
+// matters here: Brutal Doom's smoke is fired at `random(40, 160)` degrees, and
+// past ninety a plain cosine would send it out backwards.
+func pitchedBy(direction mgl32.Vec3, degrees float64, absolute bool) mgl32.Vec3 {
+	if degrees == 0 && !absolute {
+		return direction
+	}
+	flat := mgl32.Vec3{direction.X(), 0, direction.Z()}
+	if flat.Len() == 0 {
+		return direction // straight up or down already; there is no yaw to keep
+	}
+	flat = flat.Normalize()
+
+	radians := degrees * math.Pi / 180
+	if !absolute {
+		// An adjustment: add it to the pitch the heading already has.
+		radians += math.Asin(float64(-direction.Normalize().Y()))
+	}
+	across, up := math.Cos(radians), -math.Sin(radians)
+	if absolute {
+		across = math.Abs(across)
+	}
+	return flat.Mul(float32(across)).Add(mgl32.Vec3{0, float32(up), 0}).Normalize()
 }
 
 // warnMissingSprite complains once about a frame the shared atlas does not
@@ -253,11 +434,13 @@ func (g *Game) LiveActorCount() int { return len(g.worldActors) }
 func (g *Game) updateWorldActors(elapsed float64) {
 	for i := len(g.worldActors) - 1; i >= 0; i-- {
 		live := g.worldActors[i]
-		// A Stop just freezes the animation; in GZDoom the actor itself keeps
-		// falling until it touches something, which is what sends a missile-
-		// flagged casing on to Death. Only drop it once it has both stopped
-		// animating and come to rest, or its own lifetime runs out.
-		if (live.cursor.Stopped() && live.resting) || !live.object.IsAlive() {
+		// A Stop destroys the actor, which is what it does in ZDoom - the
+		// state itself is called NULL there, and nothing runs after it. Kept
+		// alive to keep falling, a casing spawner that had already dropped its
+		// brass on the way through Spawn landed a moment later, was sent to
+		// Death by hitSomething, and dropped a second one: every gun in Final
+		// Doomer ejected twice.
+		if live.cursor.Stopped() || !live.object.IsAlive() {
 			live.remove(g)
 			g.worldActors = append(g.worldActors[:i], g.worldActors[i+1:]...)
 			continue
@@ -267,6 +450,14 @@ func (g *Game) updateWorldActors(elapsed float64) {
 		live.move(g, elapsed)
 		if !live.cursor.Stopped() {
 			for _, op := range live.cursor.Update(live.runtime, elapsed) {
+				// Republished between ops, not once a frame: a step's
+				// arguments are worked out here, and a zero-tic chain reads
+				// what the step before it just wrote. A smoke puff mirrors
+				// itself with `scalex - scalex*2` one step after shrinking
+				// itself to a tenth, and against a frame-old scalex that came
+				// out as the unshrunk size, mirrored - one puff in two filled
+				// the screen with grey.
+				live.publishState()
 				live.apply(g, op)
 			}
 		}
@@ -319,11 +510,35 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 		// surface and lies there; anything with a speed of its own has hit
 		// something, and its script decides what that means.
 		live.velocity = mgl32.Vec3{}
+		if !live.resting {
+			// Something that has arrived and still has a script to run is
+			// waiting rather than playing out, and gets a longer life.
+			live.object.SetLifeTime(plantedActorLifetime)
+		}
 		live.resting = true
 		live.homing = false
+		// Something lying on the ground stops turning to face the camera.
+		// Every sprite here is an XY billboard - it follows the camera's
+		// pitch as well as its yaw, which is what ZDoom's +FORCEXYBILLBOARD
+		// asks for and what keeps a puff of smoke from going edge-on when
+		// you look down at it. A shell casing that has come to rest is the
+		// one case where it reads as a defect rather than a nicety: the
+		// quad lies almost flat on the floor, so turning on the spot sweeps
+		// the shell round the floor with you, and a thing on the ground
+		// visibly spinning is the first thing anybody notices. Resting, it
+		// drops to a plain Y billboard, which is GZDoom's own default mode
+		// (gl_billboard_mode 0): upright, facing you, never pitching.
+		live.sprite.CameraFollowMode = quads.SpriteModeFollowHorizontal
 		if live.data.Speed > 0 || live.data.Missile {
 			live.hitSomething(g, from)
+			return
 		}
+		// A casing's tumble is a Loop with no exit of its own, and its Death
+		// state is the frame it lies still on. Landing is what ends it - which
+		// is +MISSILE's own doing in ZDoom, and these mods do not all carry
+		// the flag by the time it gets here. Nothing to go to means nothing
+		// that was spinning, so it lies there as it was.
+		live.cursor.Goto("Death")
 		return
 	}
 	transform.SetPosition(to)
@@ -407,6 +622,56 @@ func (live *WorldActor) Above() bool {
 	return live.solidAt(position.Add(mgl32.Vec3{0, groundProbe, 0}))
 }
 
+// bakedLightHere is the flood-filled voxel light where this actor stands, which
+// is what lights it. Doom lights a thing by the sector it is in rather than by
+// anything pointed at it, and the voxel light level is this engine's sector
+// light: without it a puff of smoke in a room lit entirely by baked torches
+// draws black against walls that are lit.
+//
+// ponytail: one sample at the actor's own position, so a big sprite is lit
+// evenly rather than across its own span. Per-corner sampling needs the light
+// field in a texture the shader can read, which is a bigger change than a
+// smoke puff justifies.
+func absFloat(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func (live *WorldActor) bakedLightHere() float32 {
+	if live.world == nil {
+		return 0
+	}
+	return bakedLightIn(live.world, live.object.Transform().GetPosition())
+}
+
+// bakedLightAt is the same question asked of the map the player is standing
+// in, which is what a decal stuck to a wall needs to be lit like that wall.
+// The point it is asked about is a hit on a surface, and a hit sits exactly on
+// the boundary between the solid block and the air in front of it: asked there
+// it lands inside the wall as often as not, where the flood fill never reached
+// and the answer is nought. So it is asked a little way out along the face's
+// own normal, which is the lit side.
+func (g *Game) bakedLightAt(position, normal mgl32.Vec3) float32 {
+	return bakedLightIn(g.CubeMap, position.Add(normal.Mul(lightProbeOffset)))
+}
+
+// lightProbeOffset is how far off a surface to stand to ask what light falls on
+// it: enough to be clear of the boundary, well inside the block in front.
+const lightProbeOffset = 0.25
+
+func bakedLightIn(world *voxel.Map, position mgl32.Vec3) float32 {
+	if world == nil {
+		return 0
+	}
+	block := world.GetBlockFromPosition(position)
+	if block == nil {
+		return 0
+	}
+	return float32(block.GetTorchLight())
+}
+
 func (live *WorldActor) solidAt(position mgl32.Vec3) bool {
 	if live.world == nil {
 		return false
@@ -415,12 +680,25 @@ func (live *WorldActor) solidAt(position mgl32.Vec3) bool {
 	return live.world.IsSolidBlockAt(grid.X, grid.Y, grid.Z)
 }
 
+// TargetHas answers A_JumpIfInTargetInventory: what the thing that fired this
+// is carrying. That is the whole of how a thrown charge learns it has been
+// told to go off - the weapon gives itself the item, and every charge in the
+// air is watching for it.
+func (live *WorldActor) TargetHas(item string, amount int) bool {
+	if live.owner == nil || item == "" {
+		return false
+	}
+	if amount <= 0 {
+		return live.owner.Inventory.AtMax(live.owner.Caps, item)
+	}
+	return live.owner.Inventory[item] >= amount
+}
+
 // The rest of what a script can ask about its surroundings needs monsters,
 // which this game has none of, so it answers the way an empty world does.
 func (live *WorldActor) CanSee() bool               { return false }
 func (live *WorldActor) TargetWithin(float64) bool  { return false }
 func (live *WorldActor) TargetHealthBelow(int) bool { return false }
-func (live *WorldActor) TargetHas(string, int) bool { return false }
 func (live *WorldActor) HasFlag(name string) bool   { return false }
 
 // groundProbe is how far under something to look for a floor, and gravity is
@@ -435,25 +713,60 @@ const (
 // are all different.
 func (live *WorldActor) showCurrentFrame(g *Game) {
 	step := live.cursor.Step()
-	if step == nil || step.Sprite == "" {
+	// What a step shows is not always what it names: a "####" frame keeps the
+	// picture the actor is already on, which only the cursor knows.
+	sprite := live.cursor.Sprite()
+	if step == nil || sprite == "" {
 		live.sprite.Hide()
 		return
 	}
-	index, known := g.sharedSpriteIndex[step.Sprite]
+	index, known := g.sharedSpriteIndex[sprite]
 	if !known {
 		// Loading checks every frame a compiled actor names, so this is a
 		// weapons folder somebody has edited. Said once per frame name rather
 		// than once per tic.
-		g.warnMissingSprite(step.Sprite)
+		g.warnMissingSprite(sprite)
 		live.sprite.Hide()
 		return
 	}
+	if !live.drawn {
+		live.drawn = true
+		if live.hiddenAtPointBlank(g.Camera.GetPosition()) {
+			live.sprite.Hide()
+			return
+		}
+	}
 	live.sprite.Show()
+	live.sprite.BakedLight = live.bakedLightHere()
+	// A frame ZDoom marks BRIGHT ignores the light where it stands: a muzzle
+	// flash is the same flash in a lit room and a dark one. Which frames those
+	// are is a property of the frame, not of the actor's render style - the
+	// two used to be conflated here, so every additive sprite glowed and no
+	// plain one ever did, and a mod's bright frames drawn on top of a
+	// translucent puff came out as dark as the room.
+	//
+	// ponytail: added rather than replacing the lighting, which is what the
+	// shader can do without another attribute, so a bright frame in a lit room
+	// is brighter than one in a dark room instead of identical. Both are far
+	// brighter than the room, which is what the frame is asking for, and the
+	// overshoot is what the bloom threshold picks up.
+	live.sprite.Emissive = 0
+	if step.Bright {
+		live.sprite.Emissive = brightEmissive
+	}
 	live.sprite.TextureIndices = []uint16{uint16(index)}
 	left, top, right, bottom := g.sharedAtlas.GetUVInPx(index)
+	// The size is the scale's magnitude, not the scale. ZDoom reads a negative
+	// scale as a mirrored sprite rather than a smaller one, and several of
+	// these effects flip themselves that way to make one puff of smoke look
+	// like two - a size below zero here turned the quad inside out instead.
+	//
+	// ponytail: the mirror itself is dropped, so a flipped frame draws the
+	// same way round as an unflipped one. Reproducing it means flipping the
+	// UV rect, which is worth doing when something asymmetric flips.
 	live.sprite.Size = mgl32.Vec2{
-		float32(right-left) / spritePixelsPerUnit * live.scale.X(),
-		float32(bottom-top) / spritePixelsPerUnit * live.scale.Y(),
+		float32(right-left) / spritePixelsPerUnit * absFloat(live.scale.X()),
+		float32(bottom-top) / spritePixelsPerUnit * absFloat(live.scale.Y()),
 	}
 	// Anchored on the picture's own hotspot rather than its geometric center:
 	// a muzzle flash or a burst of smoke is drawn where its own art says to
@@ -461,6 +774,13 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 	// happen to be centered once padding is trimmed off.
 	pivot := g.sharedAtlas.PivotFromCenter(index)
 	live.sprite.PivotOverride = &pivot
+	if debugActors {
+		log.Printf("[actor] %-22s %-8s at=%v size=%.2fx%.2f scale=%.2f alpha=%.2f style=%q emissive=%.2f baked=%.0f",
+			live.data.Name, sprite, live.object.Transform().GetPosition(),
+			live.sprite.Size.X(), live.sprite.Size.Y(),
+			live.scale.X(), live.sprite.Tint.W(), live.data.Render.Style,
+			live.sprite.Emissive, live.sprite.BakedLight)
+	}
 }
 
 // apply is what one of these asks the world for. It is a smaller set than a
@@ -482,14 +802,7 @@ func (live *WorldActor) apply(g *Game, op wep.Op) {
 			live.scale = mgl32.Vec2{float32(values[0]), float32(values[1])}
 		}
 	case wep.OpChangeVelocity:
-		if values := live.argsOf(op); len(values) >= 3 {
-			// Doom's y is our z, and its z is our up.
-			live.setVelocity(mgl32.Vec3{
-				float32(values[0] * worldUnitsPerDoomUnit * wep.TicRate),
-				float32(values[2] * worldUnitsPerDoomUnit * wep.TicRate),
-				float32(values[1] * worldUnitsPerDoomUnit * wep.TicRate),
-			})
-		}
+		live.changeVelocity(op)
 	case wep.OpScaleVelocity:
 		if values := live.argsOf(op); len(values) > 0 {
 			live.setVelocity(live.currentVelocity().Mul(float32(values[0])))
@@ -502,10 +815,76 @@ func (live *WorldActor) apply(g *Game, op wep.Op) {
 		live.startSeeking(g, op)
 	case wep.OpWarp:
 		live.warp(g, op)
-	case wep.OpRemove, wep.OpDie:
+	case wep.OpGiveToTarget:
+		// A_GiveInventory(..., AAPTR_TARGET) and its opposite: the thing
+		// hands an item to whoever fired it, which is the weapon that spawned
+		// it, whether or not that weapon is still the one in hand.
+		if live.owner != nil && op.Item != "" {
+			if op.N < 0 {
+				live.owner.Inventory.Take(op.Item, -op.N)
+			} else {
+				live.owner.Inventory.Give(live.owner.Caps, op.Item, max(op.N, 1))
+				live.owner.StartItemTimer(op.Item)
+			}
+		}
+	case wep.OpDie:
+		// A_Die kills the actor, which in ZDoom means sending it to its Death
+		// state - and doing nothing at all if it is already dead. That second
+		// half is the whole of how a planted C4 charge goes off: its Death
+		// state opens with A_Die and then runs on into the explosion, and the
+		// second pass through the same frame has to fall through rather than
+		// jump back. Killing it outright here meant the charge vanished
+		// silently and nothing ever exploded.
+		if live.dead {
+			break
+		}
+		live.dead = true
+		if !live.cursor.Goto("Death") {
+			live.cursor.Goto("@enginestop")
+			live.object.Kill()
+		}
+	case wep.OpRemove:
 		live.cursor.Goto("@enginestop")
 		live.object.Kill()
 	}
+}
+
+// changeVelocity is A_ChangeVelocity(x, y, z, flags): a push, added to what the
+// thing is already doing unless CVF_REPLACE says to replace it, and measured
+// along the way it is heading when CVF_RELATIVE says so.
+//
+// Replacing rather than adding is not a near miss. Final Doomer's C4 charge is
+// thrown forward as a missile and then given `A_ChangeVelocity(0, 0,
+// frandom(1.5, 2), CVF_RELATIVE)` for a little lift; taken as a replacement,
+// that is the whole of its velocity, and the charge went straight up out of
+// the player's hands instead of across the room.
+func (live *WorldActor) changeVelocity(op wep.Op) {
+	values := live.argsOf(op)
+	if len(values) < 3 {
+		return
+	}
+	flags := strings.ToUpper(op.Flags)
+	// Doom's x and y are the ground plane and its z is up.
+	forward := float32(values[0] * worldUnitsPerDoomUnit * wep.TicRate)
+	sideways := float32(values[1] * worldUnitsPerDoomUnit * wep.TicRate)
+	up := float32(values[2] * worldUnitsPerDoomUnit * wep.TicRate)
+
+	push := mgl32.Vec3{forward, up, sideways}
+	if strings.Contains(flags, "CVF_RELATIVE") {
+		// Along its own heading rather than along the world's axes.
+		heading := live.velocity
+		heading[1] = 0
+		if heading.Len() > 0.0001 {
+			heading = heading.Normalize()
+			right := heading.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+			push = heading.Mul(forward).Add(right.Mul(sideways)).Add(mgl32.Vec3{0, up, 0})
+		}
+	}
+	if strings.Contains(flags, "CVF_REPLACE") {
+		live.setVelocity(push)
+		return
+	}
+	live.setVelocity(live.currentVelocity().Add(push))
 }
 
 // argsOf works out an op's numbers against this actor's own state.
@@ -570,6 +949,19 @@ func (live *WorldActor) fade(op wep.Op) {
 		alpha = max32(target, alpha-step)
 	}
 	live.sprite.Tint = mgl32.Vec4{1, 1, 1, alpha}
+	if alpha <= 0 {
+		// A_FadeTo's own FTF_REMOVE, which every one of these scripts passes
+		// and the migration does not carry: something that has faded to
+		// nothing is gone. Final Doomer's bullet puff fades out inside a loop
+		// that also grows it ten percent a tic, so left alive it went on
+		// growing invisibly - sixty five voxels across and six hundred of them
+		// at once, holding the actor budget shut against everything else.
+		//
+		// ponytail: without the flag, so it removes any fade to zero. An actor
+		// at no alpha can only be seen again if something puts its alpha back,
+		// and nothing in these mods does.
+		live.object.Kill()
+	}
 }
 
 func (live *WorldActor) currentVelocity() mgl32.Vec3 { return live.velocity }
@@ -585,13 +977,20 @@ func (live *WorldActor) remove(g *Game) {
 }
 
 // How long a spawned thing may hang around whatever its script says, how far in
-// front of the player it appears, how fast smoke drifts, and how far past white
-// an additive sprite is drawn.
+// front of the player a stray particle appears, how fast smoke drifts, and how
+// much light a frame marked BRIGHT gives itself.
+//
+// plantedActorLifetime is the longer leash something gets once it has come to
+// rest with its script still running. That is not an effect playing out - it
+// is a thing waiting to be told something: Final Doomer's C4 charge sticks to
+// a wall and watches the player's inventory for the word to go off, and eight
+// seconds is shorter than the time it takes to plant a few and reach for the
+// detonator.
 const (
 	worldActorLifetime   = 8.0
+	plantedActorLifetime = 90.0
 	spawnDistanceInFront = 0.5
-	driftSpeed           = float32(0.35)
-	additiveEmissive     = float32(3)
+	brightEmissive       = float32(1)
 )
 
 func alphaOf(actor *wep.Actor) float64 {
@@ -632,4 +1031,49 @@ func sharedAtlasIndex(atlas *glhf.TextureAtlasPacked) map[string]int {
 		indices[atlas.NameOfFrame(i)] = i
 	}
 	return indices
+}
+
+// doomPlayerRadius is Doom's own 16, which is what GZDoom measures the rule
+// below against - not this engine's player, whose collision is its own affair.
+const doomPlayerRadius = 16.0
+
+// hiddenAtPointBlank is GZDoom's "don't draw first frame of a player missile",
+// out of HWSprite::Process:
+//
+//	if (thing->flags & MF_MISSILE) {
+//	    if (!(thing->flags7 & MF7_FLYCHEAT) && thing->target == vp.ViewActor && ...) {
+//	        double speed = thing->Vel.Length();
+//	        if (speed >= thing->target->radius / 2) {
+//	            double clipdist = clamp(thing->Speed, thing->target->radius, thing->target->radius * 2);
+//	            if ((thingpos - vp.Pos).LengthSquared() < clipdist * clipdist) return;
+//	        }
+//	    }
+//	    thing->flags7 |= MF7_FLYCHEAT;   // only ever the very first frame
+//	}
+//
+// It is what keeps a rocket out of your face on the frame you fire it, and
+// without it Brutal Doom's assault shotgun draws eight DecorativeTracers - a
+// bright additive quad each - a tenth of a voxel from the eye on every shot.
+// They leave at 120 units a tic and are gone by the next frame, so all anybody
+// sees is one enormous flash that sits still while the gun moves under it: it
+// spawns at the player rather than at the muzzle, so it does not track the aim
+// either. It reads exactly like a broken muzzle flash, and every weapon in the
+// mod that lays a tracer has one.
+//
+// The three conditions all carry weight. Only a missile: smoke and casings are
+// meant to be seen up close. Only one the player fired, which here is anything
+// a weapon spawned. And only one actually moving - a puff spawned with a
+// missile flag and no speed stays where it was put, which is where its script
+// wants it.
+func (live *WorldActor) hiddenAtPointBlank(eye mgl32.Vec3) bool {
+	if !live.data.Missile || live.owner == nil {
+		return false
+	}
+	speed := float64(live.velocity.Len()) / (worldUnitsPerDoomUnit * wep.TicRate)
+	if speed < doomPlayerRadius/2 {
+		return false
+	}
+	clipDistance := min(max(live.data.Speed, doomPlayerRadius), doomPlayerRadius*2)
+	away := live.object.Transform().GetPosition().Sub(eye).Len()
+	return float64(away) < clipDistance*worldUnitsPerDoomUnit
 }

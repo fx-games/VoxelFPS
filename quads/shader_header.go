@@ -139,8 +139,11 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
     // The scene buffer is linear HDR but fogColor is authored in display range, so it
     // is lifted to the HDR value that tone maps back to exactly the colour picked.
     vec3 fogHDR = hdrFromDisplay(fogColor.rgb, toneMapParams.y, toneMapParams.x);
-    vec4 outputColor = mix(vec4(fogHDR, fogColor.a), inColor, fog_factor);
-    return outputColor;
+    // Only the colour is mixed. Mixing the alpha too made fog decide coverage:
+    // a translucent sprite far enough away came out with the fog's own alpha,
+    // which is one, so a faded-to-nothing puff of smoke painted a solid
+    // fog-coloured quad over everything behind it.
+    return vec4(mix(fogHDR, inColor.rgb, fog_factor), inColor.a);
 }
 
 // Normal-offset shadow bias. A depth bias cannot work here: the slope-scaled term

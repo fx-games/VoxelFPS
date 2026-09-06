@@ -577,3 +577,304 @@ ACTOR TestBonus
 	_, needed := result.Actors["testbonus"]
 	assert.True(t, needed, "the spawned actor is compiled and carried")
 }
+
+// A magazine and a counter are the same thing in DECORATE: both are `: Ammo`
+// with a maximum, and nothing says which is which. What tells them apart is
+// that a reload fills a magazine. The engine hands every weapon out at once
+// with nothing to pick up, so a magazine has to start loaded - and a counter
+// has to not, or a pump shotgun starts with a shell already chambered and
+// walks into its pump animation instead of firing.
+func TestOnlyWhatAReloadFillsStartsFull(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestMagazine : Ammo { Inventory.MaxAmount 30 }
+ACTOR TestChamber : Ammo { Inventory.MaxAmount 2 }
+ACTOR TestReserve : Ammo { Inventory.MaxAmount 200 }
+
+ACTOR TestReloader : Weapon
+{
+  Weapon.AmmoType "TestReserve"
+  Tag "Test Reloader"
+  States
+  {
+  Ready:
+    TSHT A 1 A_WeaponReady(WRF_ALLOWRELOAD)
+    Loop
+  Fire:
+    TSHT A 0 A_GiveInventory("TestChamber", 1)
+    TSHT A 1 A_TakeInventory("TestMagazine", 1)
+    Goto Ready
+  Reload:
+    TSHT A 0 A_JumpIfInventory("TestMagazine", 30, "Ready")
+    TSHT A 0 A_GiveInventory("TestMagazine", 1)
+    TSHT A 0 A_TakeInventory("TestReserve", 1)
+    Goto Reload
+  }
+}
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestReloader")
+	require.NoError(t, err)
+	items := result.Weapon.Items
+
+	assert.Equal(t, 30, items["TestMagazine"].Initial,
+		"the reload fills the magazine, so the weapon is drawn loaded")
+	assert.Equal(t, 0, items["TestChamber"].Initial,
+		"the firing states chamber a round; that is a counter, not a magazine")
+
+	// The reserve is the weapon's own declared ammo and the runtime fills that
+	// itself, whatever the folder says about it.
+	runtime := wep.NewRuntime(result.Weapon, nil)
+	assert.Equal(t, 200, runtime.Inventory["TestReserve"])
+	assert.Equal(t, 30, runtime.Inventory["TestMagazine"])
+	assert.Equal(t, 0, runtime.Inventory["TestChamber"])
+}
+
+// The four spawning functions disagree about where every number lives, and
+// getting one wrong puts a thing somewhere the script never asked for: a
+// muzzle flash beside the player's shoulder instead of in front of the barrel,
+// or a puff of smoke in the camera's lap. A_SpawnItem is the odd one - its
+// distance is straight ahead where every other function's spare number is
+// sideways, and it has no angle at all, the argument in that position being
+// useammo.
+func TestEachSpawningFunctionReadsItsOwnArgumentOrder(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestSpawnWeapon2 : Weapon
+{
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_SpawnItem("TestFlash", 32, 28)
+    TNT1 A 0 A_SpawnItemEx("TestFlash", 40, 8, 28)
+    TNT1 A 0 A_FireCustomMissile("TestFlash", 0, 0, 12, -16)
+    Goto Ready
+  }
+}
+
+ACTOR TestFlash
+{
+  States
+  {
+  Spawn:
+    BON1 A 4
+    Stop
+  }
+}
+`})
+
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestSpawnWeapon2")
+	require.NoError(t, err)
+
+	start, ok := result.Weapon.States.Label("Fire")
+	require.True(t, ok)
+	var ops []wep.Op
+	for _, step := range result.Weapon.States.Steps[start : start+3] {
+		require.Len(t, step.Ops, 1)
+		ops = append(ops, step.Ops[0])
+	}
+
+	item, itemEx, missile := ops[0], ops[1], ops[2]
+
+	// A_SpawnItem(type, distance, zheight, useammo, transfer_translation).
+	assert.Equal(t, 32.0, item.SpawnForward, "distance is straight ahead")
+	assert.Equal(t, 0.0, item.SpawnOffset, "and there is nothing sideways")
+	assert.Equal(t, 28.0, item.SpawnHeight)
+	assert.Equal(t, 0.0, item.Angle, "A_SpawnItem has no angle argument at all")
+
+	// A_SpawnItemEx(type, xofs, yofs, zofs, ...). Its yofs is to the right,
+	// the same way the missile functions' spawnofs_xy is, however much the
+	// rotation it is written as suggests otherwise.
+	assert.Equal(t, 40.0, itemEx.SpawnForward)
+	assert.Equal(t, 8.0, itemEx.SpawnOffset)
+	assert.Equal(t, 28.0, itemEx.SpawnHeight)
+
+	// A_FireCustomMissile(type, angle, useammo, spawnofs_xy, spawnheight, ...).
+	// A missile leaves from inside the shooter and gets anywhere under its own
+	// speed, so it has no forward offset to read.
+	assert.Equal(t, 0.0, missile.SpawnForward)
+	assert.Equal(t, 12.0, missile.SpawnOffset, "spawnofs_xy is sideways")
+	assert.Equal(t, -16.0, missile.SpawnHeight)
+}
+
+// A "####" sprite is not a picture, it is an instruction: show whatever the
+// actor is already showing. Which picture that is depends on the actor, so it
+// cannot be settled here - Final Doomer's shell casing inherits a Death written
+// entirely in "####" frames from a parent whose Spawn shows 9MMC frames, and
+// overrides Spawn with TNTS ones. Folded in at migration time the landed shell
+// draws the parent's 9mm casing; kept as a marker, the engine draws what the
+// casing is on. Both pictures still have to reach the atlas, so the marker
+// carries the names it can land on.
+func TestKeptSpritesStayMarkersAndCarryWhatTheyCanShow(t *testing.T) {
+	const mod = `
+ACTOR TestCasing
+{
+  PROJECTILE
+  States
+  {
+  Spawn:
+    9MMC ABCDEFGH 2
+    Loop
+  Death:
+    "####" A 0 A_ChangeFlag ("MOVEWITHSECTOR", 1)
+    "####" I 1000 A_FadeTo(0, 0.01, 1)
+    Stop
+  }
+}
+
+ACTOR TestShellCasing : TestCasing
+{
+  States
+  {
+  Spawn:
+    TNTS ABCDEFGH 2
+    Loop
+  }
+}
+
+ACTOR TestCasingGun : Weapon
+{
+  States
+  {
+  Select:
+    TSHT A 1 A_Raise
+    Loop
+  Deselect:
+    TSHT A 1 A_Lower
+    Loop
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TSHT B 2 A_SpawnItemEx("TestShellCasing", 0, 0, 0, 3, 2, 4)
+    Goto Ready
+  }
+}
+`
+	idx := indexFromFiles(t, map[string]string{"DECORATE": mod})
+	policy := DefaultPolicy()
+	policy.Spawns["testshellcasing"] = "sprite"
+	result, err := CompileWeapon(idx, policy, "TestCasingGun")
+	require.NoError(t, err)
+
+	casing, ok := result.Actors["testshellcasing"]
+	require.True(t, ok)
+
+	death, ok := casing.States.Label("Death")
+	require.True(t, ok)
+	kept := casing.States.Steps[death+1] // "####" I 1000
+	assert.Equal(t, "####I0", kept.Sprite, "the marker goes through as written")
+	assert.Equal(t, []string{"9MMCI0", "TNTSI0"}, kept.SpriteAlt,
+		"and names both pictures it can land on: the parent's and its own")
+
+	// Which means both are packed, though neither is written as a frame
+	// anywhere in the mod.
+	assert.Contains(t, result.ActorSprites, "9MMCI0")
+	assert.Contains(t, result.ActorSprites, "TNTSI0")
+
+	// And running the thing draws the child's picture, not the parent's.
+	cursor := wep.NewOverlayCursor(&casing.States, "Spawn")
+	assert.Equal(t, "TNTSA0", cursor.Sprite())
+	// It tumbles for a while, which is where it picks up the picture it keeps,
+	// and lands - which for a +MISSILE casing is the engine sending it to Death.
+	for i := 0; i < 4; i++ {
+		cursor.Update(&wep.Runtime{}, 1.0/wep.TicRate)
+	}
+	require.True(t, cursor.Goto("Death"))
+	for i := 0; i < 3; i++ {
+		cursor.Update(&wep.Runtime{}, 1.0/wep.TicRate)
+	}
+	assert.Equal(t, "TNTSI0", cursor.Sprite())
+}
+
+// GZDoom's Wait is not a state. FStateDefinitions::SetWait marks the frame
+// above it SDF_WAIT and FinishStates resolves that to `NextState = &itself`, so
+// the frame repeats until something else moves the actor - running its action
+// every time round. Fail is the same statement: the state parser sends WAIT and
+// FAIL to the same SetWait.
+func TestWaitAndFailSendTheCursorBackToTheFrameAboveThem(t *testing.T) {
+	const mod = `
+ACTOR TestFader
+{
+  PROJECTILE
+  States
+  {
+  Spawn:
+    TFAD AB 2
+    Death:
+    TFAD CD 1
+    TFAD E 1 A_FadeTo(0, 0.01, 1)
+    Wait
+  Crash:
+    TFAD F 1 A_FadeTo(0, 0.05, 1)
+    Fail
+  }
+}
+
+ACTOR TestFaderGun : Weapon
+{
+  States
+  {
+  Select:
+    TSHT A 1 A_Raise
+    Loop
+  Deselect:
+    TSHT A 1 A_Lower
+    Loop
+  Ready:
+    TSHT A 1 A_WeaponReady
+    Loop
+  Fire:
+    TSHT B 2 A_SpawnItemEx("TestFader", 0, 0, 0)
+    Goto Ready
+  }
+}
+`
+	idx := indexFromFiles(t, map[string]string{"DECORATE": mod})
+	policy := DefaultPolicy()
+	policy.Spawns["testfader"] = "sprite"
+	result, err := CompileWeapon(idx, policy, "TestFaderGun")
+	require.NoError(t, err)
+
+	fader, ok := result.Actors["testfader"]
+	require.True(t, ok)
+	steps := fader.States.Steps
+
+	// The Wait is the step after the frame it belongs to, and it jumps back to
+	// it rather than stopping or holding.
+	fade, ok := fader.States.Label("Death")
+	require.True(t, ok)
+	fade += 2 // TFAD C, TFAD D, then the frame with the fade on it
+	require.Len(t, steps[fade+1].Ops, 1)
+	assert.Equal(t, wep.OpGoto, steps[fade+1].Ops[0].Op)
+	assert.Equal(t, fade, mustLabel(t, fader.States, steps[fade+1].Ops[0].To),
+		"back to the frame above it")
+
+	// Fail is lowered the same way, and used to stop the actor dead instead.
+	crash, ok := fader.States.Label("Crash")
+	require.True(t, ok)
+	require.Len(t, steps[crash+1].Ops, 1)
+	assert.Equal(t, wep.OpGoto, steps[crash+1].Ops[0].Op)
+	assert.Equal(t, crash, mustLabel(t, fader.States, steps[crash+1].Ops[0].To))
+
+	// And running it fades once a tic instead of once ever.
+	cursor := wep.NewOverlayCursor(&fader.States, "Death")
+	var fades int
+	for i := 0; i < 12; i++ {
+		for _, op := range cursor.Update(&wep.Runtime{}, 1.0/wep.TicRate) {
+			if op.Op == wep.OpFadeTo {
+				fades++
+			}
+		}
+	}
+	assert.Greater(t, fades, 5, "the fade runs again every tic")
+	assert.False(t, cursor.Stopped())
+}
+
+func mustLabel(t *testing.T, machine wep.StateMachine, name string) int {
+	t.Helper()
+	index, ok := machine.Label(name)
+	require.True(t, ok, "the jump names a label that exists")
+	return index
+}

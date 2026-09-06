@@ -18,7 +18,7 @@ func TestDecalModelFacesTheSurface(t *testing.T) {
 	}
 	pos := mgl32.Vec3{3, 4, 5}
 	for _, normal := range normals {
-		model := DecalModel(pos, normal, 0.2, 1.1)
+		model := DecalModel(pos, normal, 0.2, 0.3, 1.1)
 
 		facing := model.Mul4x1(mgl32.Vec4{0, 0, 1, 0}).Vec3().Normalize()
 		assert.InDeltaSlicef(t, normal[:], facing[:], 1e-5, "normal %v", normal)
@@ -37,14 +37,17 @@ func TestDecalModelFacesTheSurface(t *testing.T) {
 	}
 }
 
+// A decal is its picture's own shape. ZDoom's bullet chips are seven pixels
+// wide and five to nine tall, so a quad scaled by one number is right for one
+// of the five and squashes or stretches the other four.
 func TestDecalModelScalesTheQuad(t *testing.T) {
-	const size = float32(0.4)
-	model := DecalModel(mgl32.Vec3{}, mgl32.Vec3{0, 0, 1}, size, 0)
+	const width, height = float32(0.4), float32(0.7)
+	model := DecalModel(mgl32.Vec3{}, mgl32.Vec3{0, 0, 1}, width, height, 0)
 	// The quad is a unit square around its centre, so a corner is half a size away
 	// on each axis.
 	corner := model.Mul4x1(mgl32.Vec4{0.5, 0.5, 0, 1}).Vec3()
-	assert.InDelta(t, size/2, corner.X(), 1e-5)
-	assert.InDelta(t, size/2, corner.Y(), 1e-5)
+	assert.InDelta(t, width/2, corner.X(), 1e-5)
+	assert.InDelta(t, height/2, corner.Y(), 1e-5)
 }
 
 // The ring buffer is what keeps the decal pass one fixed-size draw call: past
@@ -52,7 +55,7 @@ func TestDecalModelScalesTheQuad(t *testing.T) {
 func TestDecalRingBufferOverwritesOldest(t *testing.T) {
 	drawer := NewSpriteDrawer(nil)
 	for i := 0; i < MaxDecals+3; i++ {
-		drawer.addDecal(nil, uint16(i), mgl32.Vec3{float32(i), 0, 0}, mgl32.Vec3{0, 1, 0}, 0.1, 0)
+		drawer.addDecal(nil, uint16(i), mgl32.Vec3{float32(i), 0, 0}, mgl32.Vec3{0, 1, 0}, 0.1, 0.1, 0, 0)
 	}
 	assert.Len(t, drawer.decals, MaxDecals)
 	assert.Equal(t, 3, drawer.nextDecal)
@@ -70,6 +73,17 @@ func TestDecalRingBufferOverwritesOldest(t *testing.T) {
 // NaN matrix that would take the whole instanced draw with it.
 func TestDecalIgnoresZeroNormal(t *testing.T) {
 	drawer := NewSpriteDrawer(nil)
-	drawer.addDecal(nil, DecalBulletHole, mgl32.Vec3{1, 2, 3}, mgl32.Vec3{}, 0.1, 0)
+	drawer.addDecal(nil, 0, mgl32.Vec3{1, 2, 3}, mgl32.Vec3{}, 0.1, 0.1, 0, 0)
 	assert.Empty(t, drawer.decals)
+}
+
+// A decal is one instance in the same buffer the sprites use, and the buffer is
+// read a fixed stride at a time. One float short and every decal after the
+// first is drawn from the tail of the one before it, which is not a slightly
+// wrong decal - it is no decals at all, because the draw count is the float
+// count divided by the stride.
+func TestDecalInstanceIsAWholeInstance(t *testing.T) {
+	packed := appendDecalInstance(nil, &decal{light: 7}, 0, 0, 1, 1)
+	assert.Len(t, packed, QuadInstanceFloats)
+	assert.Equal(t, float32(7), packed[QuadInstanceFloats-1], "the baked light is the last field")
 }

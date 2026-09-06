@@ -271,6 +271,28 @@ func constOp(op wep.Op) Lowering {
 	}
 }
 
+// ControlItems are the inventory items a mod's own control script keeps in
+// step with the player's buttons, and which input each one stands for. They are
+// a mod's vocabulary rather than ZDoom's, and they belong here for the same
+// reason every action function's disposition does: it is a decision somebody
+// wrote down.
+//
+// Brutal Doom's BDControls.txt is an ACS loop that reads the buttons, gives one
+// of these for each that is down, waits four tics and takes them all back. Its
+// weapons never read a button directly - a full automatic ends its firing
+// states with A_JumpIfInventory("FiredPrimary", 1, "Fire") - so without these
+// every one of them fires exactly once a press.
+var ControlItems = map[string]string{
+	// Brutal Doom's.
+	"firedprimary": wep.ButtonAttack,
+	"reloading":    wep.ButtonReload,
+	// Final Doomer's, from FDOOMSCR.acs, which sets one item per button every
+	// tic from GetPlayerInput. Its C4 charge is armed and detonated entirely
+	// through these: without them the charge is thrown and can never go off.
+	"fdsynthfirefire":    wep.ButtonAttack,
+	"fdsynthfirealtfire": wep.ButtonAlt,
+}
+
 // A_WeaponReady(flags) is what makes a weapon accept input, and its flags say
 // which input. The scripts choose between a firing ready frame and a no-fire
 // one by branching on ammo, so whether the trigger works is a property of the
@@ -280,7 +302,9 @@ func lowerWeaponReady(c *Compiler, call Call) ([]wep.Op, error) {
 	op := wep.Op{
 		Op:          wep.OpWeaponReady,
 		AllowFire:   !strings.Contains(flags, "WRF_NOFIRE") && !strings.Contains(flags, "WRF_NOPRIMARY"),
+		AllowAlt:    !strings.Contains(flags, "WRF_NOFIRE") && !strings.Contains(flags, "WRF_NOSECONDARY"),
 		AllowReload: strings.Contains(flags, "WRF_ALLOWRELOAD"),
+		NoBob:       strings.Contains(flags, "WRF_NOBOB"),
 		Source:      call.Raw,
 	}
 	return []wep.Op{op}, nil
@@ -374,7 +398,25 @@ func lowerGiveInventory(c *Compiler, call Call) ([]wep.Op, error) {
 		return nil, err
 	}
 	c.needItem(item)
+	// Its third argument is a pointer: a thing can hand an item to whoever
+	// fired it. Final Doomer's C4 charge tells the player it exists that way,
+	// and the weapon counts what it has in the air by asking its own
+	// inventory - so dropped, the charge is thrown and then nothing about it
+	// can ever be detonated.
+	if pointsAtTheShooter(call.Arg(2, "")) {
+		return []wep.Op{{Op: wep.OpGiveToTarget, Item: item, N: amount, Source: call.Raw}}, nil
+	}
 	return []wep.Op{{Op: wep.OpGive, Item: item, N: amount, Source: call.Raw}}, nil
+}
+
+// pointsAtTheShooter reads one of ZDoom's actor pointers. A missile's target is
+// whoever fired it, and for anything a weapon spawns that is the player.
+func pointsAtTheShooter(pointer string) bool {
+	switch strings.ToUpper(strings.TrimSpace(pointer)) {
+	case "AAPTR_TARGET", "AAPTR_MASTER", "AAPTR_PLAYER1":
+		return true
+	}
+	return false
 }
 
 func lowerTakeInventory(c *Compiler, call Call) ([]wep.Op, error) {
@@ -387,6 +429,9 @@ func lowerTakeInventory(c *Compiler, call Call) ([]wep.Op, error) {
 		return nil, err
 	}
 	c.needItem(item)
+	if pointsAtTheShooter(call.Arg(3, "")) {
+		return []wep.Op{{Op: wep.OpGiveToTarget, Item: item, N: -amount, Source: call.Raw}}, nil
+	}
 	if strings.EqualFold(item, c.ammoType) {
 		return []wep.Op{{Op: wep.OpTakeAmmo, N: amount, Source: call.Raw}}, nil
 	}
@@ -424,9 +469,13 @@ func lowerJumpIfInventory(c *Compiler, call Call) ([]wep.Op, error) {
 func lowerRefire(c *Compiler, call Call) ([]wep.Op, error) {
 	target := call.Arg(0, "")
 	if target == "" {
-		// A_ReFire with no state goes back to the weapon's firing states.
-		c.needLabel("Fire")
-		return []wep.Op{{Op: wep.OpRefire, To: "Fire", Source: call.Raw}}, nil
+		// A_ReFire with no state of its own repeats whichever attack is
+		// running, and only the runtime knows which button that was. Writing
+		// "Fire" here instead named the primary's state on an alt attack too,
+		// and Brutal Doom's hand grenade - whose AltHold is two tics and an
+		// A_ReFire - walked out of the alt chain into Fire and pulled the pin
+		// again, for ever.
+		return []wep.Op{{Op: wep.OpRefire, Source: call.Raw}}, nil
 	}
 	resolved, err := c.jumpTarget(target)
 	if err != nil {
@@ -497,7 +546,13 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 	} else {
 		puffActor = ""
 	}
-	ops := []wep.Op{{
+	// FBF_USEAMMO is bit one of the flags, and the flags argument defaults to
+	// exactly that: a call that names no flags spends a round, and one that
+	// names some other flag and not this one does not. The Blacktail's laser
+	// pointer fires a hitscan every tic with FBF_NOFLASH|FBF_NORANDOMPUFFZ,
+	// and it costs nothing.
+	ops := c.spendAmmo(usesAmmo(call.Arg(5, "")))
+	ops = append(ops, wep.Op{
 		Op:        wep.OpFireBullets,
 		Count:     count,
 		SpreadH:   spreadH.Range.Value(),
@@ -506,7 +561,7 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 		Puff:      impact,
 		PuffActor: puffActor,
 		Source:    call.Raw,
-	}}
+	})
 	// A_FireBullets plays the weapon's own AttackSound on CHAN_WEAPON itself,
 	// unconditionally, regardless of any flags the call carries - GZDoom's
 	// own A_FireBullets does `if (weapon != NULL) A_StartSound(weapon.
@@ -529,6 +584,19 @@ func lowerFireBullets(c *Compiler, call Call) ([]wep.Op, error) {
 		}
 	}
 	return ops, nil
+}
+
+// usesAmmo reads A_FireBullets's flags argument. Written out, only
+// FBF_USEAMMO spends a round; left out entirely, the default is to spend one.
+func usesAmmo(flags string) bool {
+	flags = strings.TrimSpace(flags)
+	if flags == "" {
+		return true
+	}
+	if flags == "1" {
+		return true
+	}
+	return strings.Contains(strings.ToUpper(flags), "FBF_USEAMMO")
 }
 
 // A_FireCustomMissile(type, angle, useammo, spawnofs_xy, spawnheight, flags, pitch).
@@ -556,14 +624,25 @@ func lowerFireCustomMissile(c *Compiler, call Call) ([]wep.Op, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The seventh argument is a pitch, and A_FireProjectile applies it the
+	// simplest way there is: `self.Pitch += pitch` around the spawn, so it is
+	// an adjustment to where the player is already looking, in ZDoom's sign
+	// where positive aims down.
+	pitch, err := c.eval(call.Arg(6, "0"))
+	if err != nil {
+		return nil, err
+	}
 	c.needActor(actorName)
 	op := wep.Op{
 		Op:            wep.OpSpawnActor,
 		Actor:         actorName,
-		Angle:         angle.Range.Value(),
+		Angle:         angle.Range.Min,
+		AngleTo:       angle.Range.Max,
 		SpawnOffset:   offset.Range.Min,
 		SpawnOffsetTo: offset.Range.Max,
 		SpawnHeight:   height.Range.Value(),
+		AimPitch:      pitch.Range.Min,
+		AimPitchTo:    pitch.Range.Max,
 		Source:        call.Raw,
 	}
 	// A missile that moves under its own power is a projectile; one that only
@@ -571,7 +650,26 @@ func lowerFireCustomMissile(c *Compiler, call Call) ([]wep.Op, error) {
 	if c.actorIsMissile(actorName) {
 		op.Op = wep.OpFireProjectile
 	}
-	return []wep.Op{op}, nil
+	// Its third argument is useammo, and it defaults to true.
+	return append(c.spendAmmo(call.Arg(2, "1") != "0"), op), nil
+}
+
+// spendAmmo is the round a firing function takes out of the weapon by itself.
+// In ZDoom that is not the script's doing: A_FireBullets and A_FireCustomMissile
+// call DepleteAmmo unless told not to, and a weapon whose script never takes
+// its own ammo is not a weapon with infinite ammo - it is one whose ammo the
+// engine spends. Final Doomer's C4 charges could be thrown for ever, so the
+// state that arms the detonator, which is only reached with no charges left,
+// never came.
+func (c *Compiler) spendAmmo(uses bool) []wep.Op {
+	if !uses || c.ammoType == "" {
+		return nil
+	}
+	use := c.ammoUse(c.actorName)
+	if use <= 0 {
+		return nil
+	}
+	return []wep.Op{{Op: wep.OpTakeAmmo, N: use, Source: "the firing function's own ammo use"}}
 }
 
 func lowerAlertMonsters(c *Compiler, call Call) ([]wep.Op, error) {

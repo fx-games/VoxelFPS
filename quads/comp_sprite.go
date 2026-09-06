@@ -37,7 +37,19 @@ type SpriteComponent struct {
 	// Emissive is how far past white the sprite glows, 0 for a normal one. It is
 	// added after the light loop, so an emissive sprite ignores shadows and lights
 	// itself - see the emissive term in quadFragmentShaderSource.
-	Emissive          float32
+	Emissive float32
+	// Additive draws this sprite with ZDoom's Add render style: what it paints
+	// is added to what is already there rather than blended over it. A haze
+	// authored at six percent alpha is a whisper drawn that way and a wall of
+	// grey drawn the other, because forty overlapping quads of near-black at
+	// six percent cover the scene almost completely.
+	Additive bool
+	// BakedLight is the flood-filled voxel light level, 0 to 15, where this
+	// sprite stands. It lights the sprite the way the same number lights the
+	// walls around it - Doom lights a thing by the sector it is in, and a
+	// sprite that ignored the baked light was black in a room lit by torches.
+	// Whoever moves the sprite sets it; a sprite that never moves never has to.
+	BakedLight        float32
 	currentFrame      int
 	currentAnimation  int
 	currentFrameTime  float32

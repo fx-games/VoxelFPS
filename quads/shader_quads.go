@@ -19,18 +19,20 @@ const (
 	QuadInstanceOriginLocation   = 5
 	QuadInstanceUVLocation       = 6
 	QuadInstanceEmissiveLocation = 7
+	QuadInstanceBakedLocation    = 8
 )
 
-// QuadInstanceFormat is the per-sprite attribute layout: mat4, vec2, float, float.
+// QuadInstanceFormat is the per-sprite attribute layout: mat4, vec2, vec4, float, float.
 var QuadInstanceFormat = []glhf.InstanceAttr{
 	{Location: QuadInstanceModelLocation, Floats: 16},
 	{Location: QuadInstanceOriginLocation, Floats: 2},
 	{Location: QuadInstanceUVLocation, Floats: 4},
 	{Location: QuadInstanceEmissiveLocation, Floats: 1},
+	{Location: QuadInstanceBakedLocation, Floats: 1},
 }
 
 // QuadInstanceFloats is how many float32 one sprite occupies in that buffer.
-const QuadInstanceFloats = 16 + 2 + 4 + 1
+const QuadInstanceFloats = 16 + 2 + 4 + 1 + 1
 
 func LoadQuadShader(uboBlock string) *glhf.Shader {
 	var (
@@ -99,6 +101,7 @@ out vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
 out vec3 VertPos;
 out vec3 VertNormal;
 out float VertEmissive;
+out float VertBaked;
 #endif
 
 layout(location = 0) in uint cornerIndex;
@@ -108,6 +111,7 @@ layout(location = 1) in mat4 instModelTransform;
 layout(location = 5) in vec2 instOriginOffset;
 layout(location = 6) in vec4 instUV;// leftU, topV, rightU, bottomV, worked out on the CPU
 layout(location = 7) in float instEmissive;// 0 for a normal sprite, otherwise how far past white it glows
+layout(location = 8) in float instBaked;// the flood-filled voxel light level, 0..15, where this sprite stands
 
 uniform sampler2D tex;
 
@@ -156,6 +160,7 @@ void main() {
     VertNormal = normalize((instModelTransform * vec4(0.0, 0.0, 1.0, 0.0)).xyz);
     VertPos = worldPos.xyz;
     VertEmissive = instEmissive;
+    VertBaked = instBaked;
 #endif
 }`
 
@@ -164,6 +169,7 @@ in vec3 VertPos;// world space
 in vec2 VertUV;
 in vec3 VertNormal;// world space
 in float VertEmissive;
+in float VertBaked;
 
 uniform vec4 tintColor;
 
@@ -183,7 +189,14 @@ void main() {
         // An emissive sprite is handed to finalColor as its own light: the emissive
         // term is added after the lighting multiply, so shadows and the light loop
         // cannot darken it, and past 1.0 it is what the bloom threshold picks up.
-        fragmentColor = finalColor(surfaceColor, VertPos, VertNormal, surfaceColor.rgb * VertEmissive);
+        //
+        // The baked term is the same flood-filled voxel light the walls around
+        // this sprite are lit by, sampled once on the CPU where it stands. Without
+        // it a sprite in a room lit only by baked torches is black while every
+        // surface around it is lit - which is not what Doom does with a sprite,
+        // where the sector's own light level lights whatever stands in it.
+        fragmentColor = finalColor(surfaceColor, VertPos, VertNormal,
+            surfaceColor.rgb * VertEmissive, bakedLight(VertBaked));
     }
 }`
 
