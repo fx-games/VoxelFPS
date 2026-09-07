@@ -69,19 +69,21 @@ func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlas
 	return weapon
 }
 
-// load reads the weapon's atlas and sounds, once.
+// load reads the weapon's atlas, once, and its sounds every time: the atlas
+// is kept for the life of the game, but Unequip gives the sounds back on
+// every switch, so they need reloading on every re-equip or a weapon held a
+// second time stays mute for good.
 func (w *Weapon) load() {
-	if w.Atlas != nil {
-		return
-	}
-	if debugWeapon {
-		started := time.Now()
-		defer func() { log.Printf("[weapon] %s loaded in %v", w.Data.ID, time.Since(started)) }()
-	}
-	w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
-	w.spriteIndex = make(map[string]int)
-	for i := 0; i <= w.Atlas.LastValidIndex(); i++ {
-		w.spriteIndex[w.Atlas.NameOfFrame(i)] = i
+	if w.Atlas == nil {
+		if debugWeapon {
+			started := time.Now()
+			defer func() { log.Printf("[weapon] %s loaded in %v", w.Data.ID, time.Since(started)) }()
+		}
+		w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
+		w.spriteIndex = make(map[string]int)
+		for i := 0; i <= w.Atlas.LastValidIndex(); i++ {
+			w.spriteIndex[w.Atlas.NameOfFrame(i)] = i
+		}
 	}
 	w.game.loadWeaponSounds(w)
 }
