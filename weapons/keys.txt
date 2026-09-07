@@ -1,9 +1,9 @@
 1: small_gun
-2: fd_the_vendetta_machine
-3: fd_tornado_battery
-4: fd_grav_staff
-5: fd_melee
-6: fd_precision_pistol
-7: fd_phased_tachyon_cannon
-8: fd_mini_missile_launcher
-9: fd_drum_shotgun
+2: bd_fists
+3: bd_axe
+4: colt45
+5: blacktail_51_connector
+6: fd_borstal_shotgun
+7: fd_machine_gun
+8: bd_plasma_rifle
+9: bd_rocket_launcher
