@@ -153,6 +153,10 @@ type GlApplication struct {
 	spriteBatches    []*glhf.SpriteBatch
 	shadowResolution int
 	shadowPassCount  int
+	// casterScratch is gathered once per frame and reused across every light's
+	// shadowSceneSignature call, so filtering by reach costs a distance check per
+	// caster per light rather than a fresh map walk per light.
+	casterScratch []mgl32.Vec3
 
 	guiQuadsDrawn int
 	guiDrawCalls  int
@@ -467,7 +471,7 @@ func (a *GlApplication) StartEventLoop() {
 				// culling their front faces would drop them out of the shadow map
 				// entirely. The slope-scaled bias in ShadowCalculation covers it.
 
-				sceneSignature := a.shadowSceneSignature()
+				casterPositions := a.gatherCasterPositions()
 				a.shadowPassCount = 0
 				lights := a.lightsUbo.Lights()
 				for i := range lights {
@@ -475,7 +479,11 @@ func (a *GlApplication) StartEventLoop() {
 					// A light that is off contributes nothing, one with no atlas layer
 					// casts no shadow at all, and a light whose frustum and scene are
 					// unchanged still has a valid depth map from last frame.
-					if light.IsOff() || light.ShadowLayer < 0 || !light.NeedsShadowUpdate(sceneSignature) {
+					if light.IsOff() || light.ShadowLayer < 0 {
+						continue
+					}
+					sceneSignature := a.shadowSceneSignature(light, casterPositions)
+					if !light.NeedsShadowUpdate(sceneSignature) {
 						continue
 					}
 					a.shadowBuffer.SetDepthLayer(int(light.ShadowLayer))
@@ -612,23 +620,24 @@ func (a *GlApplication) StartEventLoop() {
 	}
 }
 
-// shadowSceneSignature hashes everything a depth map depends on: the world mesh
-// generation plus the position of every caster. Hashing a few hundred positions
-// costs far less than the full scene redraw it lets an unchanged light skip.
-// Per-object hashes are summed rather than chained, because the drawers iterate
-// maps and the order changes from frame to frame.
-func (a *GlApplication) shadowSceneSignature() uint64 {
-	signature := a.CubeMap.MeshGeneration() * 0x9E3779B97F4A7C15
-	hashPos := func(pos mgl32.Vec3) {
-		h := uint64(14695981039346656037)
-		for _, f := range [3]float32{pos.X(), pos.Y(), pos.Z()} {
-			h = (h ^ uint64(math.Float32bits(f))) * 1099511628211
-		}
-		signature += h
-	}
-	a.Sprites.ForEachCaster(hashPos)
-	a.Meshes.ForEachCaster(hashPos)
-	return signature
+// gatherCasterPositions collects every caster's world position once per frame,
+// reusing casterScratch, so every light's shadowSceneSignature call filters the
+// same slice instead of each re-walking the sprite and mesh maps.
+func (a *GlApplication) gatherCasterPositions() []mgl32.Vec3 {
+	a.casterScratch = a.casterScratch[:0]
+	visit := func(pos mgl32.Vec3) { a.casterScratch = append(a.casterScratch, pos) }
+	a.Sprites.ForEachCaster(visit)
+	a.Meshes.ForEachCaster(visit)
+	return a.casterScratch
+}
+
+// shadowSceneSignature hashes everything one light's depth map depends on: the
+// world mesh generation plus the position of every caster within that light's own
+// reach. Filtering by reach is what keeps a mover on one side of the map from
+// invalidating a static light's cache on the other side - see
+// shadowSceneSignatureFor for why that filter is exact, not approximate.
+func (a *GlApplication) shadowSceneSignature(light *LightInfo, casterPositions []mgl32.Vec3) uint64 {
+	return shadowSceneSignatureFor(light.GetPosition(), light.GetFarPlaneDist(), a.CubeMap.MeshGeneration(), casterPositions)
 }
 
 // draw3dScene draws the world from the observer's point of view. betweenPasses, if
@@ -1595,12 +1604,18 @@ func (a *GlApplication) ShadowPasses() (rendered, lit int) {
 	return a.shadowPassCount, a.lightsUbo.LitCount()
 }
 
-// ShadowCacheState exposes the two inputs the shadow cache keys on. If rendered
-// stays at the lit count while standing still, one of these is churning: a
-// climbing mesh generation means the world keeps re-meshing, a changing scene
-// hash with a steady generation means a caster is moving.
+// ShadowCacheState exposes the two inputs the shadow cache keys on, for the debug
+// overlay. If rendered stays at the lit count while standing still, one of these
+// is churning: a climbing mesh generation means the world keeps re-meshing, a
+// changing scene hash with a steady generation means some caster is moving.
+// sceneHash sums every caster unfiltered, unlike the per-light signature the
+// cache itself uses - a diagnostic total, not a cache key.
 func (a *GlApplication) ShadowCacheState() (meshGeneration uint64, sceneHash uint64) {
-	return a.CubeMap.MeshGeneration(), a.shadowSceneSignature()
+	sceneHash = a.CubeMap.MeshGeneration() * 0x9E3779B97F4A7C15
+	for _, pos := range a.gatherCasterPositions() {
+		sceneHash += hashPos(pos)
+	}
+	return a.CubeMap.MeshGeneration(), sceneHash
 }
 
 type UIContext struct {

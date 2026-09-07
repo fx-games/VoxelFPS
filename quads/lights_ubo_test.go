@@ -90,6 +90,33 @@ func TestShadowCacheInvalidatesOnChange(t *testing.T) {
 	}
 }
 
+// A caster outside a light's reach must not affect that light's signature - it is
+// clipped by the light's own shadow frustum, so it cannot appear in the depth map,
+// and hashing it in anyway would invalidate a static light's cache every time an
+// unrelated mover crosses the map.
+func TestShadowSignatureIgnoresCastersOutOfReach(t *testing.T) {
+	lightPos := mgl32.Vec3{0, 0, 0}
+	const reach = float32(10)
+	nearCaster := mgl32.Vec3{5, 0, 0}
+	farCaster := mgl32.Vec3{50, 0, 0}
+
+	base := shadowSceneSignatureFor(lightPos, reach, 1, []mgl32.Vec3{nearCaster})
+
+	if got := shadowSceneSignatureFor(lightPos, reach, 1, []mgl32.Vec3{nearCaster, farCaster}); got != base {
+		t.Errorf("a caster beyond reach changed the signature: got %d want %d", got, base)
+	}
+
+	movedFarCaster := mgl32.Vec3{60, 0, 0}
+	if got := shadowSceneSignatureFor(lightPos, reach, 1, []mgl32.Vec3{nearCaster, movedFarCaster}); got != base {
+		t.Errorf("moving a caster that was already out of reach changed the signature: got %d want %d", got, base)
+	}
+
+	movedNearCaster := mgl32.Vec3{6, 0, 0}
+	if got := shadowSceneSignatureFor(lightPos, reach, 1, []mgl32.Vec3{movedNearCaster}); got == base {
+		t.Error("moving a caster within reach must change the signature")
+	}
+}
+
 // An omni light is recognised by the shader only through the sentinel in
 // direction.w, and it must never take a shadow pass: it has one frustum and would
 // render a depth map covering a fifth of the sphere it claims to light.

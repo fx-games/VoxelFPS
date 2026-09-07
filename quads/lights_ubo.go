@@ -2,6 +2,7 @@ package quads
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
@@ -114,6 +115,35 @@ func (l *LightInfo) MarkShadowRendered(sceneSignature uint64) {
 	l.shadowRendered = true
 	l.shadowScene = sceneSignature
 	l.shadowProjView = l.GetProjectionViewMatrix()
+}
+
+func hashPos(pos mgl32.Vec3) uint64 {
+	h := uint64(14695981039346656037)
+	for _, f := range [3]float32{pos.X(), pos.Y(), pos.Z()} {
+		h = (h ^ uint64(math.Float32bits(f))) * 1099511628211
+	}
+	return h
+}
+
+// shadowSceneSignatureFor hashes what one light's depth map depends on: the world
+// mesh generation plus the position of every caster within reach of this light.
+// A caster beyond reach - the far plane of the light's own shadow frustum - is
+// clipped by that frustum and cannot appear in the depth map regardless, so
+// filtering by distance is exact, not a heuristic.
+//
+// This is what keeps a mover on one side of the map from invalidating every
+// light's cache: hashing every caster in the world into one signature shared by
+// every light meant a single patrolling NPC left no light's shadow map ever
+// cached, anywhere. Per-object hashes are summed rather than chained, because the
+// order casters are visited in changes from frame to frame.
+func shadowSceneSignatureFor(lightPos mgl32.Vec3, reach float32, meshGeneration uint64, casterPositions []mgl32.Vec3) uint64 {
+	signature := meshGeneration * 0x9E3779B97F4A7C15
+	for _, pos := range casterPositions {
+		if pos.Sub(lightPos).Len() <= reach {
+			signature += hashPos(pos)
+		}
+	}
+	return signature
 }
 
 // LightFromMap turns the map file's description of a light into one the renderer can
