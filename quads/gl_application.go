@@ -1316,6 +1316,10 @@ func (a *GlApplication) NewList() *GuiList {
 	return NewGuiList(a.UiContext())
 }
 
+func (a *GlApplication) NewMessageBox() *GuiMessageBox {
+	return NewGuiMessageBox(a.UiContext())
+}
+
 func (a *GlApplication) SetupUIAtlas(atlas *glhf.TextureAtlasFixed) {
 	a.UIAtlas = atlas
 	a.UIAtlas.SetGuiShader(a.guiShader)
