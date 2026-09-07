@@ -459,7 +459,7 @@ func (c *Chunk) Draw(shader *glhf.Shader, modelUniformIndex int) {
 		return
 	}
 
-	shader.SetUniformAttr(modelUniformIndex, c.GetMatrix())
+	shader.SetMat4(modelUniformIndex, c.GetMatrix())
 
 	c.meshBuffer.Draw(shader.ID())
 }

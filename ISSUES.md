@@ -6,18 +6,11 @@ against the current source, not the review's own claims.
 
 ## Rendering / performance
 
-- **`SetUniformAttr(uniform int, value interface{})`** (`quads/glhf/shader.go:279`)
-  boxes every `mgl32.Mat4`/`Vec2`/etc into an interface — a heap allocation per
-  uniform set, thousands per frame. Typed methods (`SetMat4`, `SetVec2`) would
-  remove both the allocation and the type switch.
 - **Voxel textures use `texelFetch`**, no mips or filtering (`quads/shader_cubes.go`)
   — distant walls alias and shimmer. Fix is the texture-array plan in
   `optimize.txt`: one `sampler2DArray` layer per tile.
 - **`LightsUBO.UpdatePlayerLight`** (`quads/lights_ubo.go:439`) re-uploads slot 0
   every frame even when the camera hasn't moved.
-- **`shadowSceneSignature()`** (`quads/gl_application.go:620`) runs twice per
-  frame when the debug overlay is up — once in the render loop, once via
-  `ShadowCacheState`. Hash once, hand the overlay the cached value.
 - **Forward shading is a fixed light loop** over every active light per
   fragment. Fine at a few lights, painful at 20+. Fix ladder: per-light range
   culling on the CPU, then clustered forward if it's ever needed — the
@@ -26,10 +19,6 @@ against the current source, not the review's own claims.
   `MaxShadowLayers = 16`, `quads/lights_ubo.go`) — a light past the last layer
   lights without casting a shadow. A light that changes layer drops its cached
   shadow map with it.
-- The shadow cache invalidates on *any* mover in the scene (the caster hash is
-  summed globally), so a single patrolling NPC means no light's shadow map is
-  ever cached. Real fix is splitting static and dynamic casters per light —
-  not a quick win.
 - `CheckAABBVsOBB` (`quads/voxel/obb.go:42`) inflates the oriented box rather
   than computing the exact (bevelled) Minkowski sum, so a glancing hit near an
   edge of a rotated box reports slightly early. Marked with a `ponytail:`

@@ -95,7 +95,7 @@ func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader) {
 				continue
 			}
 			if meshShader.HasUniform(MeshShaderEmissiveStrength) {
-				meshShader.SetUniformAttr(MeshShaderEmissiveStrength, mesh.EmissiveStrength)
+				meshShader.SetFloat(MeshShaderEmissiveStrength, mesh.EmissiveStrength)
 			}
 			compoundMesh := q.loadedMeshes[mesh.MeshIndex]
 			compoundMesh.RootNode.SetParent(mesh.GameObject().Transform())

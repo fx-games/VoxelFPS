@@ -352,6 +352,29 @@ func (s *Shader) SetUniformAttr(uniform int, value interface{}) (ok bool) {
 	return true
 }
 
+// SetMat4 and SetFloat set a uniform without boxing the value into an interface.
+// SetUniformAttr's type switch and interface allocation cost real time in the draw
+// path - these two cover the per-object uniforms actually set there (a model
+// matrix, an emissive strength); the rest of SetUniformAttr's types are set once
+// per frame or less and are not worth a typed twin yet.
+func (s *Shader) SetMat4(uniform int, value mgl32.Mat4) (ok bool) {
+	if uniform < 0 || uniform >= len(s.uniformLoc) || s.uniformLoc[uniform] < 0 {
+		s.warnMissingUniformOnce(uniform)
+		return false
+	}
+	gl.UniformMatrix4fv(s.uniformLoc[uniform], 1, false, &value[0])
+	return true
+}
+
+func (s *Shader) SetFloat(uniform int, value float32) (ok bool) {
+	if uniform < 0 || uniform >= len(s.uniformLoc) || s.uniformLoc[uniform] < 0 {
+		s.warnMissingUniformOnce(uniform)
+		return false
+	}
+	gl.Uniform1fv(s.uniformLoc[uniform], 1, &value)
+	return true
+}
+
 // warnMissingUniformOnce logs a uniform the program does not have, once per shader
 // and index. Once, because this is called from the draw path: a uniform set every
 // frame would otherwise fill the log at frame rate.

@@ -178,7 +178,7 @@ func (m *MeshNode) Draw(shader *glhf.Shader, modelTransformUniformIndex int, tex
 	if m.hidden {
 		return
 	}
-	shader.SetUniformAttr(modelTransformUniformIndex, m.GetTransformMatrix())
+	shader.SetMat4(modelTransformUniformIndex, m.GetTransformMatrix())
 	for _, pair := range m.drawPairs {
 		textureIndex := pair.TextureIndex
 		meshGroup := pair.VertexData
