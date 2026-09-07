@@ -64,8 +64,8 @@ go run . -stress -stress-size 96 -stress-sprites 2 -bench 10
 ```
 
 `-bench <seconds>` discards a warm up, records every frame, prints percentiles and
-quits. VSync and the debug overlay go off with it. The current baseline is in the
-Measurement section of `findings.md`.
+quits. VSync and the debug overlay go off with it. Judge frame time (ms), not FPS —
+FPS is a reciprocal and averaging it hides hitches.
 
 `-shadowtest` is a rig, not a level: it exists so shadow bias can be judged. The two
 knobs it is judged with are `-shadow-offset` (in shadow texels) and `-shadow-bias`,
@@ -214,7 +214,7 @@ scenery/
     mesh.glb
     scenery.json        one collider box per step - see below
   shelves/
-    mesh.glb
+    mesh.gltf           the model (plus shelf.bbmodel, the Blockbench source)
     scenery.json        two uprights and three boards
 ```
 
@@ -229,12 +229,14 @@ a wall unless every step is its own collider, and nothing on a shelf can be
 reached unless its front is open. A piece that names no colliders gets the box
 around its model, which is what a table wants.
 
-Two of the three are generated, because they are boxes:
+Stairs are generated, because they are boxes:
 
 ```
 go run ./tools/genstairs      # four steps, rise under the engine's step height
-go run ./tools/genshelves     # two uprights, three boards
 ```
+
+Shelves are modeled by hand in Blockbench instead - see AGENTS.md for how
+the model keeps its scale exact.
 
 ## Picking things up
 

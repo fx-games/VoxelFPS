@@ -149,7 +149,7 @@ vec4 applyFog(vec3 transformedFragPos, vec4 inColor) {
 // Normal-offset shadow bias. A depth bias cannot work here: the slope-scaled term
 // is near its maximum on a floor lit at a grazing angle and near its minimum on a
 // wall lit head on, so the value that keeps walls free of acne erases floor shadows
-// entirely (the "floor shadows" finding in findings.md). Nudging the sample position
+// entirely. Nudging the sample position
 // along the surface normal in *world* space instead takes the angle out of it - the
 // offset is expressed in shadow texels as they measure at this fragment, so it stays
 // the right size at any distance, any cone angle and any shadow resolution.

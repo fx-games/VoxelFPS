@@ -1268,7 +1268,7 @@ func (g *Game) updateEmissive() {
 	g.Toast(fmt.Sprintf("Emissive: strength %.1f, cutoff %.2f, sat %.2f", g.emissiveStrength, g.emissiveCutoff, g.emissiveSaturation))
 }
 
-// updateShadowBias is the knob findings.md asks for: the useful normal offset depends
+// updateShadowBias is the knob for a normal offset that depends
 // on the shadow resolution and the map's scale, so it is tuned in the running engine
 // rather than guessed at in a constant. Push it well past any plausible value and a
 // floor that stays dark means the mechanism is wrong, not the number.

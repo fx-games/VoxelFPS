@@ -11,7 +11,7 @@ import (
 // StressConfig describes a generated map built to load the renderer, so the
 // remaining performance items can be judged on numbers instead of argument. The
 // shipped test map draws 816 triangles in 2-3 calls, which is not enough to make
-// a difference visible either way (see the Measurement section in findings.md).
+// a difference visible either way (see the Measurement section in README.md).
 //
 // Everything here is deterministic: same config, same map, same frame. A
 // measurement that cannot be repeated is not a measurement.

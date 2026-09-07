@@ -1,324 +1,121 @@
 # Open issues
 
-State after the September 2026 cleanup pass (removed `physics/` + Bullet binding, `wad/`,
-`geometry/fov.go`, `geometry/camera.go`, `quads/voxel/mpr.go`; merged the disk and embedded
-asset loaders into `quads.Assets`; added DDA raycast tests).
+Consolidated from `ISSUES.md` + `findings.md` (renderer review), September 2026.
+Resolved items are cut; only what still needs doing stays. Cross-referenced
+against the current source, not the review's own claims.
 
-Fixed since: `SpriteBatch` now grows its index buffer along with its vertex buffer,
-`DDARaycast` takes a `maxDistance` and reports real misses, the collision code sweeps oriented
-colliders for real, gravity and jumping work, long moves are split into steps, and a collision
-reports one event for the surface that was actually hit (see Physics below).
+## Rendering / performance
 
-## Bugs
+- **`SetUniformAttr(uniform int, value interface{})`** (`quads/glhf/shader.go:279`)
+  boxes every `mgl32.Mat4`/`Vec2`/etc into an interface — a heap allocation per
+  uniform set, thousands per frame. Typed methods (`SetMat4`, `SetVec2`) would
+  remove both the allocation and the type switch.
+- **Voxel textures use `texelFetch`**, no mips or filtering (`quads/shader_cubes.go`)
+  — distant walls alias and shimmer. Fix is the texture-array plan in
+  `optimize.txt`: one `sampler2DArray` layer per tile.
+- **`LightsUBO.UpdatePlayerLight`** (`quads/lights_ubo.go:439`) re-uploads slot 0
+  every frame even when the camera hasn't moved.
+- **`shadowSceneSignature()`** (`quads/gl_application.go:620`) runs twice per
+  frame when the debug overlay is up — once in the render loop, once via
+  `ShadowCacheState`. Hash once, hand the overlay the cached value.
+- **Forward shading is a fixed light loop** over every active light per
+  fragment. Fine at a few lights, painful at 20+. Fix ladder: per-light range
+  culling on the CPU, then clustered forward if it's ever needed — the
+  `texelFetch` atlas above should go first, deferred fights it.
+- Shadow layers are a separate budget from lights (`MaxLights = 32`,
+  `MaxShadowLayers = 16`, `quads/lights_ubo.go`) — a light past the last layer
+  lights without casting a shadow. A light that changes layer drops its cached
+  shadow map with it.
+- The shadow cache invalidates on *any* mover in the scene (the caster hash is
+  summed globally), so a single patrolling NPC means no light's shadow map is
+  ever cached. Real fix is splitting static and dynamic casters per light —
+  not a quick win.
+- `CheckAABBVsOBB` (`quads/voxel/obb.go:42`) inflates the oriented box rather
+  than computing the exact (bevelled) Minkowski sum, so a glancing hit near an
+  edge of a rotated box reports slightly early. Marked with a `ponytail:`
+  comment; only the moving side is ever an AABB today, so it's never hit hard.
+- Scenery (`scenery.go`, `MeshDrawer`) still draws one `glDrawElements` call
+  per placed piece. Since it never moves once placed, it belongs baked into
+  the chunk mesh it stands in. Worth doing once a map places enough scenery
+  for `MeshDrawer.DrawnLastFrame`'s draw-call count to show it.
 
-- ~~**`quads/voxel/map.go:230`** — `chunkIsVisible` returns after a sphere-vs-frustum test~~
-  **Stale.** `chunkIsVisible` is a single `IsCubeInViewFrustum(chunk.AsAABB())` call
-  (`quads/voxel/map.go:340`). The commented-out alternative below it is the only thing left.
-- ~~`zdwep/weapon_test.go` does not compile~~ **Deleted.** It called the old
-  `readDoomAtlas` signature and read from `../doom_likes/`, which is gitignored, so it could
-  never pass in CI. The Doom atlas parser is uncovered again; a replacement would need a
-  small PNG in `zdwep/testdata/`.
+## Weapons / migration
+
+- ZScript is not read at all — a mod with no `DECORATE` lump (e.g. one written
+  purely in ZScript) fails to migrate rather than half-compiling.
+- Not wired into the engine yet, but compiled and carried so wiring it up
+  needs no re-migration: `monster_action`, the mod's own ACS scripts
+  (`run_script`), screen shake (`quake`), crosshairs, player flags, view zoom
+  beyond the player's own; `give_to_target`/`radius_give`/`radius_thrust`
+  (nothing has health or mass).
+- `A_PlaySound`'s attenuation is compiled but not acted on — a weapon's sounds
+  always come from the listener's position.
+- The muzzle flash and projectile lights share the single tracked light slot
+  (`quads/lights_ubo.go:452`, marked `ponytail:`), so firing while a bolt is
+  in the air takes the light off the bolt.
+- 96 of 136 weapons fire when tapped like a player taps a trigger via
+  `tools/firecheck`; the rest are each their own scripted mechanic (charge
+  gauge, heat gauge, remote detonator) worth chasing one at a time with the
+  tool.
+- 45 sprites and a handful of sounds are named by Final Doomer but shipped by
+  neither it nor doom2.wad — those frames show nothing; each weapon lists
+  which under `defaulted`.
 
 ## Lighting
 
-- **Lights and shadow layers are separate budgets.** `MaxLights = 32` sizes the UBO and the
-  shader loop; `MaxShadowLayers = 16` sizes the atlas. `assignShadowLayers` hands layers to
-  casters in list order and writes the layer into `params.x`; a light past the last layer
-  lights without shadowing instead of sampling someone else's depth map. A light that
-  changes layer drops its cached shadow with it.
-- **Slot 0 is the player's light and holds exactly one kind**: off, flashlight (45 degree
-  beam, 15 units) or torch (120 degree pool of warm light, 9 units). `T` cycles them, so the
-  player can never be lit by two of their own lights at once. Both cast shadows and both
-  hold an atlas layer; the torch is a wide spotlight rather than an omni light because a
-  shadow map is one frustum, and a sphere would need six.
-- **A torch is a baked light.** A `Torch` entity in the map, and the editor's torch drop,
-  both go to `Map.AddTorchLight` and seed the voxel flood fill - no slot, no per-frame cost,
-  and a level can hold hundreds. A `Light` entity is dynamic unless its `Baked` field is set.
-  Baked light has one colour for the whole level (`BAKED_LIGHT_COLOR`), which is the trade.
-- A map whose dynamic lights do not fit under `MaxLights` now toasts how many were dropped
-  instead of silently losing them.
-- Lights are map data (`core.MapLight`, `MapLoadResult.Lights`), not Go literals:
-  `raymap.ldtk` holds the two static ones as `Light` entities, and loading a map
-  replaces the scene's lights with the map's. Slot 0 stays the flashlight. `AGENTS.md`
-  and finding #14 have the detail.
-- Nothing writes a light back to the map file. F1 -> "Drop Light Here" places one in
-  the running engine and toasts its yaw and pitch to copy into LDtk by hand, and it
-  is gone on the next reload.
-- Floor shadows work (finding #22): normal-offset bias, a `w <= 0` guard, and a
-  spotlight near plane of 0.5 instead of 0.15. Judge them with `-shadowtest`, tune
-  them with `-shadow-offset` / `-shadow-bias` or the two F1 sliders.
-- The baked voxel flood-fill light is wired up (finding #17). The emissive texture set
-  is what seeds it: every face using one of those textures lights the air in front of
-  it, `Map.bakeEmissiveTorchlight` floods from there, and the level rides the vertex
-  bits into `bakedLight()` in the shader. Both places that change the emissive set
-  re-bake, so glow and light cannot drift apart. On `raymap.ldtk` that is 680 emitting
-  faces baked in ~8ms at load.
-  - The level rides the voxel lookup buffer, in the spare bits of the uint16 the cube
-    shader already fetches per fragment for its texture index: emissive in bit 15,
-    light in 14-11, texture index in 10-0 (`Map.packFaceLookup`). Nothing per face is
-    in the vertices any more, so greedy meshing merges across a light gradient and
-    raymap stays at its original 1324 triangles. It went through the vertex bits
-    first, which cost 3448.
-  - `DrawWithShader` re-floods the light whenever the lookup buffer is dirty, so a
-    wall placed next to a panel changes the light it blocks. ~8ms on raymap, in a
-    frame that was rebuilding and re-uploading the buffer anyway.
-  - The colour and strength are constants in `quads/shader_header.go`
-    (`BAKED_LIGHT_COLOR`, `BAKED_LIGHT_STRENGTH`), not a runtime slider.
-  - Still flat per face - that is the resolution greedy meshing leaves, and the same
-    resolution the emissive flag has always had.
+- Nothing writes a placed light back to the map file — F1 → "Drop Light Here"
+  places one in the running engine and toasts its yaw/pitch to copy into LDtk
+  by hand; it's gone on the next reload.
+- Baked voxel light is still flat per face — the resolution greedy meshing
+  leaves, and the resolution the emissive flag has always had.
 
-## Weapons
+## Dead code kept on purpose
 
-- Every picture carries its own hotspot, and until now nothing here read it.
-  GZDoom's own PNG loader (`pngtexture.cpp`) reads a private `grAb` chunk -
-  two big-endian ints, X and Y from the top-left corner - and its legacy WAD
-  picture format has the same two numbers in its header; `A_FireBullets`,
-  the weapon HUD renderer (`hw_weapon.cpp`) and the world sprite renderer
-  (`hw_sprites.cpp`) all draw a picture anchored on that point, not on its
-  center or a corner. A chainsaw's whole swing, or a pistol's whole kick, is
-  frequently carried entirely in how each frame's hotspot moves relative to
-  the last - nothing the state script itself writes down - and every one of
-  those 136 weapons' pictures has one (checked: 40 of 41 sampled from Final
-  Doomer, all of BDCE's own). Migrating with a fixed pivot instead read as
-  the state script working, every frame in the right place, and every weapon
-  looking wrong the same way: recoil, sway and swing baked into the art
-  simply never happened.
-  - `png_chunks.ReadGrabOffset`/`InjectGrabChunk` read and write the chunk.
-    `zdwep/wad.go`'s legacy-picture path now writes one from the WAD header's
-    LeftOffset/TopOffset, so a WAD-sourced sprite and a pk3's PNG read the
-    same way downstream.
-  - `tpack.NamedImage` carries `OffsetX`/`OffsetY`; both atlas builders
-    (`zdwep/write.go`'s per-weapon atlas, `wep.BuildSharedAtlas`'s shared
-    one) read them from the source PNG before packing, and
-    `TrimmedAtlasEntry` carries them through into the packed atlas file
-    itself, in the same untrimmed-picture space `SizeForLayout` already
-    describes. A picture with no `grAb` at all falls back to vanilla Doom's
-    own default - centered, bottom-anchored - which is what a fixed pivot
-    already assumed, so nothing regresses for a plain unannotated PNG.
-  - The weapon HUD (`weapon.go`) anchors each frame on
-    `TextureAtlasPacked.NormalizedHotspot`, in place of a flat `{0.5, 1}`.
-    A world actor (`world_actor.go`) does the same through
-    `SpriteComponent.PivotOverride`, set every frame from
-    `PivotFromCenter` - a muzzle flash or an ejected shell now sits where its
-    own picture says to put it relative to where it spawned, not at a fixed
-    center or corner.
-- Weapons are data. `weapons/` holds one folder per weapon plus `_actors/`, the shared
-  store, and `keys.txt` binding the number keys; `,` and `.` walk the rest. Everything
-  is read and checked at startup and a folder that does not load stops the game with
-  every problem it found listed. A weapon's pictures and sounds are read the first time
-  it is held, not at startup.
-- WADs carry their own DECORATE too, not just IWADs' stock sprites: `openWAD`
-  exposes every lump outside the sprite markers under its own bare name (for
-  `DECORATE`, `SNDINFO` and the like) and under `sounds/` (for whatever SNDINFO
-  points at, which carries no file extension to say what it is), and a
-  graphic lump already saved as a PNG - what a modern WAD editor writes - is
-  passed through rather than misread as the legacy column-of-posts format.
-  ZScript is not DECORATE and still is not read at all; a mod written purely
-  in ZScript (no `DECORATE` lump at all) fails to migrate rather than
-  half-compiling.
-- A frame writing more than one action in braces - `SOCO A 1 { A_WeaponReady
-  (...); A_FireBullets(...); }`, GZDoom's anonymous action sequence - used to
-  have its braces split off by the same pass that splits an actor's own body
-  braces, leaving the frame with no action at all and the calls as an orphan
-  line nothing recognised: both silently dropped, no error, a weapon that
-  never signalled it was ready for input. `splitBraces` now recognises a
-  frame head ahead of a `{` and leaves the whole line for `parseStateLine`,
-  which reads the sequence itself.
-- `A_FireBullets` plays the weapon's own `AttackSound` on `CHAN_WEAPON`
-  itself, unconditionally - real GZDoom's own implementation does exactly
-  this before it ever looks at the call's arguments. A migration that only
-  acted on an explicit `A_PlaySound` left every weapon written the older,
-  simpler way - set `AttackSound`, never call `A_PlaySound` at all - silent.
-- `CountInv("Item")`, used inside a general expression rather than through
-  `A_JumpIfInventory`, reads the same Inventory map A_GiveInventory/
-  A_TakeInventory already use, kept in the exact case the script wrote the
-  item's name in - lowercasing it, as a first pass did, reads as permanently
-  empty against an item named with any capital letter, which is why one
-  weapon jumped to its own Reload state on the very first tic, forever.
-- Hex literals (`0x7FFFFFFF`, the usual way to write "as much as an int
-  holds") tokenize as themselves now rather than as a number and a separate,
-  unrecognised identifier glued together. `CHAN_5`/`CHAN_6`/`CHAN_7`, the
-  generic extra sound channels past the five named ones, are recognised.
-- 136 weapons are migrated: 125 from Final Doomer and Brutal Doom Community
-  Expansion, plus ten single-weapon community mods brought in afterwards
-  (see `README.md`) that forced the four fixes above them.
-  Brutal Doom's vehicles (the mech, the tank, the bike, the turrets), its meat-shield
-  grab-and-throw, its play-as-monster mode and its classic-mode weapon swap all satisfy
-  `IsWeapon` the same way a real weapon does - something the player "holds" while it
-  runs its own states - and are named out by `notPlayerWeapons` in
-  `zdwep/compile_weapon.go` rather than migrated and then hidden.
-- `tools/firecheck` raises every weapon and taps the trigger, watching for a hitscan, a
-  spawned projectile or a swing; run it after any migration. It found two real compiler
-  bugs this way: `Weapon.AmmoType1`/`AmmoUse1` were read without the `1`, so a weapon
-  using the numbered spelling (nearly all of them) compiled with no ammo type at all,
-  and `A_CustomMissile`'s height and angle arguments were swapped with
-  `A_FireCustomMissile`'s order, which is why a spawned smoke trail could show up
-  hundreds of units above the gun that spawned it. A second, real ammo pool
-  (`Weapon.AmmoType2`, the loaded rounds next to the reserve `AmmoType1` draws from) is
-  now filled to capacity the same way the first one always was. 96 of 136 fire when
-  tapped like a player taps a trigger, not held forever - some of Brutal Doom's melee
-  reads a continuous hold as "still charging" and only swings on release. The rest are
-  each their own scripted mechanic (a charge gauge, a heat gauge, a remote detonator)
-  worth chasing one at a time with the tool rather than guessed at in bulk.
-- Spawned actors are drawn: the mod's own smoke, casings and projectiles, from their
-  own sprites. Their frames live in `weapons/_sprites/` and are packed into one atlas
-  when the game starts, kept in `weapons/_sprites.png` until the store changes, so
-  every casing and puff on screen is one texture and one batch whoever fired it.
-- A bullet's impact is the puff the weapon actually names (`A_FireBullets`'s fifth
-  argument), drawn as that actor's own sprite, when the mod defines one -
-  `weapon.json`'s `puff_actor` on the `fire_bullets` op. The engine's own generic
-  bullet-hole decal and particles are the fallback for a puff the mod leaves stock
-  (GZDoom's own) or names nothing, and for blood, which has no mod sprite. An
-  explosion already mid its own Death-state animation (`A_Explode` on a spawned
-  actor) no longer also gets the engine's explosion particles laid over it - the
-  mod's own frames are the explosion.
-- An actor without `+MISSILE` and without its own `Speed` (most shell casings - they
-  are launched by the spawner's velocity, not a property on themselves) never used
-  to reach its Death state on landing, so its tumble animation's own `Loop` ran
-  forever instead of settling into a rest pose. `wep.Actor.Missile` now carries the
-  flag the way `NoGravity` already did, and a spawned thing whose animation halts
-  (a `Stop`) before it has physically landed keeps falling rather than vanishing
-  mid-air - only stopping to be removed once it is both stopped and resting.
-- What the engine does not act on yet, all of it compiled and carried so that wiring it
-  up needs no re-migration:
-  - Monster behaviour (`monster_action`), the mod's own ACS scripts (`run_script`),
-    screen shake (`quake`), crosshairs, player flags, and everything about how a
-    player's own view beyond zoom. Velocity, fading, scaling, seeking and warping all
-    work.
-  - `give_to_target`, `radius_give` and `radius_thrust`: nothing has health or mass.
-- A spawned thing carries no physics body. It moves by arithmetic and stops at the
-  first solid block: a shell falls and settles on the floor, a missile that reaches a
-  wall goes to its Death state. A body would sweep the voxel world every frame for
-  every puff of smoke, and worse, the player would bump into ejected shell casings.
-- Homing works: A_SeekerMissile turns a missile towards what the player is looking at,
-  by no more than its own turn rate. There are no monsters to lock onto, so the
-  crosshair is the target. A_Warp puts a thing on whatever spawned it.
-- Spawned sprites do not cast shadows, the way Doom sprites never did. A hundred
-  drifting puffs that cast would have every light redraw its shadow map every frame.
-- An additive sprite's bloom now scales with its own alpha, not a flat value: a
-  script that draws its smoke at `alpha 0.06` wants a haze, and got the same bloom
-  a full-strength muzzle flash does, which is why gun smoke could read as a solid
-  glowing cloud up close.
-- No more than 192 spawned things are kept at once, oldest dropped first. That is
-  right for smoke and casings and would be wrong for a rocket in flight.
-- Damage is published as an event and plays the hit reaction. Nothing has health.
-- `A_PlaySound`'s attenuation is compiled but not acted on. The player can pan and
-  attenuate, but a weapon's own sounds come from where the listener is standing.
-- The muzzle flash rides the single tracked light slot, which projectile lights also
-  use, so firing while a bolt is in the air takes the light off the bolt.
-- 45 sprites and a handful of sounds are named by Final Doomer and shipped by neither
-  it nor doom2.wad. Those frames show nothing, and each weapon lists which under
-  `defaulted`.
+See `AGENTS.md` → "Keep the unused packages" for the rule. Not covered there:
 
-## Robustness
-
-- 97 `panic(` calls in non-test code, all of them at load or init. The three that were
-  reachable after startup are gone: `SetUniformAttr` on a uniform the program does not
-  have now logs once and returns false (it has 65 call sites and runs from the draw
-  path), `Assets.Image` returns the magenta placeholder like `Assets.Texture` already
-  did (the atlas picker decodes whatever the player drops on the window), and
-  `calculatePath` returns no path instead of panicking on a destination at another
-  height. What is left is structural - a missing shader or font index is not something
-  to carry on from.
-- 36 ignored errors (`x, _ := ...`) outside tests. The worst were in the asset loaders and are
-  fixed (`quads.Assets.open` panics with the file name); the rest are mostly GL and parsing.
-- `dungen/accretion.go:176` — `panic("first room cannot be placed")` instead of retrying or
-  reporting a failed generation. Unreachable today: nothing calls `dungen`.
-- ~~`go vet` warnings~~ **Clear.** The four unreachable `return`s after `panic` are gone and
-  the six `voxel.Int3` literals in `edit_map.go` are keyed. `go build`, `go vet` and
-  `go test` all run on every push through `.github/workflows/test.yml` - `go.yml` only fires
-  on release tags, which is too late to learn the tree is broken.
-
-## Dead or unused code
-
-**These stay. See `AGENTS.md`** - they have no callers today and are kept on purpose,
-because procedural generation, sound and the 3D texture path are all expected to be
-wired up later. Listing them here is a record of the fact, not a proposal.
-
-- `dungen/` (~2700 lines) — `loadDungeonMap` in `load_map.go` is never called; `main` always
-  loads the LDtk map. `geometry/jps.go` exists only to serve it. Wire it up or drop both.
-- `audio/` (~350 lines) — imported nowhere, but keeps `gopxl/beep` and `go-meltysynth` in
-  `go.mod`.
-- `geometry/cc.go` — connected components, no callers.
-- `quads/glhf/texture3d.go`, `quads/glhf/texture_array.go` (~340 lines) — no constructor call
-  outside the package. Kept for the planned texture-array voxel rendering in `optimize.txt`.
-- `quads/voxel/map.go` and `geometry/` still carry commented-out alternative implementations.
-
-## Physics notes
-
-- Objects never tunneled through voxels: the cell walk already covered the swept bounding box.
-  What the "CANNOT BE CALLED WITH HIGH-VELOCITY OBJECTS" comment was really about is cost - that
-  bounding box grows with the cube of the distance, so a 173 unit diagonal move cost 2.8ms in an
-  empty world. `Update` now splits a move into steps of at most one unit, which makes it linear
-  (the same move costs 0.5ms, a 1039 unit one 3ms).
-- Gravity is off by default, as it was before; `F` toggles it and now also tells the physics
-  system. With gravity on, the player keeps its vertical velocity between frames, jumps only
-  when `IsGrounded`, and falls no faster than `terminalVelocity`. With gravity off, space and C
-  fly straight up and down.
-- Velocity into a surface is removed on impact, so an object resting on the floor does not
-  build up speed, and sliding along a wall keeps the part of the movement that runs along it.
-
-- Sprites are billboards: their transform turns towards the camera, so physics deliberately
-  treats them as axis aligned boxes (`PhysicsComponent.HasOrientedCollider`). Only objects with
-  a transform of their own are swept as oriented boxes. `PhysicsComponent.OBB(camera)` stays
-  the camera-facing box, and is for picking only.
-- `CheckAABBVsOBB` inflates the oriented box by the reach of the moving box along each of its
-  axes and ray casts. The exact Minkowski sum of two boxes has bevelled edges, so a glancing
-  hit near an edge of a rotated box reports slightly early. Marked with a `ponytail:` comment.
-- `CheckOBBVsOBB` was removed: it composed the two transforms in the wrong order, had no
-  callers, and its test asserted a time of impact that only holds when the two centers meet.
-  Nothing in the engine sweeps a rotated box against another; the moving side is always an AABB.
+- `dungen/` (~2700 lines) — `loadDungeonMap` (`load_map.go:66`) is never
+  called; `main` always loads the LDtk map. `geometry/jps.go` exists only to
+  serve it.
+- `quads/glhf/texture_array.go` (~340 lines) — no constructor call outside the
+  package. Kept for the planned texture-array voxel rendering above.
+- `quads/voxel/map.go` and `geometry/` still carry commented-out alternative
+  implementations.
+- `dungen/accretion.go:176` — `panic("first room cannot be placed")` instead
+  of retrying or reporting a failed generation. Unreachable today since
+  nothing calls `dungen`.
 
 ## Structure
 
-- `Game` in `main.go` is still a god object, but the voxel editor's state is out of it:
-  `Editor` (`edit_map.go`) holds the brush, the selection, the pending selection action and
-  the spawn ghost, reached as `g.editor.*`. What is left mixed in is player, weapon, UI and
-  render-knob state. `lastHitResult` and `entityMenu` stayed on `Game` on purpose - gameplay
-  reads both.
-- `GlApplication` (`quads/gl_application.go`) — same problem one layer down, minus the light
-  list: `LightsUBO` owns the lights, the player's light and the tracked light now, and
-  `GlApplication` forwards to it.
-- `ldtk/ldtk.go` — 1174 lines of quicktype-generated schema, of which `load_map.go` uses five
-  types. Hand-written structs would be ~40 lines.
-- The nine `quads/shader_*.go` files (1320 lines) repeat near-identical uniform plumbing.
-  Only worth merging when two of them need the same change.
+- `Game` in `main.go` is still a god object outside the voxel-editor state
+  already split into `Editor` (`edit_map.go`). Player, weapon, UI and
+  render-knob state are still mixed in.
+- `ldtk/ldtk.go` — 1174 lines of quicktype-generated schema, of which
+  `load_map.go` uses five types. Hand-written structs would be ~40 lines.
+- The nine `quads/shader_*.go` files (1320 lines) repeat near-identical
+  uniform plumbing. Only worth merging when two of them need the same change.
 
 ## Tests
 
-Covered: `png_chunks`, `quads/voxel` (OBB sweep, DDA raycast incl. the range/miss cases),
-`zdwep` (broken, see above). `SpriteBatch.grow` has no automated test — it needs a GL context;
-it was verified by hand by shrinking a batch to one quad and watching it double.
-Untested and worth it next: `voxel.SweepAABB` / `CheckAABBVsOBB` (the physics core),
-`tpack` atlas pack/decode round-trip, `quads/assets.go` loaders against a `fstest.MapFS`.
+Covered: `png_chunks`, `quads/voxel` (OBB sweep, DDA raycast), instancing
+attribute locations, shadow cache. `zdwep/weapon_test.go` was deleted (called
+an old signature, read from a gitignored fixture dir) — the Doom atlas parser
+is uncovered again.
 
-## Measuring performance
+Untested and worth it: `voxel.SweepAABB`/`CheckAABBVsOBB` (the physics core),
+`tpack` atlas pack/decode round-trip, `quads/assets.go` loaders against a
+`fstest.MapFS`. `SpriteBatch.grow` needs a GL context so it's hand-verified
+only.
 
-`-stress` generates a map built to load the renderer, because the shipped test map draws 816
-triangles in 2-3 calls and nothing can be measured against it (see `findings.md`,
-Measurement). `go run . -stress` gives 128x128 tiles, a pillar every 6, about a thousand
-barrel sprites and 8 downward spotlights; `-stress-size`, `-stress-pillars`,
-`-stress-sprites` and `-stress-lights` move each knob. It is fully deterministic, so two
-builds can be compared on the same frame. The FPS average is in the window title.
+## Known limits
 
-The pillars are load bearing: a flat floor with four outer walls collapses into a handful of
-quads under greedy meshing and stresses nothing.
-
-Known limit: `PathfindingSystem.calculatePath` hardcodes a 64x64 path range, so pathfinding
-is wrong on a stress map bigger than that. Nothing in a stress run calls it.
+- `PathfindingSystem.calculatePath` (`quads/sys_pathfinder.go:90`) hardcodes a
+  64x64 path range — wrong on a map bigger than that.
+- 36 ignored errors (`x, _ := ...`) outside tests, mostly GL and parsing.
 
 ## Gameplay backlog
 
-`optimize.txt` is the running list (jumping/gravity/throwing, decals, textured particles,
-pickups, destructible props, hitscan vs projectile weapons, water, dialog and container UI,
-enemy movement, SDF fonts) plus the rendering optimizations (single draw call for statics,
-octree culling, instanced rendering, texture arrays instead of per-vertex texture indices).
+`optimize.txt` is the running list (jumping/gravity/throwing, decals,
+textured particles, pickups, destructible props, hitscan vs projectile
+weapons, water, dialog/container UI, enemy movement, SDF fonts, single draw
+call for statics, octree culling, instanced rendering, texture arrays).
 `design.txt` holds the texture atlas decisions.
-
-- Scenery (`scenery.go`, `MeshDrawer`) still draws one `glDrawElements` call per placed
-  piece - a table, a shelf, a stair step. It never moves once placed, the same way a chunk's
-  own voxel faces never move, so it belongs in the chunk mesh it stands in rather than as its
-  own `MeshComponent`: baked into the chunk's vertex buffer at load (or the first time
-  something spawns one), it costs the chunk's own single draw call instead of its own bind
-  and call. Worth doing once a map places enough scenery for `MeshDrawer.DrawnLastFrame`'s
-  draw-call count to show it - the test range's few dozen shelves do not yet.

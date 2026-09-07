@@ -8,8 +8,8 @@ import (
 	"github.com/memmaker/goray/geometry"
 )
 
-// The shadow test map. Its whole reason to exist is finding #22 in findings.md:
-// shadows showed up on walls and never on the floor, and neither the LDtk map nor
+// The shadow test map. Its whole reason to exist: shadows showed up on walls
+// and never on the floor, and neither the LDtk map nor
 // the stress map could settle why. The LDtk map's lights are horizontal at head
 // height, which turns every floor shadow into a grazing smear that looks the same
 // whether the bias is right or wrong; the stress map is a thousand barrels under
