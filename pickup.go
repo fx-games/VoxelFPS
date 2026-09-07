@@ -288,10 +288,11 @@ func (g *Game) spawnWeaponRange(corner mgl32.Vec3) {
 	}
 }
 
-// The shelves the range is built out of. The board heights are the top surfaces
-// tools/genshelves draws and scenery/shelves/scenery.json collides with; a thing
-// stands on one by standing at that height. shelfSlotBeside splits a board in
-// two, the weapon on the left of it and its ammo on the right.
+// The shelves the range is built out of. The board heights are the top
+// surfaces scenery/shelves/shelf.bbmodel models and scenery/shelves/scenery.json
+// collides with; a thing stands on one by standing at that height.
+// shelfSlotBeside splits a board in two, the weapon on the left of it and its
+// ammo on the right.
 const (
 	shelvesMeshName = "shelves"
 	shelfSlotBeside = 0.25

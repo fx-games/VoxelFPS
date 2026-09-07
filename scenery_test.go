@@ -25,17 +25,20 @@ func TestEverySceneryFolderLoadsAndHasItsMesh(t *testing.T) {
 		if piece.Name == "" {
 			t.Errorf("%s has no name", id)
 		}
-		mesh := filepath.Join(sceneryDir, id, "mesh.glb")
-		if _, err := os.Stat(mesh); err != nil {
-			t.Errorf("%s: %v", id, err)
+		gltf := filepath.Join(sceneryDir, id, "mesh.gltf")
+		glb := filepath.Join(sceneryDir, id, "mesh.glb")
+		if _, err := os.Stat(gltf); err != nil {
+			if _, err := os.Stat(glb); err != nil {
+				t.Errorf("%s: no mesh.gltf or mesh.glb", id)
+			}
 		}
 	}
 }
 
 // The weapon range stands a gun on a shelf by standing it at the height of a
-// board, and the boards are boxes in scenery/shelves/scenery.json that
-// tools/genshelves draws. Nothing but these numbers links the three, so when
-// they drift the guns hang in the air or sink into the wood.
+// board, and the boards are boxes in scenery/shelves/scenery.json that match
+// scenery/shelves/shelf.bbmodel by hand. Nothing but these numbers links the
+// three, so when they drift the guns hang in the air or sink into the wood.
 func TestThingsStandOnTheShelfsOwnBoards(t *testing.T) {
 	library, err := loadScenery(sceneryDir)
 	if err != nil {

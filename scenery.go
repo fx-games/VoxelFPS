@@ -38,7 +38,7 @@ type Scenery struct {
 // sceneryDir is the folder of folders, one to a piece.
 const sceneryDir = "scenery"
 
-// sceneryFile is what every one of them holds beside its mesh.glb.
+// sceneryFile is what every one of them holds beside its mesh.glb or mesh.gltf.
 const sceneryFile = "scenery.json"
 
 // loadScenery reads every folder under dir. A folder without a scenery.json is
@@ -88,11 +88,18 @@ func (s *Scenery) colliders(piece *quads.GameObject) []*quads.PhysicsComponent {
 }
 
 // meshFile is where a named model is. Scenery keeps its own beside its
-// scenery.json; everything else - the torch, the cube, the debug meshes - is
-// still a bare file under assets/meshes.
+// scenery.json, as mesh.gltf (Blockbench's own export, JSON with embedded
+// buffers/images) if the piece has one, else the older generated mesh.glb -
+// gltf.Open sniffs the content either way, so the extension only has to be
+// honest, not load-bearing. Everything else - the torch, the cube, the debug
+// meshes - is still a bare file under assets/meshes.
 func (g *Game) meshFile(name string) string {
 	if _, isScenery := g.scenery[name]; isScenery {
-		return filepath.Join(sceneryDir, name, "mesh.glb")
+		dir := filepath.Join(sceneryDir, name)
+		if _, err := os.Stat(filepath.Join(dir, "mesh.gltf")); err == nil {
+			return filepath.Join(dir, "mesh.gltf")
+		}
+		return filepath.Join(dir, "mesh.glb")
 	}
 	return filepath.Join("assets", "meshes", name+".glb")
 }

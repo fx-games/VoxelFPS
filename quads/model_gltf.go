@@ -135,9 +135,38 @@ func LoadGLTF(filename string, animationMap map[string]string, forcedVertexColor
 			}
 		}
 	}
-	rootNode := buildNodeHierarchy(doc, flatNodes, defaultScene.Nodes[0], result.getSamplerFrames)
-	result.RootNode = rootNode
+	result.RootNode = buildSceneRoot(doc, flatNodes, defaultScene, result.getSamplerFrames)
 	return result
+}
+
+// buildSceneRoot builds every node the scene lists at the top level, not just
+// the first. A single exported mesh only ever has one - Blockbench's own
+// generator-style output (genstairs, the old genshelves) merges everything
+// into one primitive - but Blockbench's own exporter puts every ungrouped
+// outliner element in as its own sibling scene node, and a model authored as
+// several loose cubes silently rendered as just the first of them until this
+// wrapped the rest in a synthetic identity root: nothing else in this file
+// walked past defaultScene.Nodes[0], so the missing pieces produced no error
+// at all, just an incomplete model with a collider bigger than what showed up.
+func buildSceneRoot(doc *gltf.Document, flatNodes []*MeshNode, defaultScene *gltf.Scene, samplerFrameSource func(animationName string) [][]float32) *MeshNode {
+	if len(defaultScene.Nodes) == 1 {
+		return buildNodeHierarchy(doc, flatNodes, defaultScene.Nodes[0], samplerFrameSource)
+	}
+	println(fmt.Sprintf("[loadGLTF] scene has %d top-level nodes, not 1 - wrapping them under a synthetic root (group everything under one node on export to avoid this)", len(defaultScene.Nodes)))
+	root := &MeshNode{
+		name:         "scene_root",
+		animations:   make(map[string]*SimpleAnimationData),
+		quatRotation: mgl32.QuatIdent(),
+		translation:  mgl32.Vec3{0, 0, 0},
+		scale:        mgl32.Vec3{1, 1, 1},
+	}
+	root.SetSamplerSource(samplerFrameSource)
+	for _, nodeIndex := range defaultScene.Nodes {
+		child := buildNodeHierarchy(doc, flatNodes, nodeIndex, samplerFrameSource)
+		child.parent = root
+		root.children = append(root.children, child)
+	}
+	return root
 }
 
 func tryLoadTextures(doc *gltf.Document) []*glhf.Texture {

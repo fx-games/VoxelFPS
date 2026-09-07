@@ -247,7 +247,9 @@ itself is pickup-specific.
 ## Where the furniture comes from
 
 `scenery/` is the weapons folder's shape applied to what a room is furnished
-with: one folder per piece, holding `mesh.glb` and a `scenery.json` (`name`
+with: one folder per piece, holding a mesh (`mesh.gltf` or the older
+`mesh.glb` - `gltf.Open` sniffs the actual format from the file's own bytes,
+not the extension, so both load the same way) and a `scenery.json` (`name`
 and `colliders`). There is no list of pieces in Go and there must not be one -
 a map entity's `MeshName` and the editor's `Place Scenery` menu both go
 through `Game.scenery`, whatever `loadScenery` found on disk. Only the JSON is
@@ -264,11 +266,78 @@ wants. A piece that names its own - stairs, shelves - replaces that:
   by the pickup beam or by walking into it. The colliders are the two
   uprights and the three boards, leaving the middle open.
 
-`tools/genstairs` and `tools/genshelves` draw the same numbers their JSON
-collides with - generated because they are boxes, and because the stair rise
-has to stay under the physics system's step height.
-`TestThingsStandOnTheShelfsOwnBoards` checks the weapon range stands things at
-heights the shelf actually has a board at.
+`tools/genstairs` draws the same numbers its JSON collides with - generated
+because it is boxes, and because the stair rise has to stay under the physics
+system's step height. The shelves are modeled by hand instead, in
+`scenery/shelves/shelf.bbmodel` (kept beside the exported `mesh.gltf` for
+later edits) - see "Modeling scenery in Blockbench" below for how its scale
+and texture stay exact. `TestThingsStandOnTheShelfsOwnBoards` checks the
+weapon range stands things at heights the shelf actually has a board at.
+
+## Modeling scenery in Blockbench
+
+`scenery/shelves` was modeled and textured in Blockbench through the
+`blockbench-mcp-plugin` MCP server rather than generated, to see what that
+workflow costs. What it takes to get a correct, game-ready model out of it:
+
+- **Project format `free` exports 16 Blockbench units to 1 world unit (1
+  voxel).** Proven by placing a 16x16x16 cube and reading back the exported
+  glTF: its POSITION accessor bounds are `[0,1]`. Nothing in the UI states
+  this ratio - it has to be measured once per format. So a part that must be
+  exactly one voxel wide is built 16 units wide, not 1.
+- **The `gltf` export codec's MCP tool (`export_model`) silently returns an
+  empty document (`"{}"`) for this plugin version.** The compiler itself
+  works - calling `Codecs.gltf.compile()` directly via `risky_eval` returns
+  the real JSON (with embedded base64 buffers and textures, self-contained,
+  no external `.bin`/`.png`). Use that path and write the result to a file
+  with `Write`/`patch` rather than trusting `export_model`'s `content` field
+  for this codec.
+- **A cube's per-face auto UV stretches the whole texture over that face**
+  (confirmed: a 16x16x16 cube's OBJ export puts `vt 0 0 / 1 0 / 1 1 / 0 1` on
+  every face regardless of that face's real proportions). Fine for a cube,
+  wrong for a plank - the old generated shelf used this and squashed its
+  texture on every non-square face. Fix: give `place_cube`'s `faces` a
+  per-face `uv: [x0, y0, x1, y1]` in texture pixels, sized to match that
+  face's real-world proportions at one shared pixel-per-unit density, so nothing
+  stretches and nothing needs to tile.
+- **Tiling a small texture across many faces does not work in this engine.**
+  glTF samplers Blockbench exports are hardcoded `CLAMP_TO_EDGE`, and the
+  engine's own texture loader (`quads/glhf/texture2d.go`) hardcodes
+  `CLAMP_TO_BORDER` regardless of what the sampler says - a UV rect larger
+  than the texture just smears the edge pixel instead of repeating. So reuse
+  is done by pointing several faces' UV rects at the same region of one
+  texture atlas, not by tiling a swatch.
+- **`create_texture`'s `width`/`height` are silently ignored when a
+  `fill_color` is also given** (tested against this plugin version - the
+  texture comes back 16x16 regardless of the requested size). Work around it
+  with `risky_eval`: build a blank canvas at the real size with the DOM
+  Canvas API, then `new Texture({name, width, height}).fromDataURL(canvas.toDataURL()).add()`.
+  Painting tools (`paint_with_brush`, `paint_fill_tool`) work fine once the
+  texture is actually the right size - a symptom worth checking for is a
+  texture that looks unaffected by painting at high pixel coordinates.
+- Do the atlas layout in real units up front (list every distinct face
+  rectangle by its world size times the chosen pixel density) - reusing one
+  rectangle for several faces (both uprights, all three boards) keeps the
+  atlas small and the model visually consistent.
+- **The single biggest trap: Blockbench's exporter puts every top-level
+  element or group in the scene as a separate *sibling* node.** Five cubes
+  placed loose in the outliner export as five sibling `scene.nodes` entries,
+  not one node with five children. Group everything under one Blockbench
+  group before exporting (`add_group`, then `cube.addTo(group)` via
+  `risky_eval` if the cubes already exist) so the export has exactly one root
+  node with the cubes as its `children` - check this by reading the compiled
+  JSON's `scene.nodes`, which should be `[N]` with a single index. This used
+  to be silent and fatal: `quads/model_gltf.go`'s `LoadGLTF` only walked
+  `scene.nodes[0]` and never looked at the rest, so an ungrouped export
+  quietly rendered as just its first element - and worse, the piece's own
+  collider (from `scenery.json`) still spawned and still cast a shadow
+  regardless, so it read as "mesh missing" rather than "mesh broken", the more
+  misleading failure to debug. `LoadGLTF` now wraps every top-level node under
+  a synthetic root (`buildSceneRoot`) and prints a `[loadGLTF] scene has N
+  top-level nodes` warning when it has to, so a stray ungrouped export fails
+  loudly instead of silently now - but grouping on export is still the right
+  habit, both because it's a warning worth not seeing and because a single
+  group gives Blockbench's own outliner one thing to select and move.
 
 **A piece of scenery is one thing**, however many boxes it collides as: one
 model, one GameObject, one name. `Scenery.colliders` binds its extra boxes to
