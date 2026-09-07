@@ -41,6 +41,10 @@ func main() {
 	scan := flag.Bool("scan", false, "lower every actor in the mod and report the whole vocabulary it needs")
 	prune := flag.Bool("prune", false, "delete shared actor files no weapon points at any more, and stop")
 	measure := flag.Bool("measure", false, "measure every installed weapon's pickup pictures into its weapon.json, and stop")
+	forceItem := flag.String("force-item", "", "compile as if this inventory item were always held - for pulling a mod's own alternate-mode state graph (gated behind a flag only its own ACS or CVARINFO default would set) out as its own weapon, rather than leaving it dead weight nothing here ever reaches. Named weapons only, not -all")
+	dropUnreachable := flag.Bool("drop-unreachable", false, "after compiling (and after -force-item, if given), remove every state nothing can reach at all - unlike PruneDeadStates this is unscoped, for a weapon that just had one of its own modes forced on or off for good. Named weapons only")
+	renameID := flag.String("rename-id", "", "use this id instead of the one the actor's own tag would give (still gets -prefix). Named weapons only")
+	renameTag := flag.String("rename-tag", "", "use this display name instead of the actor's own DECORATE Tag. Named weapons only")
 	flag.Parse()
 
 	if *measure {
@@ -164,7 +168,24 @@ func main() {
 		result.Weapon.Provenance.Revision = *revision
 		result.Weapon.Provenance.Credit = credit(src)
 
-		result.Weapon.ID = *prefix + uniqueID(taken, result.Weapon.ID, name)
+		if !*all && *forceItem != "" {
+			result.ForceItemGiven(*forceItem)
+			fmt.Fprintf(os.Stderr, "%s: compiled as if %q were always held\n", name, *forceItem)
+		}
+		if !*all && *dropUnreachable {
+			if dropped := result.DropUnreachableStates(); dropped > 0 {
+				fmt.Fprintf(os.Stderr, "%s: dropped %d states nothing can reach\n", name, dropped)
+			}
+		}
+		if !*all && *renameTag != "" {
+			result.Weapon.Tag = *renameTag
+		}
+
+		id := result.Weapon.ID
+		if !*all && *renameID != "" {
+			id = *renameID
+		}
+		result.Weapon.ID = *prefix + uniqueID(taken, id, name)
 
 		if collapsed := assets.CollapsedViews(result); len(collapsed) > 0 {
 			fmt.Fprintf(os.Stderr, "%s: only one view of %s\n",

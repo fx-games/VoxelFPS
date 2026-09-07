@@ -999,7 +999,18 @@ func (r *Result) PruneDeadStates() (droppedSteps int) {
 		remove[i] = prunable[i] && !reachable[i]
 	}
 	rescueStillNamedSteps(machine, remove)
+	return compactStates(r, remove)
+}
 
+// compactStates drops every step remove marks, and the labels that named
+// them, from the weapon's own state machine - the mechanics PruneDeadStates
+// and SplitOnItem both need once they have decided what should go. A
+// jump_if_inventory left aimed at a step this removes is stripped from its
+// own step (wep/load.go rejects a jump with nowhere to go); nothing else
+// should still name a removed step, or the caller's own remove slice was
+// wrong.
+func compactStates(r *Result, remove []bool) (droppedSteps int) {
+	machine := &r.Weapon.States
 	newIndex := make([]int, len(machine.Steps))
 	newSteps := make([]wep.Step, 0, len(machine.Steps))
 	for i, step := range machine.Steps {
@@ -1028,6 +1039,40 @@ func (r *Result) PruneDeadStates() (droppedSteps int) {
 	machine.Labels = newLabels
 	r.Sprites = spritesUsedBy(newSteps)
 	return droppedSteps
+}
+
+// ForceItemGiven rewrites every jump_if_inventory on the named item into an
+// unconditional jump, as if the item were always held. It is how a mod's own
+// alternate-mode state graph - gated behind an inventory flag only its own
+// ACS or CVARINFO default would ever set, and so permanently off in an
+// engine that runs neither - is pulled out as a standalone weapon rather
+// than left as dead weight in the one the flag never turns on.
+func (r *Result) ForceItemGiven(item string) {
+	item = strings.ToLower(item)
+	machine := &r.Weapon.States
+	for i := range machine.Steps {
+		for j := range machine.Steps[i].Ops {
+			op := &machine.Steps[i].Ops[j]
+			if op.Op == wep.OpJumpIfInventory && strings.ToLower(op.Item) == item {
+				op.Op = wep.OpGoto
+				op.Item = ""
+			}
+		}
+	}
+}
+
+// DropUnreachableStates removes every step reachableSteps cannot reach at
+// all - unscoped, unlike PruneDeadStates, because this is for a weapon about
+// to become its own file: nothing else will ever read the parts an edit like
+// ForceItemGiven made unreachable, so there is no "leave it for later" case
+// to preserve.
+func (r *Result) DropUnreachableStates() int {
+	reachable := reachableSteps(r.Weapon)
+	remove := make([]bool, len(reachable))
+	for i := range remove {
+		remove[i] = !reachable[i]
+	}
+	return compactStates(r, remove)
 }
 
 // withoutDeadJumps drops an op whose only reason to exist was reaching a step
