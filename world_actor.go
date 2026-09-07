@@ -71,6 +71,10 @@ type WorldActor struct {
 	// own CHAN_WEAPON must not stop the gun that spawned it playing its shot
 	// on the player's. Zero is the player, so these start at one.
 	origin int
+	// soundScope is the weapon that spawned this, whose sounds it plays -
+	// see cueKey in the audio package. A rocket plays its own cues by the
+	// launcher's ID even once the launcher is no longer the weapon in hand.
+	soundScope string
 }
 
 // worldUnitsPerDoomUnit converts the numbers a script writes into ours. Doom
@@ -165,12 +169,13 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 
 	g.lastActorOrigin++
 	live := &WorldActor{
-		origin:  g.lastActorOrigin,
-		data:    actor,
-		cursor:  wep.NewCursor(&actor.States, label),
-		runtime: &wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}, Vars: map[string]float64{}, Rand: weapon.runtime.Rand},
-		object:  object,
-		sprite:  sprite,
+		origin:     g.lastActorOrigin,
+		soundScope: weapon.Data.ID,
+		data:       actor,
+		cursor:     wep.NewCursor(&actor.States, label),
+		runtime:    &wep.Runtime{Inventory: wep.Inventory{}, Caps: wep.Caps{}, Vars: map[string]float64{}, Rand: weapon.runtime.Rand},
+		object:     object,
+		sprite:     sprite,
 		scale: mgl32.Vec2{
 			float32(actor.Render.Scale[0]),
 			float32(actor.Render.Scale[1]),
@@ -189,7 +194,7 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 	// fired: A_SpawnItem drops a thing into the world and makes no such noise.
 	if op.Op == wep.OpFireProjectile && actor.SeeSound != "" {
 		g.playSoundAt(wep.Op{Sound: actor.SeeSound, Volume: 1, Pitch: 1, Channel: seeSoundChannel},
-			position, live.origin)
+			position, live.origin, live.soundScope)
 	}
 	g.worldActors = append(g.worldActors, live)
 	g.capWorldActors()
@@ -849,7 +854,7 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 func (live *WorldActor) apply(g *Game, op wep.Op) {
 	switch op.Op {
 	case wep.OpPlaySound:
-		g.playSoundAt(op, live.object.Transform().GetPosition(), live.origin)
+		g.playSoundAt(op, live.object.Transform().GetPosition(), live.origin, live.soundScope)
 	case wep.OpExplode:
 		g.explodeAt(live.object.Transform().GetPosition(), op)
 	case wep.OpSetAlpha:

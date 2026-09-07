@@ -491,6 +491,21 @@ func (g *Game) benchmarkLabel() string {
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
+	// A weapon's sounds stay loaded from the moment it is given out until the
+	// level that gave it out is gone - this is that moment. Ownership itself
+	// lives on the weapon, not the map, so ownership survives a reload and the
+	// sounds are loaded straight back for whatever the player is still
+	// carrying, rather than staying gone until the next pickup that never
+	// comes because it is already owned.
+	if g.audio != nil {
+		g.audio.UnloadAllCues()
+		for _, weapon := range g.weapons {
+			if weapon.owned {
+				g.loadWeaponSounds(weapon)
+			}
+		}
+	}
+
 	g.Sprites.Clear()
 	g.Meshes.Clear()
 	// Their sprites went with Sprites.Clear, and the map puts the range back.

@@ -69,22 +69,34 @@ func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlas
 	return weapon
 }
 
-// load reads the weapon's atlas, once, and its sounds every time: the atlas
-// is kept for the life of the game, but Unequip gives the sounds back on
-// every switch, so they need reloading on every re-equip or a weapon held a
-// second time stays mute for good.
+// load reads the weapon's atlas, once, and keeps it for the life of the game.
+// Its sounds are not this function's business - see give.
 func (w *Weapon) load() {
-	if w.Atlas == nil {
-		if debugWeapon {
-			started := time.Now()
-			defer func() { log.Printf("[weapon] %s loaded in %v", w.Data.ID, time.Since(started)) }()
-		}
-		w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
-		w.spriteIndex = make(map[string]int)
-		for i := 0; i <= w.Atlas.LastValidIndex(); i++ {
-			w.spriteIndex[w.Atlas.NameOfFrame(i)] = i
-		}
+	if w.Atlas != nil {
+		return
 	}
+	if debugWeapon {
+		started := time.Now()
+		defer func() { log.Printf("[weapon] %s loaded in %v", w.Data.ID, time.Since(started)) }()
+	}
+	w.Atlas = w.game.LoadPackedAtlasWithBatch(w.atlasPath)
+	w.spriteIndex = make(map[string]int)
+	for i := 0; i <= w.Atlas.LastValidIndex(); i++ {
+		w.spriteIndex[w.Atlas.NameOfFrame(i)] = i
+	}
+}
+
+// give hands the weapon to whoever is about to carry it - a pickup for the
+// player today, however an NPC comes to one tomorrow - loading its sounds the
+// first time and never again on its own account: they stay loaded, alongside
+// every other weapon anyone is carrying, until the level that handed them out
+// is gone. A second give is a weapon already owned and does nothing, so a
+// call site never has to check first.
+func (w *Weapon) give() {
+	if w.owned {
+		return
+	}
+	w.owned = true
 	w.game.loadWeaponSounds(w)
 }
 
@@ -101,23 +113,14 @@ func (w *Weapon) Equip() {
 	w.cursor.Goto("Ready")
 }
 
-// Unequip stops the overlay and anything the weapon was still playing, and
-// gives back what it was holding. Several of these guns hum while they are
-// held, on a looping sound their script starts and never stops, so putting one
-// away has to stop that.
-//
-// It also gives back the weapon's sounds. A migrated mod brings well over a
-// hundred weapons and a quarter of a gigabyte of sound between them, which
-// decodes to several times that; kept, a player who cycles through the whole
-// folder ends up carrying every weapon's sounds at once. Only the weapon in
-// hand can make a sound, so only its cues are kept - and because the cues are
-// named per weapon folder, two weapons with a sound of the same name no longer
-// have to be the same sound.
+// Unequip stops the overlay and anything the weapon was still playing.
+// Several of these guns hum while they are held, on a looping sound their
+// script starts and never stops, so putting one away has to stop that. Its
+// sounds stay loaded - see give - so putting it away is not what silences it.
 func (w *Weapon) Unequip() {
 	w.endFlash()
 	if w.game != nil && w.game.audio != nil {
 		w.game.audio.StopChannels()
-		w.game.audio.UnloadAllCues()
 	}
 }
 
@@ -445,7 +448,9 @@ func (g *Game) LoadWeapons(dir string) error {
 	// one of these mods is the fists and the pistol. Everything else is picked
 	// up, and until something is, the player is empty handed.
 	for _, weapon := range g.weapons {
-		weapon.owned = weapon.Data.Starting
+		if weapon.Data.Starting {
+			weapon.give()
+		}
 	}
 	if starting := g.startingInHand(); starting >= 0 {
 		g.selectWeapon(starting)
@@ -454,12 +459,12 @@ func (g *Game) LoadWeapons(dir string) error {
 	// looking at a weapon: -weapon hands over the one it names, and -cycle
 	// walks the whole folder, which means holding it.
 	if index, known := g.weaponByID[g.startWeapon]; known {
-		g.weapons[index].owned = true
+		g.weapons[index].give()
 		g.selectWeapon(index)
 	}
 	if g.autoCycle > 0 {
 		for _, weapon := range g.weapons {
-			weapon.owned = true
+			weapon.give()
 		}
 		if g.currentWeapon() == nil {
 			g.selectWeapon(0)
@@ -504,15 +509,17 @@ func (g *Game) loadWeaponSounds(weapon *Weapon) {
 	}
 	// Cue names are the names the ops play by, which the migration wrote the
 	// folder to match, so no mapping is needed here. Two weapons that play the
-	// same ZDoom sound share the cue, which is what sharing a name means.
+	// same ZDoom sound at the same relative path get the same cue; two that
+	// don't are kept apart by the weapon's own ID, which is the scope every
+	// cue of its is loaded and played under - see cueKey in the audio package.
 	//
 	// A sound that will not decode is reported and the weapon keeps working;
 	// what makes a weapon refuse to load is checked at load, and a broken cue
 	// is not worth taking the game down for while it is being played.
-	if err := g.audio.LoadCueTree(weapon.soundsPath); err != nil {
+	if err := g.audio.LoadCueTree(weapon.Data.ID, weapon.soundsPath); err != nil {
 		log.Printf("[weapons] %s: %v", weapon.Data.ID, err)
 	}
-	g.audio.SoundsLoaded()
+	g.audio.SoundsLoaded(weapon.Data.ID)
 }
 
 // audioSampleRate is what the speaker runs at.
@@ -595,7 +602,7 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 		g.setWeaponZoom(weapon, op)
 
 	case wep.OpPlaySound:
-		g.playWeaponSound(op)
+		g.playWeaponSound(weapon, op)
 	case wep.OpSpin:
 		// The weapon's script walked a circle of frames that cost no time. It
 		// keeps running - a gun that goes invisible is worse than one that
@@ -710,13 +717,14 @@ func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
 }
 
 // playSoundAt plays a cue from somewhere in the world, panned and quietened by
-// where that is relative to the listener.
-func (g *Game) playSoundAt(op wep.Op, position mgl32.Vec3, origin int) {
+// where that is relative to the listener. scope is whose cue it is - see
+// cueKey in the audio package.
+func (g *Game) playSoundAt(op wep.Op, position mgl32.Vec3, origin int, scope string) {
 	if g.audio == nil {
 		return
 	}
 	pan, volume := g.listenerFor(position, op.Volume)
-	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
+	g.audio.PlayCueAt(scope, op.Sound, audio.CueOptions{
 		Volume: volume, Pitch: op.Pitch, Looping: op.Looping,
 		Channel: op.Channel, Pan: pan, Origin: origin,
 	})
@@ -891,14 +899,14 @@ func randomSpan(random *rand.Rand) float64 {
 	return random.Float64()*2 - 1
 }
 
-func (g *Game) playWeaponSound(op wep.Op) {
+func (g *Game) playWeaponSound(weapon *Weapon, op wep.Op) {
 	if g.audio == nil {
 		return
 	}
 	// A weapon's own sounds come from where the listener is standing, so there
 	// is nothing to pan. What a spawned actor plays goes through playSoundAt,
 	// which does.
-	g.audio.PlayCueAt(op.Sound, audio.CueOptions{
+	g.audio.PlayCueAt(weapon.Data.ID, op.Sound, audio.CueOptions{
 		Volume:  op.Volume,
 		Pitch:   op.Pitch,
 		Looping: op.Looping,

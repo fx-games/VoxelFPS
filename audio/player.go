@@ -19,16 +19,19 @@ import (
 )
 
 type Player struct {
-	loadedCues map[string][]*beep.Buffer
+	loadedCues map[cueKey][]*beep.Buffer
 	// cueFiles is what a cue could be played from, filled by LoadCueTree
 	// without reading any of it. Decoding a weapon's whole sound folder as it
 	// comes into the player's hands cost a third of a second of silence on
 	// every switch, and most of it is never played: a mod ships several takes
 	// of every sound and a dozen sounds the weapon only makes underwater.
-	cueFiles      map[string][]string
+	cueFiles      map[cueKey][]string
 	currentStream beep.StreamSeekCloser
-	cuesLoaded    bool
-	disabled      bool
+	// loadedScopes is which scopes have been through LoadCueTree, so a cue
+	// asked for before anything has loaded - or for a scope nobody gave the
+	// player - answers with silence instead of a half-filled cueFiles map.
+	loadedScopes map[string]bool
+	disabled     bool
 	// channels holds one mixer per sound channel, keyed by the thing making
 	// the sound as well as the channel number. ZDoom's channels belong to an
 	// origin - a new sound on the player's CHAN_WEAPON replaces the player's
@@ -45,6 +48,17 @@ type Player struct {
 type channelKey struct {
 	origin int
 	number int
+}
+
+// cueKey names one cue: which weapon it belongs to and the name its own ops
+// play it by. Two weapons can and do ship a file at the same relative path -
+// a dozen of BDCE's guns each have their own Shotgun/Reload.ogg - and every
+// weapon the player is carrying now has its sounds loaded at once rather
+// than just the one in hand, so the scope has to be part of the key or the
+// second weapon loaded silently overwrites the first one's sound.
+type cueKey struct {
+	scope string
+	name  string
 }
 
 // channel is one origin's channel: the mixer it plays through, and what is on
@@ -136,37 +150,14 @@ func (p *Player) StartStream(streamer beep.StreamSeekCloser, shouldLoop bool) {
 }
 func (p *Player) UnloadAllCues() {
 	p.stopAndCloseStream()
-	p.loadedCues = make(map[string][]*beep.Buffer)
-	p.cueFiles = make(map[string][]string)
+	p.loadedCues = make(map[cueKey][]*beep.Buffer)
+	p.cueFiles = make(map[cueKey][]string)
+	p.loadedScopes = make(map[string]bool)
 }
 
 func (p *Player) stopAndCloseStream() {
 	if p.currentStream != nil {
 		p.currentStream.Close()
-	}
-}
-func (p *Player) LoadCuesFromDir(dirName string, cuePrefix string) {
-	if p.disabled {
-		return
-	}
-	cueBase := path.Base(dirName)
-	if cuePrefix != "" {
-		cueBase = fmt.Sprintf("%s/%s", cuePrefix, cueBase)
-	}
-	entries, _ := os.ReadDir(dirName)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			cueName := fmt.Sprintf("%s/%s", cueBase, entry.Name())
-			p.loadAllCuesInDir(path.Join(dirName, entry.Name()), cueName)
-		} else {
-			extension := path.Ext(entry.Name())
-			if strings.ToLower(extension) != ".ogg" {
-				continue
-			}
-			withoutExt := entry.Name()[:len(entry.Name())-len(extension)]
-			cueName := fmt.Sprintf("%s/%s", cueBase, withoutExt)
-			p.loadCue(path.Join(dirName, entry.Name()), cueName)
-		}
 	}
 }
 
@@ -175,9 +166,8 @@ func (p *Player) LoadCuesFromDir(dirName string, cuePrefix string) {
 // names sounds, so a cue loaded from sounds/hellboundshotgun/fire.ogg answers to
 // "hellboundshotgun/fire", which is the name the script plays it by.
 //
-// LoadCuesFromDir names cues after the directory it was pointed at, which puts
-// an extra segment on the front; this does not.
-func (p *Player) LoadCueTree(root string) error {
+// scope keeps this tree's cues apart from every other weapon's: see cueKey.
+func (p *Player) LoadCueTree(scope, root string) error {
 	if p.disabled {
 		return nil
 	}
@@ -200,27 +190,29 @@ func (p *Player) LoadCueTree(root string) error {
 		if tilde := strings.LastIndexByte(cue, '~'); tilde >= 0 {
 			cue = cue[:tilde]
 		}
-		p.cueFiles[cue] = append(p.cueFiles[cue], name)
+		key := cueKey{scope, cue}
+		p.cueFiles[key] = append(p.cueFiles[key], name)
 		return nil
 	})
 }
 
 // buffers are the decoded takes of a cue, decoded the first time it is played
 // and kept until the cues are unloaded.
-func (p *Player) buffers(name string) []*beep.Buffer {
-	if loaded, done := p.loadedCues[name]; done {
+func (p *Player) buffers(scope, name string) []*beep.Buffer {
+	key := cueKey{scope, name}
+	if loaded, done := p.loadedCues[key]; done {
 		return loaded
 	}
-	for _, file := range p.cueFiles[name] {
-		if err := p.loadCue(file, name); err != nil {
+	for _, file := range p.cueFiles[key] {
+		if err := p.loadCue(file, scope, name); err != nil {
 			log.Printf("[audio] %s: %v", file, err)
 		}
 	}
-	if p.loadedCues[name] == nil {
+	if p.loadedCues[key] == nil {
 		// Remembered as nothing rather than looked for again on every shot.
-		p.loadedCues[name] = []*beep.Buffer{}
+		p.loadedCues[key] = []*beep.Buffer{}
 	}
-	return p.loadedCues[name]
+	return p.loadedCues[key]
 }
 
 // endWhenSilent stops a streamer that has run out of file but not out of
@@ -237,7 +229,7 @@ func (s endWhenSilent) Stream(samples [][2]float64) (int, bool) {
 	return n, ok && n > 0
 }
 
-func (p *Player) loadCue(fileName string, cueName string) error {
+func (p *Player) loadCue(fileName string, scope string, cueName string) error {
 	if p.disabled {
 		return nil
 	}
@@ -279,21 +271,22 @@ func (p *Player) loadCue(fileName string, cueName string) error {
 		return fmt.Errorf("%s decoded to no samples at all", fileName)
 	}
 
-	if _, exists := p.loadedCues[cueName]; !exists {
-		p.loadedCues[cueName] = make([]*beep.Buffer, 0)
+	key := cueKey{scope, cueName}
+	if _, exists := p.loadedCues[key]; !exists {
+		p.loadedCues[key] = make([]*beep.Buffer, 0)
 	}
-	p.loadedCues[cueName] = append(p.loadedCues[cueName], buffer)
+	p.loadedCues[key] = append(p.loadedCues[key], buffer)
 	return nil
 }
 
-func (p *Player) PlayCue(name string) {
+func (p *Player) PlayCue(scope, name string) {
 	if p.disabled {
 		return
 	}
-	if !p.cuesLoaded {
+	if !p.loadedScopes[scope] {
 		return
 	}
-	buffers := p.buffers(name)
+	buffers := p.buffers(scope, name)
 	if len(buffers) == 0 {
 		return
 	}
@@ -319,21 +312,10 @@ func (p *Player) init(sampleRateInt int32) {
 	}
 }
 
-func (p *Player) loadAllCuesInDir(dirName string, cueName string) {
-	if p.disabled {
-		return
-	}
-	entries, _ := os.ReadDir(dirName)
-	for _, entry := range entries {
-		if strings.ToLower(path.Ext(entry.Name())) != ".ogg" {
-			continue
-		}
-		p.loadCue(path.Join(dirName, entry.Name()), cueName)
-	}
-}
-
-func (p *Player) SoundsLoaded() {
-	p.cuesLoaded = true
+// SoundsLoaded marks a scope's cues as ready to play, once LoadCueTree has
+// filled in what they could come from.
+func (p *Player) SoundsLoaded(scope string) {
+	p.loadedScopes[scope] = true
 }
 
 // CueOptions is how a cue should sound: as loud, as high and as far to one side
@@ -365,11 +347,12 @@ type CueOptions struct {
 var debugSound = os.Getenv("DEBUG_SOUND") != ""
 
 // PlayCueAt plays a cue with volume, pitch, panning and channel behaviour.
-func (p *Player) PlayCueAt(name string, options CueOptions) {
-	if p.disabled || !p.cuesLoaded {
+// scope is whose sounds it comes from - see cueKey.
+func (p *Player) PlayCueAt(scope, name string, options CueOptions) {
+	if p.disabled || !p.loadedScopes[scope] {
 		return
 	}
-	buffers := p.buffers(name)
+	buffers := p.buffers(scope, name)
 	if debugSound {
 		log.Printf("[sound] %-34s takes=%d origin=%d chan=%d vol=%.2f pitch=%.2f loop=%v",
 			name, len(buffers), options.Origin, options.Channel, options.Volume,

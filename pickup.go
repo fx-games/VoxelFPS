@@ -224,7 +224,7 @@ func (g *Game) take(pickup *Pickup) {
 		if weapon.owned {
 			return
 		}
-		weapon.owned = true
+		weapon.give()
 		g.Toast("Picked up " + weapon.DisplayName())
 		if g.currentWeapon() == nil {
 			g.selectWeapon(g.weaponByID[weapon.Data.ID])
