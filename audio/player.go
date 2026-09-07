@@ -460,15 +460,22 @@ func (p *Player) StopChannel(origin, number int) {
 	}
 }
 
-// StopChannels silences every channel, which is what putting a weapon away
-// means: a gun that hums while it is held has to stop humming once it is not.
-func (p *Player) StopChannels() {
+// StopChannels silences every channel belonging to one origin, which is what
+// putting a weapon away means: a gun that hums while it is held has to stop
+// humming once it is not. It reaches only that origin's channels - a grenade
+// still in the air, or anything else the world is still playing a sound for,
+// is none of a weapon switch's business and keeps going until its own sound
+// ends on its own.
+func (p *Player) StopChannels(origin int) {
 	if p.disabled {
 		return
 	}
 	speaker.Lock()
 	defer speaker.Unlock()
-	for _, open := range p.channels {
+	for key, open := range p.channels {
+		if key.origin != origin {
+			continue
+		}
 		open.clear()
 	}
 }

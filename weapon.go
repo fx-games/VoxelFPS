@@ -113,14 +113,16 @@ func (w *Weapon) Equip() {
 	w.cursor.Goto("Ready")
 }
 
-// Unequip stops the overlay and anything the weapon was still playing.
-// Several of these guns hum while they are held, on a looping sound their
-// script starts and never stops, so putting one away has to stop that. Its
-// sounds stay loaded - see give - so putting it away is not what silences it.
+// Unequip stops the overlay and the weapon's own hum, if it has one. Several
+// of these guns hum while they are held, on a looping sound their script
+// starts and never stops, so putting one away has to stop that - but only
+// that: a grenade still in the air plays on its own origin, not the
+// player's, and keeps going until its own sound ends on its own. Its sounds
+// stay loaded - see give - so putting it away is not what silences it either.
 func (w *Weapon) Unequip() {
 	w.endFlash()
 	if w.game != nil && w.game.audio != nil {
-		w.game.audio.StopChannels()
+		w.game.audio.StopChannels(playerOrigin)
 	}
 }
 
@@ -697,8 +699,13 @@ const seekReach = 64.0
 
 // spawnFrom puts an actor into the world where another one already is, which is
 // how a rocket lays a smoke trail behind itself.
+//
+// The actor library it draws from is the one that spawned the parent, not
+// whatever is in hand now - a grenade thrown before a weapon switch still
+// spawns its own FragGrenadeExplosion when it lands, rather than looking for
+// one in whatever the player is holding by then and finding nothing.
 func (g *Game) spawnFrom(parent *WorldActor, op wep.Op) {
-	weapon := g.currentWeapon()
+	weapon := g.weaponByScope(parent.soundScope)
 	if weapon == nil {
 		return
 	}

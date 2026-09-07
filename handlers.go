@@ -115,6 +115,16 @@ func (g *Game) currentWeapon() *Weapon {
 	return g.weapons[g.currentWeaponIndex]
 }
 
+// weaponByScope is the weapon a spawned actor's sounds and library of further
+// actors belong to - see WorldActor.soundScope - which is whichever weapon
+// spawned it, not whatever is in hand by the time it does something.
+func (g *Game) weaponByScope(id string) *Weapon {
+	if index, known := g.weaponByID[id]; known {
+		return g.weapons[index]
+	}
+	return nil
+}
+
 // HitscanEffect is one pellet's worth of a shot, with the compiled op it came
 // from so the impact knows what kind of shot it was and how hard, and the
 // weapon that fired it, so the puff it names can be drawn as itself.
