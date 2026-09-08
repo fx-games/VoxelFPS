@@ -12,13 +12,13 @@ import (
 // Dual 92s, which name nothing and must still chip, and the Blacktail's laser
 // pointer, whose own puff says `Decal "None"` and must not.
 func TestDecalForFollowsTheWeaponThenThePuff(t *testing.T) {
-	weapon := func(decal string, actors map[string]*wep.Actor) *Weapon {
+	weapon := func(decal string, actors map[string]*wep.Effect) *Weapon {
 		return &Weapon{Data: &wep.Weapon{Decal: decal}, Actors: actors}
 	}
-	redDot := map[string]*wep.Actor{"reddot": {Name: "RedDot"}}
-	stock := map[string]*wep.Actor{"bulletpuff": {Name: "BulletPuff", Stock: true}}
-	chip := map[string]*wep.Actor{"btpuff": {Name: "BTPuff", Decal: "BulletChip"}}
-	noDecal := map[string]*wep.Actor{"btpuff": {Name: "BTPuff", Decal: "BulletChip", NoDecal: true}}
+	redDot := map[string]*wep.Effect{"reddot": {Name: "RedDot"}}
+	stock := map[string]*wep.Effect{"bulletpuff": {Name: "BulletPuff", Stock: true}}
+	chip := map[string]*wep.Effect{"btpuff": {Name: "BTPuff", Decal: "BulletChip"}}
+	noDecal := map[string]*wep.Effect{"btpuff": {Name: "BTPuff", Decal: "BulletChip", NoDecal: true}}
 
 	for _, c := range []struct {
 		name   string

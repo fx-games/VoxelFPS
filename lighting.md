@@ -263,7 +263,7 @@ Two bugs it was carrying while it sat unused: `nodeLight - 1` on a `byte` underf
 255 at level 0, which would have spread full brightness across the entire map, and a
 `println` fired on every spread step.
 
-On `raymap.ldtk`: **680 emitting faces, ~8ms**, producing 2084 lit lookup entries.
+On `raymap.json`: **680 emitting faces, ~8ms**, producing 2084 lit lookup entries.
 
 ### Where the level lives — and why not in the vertices
 
@@ -378,9 +378,9 @@ to know how a shadow frustum is built. `quads.LightFromMap` turns one into a
 `LightInfo`; `LoadVoxelMap` **replaces** the scene's lights on every load, so a hot
 reload does not leave the last map's lights burning.
 
-In `raymap.ldtk`, a `Light` entity with fields `Height`, `Yaw`, `Pitch`, `Intensity`,
+In `raymap.json`, a `Light` entry with fields `Height`, `Yaw`, `Pitch`, `Intensity`,
 `Angle`, `Reach`, `Baked`. Grid position plus half a tile centres it. Defaults if unset
-or ≤0: angle 45°, reach 15, intensity 1. `TestLDtkMapCarriesItsLights` fails if a save
+or ≤0: angle 45°, reach 15, intensity 1. `TestJSONMapCarriesItsLights` fails if a save
 from the editor drops them.
 
 A **`Torch` entity** is the same thing from the other end: baked, always, with only a
@@ -394,7 +394,7 @@ what angle that works out to. `TestLookAtAndForwardAreTheSameRotation` checks bo
 directions agree.
 
 **F1 → Drop Light Here** places a light where the camera stands, pointing where it
-looks, and toasts the yaw and pitch to copy into LDtk. It is a way to *find* the numbers,
+looks, and toasts the yaw and pitch to copy into the map file. It is a way to *find* the numbers,
 not a way to save them — nothing writes a light back to the map file, and placement in
 the running engine is a scratchpad.
 

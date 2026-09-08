@@ -390,7 +390,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 		// Slot 0 is the player's light and nothing else: it hangs off the camera, is
 		// updated by index every frame, and belongs to the player rather than to any
 		// map. Every other light comes from the map file - the two that used to be
-		// hardcoded here now live in raymap.ldtk as Light entities, where they can be
+		// hardcoded here now live in raymap.json as Light entities, where they can be
 		// moved without a rebuild and where a second map can have its own.
 		glApp.lightsUbo.AttachPlayerLightTo(glApp.Camera, glApp.shadowResolution, PlayerLightOff)
 
@@ -803,8 +803,8 @@ func (a *GlApplication) SetupParticleSystem(name ParticleName, count int) {
 	ps := glhf.NewParticleSystem(count)
 	a.particleSystems[name] = ps
 }
-func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
-	a.Pathfinder = NewPathfindingSystem(isSolid)
+func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool, maxHeight int32) {
+	a.Pathfinder = NewPathfindingSystem(isSolid, maxHeight)
 }
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
 	a.minimap = NewMiniMap(a.guiShader, width, height, getColor)
@@ -1850,7 +1850,7 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, sh
 
 				for _, entity := range tileInfo.Entities {
 					if isFloorLevel {
-						entitySpawnPos := mgl32.Vec3{float32(x) + 0.5, float32(y), float32(z) + 0.5}
+						entitySpawnPos := mgl32.Vec3{float32(x) + 0.5, float32(y), float32(z) + 0.5}.Add(entity.LocalOffset)
 						entitySpawns[entitySpawnPos] = entity
 					}
 				}

@@ -15,12 +15,12 @@ voxel cubes, meshes, sprites, lines, skybox, GUI and post-processing.
 - Greedy-meshed voxel chunks, texture indices kept out of the vertex buffer
 - Sprite batches with fixed and packed texture atlases
 - glTF/GLB static mesh loading (`qmuntal/gltf`)
-- Spotlights via UBO, authored in the map file (`Light` entities in LDtk), with
+- Spotlights via UBO, authored in the map file (`Light` entries in the JSON map), with
   normal-offset shadow mapping, hardware PCF and per-light reach, cone and intensity
 - Fog, and a `-shadowtest` map built to judge shadow bias by
 - Render-to-framebuffer + post-processing pass, screenshot capture (F12)
 
-**World & entities** — LDtk maps (`ldtk/`) or a plain ASCII string map, voxel blocks with
+**World & entities** — a plain JSON map format or ASCII string maps, voxel blocks with
 DDA raycasting, AABB/OBB/MPR collision (`quads/voxel/`), a simple physics system with
 optional gravity, projectiles, particles, animated sprites, paths and pathfinding
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
@@ -111,7 +111,7 @@ geometry/   pathfinding, FOV, points/rects
 dungen/     dungeon generators
 wep/        compiled weapon format, loader and stepper
 zdwep/      Doom weapon migration (offline only)
-ldtk/ tpack/ eassets/  level format, texture packer, embedded assets
+tpack/ eassets/       texture packer, embedded assets
 audio/ events/ png_chunks/
 ```
 

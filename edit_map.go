@@ -9,69 +9,6 @@ import (
 	"path/filepath"
 )
 
-func (g *Game) openVoxelBrushMenu() {
-	if g.editor.voxelBlock == nil {
-		return
-	}
-	previousMouseState := g.setupModal()
-	configMenu := g.OpenConfigMenu()
-
-	options := []quads.GuiOption{
-		quads.NewGuiOptionAction("Pen", func() {
-			g.captureMouse(previousMouseState)
-			g.editor.voxelBrush = &VoxelBrushDrag{}
-
-			if g.editor.voxelSelectionAction == nil {
-				g.editor.voxelSelectionAction = g.voxelPlaceBlock
-				g.editor.voxelSelectionEmpty = true
-			}
-			g.Toast("Pen Brush Selected")
-			g.popFromWidgetStack()
-		}),
-		quads.NewGuiOptionAction("Line", func() {
-			g.captureMouse(previousMouseState)
-			g.editor.voxelBrush = &VoxelBrushLine{}
-
-			if g.editor.voxelSelectionAction == nil {
-				g.editor.voxelSelectionAction = g.voxelPlaceBlock
-				g.editor.voxelSelectionEmpty = true
-			}
-
-			g.Toast("Line Brush Selected")
-			g.popFromWidgetStack()
-		}),
-		quads.NewGuiOptionAction("Rect (outline)", func() {
-			g.captureMouse(previousMouseState)
-			g.editor.voxelBrush = &VoxelBrushRectangle{fill: false}
-
-			if g.editor.voxelSelectionAction == nil {
-				g.editor.voxelSelectionAction = g.voxelPlaceBlock
-				g.editor.voxelSelectionEmpty = true
-			}
-
-			g.Toast("Line Brush Selected")
-			g.popFromWidgetStack()
-		}),
-		quads.NewGuiOptionAction("Rect (filled)", func() {
-			g.captureMouse(previousMouseState)
-			g.editor.voxelBrush = &VoxelBrushRectangle{fill: true}
-
-			if g.editor.voxelSelectionAction == nil {
-				g.editor.voxelSelectionAction = g.voxelPlaceBlock
-				g.editor.voxelSelectionEmpty = true
-			}
-
-			g.Toast("Line Brush Selected")
-			g.popFromWidgetStack()
-		}),
-	}
-	configMenu.SetOptions(options)
-	guiWidth, guiHeight := g.GuiSize()
-	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
-
-	g.pushToWidgetStack(configMenu)
-}
-
 // openSceneryMenu is the placement half of the scenery folder: whatever is in
 // it is in this menu, without a line of Go per piece. Picking one puts a ghost
 // of it on the crosshair, and a left click drops it - the same ghost the sprite
@@ -114,7 +51,6 @@ func (g *Game) openVoxelEditMenu() {
 	configMenu := g.OpenConfigMenu()
 
 	options := []quads.GuiOption{
-		quads.NewGuiOptionAction("Choose Brush", g.openVoxelBrushMenu),
 		quads.NewGuiOptionAction("Block Textures", g.openCubeTextureMapper),
 		quads.NewGuiOptionAction("Paint Tool", func() {
 			g.setEditorTool(EditorToolPaint)
@@ -139,27 +75,6 @@ func (g *Game) openVoxelEditMenu() {
 			g.captureMouse(previousMouseState)
 			g.startTorchPlacement()
 			g.Toast("Left click drops a torch")
-			g.popFromWidgetStack()
-		}),
-		quads.NewGuiOptionAction("Add Blocks", func() {
-			g.captureMouse(previousMouseState)
-			if g.editor.voxelBrush == nil {
-				g.editor.voxelBrush = &VoxelBrushDrag{}
-			}
-
-			g.editor.voxelSelectionAction = g.voxelPlaceBlock
-			g.editor.voxelSelectionEmpty = true
-			g.Toast("Setting blocks")
-			g.popFromWidgetStack()
-		}),
-		quads.NewGuiOptionAction("Remove Blocks", func() {
-			g.captureMouse(previousMouseState)
-			if g.editor.voxelBrush == nil {
-				g.editor.voxelBrush = &VoxelBrushDrag{}
-			}
-			g.editor.voxelSelectionAction = g.voxelRemoveBlock
-			g.editor.voxelSelectionEmpty = false
-			g.Toast("Removing blocks")
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Save Map", func() {
@@ -197,17 +112,24 @@ func (g *Game) openVoxelEditMenu() {
 // touched by the F1 menus, by the editing keys and by nothing else. A normal run
 // never reads it.
 type Editor struct {
-	// The block the brush paints, and the shape it paints with.
+	// The block ADD paints with, and - while a Line/Plane/Cube drag is
+	// mid-way through - the brush dragging it out.
 	voxelBlock *voxel.Block
 	voxelBrush VoxelBrush
 
-	// The cells the next action applies to, and the action itself. A nil action
-	// means the editor is not waiting for a selection.
+	// The cells the preview ghosts and the next click would commit.
 	voxelSelection []voxel.Int3
-	// voxelSelectionEmpty selects the empty grid position just before the one that
-	// was hit, which is where a block being placed has to go.
-	voxelSelectionEmpty  bool
-	voxelSelectionAction func(pos []voxel.Int3)
+
+	// active is the Minecraft-creative toggle: whether the game is being played
+	// or built right now. addMode is Tab's state, ADD when true, DEL when
+	// false. shapeMethod is the number key's state, which geometry a click
+	// applies addMode to. pendingStart is the first corner of a Line/Plane/Cube
+	// drag, nil until a click sets it and nil again once the second click or a
+	// cancel clears it.
+	active       bool
+	addMode      bool
+	shapeMethod  EditShape
+	pendingStart *voxel.Int3
 
 	// The ghost following the crosshair in spawn mode, placed by a click, and -
 	// when the ghost is a piece of scenery rather than a torch or a sprite -
@@ -302,12 +224,164 @@ func (g *Game) toggleSpawnMode() {
 	g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
 }
 
-func (g *Game) startVoxelEditing() {
-	g.captureMouse(false)
-	g.editor.voxelBrush = &VoxelBrushRectangle{fill: false}
-	g.editor.voxelBlock = voxel.NewBlock(2)
-	g.editor.voxelSelectionAction = g.voxelPlaceBlock
-	g.editor.voxelSelectionEmpty = true
+// toggleEditorMode is the Minecraft-creative switch: F5 swaps the whole game
+// between playing and building. The mouse never comes uncaptured for either -
+// building aims with the crosshair, same as firing does.
+func (g *Game) toggleEditorMode() {
+	g.editor.active = !g.editor.active
+	g.editor.pendingStart = nil
+	g.editor.voxelBrush = nil
+	if g.editor.active {
+		if g.editor.voxelBlock == nil {
+			g.editor.voxelBlock = voxel.NewBlock(2)
+		}
+		if g.editor.shapeMethod == 0 {
+			g.editor.shapeMethod = EditShapeSingle
+		}
+		g.editor.addMode = true
+		g.Toast("Map Editor: ON")
+	} else {
+		// Editor mode is the only place flying makes sense; leaving it always
+		// puts the player's feet back on the ground.
+		g.gravitationEnabled = true
+		g.physicsSystem.SetGravityEnabled(true)
+		g.Toast("Map Editor: OFF")
+	}
+}
+
+// EditShape is what the number keys pick in editor mode: the geometry the next
+// click applies ADD or DEL to.
+type EditShape int
+
+const (
+	EditShapeSingle EditShape = iota + 1
+	EditShapeLine
+	EditShapePlane
+	EditShapeCube
+	EditShapeStamp3x3x3
+)
+
+func (s EditShape) String() string {
+	switch s {
+	case EditShapeLine:
+		return "Line"
+	case EditShapePlane:
+		return "Plane"
+	case EditShapeCube:
+		return "Cube"
+	case EditShapeStamp3x3x3:
+		return "3x3x3 Stamp"
+	}
+	return "Single"
+}
+
+// editorBrushFor is the two-click brushes: click sets the start corner, a
+// second click drags out the shape from the current aim. Single and Stamp
+// commit on one click, so they never need one of these.
+func editorBrushFor(shape EditShape) VoxelBrush {
+	switch shape {
+	case EditShapeLine:
+		return &VoxelBrushLine{}
+	case EditShapePlane:
+		return &VoxelBrushRectangle{fill: true}
+	case EditShapeCube:
+		return &VoxelBrushCube{}
+	}
+	return nil
+}
+
+// editorAimCell is the cell the next edit applies to: the empty cell just
+// before whatever the crosshair hit while ADDing, the solid cell it hit while
+// DELeting.
+func (g *Game) editorAimCell() (voxel.Int3, bool) {
+	if g.lastHitResult == nil || !g.lastHitResult.HitInfo.Hit || g.lastHitResult.HitObject != nil {
+		return voxel.Int3{}, false
+	}
+	if g.editor.addMode {
+		return g.lastHitResult.HitInfo.PreviousGridPosition, true
+	}
+	return g.lastHitResult.HitInfo.CollisionGridPosition, true
+}
+
+// stampAround is the method 5 shape: a 3x3x3 block of cells centered on aim.
+func stampAround(center voxel.Int3) []voxel.Int3 {
+	cells := make([]voxel.Int3, 0, 27)
+	for dx := int32(-1); dx <= 1; dx++ {
+		for dy := int32(-1); dy <= 1; dy++ {
+			for dz := int32(-1); dz <= 1; dz++ {
+				cells = append(cells, voxel.Int3{X: center.X + dx, Y: center.Y + dy, Z: center.Z + dz})
+			}
+		}
+	}
+	return cells
+}
+
+// updateEditorPreview keeps the selection the unit cube ghosts every frame:
+// the single cell under the crosshair, the shape dragged out so far from a
+// pending start, or the stamp's 3x3x3 block. Called every frame editor mode
+// is on, captured mouse or not, since the crosshair - not the OS cursor - is
+// what aims now.
+func (g *Game) updateEditorPreview() {
+	aim, hit := g.editorAimCell()
+	if !hit {
+		g.editor.voxelSelection = nil
+		return
+	}
+	switch g.editor.shapeMethod {
+	case EditShapeStamp3x3x3:
+		g.editor.voxelSelection = stampAround(aim)
+	case EditShapeLine, EditShapePlane, EditShapeCube:
+		if g.editor.pendingStart != nil && g.editor.voxelBrush != nil {
+			g.editor.voxelSelection = g.editor.voxelBrush.Drag(aim)
+		} else {
+			g.editor.voxelSelection = []voxel.Int3{aim}
+		}
+	default:
+		g.editor.voxelSelection = []voxel.Int3{aim}
+	}
+	g.UnitCube.QueueDraw(g.editor.voxelSelection)
+}
+
+// applyEditorEdit is what a left click does in editor mode: single and stamp
+// commit immediately, the drag shapes take a click for the start corner and a
+// second click - anywhere, the crosshair is still aiming - to commit.
+func (g *Game) applyEditorEdit() {
+	aim, hit := g.editorAimCell()
+	if !hit {
+		return
+	}
+	switch g.editor.shapeMethod {
+	case EditShapeLine, EditShapePlane, EditShapeCube:
+		if g.editor.pendingStart == nil {
+			g.editor.voxelBrush = editorBrushFor(g.editor.shapeMethod)
+			g.editor.voxelBrush.StartDrag(aim)
+			start := aim
+			g.editor.pendingStart = &start
+			return
+		}
+		g.commitEditorEdit(g.editor.voxelBrush.Drag(aim))
+		g.editor.pendingStart = nil
+		g.editor.voxelBrush = nil
+	case EditShapeStamp3x3x3:
+		g.commitEditorEdit(stampAround(aim))
+	default:
+		g.commitEditorEdit([]voxel.Int3{aim})
+	}
+}
+
+// cancelEditorSelection drops a pending start corner - the right click's job
+// while editor mode is on, since it fires nothing while empty handed.
+func (g *Game) cancelEditorSelection() {
+	g.editor.pendingStart = nil
+	g.editor.voxelBrush = nil
+}
+
+func (g *Game) commitEditorEdit(cells []voxel.Int3) {
+	if g.editor.addMode {
+		g.voxelPlaceBlock(cells)
+	} else {
+		g.voxelRemoveBlock(cells)
+	}
 }
 
 func (g *Game) voxelPlaceBlock(pos []voxel.Int3) {
@@ -321,20 +395,6 @@ func (g *Game) voxelRemoveBlock(pos []voxel.Int3) {
 type VoxelBrush interface {
 	StartDrag(pos voxel.Int3) []voxel.Int3
 	Drag(cur voxel.Int3) []voxel.Int3
-}
-
-type VoxelBrushDrag struct {
-	draggedOver []voxel.Int3
-}
-
-func (v *VoxelBrushDrag) StartDrag(pos voxel.Int3) []voxel.Int3 {
-	v.draggedOver = []voxel.Int3{pos}
-	return []voxel.Int3{pos}
-}
-
-func (v *VoxelBrushDrag) Drag(cur voxel.Int3) []voxel.Int3 {
-	v.draggedOver = append(v.draggedOver, cur)
-	return v.draggedOver
 }
 
 type VoxelBrushLine struct {
@@ -393,4 +453,30 @@ func (v *VoxelBrushRectangle) Drag(cur voxel.Int3) []voxel.Int3 {
 	}
 
 	return rect
+}
+
+// VoxelBrushCube is method 4: a filled box between two arbitrary corners, the
+// only brush that varies all three axes.
+type VoxelBrushCube struct {
+	start voxel.Int3
+}
+
+func (v *VoxelBrushCube) StartDrag(pos voxel.Int3) []voxel.Int3 {
+	v.start = pos
+	return []voxel.Int3{pos}
+}
+
+func (v *VoxelBrushCube) Drag(cur voxel.Int3) []voxel.Int3 {
+	minX, maxX := min(v.start.X, cur.X), max(v.start.X, cur.X)
+	minY, maxY := min(v.start.Y, cur.Y), max(v.start.Y, cur.Y)
+	minZ, maxZ := min(v.start.Z, cur.Z), max(v.start.Z, cur.Z)
+	var box []voxel.Int3
+	for x := minX; x <= maxX; x++ {
+		for y := minY; y <= maxY; y++ {
+			for z := minZ; z <= maxZ; z++ {
+				box = append(box, voxel.Int3{X: x, Y: y, Z: z})
+			}
+		}
+	}
+	return box
 }

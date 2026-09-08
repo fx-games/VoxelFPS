@@ -140,6 +140,48 @@ func TestTheWeaponSwaysTheWayDoomsDoes(t *testing.T) {
 	}
 }
 
+// A_Explode(damage, radius) compiles to Op.Args in call order, not to
+// Op.Damage - see explodeArgs. A frag grenade's own JSON carries {67, 160},
+// so this pins the mapping down against a real compiled call rather than a
+// made-up pair of numbers.
+func TestExplodeArgsReadsDamageAndRadiusInCallOrder(t *testing.T) {
+	damage, radius := explodeArgs(wep.Op{Op: wep.OpExplode, Args: []float64{67, 160}})
+	if damage != 67 {
+		t.Errorf("damage = %d, want 67", damage)
+	}
+	wantRadius := float32(160) * worldUnitsPerDoomUnit
+	if math.Abs(float64(radius-wantRadius)) > 0.0001 {
+		t.Errorf("radius = %v, want %v", radius, wantRadius)
+	}
+
+	// Args less than the JSON promised isn't a real weapon this compiler would
+	// ever emit, but a caller that forgot to check op.Op first could hand
+	// this an unrelated, argument-less op - it should not panic.
+	if damage, radius := explodeArgs(wep.Op{Op: wep.OpDie}); damage != 0 || radius != 0 {
+		t.Errorf("explodeArgs(no args) = (%d, %v), want (0, 0)", damage, radius)
+	}
+
+	// GrenadeAlerter (`GrenadeAlerter : FragGrenadeExplosion`) overrides its
+	// parent's Spawn state with its own A_Explode(2, 240) and DamageType
+	// "Avoid" - a Brutal Doom convention every monster class answers with
+	// DamageFactor 0, because the whole point of the actor is to give away a
+	// live grenade's position without hurting anyone. This engine has no
+	// DamageFactor table, so explodeArgs is where that has to be honoured
+	// instead: zero the blast rather than let a bystander flinch every fuse
+	// tick, well before the grenade goes off for real.
+	if damage, radius := explodeArgs(wep.Op{
+		Op: wep.OpExplode, Args: []float64{2, 240}, DamageType: "Avoid",
+	}); damage != 0 || radius != 0 {
+		t.Errorf("explodeArgs(DamageType Avoid) = (%d, %v), want (0, 0)", damage, radius)
+	}
+	// ZDoom itself is case-insensitive about class properties.
+	if damage, _ := explodeArgs(wep.Op{
+		Op: wep.OpExplode, Args: []float64{2, 240}, DamageType: "avoid",
+	}); damage != 0 {
+		t.Errorf("explodeArgs(DamageType avoid) damage = %d, want 0", damage)
+	}
+}
+
 func peaks(values []float64) int {
 	count := 0
 	for i := 1; i < len(values)-1; i++ {

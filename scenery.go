@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/geometry"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 )
@@ -33,6 +34,20 @@ type Scenery struct {
 	// way stairs can be walked up rather than into - each step has to be its
 	// own box - and the only way a shelf can be reached into.
 	Colliders [][2]mgl32.Vec3 `json:"colliders"`
+
+	// Climbable are boxes nobody collides with but that mark this piece as a
+	// ladder: standing in one lets the player or a pathing actor go straight up
+	// or down instead of falling or being walled off. See registerClimbable and
+	// core.MapEntity.ClimbTo.
+	//
+	// ponytail: a climbable box that stopped exactly at the ladder's own model
+	// left nowhere to land - gravity always came back before the player was
+	// horizontally clear of the wall the ladder is mounted on. scenery/ladder's
+	// box runs taller than the model and a tile past it, into the landing, so
+	// there is still a window with no gravity to walk out over the edge in.
+	// That bakes in "this ladder climbs towards +Z"; a ladder facing another
+	// way needs its own box, there is no rotation to derive it from yet.
+	Climbable [][2]mgl32.Vec3 `json:"climbable"`
 }
 
 // sceneryDir is the folder of folders, one to a piece.
@@ -85,6 +100,25 @@ func (s *Scenery) colliders(piece *quads.GameObject) []*quads.PhysicsComponent {
 		boxes = append(boxes, physics)
 	}
 	return boxes
+}
+
+// registerClimbable turns a ladder piece's local Climbable boxes into world
+// volumes the player's movement checks every frame, and - given where the
+// entity says its landing is - a ClimbLink pathfinding can route actors
+// through. A piece with no ClimbTo is climbable by the player but invisible
+// to pathfinding: nothing routes an actor onto a ladder that does not say
+// where it comes out.
+func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo *mgl32.Vec3) {
+	pos := piece.Transform().GetPosition()
+	for _, box := range def.Climbable {
+		world := voxel.NewAABB(box[0], box[1]).Add(pos)
+		g.climbVolumes = append(g.climbVolumes, world)
+	}
+	if climbTo != nil && g.Pathfinder != nil {
+		bottom := geometry.Point{X: int(pos.X()), Y: int(pos.Z())}
+		top := geometry.Point{X: int(climbTo.X()), Y: int(climbTo.Z())}
+		g.Pathfinder.AddClimbLink(bottom, top, pos.Y(), climbTo.Y())
+	}
 }
 
 // meshFile is where a named model is. Scenery keeps its own beside its

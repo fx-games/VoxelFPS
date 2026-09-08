@@ -25,7 +25,7 @@ import (
 
 // WorldActor is one of those things while it exists.
 type WorldActor struct {
-	data    *wep.Actor
+	data    *wep.Effect
 	cursor  *wep.Cursor
 	runtime *wep.Runtime
 	object  *quads.GameObject
@@ -145,12 +145,45 @@ func (live *WorldActor) setMaster(master *WorldActor) {
 	}
 }
 
+// spawnJitterStep and spawnJitterCycle turn a spawn's own sequence number into
+// a few centimetres of vertical offset - enough to break an exact tie, small
+// enough that nobody notices a puff of smoke sitting a hair off where it was
+// asked to be. The cycle wraps rather than growing without bound, so a long
+// session spawning thousands of effects never drifts one arbitrarily far from
+// where its script actually put it.
+const (
+	spawnJitterStep  = float32(0.01)
+	spawnJitterCycle = 23 // coprime with the small counts effects spawn in, e.g. 5
+)
+
+// spawnJitter is why two effects that read the same X, Y, Z off the same
+// script call - a frag grenade's own fireball and the BarrelExplosionSmokeColumn
+// it spawns at the same instant - do not end up bit-identical in world space.
+// GZDoom's software renderer sorts things and draws them with no shared depth
+// buffer at all, so two Doom things standing on the same spot never compete for
+// the same pixel the way two textured quads sharing a Z buffer do; ZDoom's own
+// hardware renderer additionally biases every masked sprite by the same fixed
+// offset (see spriteDepthBias), which moves a sprite off the wall behind it but
+// does nothing to separate two sprites tied with each other, because both get
+// the identical bias. This engine's polygon-offset tiers (additive, opaque,
+// translucent - see sys_sprites.go) settle most such ties, but two quads at the
+// literal same point are still coincident in view space, and depth-buffer
+// precision is coarser the farther out that view space point is: a few dozen
+// polygon-offset units that reliably separate two ties up close can still
+// leave them interleaving in a fine Moire pattern ten-odd units out, which is
+// what a screenshot of exactly this pairing showed. A real, if tiny, position
+// difference sidesteps the precision question entirely instead of trying to
+// out-guess it.
+func spawnJitter(position mgl32.Vec3, sequence int) mgl32.Vec3 {
+	return position.Add(mgl32.Vec3{0, spawnJitterStep * float32(sequence%spawnJitterCycle), 0})
+}
+
 // spawnActorAt is the rest of it, once where has been decided. The label is
 // where the new thing's script starts, which is Spawn for everything but a
 // puff that landed on a wall.
 // spawner is whatever ran the call, so a velocity written as `velx` reads off
 // the thing that did the spawning rather than off nothing at all.
-func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, position mgl32.Vec3, label string, spawner *wep.Runtime) *WorldActor {
+func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Effect, op wep.Op, position mgl32.Vec3, label string, spawner *wep.Runtime) *WorldActor {
 	_, direction := g.aim()
 
 	sprite := quads.NewSprite(g.sharedAtlas, []uint16{0})
@@ -162,12 +195,12 @@ func (g *Game) spawnActorAt(weapon *Weapon, actor *wep.Actor, op wep.Op, positio
 		sprite.Additive = true
 	}
 
+	g.lastActorOrigin++
 	object := quads.NewGameObject("Spawned:" + actor.Name)
-	object.Transform().SetPosition(position)
+	object.Transform().SetPosition(spawnJitter(position, g.lastActorOrigin))
 	object.SetComponent(sprite)
 	object.SetLifeTime(worldActorLifetime)
 
-	g.lastActorOrigin++
 	live := &WorldActor{
 		origin:     g.lastActorOrigin,
 		soundScope: weapon.Data.ID,
@@ -302,7 +335,7 @@ const (
 // launchVelocity is how fast it leaves. A missile has a speed of its own and
 // goes where the player is looking; anything else drifts, so that smoke does
 // not sit in a rigid dot.
-func (g *Game) launchVelocity(actor *wep.Actor, op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) mgl32.Vec3 {
+func (g *Game) launchVelocity(actor *wep.Effect, op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) mgl32.Vec3 {
 	if velocity, ok := explicitVelocity(op, direction, spawner); ok {
 		return velocity
 	}
@@ -462,8 +495,8 @@ func (g *Game) warnMissingSprite(name string) {
 // LiveActorCount is how many spawned things are in flight, for the overlay.
 func (g *Game) LiveActorCount() int { return len(g.worldActors) }
 
-// updateWorldActors steps everything in flight and clears out what has stopped.
-func (g *Game) updateWorldActors(elapsed float64) {
+// updateEffects steps everything in flight and clears out what has stopped.
+func (g *Game) updateEffects(elapsed float64) {
 	for i := len(g.worldActors) - 1; i >= 0; i-- {
 		live := g.worldActors[i]
 		// A Stop destroys the actor, which is what it does in ZDoom - the
@@ -521,7 +554,8 @@ func (live *WorldActor) publishState() {
 
 // move carries a spawned thing along: what falls falls, what homes turns
 // towards where it is going, and everything stops at the first solid thing it
-// meets rather than passing through the world.
+// meets rather than passing through the world - unless its own class says it
+// bounces, in which case that surface reflects it instead. See bounceOff.
 func (live *WorldActor) move(g *Game, elapsed float64) {
 	if live.resting {
 		return
@@ -537,45 +571,134 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 
 	transform := live.object.Transform()
 	from := transform.GetPosition()
-	to := from.Add(live.velocity.Mul(float32(elapsed)))
+	step := live.velocity.Mul(float32(elapsed))
+	to := from.Add(step)
 
-	if live.solidAt(to) {
-		// It has arrived somewhere solid. A shell settles just above the
-		// surface and lies there; anything with a speed of its own has hit
-		// something, and its script decides what that means.
-		live.velocity = mgl32.Vec3{}
-		if !live.resting {
-			// Something that has arrived and still has a script to run is
-			// waiting rather than playing out, and gets a longer life.
-			live.object.SetLifeTime(plantedActorLifetime)
-		}
-		live.resting = true
-		live.homing = false
-		// Something lying on the ground stops turning to face the camera.
-		// Every sprite here is an XY billboard - it follows the camera's
-		// pitch as well as its yaw, which is what ZDoom's +FORCEXYBILLBOARD
-		// asks for and what keeps a puff of smoke from going edge-on when
-		// you look down at it. A shell casing that has come to rest is the
-		// one case where it reads as a defect rather than a nicety: the
-		// quad lies almost flat on the floor, so turning on the spot sweeps
-		// the shell round the floor with you, and a thing on the ground
-		// visibly spinning is the first thing anybody notices. Resting, it
-		// drops to a plain Y billboard, which is GZDoom's own default mode
-		// (gl_billboard_mode 0): upright, facing you, never pitching.
-		live.sprite.CameraFollowMode = quads.SpriteModeFollowHorizontal
-		if live.data.Speed > 0 || live.data.Missile {
-			live.hitSomething(g, from)
-			return
-		}
-		// A casing's tumble is a Loop with no exit of its own, and its Death
-		// state is the frame it lies still on. Landing is what ends it - which
-		// is +MISSILE's own doing in ZDoom, and these mods do not all carry
-		// the flag by the time it gets here. Nothing to go to means nothing
-		// that was spinning, so it lies there as it was.
-		live.cursor.Goto("Death")
+	if !live.solidAt(to) {
+		transform.SetPosition(to)
 		return
 	}
-	transform.SetPosition(to)
+
+	// X, Z and Y are tested separately - moving into solid ground is a floor
+	// even though the same step also carries the thing sideways - by trying
+	// each on its own against the position the whole step was already found
+	// to collide from. Testing X and Z separately (rather than the one
+	// diagonal position this used to test) is what lets bounceOff reflect
+	// only the component the wall actually opposes: a grenade clipping a
+	// wall at a shallow angle slides along it and keeps most of its speed,
+	// it does not bounce straight back the way it came.
+	blockedByX := live.solidAt(mgl32.Vec3{to.X(), from.Y(), from.Z()})
+	blockedByZ := live.solidAt(mgl32.Vec3{from.X(), from.Y(), to.Z()})
+	if !blockedByX && !blockedByZ && live.solidAt(mgl32.Vec3{to.X(), from.Y(), to.Z()}) {
+		// A step that clips exactly through a corner neither axis alone
+		// occupies (both report clear, the diagonal does not). There is no
+		// way to tell which face was actually hit - solidAt does not carry
+		// that - so this treats it as if both were, the same as every actor
+		// was stopped before per-axis reflection existed, rather than let it
+		// sail through a corner untouched.
+		blockedByX, blockedByZ = true, true
+	}
+	blockedByFloorOrCeiling := live.solidAt(mgl32.Vec3{from.X(), to.Y(), from.Z()})
+
+	if next, bounced := live.bounceOff(from, to, step, blockedByX, blockedByZ, blockedByFloorOrCeiling); bounced {
+		transform.SetPosition(next)
+		return
+	}
+
+	live.settleOnSolid(g, from)
+}
+
+// bounceOff answers what a frag grenade's own +BOUNCEONFLOORS/WALLS/CEILINGS
+// do that an ordinary missile's contact does not: reflect the velocity
+// component the surface actually opposes instead of ending the flight
+// outright. Takes which of the three axes move found blocked rather than
+// asking the world itself, so the physics here is plain arithmetic over
+// data.Bounce* and velocity - straightforward to test without a voxel world
+// behind it.
+//
+// Reflecting only the blocked axis (or axes, on a true corner hit) rather
+// than the whole horizontal velocity is what keeps the bounce angle right:
+// a grenade that clips a wall almost end-on should deflect at a shallow
+// angle and keep going, not reverse its entire course as if it had hit the
+// wall dead center.
+//
+// ponytail: a wall and a floor blocked on the exact same step, where one
+// bounces and the other does not, reflects the one that does and reports the
+// whole step as bounced rather than settling for the one that does not -
+// every actor this engine bounces sets all three flags together, so the
+// floor/wall pair disagreeing on whether to bounce cannot come up for it.
+// Give this its own outcome for that axis too if a partially-bouncing actor
+// ever needs it to actually stop instead.
+func (live *WorldActor) bounceOff(from, to, step mgl32.Vec3, blockedByX, blockedByZ, blockedByFloorOrCeiling bool) (next mgl32.Vec3, bounced bool) {
+	next = from
+	if blockedByFloorOrCeiling {
+		ceiling := step.Y() > 0
+		if (ceiling && live.data.BounceCeilings) || (!ceiling && live.data.BounceFloors) {
+			live.velocity = mgl32.Vec3{live.velocity.X(), -live.velocity.Y() * float32(live.data.BounceFactor), live.velocity.Z()}
+			bounced = true
+		}
+	} else {
+		next = mgl32.Vec3{next.X(), to.Y(), next.Z()}
+	}
+	if blockedByX || blockedByZ {
+		if live.data.BounceWalls {
+			factor := float32(live.data.WallBounceFactor)
+			vx, vz := live.velocity.X(), live.velocity.Z()
+			if blockedByX {
+				vx = -vx
+			}
+			if blockedByZ {
+				vz = -vz
+			}
+			live.velocity = mgl32.Vec3{vx * factor, live.velocity.Y(), vz * factor}
+			bounced = true
+		}
+	}
+	if !blockedByX {
+		next = mgl32.Vec3{to.X(), next.Y(), next.Z()}
+	}
+	if !blockedByZ {
+		next = mgl32.Vec3{next.X(), next.Y(), to.Z()}
+	}
+	return next, bounced
+}
+
+// settleOnSolid is where anything that does not bounce off what it just met
+// ends up: a shell lying on the floor, or a missile's own Death state.
+func (live *WorldActor) settleOnSolid(g *Game, from mgl32.Vec3) {
+	// It has arrived somewhere solid. A shell settles just above the
+	// surface and lies there; anything with a speed of its own has hit
+	// something, and its script decides what that means.
+	live.velocity = mgl32.Vec3{}
+	if !live.resting {
+		// Something that has arrived and still has a script to run is
+		// waiting rather than playing out, and gets a longer life.
+		live.object.SetLifeTime(plantedActorLifetime)
+	}
+	live.resting = true
+	live.homing = false
+	// Something lying on the ground stops turning to face the camera.
+	// Every sprite here is an XY billboard - it follows the camera's
+	// pitch as well as its yaw, which is what ZDoom's +FORCEXYBILLBOARD
+	// asks for and what keeps a puff of smoke from going edge-on when
+	// you look down at it. A shell casing that has come to rest is the
+	// one case where it reads as a defect rather than a nicety: the
+	// quad lies almost flat on the floor, so turning on the spot sweeps
+	// the shell round the floor with you, and a thing on the ground
+	// visibly spinning is the first thing anybody notices. Resting, it
+	// drops to a plain Y billboard, which is GZDoom's own default mode
+	// (gl_billboard_mode 0): upright, facing you, never pitching.
+	live.sprite.CameraFollowMode = quads.SpriteModeFollowHorizontal
+	if live.data.Speed > 0 || live.data.Missile {
+		live.hitSomething(g, from)
+		return
+	}
+	// A casing's tumble is a Loop with no exit of its own, and its Death
+	// state is the frame it lies still on. Landing is what ends it - which
+	// is +MISSILE's own doing in ZDoom, and these mods do not all carry
+	// the flag by the time it gets here. Nothing to go to means nothing
+	// that was spinning, so it lies there as it was.
+	live.cursor.Goto("Death")
 }
 
 // hitSomething sends a missile to its Death state, which is where a script puts
@@ -1066,7 +1189,7 @@ const (
 	brightEmissive       = float32(1)
 )
 
-func alphaOf(actor *wep.Actor) float64 {
+func alphaOf(actor *wep.Effect) float64 {
 	if actor.Render.Alpha <= 0 || actor.Render.Alpha > 1 {
 		return 1
 	}

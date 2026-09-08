@@ -53,7 +53,7 @@ against the current source, not the review's own claims.
 ## Lighting
 
 - Nothing writes a placed light back to the map file — F1 → "Drop Light Here"
-  places one in the running engine and toasts its yaw/pitch to copy into LDtk
+  places one in the running engine and toasts its yaw/pitch to copy into the map file
   by hand; it's gone on the next reload.
 - Baked voxel light is still flat per face — the resolution greedy meshing
   leaves, and the resolution the emissive flag has always had.
@@ -63,7 +63,7 @@ against the current source, not the review's own claims.
 See `AGENTS.md` → "Keep the unused packages" for the rule. Not covered there:
 
 - `dungen/` (~2700 lines) — `loadDungeonMap` (`load_map.go:66`) is never
-  called; `main` always loads the LDtk map. `geometry/jps.go` exists only to
+  called; `main` always loads `assets/raymap.json`. `geometry/jps.go` exists only to
   serve it.
 - `quads/glhf/texture_array.go` (~340 lines) — no constructor call outside the
   package. Kept for the planned texture-array voxel rendering above.
@@ -78,8 +78,6 @@ See `AGENTS.md` → "Keep the unused packages" for the rule. Not covered there:
 - `Game` in `main.go` is still a god object outside the voxel-editor state
   already split into `Editor` (`edit_map.go`). Player, weapon, UI and
   render-knob state are still mixed in.
-- `ldtk/ldtk.go` — 1174 lines of quicktype-generated schema, of which
-  `load_map.go` uses five types. Hand-written structs would be ~40 lines.
 - The nine `quads/shader_*.go` files (1320 lines) repeat near-identical
   uniform plumbing. Only worth merging when two of them need the same change.
 

@@ -26,7 +26,7 @@ type Library struct {
 	ByID    map[string]*Weapon
 	// Actors holds each weapon's own actors, keyed by weapon id then by
 	// lowercased actor name.
-	Actors map[string]map[string]*Actor
+	Actors map[string]map[string]*Effect
 	// Keys binds number keys to weapon ids: Keys[1] is what pressing 1 selects.
 	Keys map[int]string
 	// Sprites lists the atlas frame names each weapon's atlas holds, in atlas
@@ -68,7 +68,7 @@ func Load(dir string) (*Library, error) {
 	library := &Library{
 		Dir:     dir,
 		ByID:    make(map[string]*Weapon),
-		Actors:  make(map[string]map[string]*Actor),
+		Actors:  make(map[string]map[string]*Effect),
 		Keys:    make(map[int]string),
 		Sprites: make(map[string][]string),
 	}
@@ -121,19 +121,19 @@ func Load(dir string) (*Library, error) {
 // actorStore reads the shared actor files, keeping what it has already read.
 type actorStore struct {
 	dir    string
-	loaded map[string]*Actor
+	loaded map[string]*Effect
 }
 
 func newActorStore(dir string) *actorStore {
-	return &actorStore{dir: dir, loaded: make(map[string]*Actor)}
+	return &actorStore{dir: dir, loaded: make(map[string]*Effect)}
 }
 
 // get reads one actor file, or hands back the copy already read.
-func (s *actorStore) get(file string) (*Actor, error) {
+func (s *actorStore) get(file string) (*Effect, error) {
 	if actor, ok := s.loaded[file]; ok {
 		return actor, nil
 	}
-	var actor Actor
+	var actor Effect
 	if err := readJSON(filepath.Join(s.dir, file), &actor); err != nil {
 		return nil, err
 	}
@@ -162,9 +162,9 @@ func readSharedSprites(dir string) map[string]bool {
 	return names
 }
 
-func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]bool) (*Weapon, map[string]*Actor, []string, []string) {
+func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]bool) (*Weapon, map[string]*Effect, []string, []string) {
 	var problems []string
-	fail := func(format string, args ...any) (*Weapon, map[string]*Actor, []string, []string) {
+	fail := func(format string, args ...any) (*Weapon, map[string]*Effect, []string, []string) {
 		return nil, nil, nil, append(problems, id+"/: "+fmt.Sprintf(format, args...))
 	}
 
@@ -180,7 +180,7 @@ func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]boo
 		problems = append(problems, fmt.Sprintf("%s/: names itself %q", id, weapon.ID))
 	}
 
-	actors := make(map[string]*Actor, len(weapon.Actors))
+	actors := make(map[string]*Effect, len(weapon.Actors))
 	for name, file := range weapon.Actors {
 		actor, err := shared.get(file)
 		if err != nil {
@@ -243,7 +243,7 @@ func loadWeapon(dir, id string, shared *actorStore, sharedSprites map[string]boo
 // every op is one this build knows, every sprite is in the atlas, every sound
 // is a file, and every actor referenced was compiled into this folder.
 func checkStates(id, what string, machine StateMachine, sprites map[string]bool,
-	actors map[string]*Actor, sounds map[string]string, dir string) []string {
+	actors map[string]*Effect, sounds map[string]string, dir string) []string {
 	var problems []string
 	note := func(format string, args ...any) {
 		problems = append(problems, fmt.Sprintf("%s/%s: ", id, what)+fmt.Sprintf(format, args...))
@@ -374,7 +374,7 @@ func readJSON(path string, value any) error {
 	return nil
 }
 
-func sortedActorNames(actors map[string]*Actor) []string {
+func sortedActorNames(actors map[string]*Effect) []string {
 	names := make([]string, 0, len(actors))
 	for name := range actors {
 		names = append(names, name)

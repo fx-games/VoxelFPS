@@ -32,9 +32,11 @@ var stringMapData = `################
 
 func main() {
 	defaults := DefaultStressConfig()
-	stress := flag.Bool("stress", false, "generate a stress map instead of loading the LDtk map")
+	stress := flag.Bool("stress", false, "generate a stress map instead of loading the default map")
 	shadowTest := flag.Bool("shadowtest", false, "load the shadow test map: one caster, one wall, one light from above")
 	stairsTest := flag.Bool("stairs", false, "load the stairs test map: a staircase onto a platform, to walk the step-up")
+	actorTest := flag.Bool("actors", false, "load the actor pathfinding test map: a hundred patrolling actors, a platform reached by stairs, a platform reached by ladder")
+	doorsTest := flag.Bool("doors", false, "load the doors test map: three slide doors (front/mid/back placed) and one swing door")
 	// The two shadow knobs are also flags, not only config menu sliders, so a
 	// before/after can be run from a script instead of from muscle memory.
 	shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
@@ -69,6 +71,10 @@ func main() {
 		mapLoad = loadShadowTestMap()
 	} else if *stairsTest {
 		mapLoad = loadStairsTestMap()
+	} else if *actorTest {
+		mapLoad = loadActorTestMap()
+	} else if *doorsTest {
+		mapLoad = loadDoorTestMap()
 	} else if *stress {
 		stressConfig = &StressConfig{
 			Size:          *stressSize,
@@ -79,7 +85,7 @@ func main() {
 		mapLoad = loadStressMap(*stressConfig)
 	} else {
 		var err error
-		mapLoad, err = loadLDTK("assets/raymap.ldtk")
+		mapLoad, err = loadJSONMap("assets/raymap.json")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -100,6 +106,7 @@ func main() {
 	glhf.Run(func() {
 		game := NewGame(stressConfig)
 		game.isShadowTest = shadowTestMap
+		game.isActorTest = *actorTest
 		game.shadowNormalOffset = float32(*shadowOffset)
 		game.shadowDepthBias = float32(*shadowBias)
 		game.benchSeconds = *benchSeconds
@@ -194,9 +201,22 @@ type Game struct {
 	currentWindowModeIndex int
 
 	isShadowTest bool
+	isActorTest  bool
 	benchSeconds float64
 	// bobTics is the clock the weapon's sway is a function of, in Doom tics.
 	bobTics float64
+	// bobSpeed is weaponBob's speed input, eased toward the player's actual
+	// speed each Update tick rather than read fresh at draw time - see
+	// updateWeapon. The physics velocity it comes from is only ever correct
+	// on the frames the fixed-timestep physics step actually runs, and on a
+	// frame it doesn't, what's left is that tick's own pre-collision wish
+	// velocity - full speed, straight into whatever wall stopped it a moment
+	// ago. Sampling that raw at draw time is what made the weapon sprite
+	// snap between "still" and "full swing" once every couple of frames
+	// while walking into a wall; easing it here instead means one such frame
+	// only nudges the average, so the sway stays visually smooth regardless
+	// of which frames physics actually ran on.
+	bobSpeed float64
 	// warnedSpinning keeps a weapon whose script cannot settle from saying so
 	// every frame for as long as it is held.
 	warnedSpinning        map[string]bool
@@ -208,9 +228,8 @@ type Game struct {
 	projectileImpactAnim int
 	lastHitResult        *RaycastResult
 
-	gravitationEnabled  bool
-	move                q3Move
-	isMouseBeingDragged bool
+	gravitationEnabled bool
+	move               q3Move
 
 	// The map editor's half of the state. Kept together rather than mixed into the
 	// player's, because the two are only ever touched by different halves of the
@@ -247,6 +266,18 @@ type Game struct {
 	// Only the descriptions are here; a model is loaded the first time one is
 	// spawned.
 	scenery map[string]*Scenery
+
+	// climbVolumes are the world-space boxes a ladder's Climbable boxes turned
+	// into: standing inside one lets pollInput move the player straight up or
+	// down instead of falling. See registerClimbable.
+	climbVolumes []voxel.AABB
+
+	// actors are every NPC/monster in the level - see actor.go.
+	actors []*Actor
+
+	// doors are every slide or swing door in the level - see door.go.
+	doors []*Door
+
 	// triggerHeld is a state and reloadPressed is an edge; the weapon's script
 	// decides whether either does anything. altHeld is the second attack
 	// button, ZDoom's +altattack, which a weapon with an AltFire state of its
@@ -487,7 +518,10 @@ func (g *Game) benchmarkLabel() string {
 	if g.isShadowTest {
 		return "shadow test map"
 	}
-	return "raymap.ldtk"
+	if g.isActorTest {
+		return fmt.Sprintf("actor pathfinding test map, %d actors", actorPopulation)
+	}
+	return "raymap.json"
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
@@ -510,6 +544,9 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.Meshes.Clear()
 	// Their sprites went with Sprites.Clear, and the map puts the range back.
 	g.pickups = nil
+	g.climbVolumes = nil
+	g.actors = nil
+	g.doors = nil
 
 	// Load Map
 	entitySpawns := g.LoadVoxelMap(mapLoad)
@@ -524,7 +561,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// 49 is a brightened copy of the console panel 47, written into the free slot in the
 	// wall sheet's last row: same art with its screen readouts lifted, so the screens
 	// clear the emissive cutoff by a wide margin and read as lit rather than as painted.
-	// raymap.ldtk points the two console walls at it.
+	// raymap.json points the two console walls at it.
 	//
 	// Indices are literal because this atlas's layout is fixed and indexed directly
 	// everywhere else too, see ISSUES.md. Press G at any wall to add another at runtime.
@@ -541,7 +578,14 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.physicsSystem = quads.NewCollisionSolver(g.CubeMap.IsSolidBlockAt, g.CubeMap.ContainsVec)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
-	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt)
+	// mapLoad.MapDimensions, not CubeMap.VoxelDimensions: the voxel buffer is
+	// padded up to a whole number of chunks (a 7-tall map allocates a 32-tall
+	// buffer), and every layer above what the map actually declared is chunk
+	// padding, not carved-out air - it reads as solid. Scanning up to the
+	// padded height made groundHeight find "floor" at y=33 on every column
+	// instead of the real surface, and the search only ever explored a stack
+	// of one-tile-wide solid ceilings that no path could get down from.
+	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, int32(mapLoad.MapDimensions[1]))
 
 	// Spawn Entities
 	for spawnPos, entity := range entitySpawns {
@@ -648,6 +692,8 @@ func (g *Game) Update(elapsed float64) {
 	}
 	g.updateAutoCycle(elapsed)
 	g.updateWeapon(elapsed)
+	g.updateActors(elapsed)
+	g.updateDoors(elapsed)
 	g.physicsSystem.Update(elapsed)
 	g.updatePickups()
 	g.updateGUI(elapsed)
@@ -755,13 +801,16 @@ func (g *Game) DrawGui(elapsed float64) {
 		}
 	}
 
-	if weapon := g.currentWeapon(); weapon != nil {
-		guiWidth, guiHeight := g.GuiSize()
-		bobX, bobY := g.weaponBob()
-		weapon.Draw(int32(guiWidth), int32(guiHeight), bobX, bobY)
+	if g.editor.active {
+		g.drawEditorHUD()
+	} else {
+		if weapon := g.currentWeapon(); weapon != nil {
+			guiWidth, guiHeight := g.GuiSize()
+			bobX, bobY := g.weaponBob()
+			weapon.Draw(int32(guiWidth), int32(guiHeight), bobX, bobY)
+		}
+		g.drawWeaponHUD()
 	}
-
-	g.drawWeaponHUD()
 
 	// Only while the overlay is on. The check used to be commented out here
 	// and left on the half that *builds* the text, so switching the F1
@@ -854,11 +903,14 @@ func (g *Game) updateGUI(elapsed float64) {
 		x, y := g.Window.GetCursorPos()
 		origin, direction = g.Camera.GetPickingRayFromScreenPosition(
 			x/float64(g.WindowWidth), y/float64(g.WindowHeight))
-		g.UnitCube.QueueDraw(g.editor.voxelSelection)
 	}
 	result := g.rayCast(origin, direction)
 
 	g.lastHitResult = &result
+
+	if g.editor.active {
+		g.updateEditorPreview()
+	}
 
 	if g.editor.gameObjectForSpawning != nil {
 		groundPos, hitGround := g.lastHitResult.GroundPosition()
@@ -1361,7 +1413,7 @@ func (g *Game) watchFileChangesLoop() {
 	}
 	defer watcher.Close()
 	// Add a path.
-	fileToWatch := filepath.Join("assets", "raymap.ldtk")
+	fileToWatch := filepath.Join("assets", "raymap.json")
 	err = watcher.Add(fileToWatch)
 	if err != nil {
 		log.Fatal(err)
@@ -1375,10 +1427,10 @@ func (g *Game) watchFileChangesLoop() {
 			log.Println("event:", event)
 			if event.Has(fsnotify.Write) {
 				log.Println("modified file:", event.Name)
-				// LDtk writes in more than one step, so an event can land on a
-				// half-written file. Keep the map that is loaded and wait for the
-				// next event rather than taking the process down over it.
-				reloaded, err := loadLDTK(fileToWatch)
+				// A hand-edited or half-flushed save can land on a truncated file.
+				// Keep the map that is loaded and wait for the next event rather
+				// than taking the process down over it.
+				reloaded, err := loadJSONMap(fileToWatch)
 				if err != nil {
 					log.Println("hot reload skipped:", err)
 					continue

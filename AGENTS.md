@@ -207,7 +207,7 @@ format). Getting either one pickable in the world is a third, separate step.
 
 **A weapon needs nothing map-specific.** Every weapon in `weapons/` is
 automatically racked by `spawnWeaponRange` the moment the `WeaponRange` map
-entity loads (`assets/raymap.ldtk`, the room east of spawn) - a rack of
+entity loads (`assets/raymap.json`, the room east of spawn) - a rack of
 shelves per tile, a weapon and its own ammo side by side on a board. Add a
 weapon to the folder (migrate it, or hand-write a `weapon.json`) and it shows
 up there on the next run; nothing else has to change. It only needs pickup art
@@ -280,6 +280,41 @@ weapon range stands things at heights the shelf actually has a board at.
 `blockbench-mcp-plugin` MCP server rather than generated, to see what that
 workflow costs. What it takes to get a correct, game-ready model out of it:
 
+- **The worst one, because it doesn't fail to export or look wrong in
+  Blockbench - it fails only in the running game, invisibly: Blockbench
+  normalizes a per-face `uv: [x0,y0,x1,y1]` rect by the *project's* resolution
+  setting (`create_project`'s texture size, still 16x16 by default), not by
+  the actual texture's own width/height.** Painting a 128x128 texture and
+  then giving a face a pixel-space UV rect like `[114,2,118,86]` looks
+  completely correct in Blockbench's own viewport and every screenshot this
+  session took of the model there - Blockbench displays UV against the
+  texture's real size, it just *exports* against the project's declared size.
+  The glTF that comes out has TEXCOORD values normalized by 16 (`114/16 =
+  7.125`) instead of by 128 (`114/128 = 0.891`), i.e. wildly outside `[0,1]`.
+  Sampling that in this engine hits the texture's `CLAMP_TO_BORDER` wrap mode
+  (see below), which returns transparent black past the edge, and the mesh
+  shader (`quads/shader_mesh.go`) discards any fragment with `alpha == 0` -
+  so the whole model renders as nothing. It still passes every other check: it
+  loads without error, its AABB and collider are exactly right, it's inside
+  the view frustum, `MeshNode.Draw` issues its draw calls - and it still
+  casts a correct shadow, because the depth-only shadow shader has no texture
+  lookup or alpha discard at all. That combination (present in the collider
+  and the shadow, absent in the color pass) is the signature of this bug
+  specifically - a real occlusion or culling bug would drop the shadow too.
+  **The fix is to set the project's resolution to match the real texture
+  before exporting** (or immediately after creating a texture at a
+  non-default size) - there is no dedicated MCP tool for it, so do it with
+  `risky_eval`: `Project.texture_width = 128; Project.texture_height = 128`
+  (and update the `.bbmodel`'s own `"resolution"` and the texture's
+  `"uv_width"`/`"uv_height"` fields to match, if hand-patching a file that
+  was exported before this was caught - the UV numbers stored in the file are
+  still correct pixel coordinates, only the denominator used at export time
+  was wrong). Sanity check before trusting any export with custom per-face
+  UVs: read the compiled glTF's TEXCOORD accessor `min`/`max` and confirm
+  every value is within `[0,1]` - anything outside that range will render as
+  invisible-but-shadow-casting in this engine, not as a visibly stretched or
+  offset texture the way it would in a renderer with a saner default wrap
+  mode.
 - **Project format `free` exports 16 Blockbench units to 1 world unit (1
   voxel).** Proven by placing a 16x16x16 cube and reading back the exported
   glTF: its POSITION accessor bounds are `[0,1]`. Nothing in the UI states
@@ -662,7 +697,7 @@ costs ammo - Doom's own rule.
 
 ## The test range
 
-`assets/raymap.ldtk` has a room east of spawn with a `WeaponRange` entity in
+`assets/raymap.json` has a room east of spawn with a `WeaponRange` entity in
 its corner; `spawnWeaponRange` racks every weapon the folder holds from
 there - a rack of shelves per tile, a weapon and its own ammo side by side on
 a board, two boards to a rack, skipping tiles the room's own pillars stand

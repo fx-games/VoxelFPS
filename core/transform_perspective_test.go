@@ -21,7 +21,7 @@ func TestPointFrustum(t *testing.T) {
 	}{
 		{"straight ahead", mgl32.Vec3{0, 0, -10}, true},
 		{"behind the camera", mgl32.Vec3{0, 0, 10}, false},
-		{"in front of the near plane", mgl32.Vec3{0, 0, -0.05}, false},
+		{"in front of the near plane", mgl32.Vec3{0, 0, -0.02}, false},
 		{"past the far plane", mgl32.Vec3{0, 0, -200}, false},
 		{"far off to the side", mgl32.Vec3{100, 0, -10}, false},
 	}

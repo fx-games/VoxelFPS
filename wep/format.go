@@ -60,7 +60,7 @@ var EngineDecalSprites = []string{
 }
 
 // ViewDirections is how many angles a frame is drawn from, and the length of
-// an Actor.Views list. It is core.ViewDirections, repeated here because the
+// an Effect.Views list. It is core.ViewDirections, repeated here because the
 // compiled format cannot import the engine.
 const ViewDirections = 8
 
@@ -120,7 +120,12 @@ type Op struct {
 	SpreadH float64 `json:"spread_h,omitempty"`
 	SpreadV float64 `json:"spread_v,omitempty"`
 	Damage  int     `json:"damage,omitempty"`
-	Puff    string  `json:"puff,omitempty"`
+	// DamageType is the exploding actor's own class property, not an
+	// A_Explode argument - ZDoom reads it off the thing doing the damage, not
+	// off the call. "Avoid" is Brutal Doom's convention for a blast that only
+	// alerts monsters and is not meant to hurt anyone; see explode (weapon.go).
+	DamageType string `json:"damage_type,omitempty"`
+	Puff       string `json:"puff,omitempty"`
 	// PuffActor is the actor the mod itself names, so the impact can draw its
 	// own sprite (a spark, a puff of smoke) instead of the engine's generic
 	// bullet hole. Empty when the script named nothing or named an actor the
@@ -496,14 +501,14 @@ type Provenance struct {
 	Credit     string `json:"credit,omitempty"`
 }
 
-// Actor is something a weapon puts into the world: a muzzle smoke puff, an
+// Effect is something a weapon puts into the world: a muzzle smoke puff, an
 // ejected shell casing, the puff a hitscan leaves where it lands.
 //
 // Actors live in their own files, shared between the weapons that spawn them
 // and named by the hash of what is in them. Two weapons that spawn the same
 // smoke point at the same file, and because the name is the content, they
 // cannot disagree about what it holds and there is no order to load them in.
-type Actor struct {
+type Effect struct {
 	Format int          `json:"format"`
 	Name   string       `json:"name"`
 	Render Render       `json:"render"`
@@ -526,6 +531,21 @@ type Actor struct {
 	// NoDecal is +NODECAL, which stops a shot marking the wall whatever the
 	// weapon that fired it says.
 	NoDecal bool `json:"no_decal,omitempty"`
+	// BounceFloors, BounceWalls and BounceCeilings are ZDoom's own three bounce
+	// flags - +BOUNCEONFLOORS, +BOUNCEONWALLS, +BOUNCEONCEILINGS. Touching that
+	// kind of surface reflects the actor's velocity instead of ending its
+	// flight the way an ordinary missile's contact does; a frag grenade sets
+	// all three, so it deflects off a wall or ceiling exactly as it does off
+	// the floor rather than stopping dead against whichever it meets first.
+	BounceFloors   bool `json:"bounce_floors,omitempty"`
+	BounceWalls    bool `json:"bounce_walls,omitempty"`
+	BounceCeilings bool `json:"bounce_ceilings,omitempty"`
+	// BounceFactor scales the vertical velocity a floor or ceiling bounce
+	// keeps; WallBounceFactor is the same for a wall. Both are only meaningful
+	// alongside the matching flag above, and default to ZDoom's own 0.7 when a
+	// bouncing actor's class does not set one of its own.
+	BounceFactor     float64 `json:"bounce_factor,omitempty"`
+	WallBounceFactor float64 `json:"wall_bounce_factor,omitempty"`
 	// SeeSound is what a missile makes as it leaves the barrel. ZDoom plays it
 	// from P_SpawnMissile rather than from any state, so it appears nowhere in
 	// the actor's script: Final Doomer's plasma rifle has no A_PlaySound of
@@ -558,7 +578,7 @@ type Actor struct {
 // - the load check and the store sweep - have to agree about it. They did not
 // when Views was added, and the sweep deleted seven views of every frame
 // because no step named them.
-func (a *Actor) Pictures() []string {
+func (a *Effect) Pictures() []string {
 	var names []string
 	for _, step := range a.States.Steps {
 		if step.Sprite != "" && !IsKeepMarker(step.Sprite) {
@@ -669,7 +689,7 @@ type Weapon struct {
 
 // Pictures is every name in the shared store the weapon itself names, as
 // opposed to the ones its actors name. That is the two pickup icons, and it
-// exists for the same reason Actor.Pictures does: the load check and the store
+// exists for the same reason Effect.Pictures does: the load check and the store
 // sweep have to agree about what the store is for. They did not when the icons
 // were added, and `genweapons -prune` deleted every one of them on the first
 // run, because no actor named them.
@@ -686,6 +706,6 @@ func (w *Weapon) Pictures() []string {
 
 // Actors is actors.json: everything a weapon references.
 type Actors struct {
-	Format int               `json:"format"`
-	Actors map[string]*Actor `json:"actors"`
+	Format int                `json:"format"`
+	Actors map[string]*Effect `json:"actors"`
 }

@@ -9,17 +9,17 @@ import (
 )
 
 // The shipped map's two lights used to be Go literals in the GlApplication
-// constructor. They are Light entities in raymap.ldtk now, which means a typo in the
-// loader or a stray save from the editor can drop them and the map just goes dark
-// with nothing to say so. This is what says so.
-func TestLDtkMapCarriesItsLights(t *testing.T) {
-	result, err := loadLDTK("assets/raymap.ldtk")
+// constructor. They are Light entries in raymap.json now, which means a typo in
+// the loader or a stray save from the editor can drop them and the map just goes
+// dark with nothing to say so. This is what says so.
+func TestJSONMapCarriesItsLights(t *testing.T) {
+	result, err := loadJSONMap("assets/raymap.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if len(result.Lights) < 2 {
-		t.Fatalf("raymap.ldtk parsed to %d lights, want the two it is authored with", len(result.Lights))
+		t.Fatalf("raymap.json parsed to %d lights, want the two it is authored with", len(result.Lights))
 	}
 
 	for _, light := range result.Lights {
@@ -51,14 +51,14 @@ func TestLDtkMapCarriesItsLights(t *testing.T) {
 	}
 }
 
-// The file watcher hands loadLDTK whatever is on disk at the moment LDtk saved,
-// which can be a truncated or malformed project. It has to come back as an error
-// - a panic here kills the running engine and the session with it.
-func TestLoadLDTKReportsBadFilesInsteadOfPanicking(t *testing.T) {
+// The file watcher hands loadJSONMap whatever is on disk at the moment it was
+// saved, which can be a truncated or malformed file. It has to come back as an
+// error - a panic here kills the running engine and the session with it.
+func TestLoadJSONMapReportsBadFilesInsteadOfPanicking(t *testing.T) {
 	dir := t.TempDir()
 
-	truncated := filepath.Join(dir, "truncated.ldtk")
-	full, err := os.ReadFile("assets/raymap.ldtk")
+	truncated := filepath.Join(dir, "truncated.json")
+	full, err := os.ReadFile("assets/raymap.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,9 +66,9 @@ func TestLoadLDTKReportsBadFilesInsteadOfPanicking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, name := range []string{truncated, filepath.Join(dir, "missing.ldtk")} {
-		if _, err := loadLDTK(name); err == nil {
-			t.Errorf("loadLDTK(%s) returned no error", name)
+	for _, name := range []string{truncated, filepath.Join(dir, "missing.json")} {
+		if _, err := loadJSONMap(name); err == nil {
+			t.Errorf("loadJSONMap(%s) returned no error", name)
 		}
 	}
 }

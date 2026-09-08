@@ -336,6 +336,23 @@ func (c *PhysicsSystem) onProjectileMapCollision(projectile *PhysicsComponent, i
 	projectile.SetPosition(info.CollisionWorldPosition)
 }
 
+// RemoveObject drops obj out of the simulation entirely: no longer moved, no
+// longer solid, no longer found by a collision test or a picking ray - both
+// of those read the same grid this takes it off of. Unlike letting an object
+// die on its own (obj.IsDead, checked once a step by the loop in step()),
+// this does not touch the GameObject or its sprite at all: a corpse that
+// should stay visible on-screen calls this instead of GameObject.Kill(),
+// which would also drop it out of SpriteDrawer's draw list and make it
+// vanish outright.
+func (c *PhysicsSystem) RemoveObject(obj *PhysicsComponent) {
+	for i, o := range c.movingObjects {
+		if o == obj {
+			c.remove(i, obj)
+			return
+		}
+	}
+}
+
 func (c *PhysicsSystem) remove(id int, obj *PhysicsComponent) {
 	c.removeFromGrid(obj.Position(), obj)
 	c.movingObjects = append(c.movingObjects[:id], c.movingObjects[id+1:]...)

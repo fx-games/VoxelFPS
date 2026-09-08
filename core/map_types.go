@@ -100,6 +100,29 @@ type MapEntity struct {
 	// PatrolTo is the far end of a walking entity's beat. It walks there, then back
 	// to where it spawned, forever. Nil means the spawner picks a default.
 	PatrolTo *mgl32.Vec3
+
+	// ClimbTo is the landing at the top of a ladder entity: the point pathfinding
+	// steps straight to from the ladder's foot, whatever the height difference.
+	// Nil means this entity is not a ladder. See Scenery.Climbable.
+	ClimbTo *mgl32.Vec3
+
+	// StepTo is the far side of a physically-bridged elevation change this
+	// entity provides - a staircase's platform, say. Pathfinding otherwise
+	// requires two neighbouring tiles to have exactly the same floor height:
+	// even one voxel of difference is taller than the physics step height can
+	// carry a walker over unassisted (see quads.climbStep's absence - there
+	// isn't one), so without this a tile a staircase leads to is unreachable
+	// from its foot exactly like any other wall. Unlike ClimbTo this is an
+	// ordinary walk: gravity and the physics step-up carry the moment across,
+	// the same as they do for the player on the same staircase.
+	StepTo *mgl32.Vec3
+
+	// LocalOffset shifts this entity off the tile centre toVoxelMap otherwise
+	// always spawns it at. Doors are why this exists: a door plane is a full
+	// voxel wide and tall but a sixteenth as deep, and it has to be placeable
+	// at the front, back or middle of its tile rather than always centred -
+	// see door.go. Nil is the zero offset, not a special case.
+	LocalOffset mgl32.Vec3
 }
 
 type TileInfo struct {

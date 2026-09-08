@@ -14,7 +14,7 @@ import (
 // Result is everything one weapon needs, compiled.
 type Result struct {
 	Weapon *wep.Weapon
-	Actors map[string]*wep.Actor
+	Actors map[string]*wep.Effect
 	// Sprites are the weapon's own frames, packed into its own atlas in first
 	// use order so it comes out the same on every run.
 	Sprites []string
@@ -98,7 +98,7 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 		},
 	}
 
-	result := &Result{Weapon: weapon, Actors: make(map[string]*wep.Actor)}
+	result := &Result{Weapon: weapon, Actors: make(map[string]*wep.Effect)}
 
 	// The reachable actors are walked to a fixed point: a spawned actor can
 	// spawn another. Every edge got here through a policy entry, so the walk is
@@ -115,7 +115,7 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 			// bullet puff, an exploding barrel. The op keeps the name and the
 			// weapon records that the engine has to supply it.
 			c.defaulted("stock actor " + name)
-			result.Actors[strings.ToLower(name)] = &wep.Actor{
+			result.Actors[strings.ToLower(name)] = &wep.Effect{
 				Name:   name,
 				Stock:  true,
 				Render: wep.Render{Scale: [2]float64{1, 1}, Alpha: 1},
@@ -156,7 +156,7 @@ func compileWeapon(idx *Index, policy Policy, actorName string, strict bool) (*R
 
 // compileActor compiles one spawned actor, sharing the weapon's sprite and
 // sound collection so everything lands in the same folder.
-func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*wep.Actor, []string, error) {
+func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*wep.Effect, []string, error) {
 	actor, ok := idx.Actor(name)
 	if !ok {
 		return nil, nil, fmt.Errorf("actor %q is spawned but not defined in this mod", name)
@@ -190,7 +190,7 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 		shared.defaulted(name)
 	}
 
-	compiled := &wep.Actor{
+	compiled := &wep.Effect{
 		Name:      actor.Name,
 		Render:    inner.render(actor.Name, false),
 		Speed:     inner.speedOf(actor.Name),
@@ -201,6 +201,7 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 		NoDecal:   inner.mergedFlag(actor.Name, "nodecal"),
 		SeeSound:  seeSound,
 	}
+	inner.bounceOf(actor.Name, compiled)
 	return compiled, sortedNames(inner.neededActors), nil
 }
 
@@ -518,6 +519,37 @@ func (c *Compiler) actorFloats(name string) bool {
 		return value
 	}
 	return c.inheritsAStockProjectile(name) || c.inheritsAStockFloater(name)
+}
+
+// zdoomDefaultBounceFactor is ZDoom's own default for BounceFactor and
+// WallBounceFactor alike, used whenever a bouncing actor's class does not set
+// one of its own: https://zdoom.org/wiki/BounceFactor. A frag grenade writes
+// both explicitly; plenty of mods that only set the bounce flags rely on this
+// default instead.
+const zdoomDefaultBounceFactor = 0.7
+
+// bounceOf fills in a compiled Effect's bounce fields. The factors are only
+// worth reading - and only worth shipping in the JSON at all, via Effect's
+// omitempty - when at least one bounce flag is actually set; every actor that
+// does not bounce would otherwise carry a stray BounceFactor of its own.
+func (c *Compiler) bounceOf(name string, compiled *wep.Effect) {
+	compiled.BounceFloors = c.mergedFlag(name, "bounceonfloors")
+	compiled.BounceWalls = c.mergedFlag(name, "bounceonwalls")
+	compiled.BounceCeilings = c.mergedFlag(name, "bounceonceilings")
+	if !compiled.BounceFloors && !compiled.BounceWalls && !compiled.BounceCeilings {
+		return
+	}
+	compiled.BounceFactor = c.bounceFactor(name, "bouncefactor")
+	compiled.WallBounceFactor = c.bounceFactor(name, "wallbouncefactor")
+}
+
+func (c *Compiler) bounceFactor(name, property string) float64 {
+	if value, ok := c.mergedProperty(name, property); ok {
+		if number, err := strconv.ParseFloat(strings.TrimSpace(strings.Trim(value, `"`)), 64); err == nil {
+			return number
+		}
+	}
+	return zdoomDefaultBounceFactor
 }
 
 // seeSoundOf is the sound a missile makes when it is fired, which ZDoom plays

@@ -146,7 +146,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 	// player looks at is biased.
 	if !forShadows {
 		gl.Enable(gl.POLYGON_OFFSET_FILL)
-		gl.PolygonOffset(spriteDepthBiasFactor, spriteDepthBiasUnits)
+		gl.PolygonOffset(spriteDepthBiasFactor, spriteDepthBiasUnitsOpaque)
 		defer func() {
 			gl.PolygonOffset(0, 0)
 			gl.Disable(gl.POLYGON_OFFSET_FILL)
@@ -203,7 +203,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 
 		drawCalls += q.drawBatch(q.culledBatch, true)
 		drawCalls += q.drawBatch(q.unculledBatch, false)
-		drawCalls += q.drawAdditiveBatch(q.additiveBatch)
+		drawCalls += q.drawAdditiveBatch(q.additiveBatch, spriteDepthBiasUnitsOpaque)
 
 		currentAtlas.End()
 	}
@@ -241,10 +241,26 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 	spritesDrawn := 0
 	drawCalls := 0
 
-	// Transparent sprites are drawn last, farthest first. The sort puts the farthest
-	// at index 0, so this has to iterate forwards: drawing nearest first let the near
-	// sprite write depth and the ones behind it failed the depth test outright, so
-	// they did not blend badly - they vanished.
+	// Transparent sprites are drawn last, farthest first, and none of them write
+	// depth any more - see the DepthMask(false) in flush() below. They used to:
+	// the nearest of a pile of overlapping smoke puffs wrote depth and the ones
+	// behind it failed the depth test outright, so a dozen puffs stacked in the
+	// same spot did not double-blend into something darker than any one of them.
+	// That worked for a pile of the *same* translucent effect, and broke for two
+	// *different* ones sharing a spawn point instead - a frag grenade's own
+	// smoke column and its fireball land on the same call-site position (see
+	// spawnJitter's own comment for why even a position nudge and three tiers of
+	// polygon-offset still left this ties-with-itself at some camera distances),
+	// and a translucent sprite that writes depth there is one that can tie with
+	// another sprite's depth exactly, which a GPU resolves inconsistently
+	// per-pixel - the fine Moire pattern a screenshot of exactly this pairing
+	// showed, at two different distances, twice. Not writing depth trades the
+	// old cosmetic risk (a big pile of the same translucent effect reads a shade
+	// darker than intended) for never being able to tie with anything, which
+	// for effects that are almost always one or two sprites deep rather than a
+	// hundred is the safer default. Sorting back-to-front still keeps blending
+	// correct without it: farthest drawn first means each later, nearer sprite
+	// blends over what is already there in the right order.
 	slices.SortStableFunc(q.transparentSprites, func(i, j *SpriteComponent) int {
 		iPos := i.GameObject().Transform().GetPosition()
 		jPos := j.GameObject().Transform().GetPosition()
@@ -270,9 +286,11 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		}
 		runAtlas.Begin()
 		if runAdditive {
-			drawCalls += q.drawAdditiveBatch(q.culledBatch)
+			drawCalls += q.drawAdditiveBatch(q.culledBatch, spriteDepthBiasUnits)
 		} else {
+			gl.DepthMask(false)
 			drawCalls += q.drawBatch(q.culledBatch, true)
+			gl.DepthMask(true)
 		}
 		runAtlas.End()
 		q.culledBatch = q.culledBatch[:0]
@@ -304,7 +322,9 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		spritesDrawn++
 		if sprite.DrawMode() == SpriteModeStatic {
 			runAtlas.Begin()
+			gl.DepthMask(false)
 			drawCalls += q.drawBatch(q.culledBatch, false)
+			gl.DepthMask(true)
 			runAtlas.End()
 			q.culledBatch = q.culledBatch[:0]
 			runAtlas = nil
@@ -349,13 +369,21 @@ func appendInstance(dst []float32, observer core.Transformer, sprite *SpriteComp
 // percent alpha darkens everything behind it instead of glowing, and forty
 // overlapping puffs of it turn a lit room black. Writing depth, the nearest
 // puff would hide every sprite drawn after it, because a batch is not sorted.
-func (q *SpriteDrawer) drawAdditiveBatch(instances []float32) int {
+// restoreUnits is the bias the caller's own batches were drawn with and want
+// back once the stronger additive one is done - Draw() runs at
+// spriteDepthBiasUnitsOpaque, DrawTransparent() at spriteDepthBiasUnits, and
+// hardcoding either here silently left the other's later batches (the next
+// atlas's opaque sprites, in Draw()'s case) drawn at the wrong bias for the
+// rest of the call.
+func (q *SpriteDrawer) drawAdditiveBatch(instances []float32, restoreUnits float32) int {
 	if len(instances) == 0 {
 		return 0
 	}
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE)
 	gl.DepthMask(false)
+	gl.PolygonOffset(spriteDepthBiasFactor, spriteDepthBiasUnitsAdditive)
 	calls := q.drawBatch(instances, true)
+	gl.PolygonOffset(spriteDepthBiasFactor, restoreUnits)
 	gl.DepthMask(true)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 	return calls
@@ -376,6 +404,26 @@ func (q *SpriteDrawer) drawAdditiveBatch(instances []float32) int {
 const (
 	spriteDepthBiasFactor = -1
 	spriteDepthBiasUnits  = -128
+	// spriteDepthBiasUnitsAdditive is stronger than the ordinary bias above, so
+	// an additive sprite (a burst of fire) sits reliably closer to the viewer
+	// than a translucent one (its smoke) or an opaque one (a fireball) at the
+	// exact same spawn point - A_SpawnItem and A_CustomMissile both land there
+	// with no offset of their own. This decides ordering against a sprite that
+	// still writes real depth (an opaque one, or real world geometry); it is no
+	// longer what keeps additive from tying with translucent, because
+	// translucent does not write depth at all any more (see DrawTransparent) -
+	// nothing for it to tie with.
+	spriteDepthBiasUnitsAdditive = -256
+	// spriteDepthBiasUnitsOpaque sits between the other two, so an ordinary
+	// (non-additive, fully opaque) sprite - FragGrenadeExplosion's own fireball
+	// frames, alpha 1, no render style - draws in front of a translucent one
+	// (its smoke) testing against it at the same spawn point, the same way
+	// additive already does against both. The fireball is spawn_item'd
+	// alongside BarrelExplosionSmokeColumn at the very same position and,
+	// unlike SmallExplosionFlames, has no Speed to drift away on: it sits there
+	// through several seconds of held frames while the smoke drifts and fades
+	// near it.
+	spriteDepthBiasUnitsOpaque = -192
 )
 
 // drawBatch submits one instanced draw and reports the number of draw calls it cost.

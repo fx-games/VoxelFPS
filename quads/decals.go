@@ -20,15 +20,23 @@ const MaxDecals = 256
 // where a voxel is 1.
 const decalSurfaceOffset = float32(0.01)
 
-// A decal is a quad glued to a surface: a bullet hole or a splatter. It is not a
-// game object and not a sprite - it never moves, never animates and never needs
-// an update - so it is only the model matrix that puts the quad on the wall plus
+// A decal is a quad glued to a surface: a bullet hole or a splatter. It is not
+// a game object and not a sprite - it never animates and never needs a per-tic
+// update - so it is only the model matrix that puts the quad on the wall plus
 // the atlas tile to stamp there. That is exactly one instance in the quad
 // shader's instance buffer, which is why decals cost one draw call in total.
+//
+// parent is nil for the overwhelming majority stuck to a wall or other static
+// terrain, in which case model and center are already world space and cost
+// nothing further. A decal stuck to a moving GameObject instead - a door - has
+// to follow it, so for those model and center are in parent's own local space
+// and DrawDecals re-applies parent's current transform every frame, the same
+// way a mesh's own vertices do.
 type decal struct {
 	model  mgl32.Mat4
 	center mgl32.Vec3
 	radius float32
+	parent *GameObject
 	// light is the flood-filled voxel light where it is stuck, so a bullet
 	// hole in a lit room is as lit as the wall around it. Whoever sticks it
 	// there samples it; the drawer has no map to ask.
@@ -41,26 +49,38 @@ type decal struct {
 // shape, and ZDoom's bullet chips are seven pixels by five to nine, so a square
 // is wrong for all but one of them - and light is the baked light level there,
 // 0 to 15. The quad is rolled by a random angle around the normal so repeated
-// hits on the same wall do not line up.
-func (q *SpriteDrawer) AddDecal(atlas glhf.TextureAtlas, texIndex uint16, pos, normal mgl32.Vec3, width, height, light float32) {
-	q.addDecal(atlas, texIndex, pos, normal, width, height, rand.Float32()*2*math.Pi, light)
+// hits on the same wall do not line up. parent is the GameObject the surface
+// belongs to, or nil for raw terrain - see the decal type's own doc comment.
+func (q *SpriteDrawer) AddDecal(atlas glhf.TextureAtlas, texIndex uint16, pos, normal mgl32.Vec3, width, height, light float32, parent *GameObject) {
+	q.addDecal(atlas, texIndex, pos, normal, width, height, rand.Float32()*2*math.Pi, light, parent)
 }
 
 // ponytail: one atlas for all decals, kept in a single list. Grouping by atlas
 // only pays off once decals come from more than one sheet, and both the bullet
 // chips and the blood live in the shared picture store with everything else a
 // weapon throws at a wall.
-func (q *SpriteDrawer) addDecal(atlas glhf.TextureAtlas, texIndex uint16, pos, normal mgl32.Vec3, width, height, roll, light float32) {
+func (q *SpriteDrawer) addDecal(atlas glhf.TextureAtlas, texIndex uint16, pos, normal mgl32.Vec3, width, height, roll, light float32, parent *GameObject) {
 	if normal.Len() == 0 {
 		return
 	}
 	q.decalAtlas = atlas
+	model := DecalModel(pos, normal, width, height, roll)
+	center := pos.Add(normal.Normalize().Mul(decalSurfaceOffset))
+	if parent != nil {
+		// Store both relative to parent's transform as it is right now, so
+		// DrawDecals can get back to the same world-space quad by reapplying
+		// whatever that transform has become.
+		parentTransform := parent.Transform().GetTransformMatrix()
+		model = parentTransform.Inv().Mul4(model)
+		center = parent.Transform().GetRelativePosition(center)
+	}
 	newDecal := decal{
-		model:  DecalModel(pos, normal, width, height, roll),
-		center: pos.Add(normal.Normalize().Mul(decalSurfaceOffset)),
+		model:  model,
+		center: center,
 		// Half the quad's diagonal, which is what the frustum test needs and
 		// what a roll around the normal sweeps the corners through.
 		radius:   float32(math.Hypot(float64(width), float64(height))) * 0.5,
+		parent:   parent,
 		light:    light,
 		texIndex: texIndex,
 	}
@@ -70,6 +90,19 @@ func (q *SpriteDrawer) addDecal(atlas glhf.TextureAtlas, texIndex uint16, pos, n
 	}
 	q.decals[q.nextDecal] = newDecal
 	q.nextDecal = (q.nextDecal + 1) % MaxDecals
+}
+
+// worldSpace is d's model matrix and centre, in world space right now: as
+// stored for a static decal, or reapplied against parent's current transform
+// for one stuck to a moving GameObject.
+func (d *decal) worldSpace() (model mgl32.Mat4, center mgl32.Vec3) {
+	if d.parent == nil {
+		return d.model, d.center
+	}
+	parentTransform := d.parent.Transform().GetTransformMatrix()
+	model = parentTransform.Mul4(d.model)
+	center = parentTransform.Mul4x1(mgl32.Vec4{d.center.X(), d.center.Y(), d.center.Z(), 1}).Vec3()
+	return model, center
 }
 
 // DecalModel is the model matrix that puts a unit quad on a surface: rotated so
@@ -107,11 +140,12 @@ func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Sha
 	q.culledBatch = q.culledBatch[:0]
 	for i := range q.decals {
 		d := &q.decals[(q.nextDecal+i)%len(q.decals)]
-		if !observer.IsSphereInViewFrustum(d.center, d.radius) {
+		model, center := d.worldSpace()
+		if !observer.IsSphereInViewFrustum(center, d.radius) {
 			continue
 		}
 		leftU, topV, rightU, bottomV := q.decalAtlas.GetUV(int(d.texIndex))
-		q.culledBatch = appendDecalInstance(q.culledBatch, d,
+		q.culledBatch = appendDecalInstance(q.culledBatch, d, model,
 			float32(leftU), float32(topV), float32(rightU), float32(bottomV))
 	}
 	q.quadsDrawn += len(q.culledBatch) / QuadInstanceFloats
@@ -140,8 +174,8 @@ func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Sha
 // one off shifted every decal after the first into the one before it and lost
 // the last one entirely - which is why no bullet hole was drawn at all from
 // the day sprites learned their baked light until this was found.
-func appendDecalInstance(dst []float32, d *decal, leftU, topV, rightU, bottomV float32) []float32 {
-	dst = append(dst, d.model[:]...)
+func appendDecalInstance(dst []float32, d *decal, model mgl32.Mat4, leftU, topV, rightU, bottomV float32) []float32 {
+	dst = append(dst, model[:]...)
 	// origin offset (centred), uv rect, emissive, baked light
 	return append(dst, 0, 0, leftU, topV, rightU, bottomV, 0, d.light)
 }

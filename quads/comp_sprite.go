@@ -111,8 +111,16 @@ func (s *SpriteComponent) PlayAnimationDieAfterLastFrame(animationIndex int) {
 	s.dieAfterLastFrame = true
 }
 func (s *SpriteComponent) PlayAnimationInterrupting(animationIndex int) {
-	s.followUpAnimation = s.currentAnimation
-	s.followUpLoop = s.loop
+	// Only capture a follow-up target when this is not already the interrupt
+	// playing: a second hit landing mid-flinch would otherwise capture
+	// currentAnimation == animationIndex as its own follow-up, and Update's
+	// end-of-animation branch would resume into that same animation forever -
+	// an actor stuck replaying its hit/hurt frame instead of returning to
+	// whatever it was doing before the first hit.
+	if s.currentAnimation != animationIndex {
+		s.followUpAnimation = s.currentAnimation
+		s.followUpLoop = s.loop
+	}
 	s.loop = false
 	s.PlayAnimation(animationIndex)
 }

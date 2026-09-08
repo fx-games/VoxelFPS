@@ -176,8 +176,10 @@ type DamageEvent struct {
 	Where  mgl32.Vec3
 }
 
-// damage is what a shot does to what it hits. There is nothing with health in
-// this game yet, so it publishes the hit and plays the reaction.
+// damage is what a shot does to what it hits: publish the hit, then - for an
+// actor - let TakeDamage decide whether it flinches or dies. hit.Relative.Y()
+// in [0.6, 0.8) is a hit somewhere around the head rather than the torso; see
+// Actor.TakeDamage for what headshot vs. body then does with it.
 func (g *Game) damage(hit RaycastResult, amount int) {
 	hitObject := hit.HitObject
 	events.Publish(events.EventDamage, DamageEvent{
@@ -185,15 +187,12 @@ func (g *Game) damage(hit RaycastResult, amount int) {
 		Amount: amount,
 		Where:  hit.WorldPosition(),
 	})
-	if hitObject == nil || hitObject.DisplayName != "Scientist" {
+	actor := g.actorFor(hitObject)
+	if actor == nil {
 		return
 	}
-	sprite := hitObject.Sprite()
-	if hit.Relative.Y() > 0.6 && hit.Relative.Y() < 0.8 {
-		sprite.PlayAnimationFreezeLastFrame(int(quads.AnimDying))
-		return
-	}
-	sprite.PlayAnimationInterrupting(int(quads.AnimHit))
+	headshot := hit.Relative.Y() > 0.6 && hit.Relative.Y() < 0.8
+	actor.TakeDamage(headshot)
 }
 func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int) {
 	offsetOrigin := origin.Add(direction.Mul(0.8))
@@ -238,7 +237,14 @@ var projectileLightColor = mgl32.Vec3{0.4, 0.8, 1.0}
 
 func (g *Game) playerInteractWith(id events.EventID, event events.Event) {
 	hoveredObj := event.(*quads.GameObject)
-	if hoveredObj != nil && hoveredObj.DisplayName == "Scientist" {
+	if hoveredObj == nil {
+		return
+	}
+	if door := g.doorFor(hoveredObj); door != nil {
+		door.Interact()
+		return
+	}
+	if hoveredObj.DisplayName == "Scientist" {
 		g.Toast("You interacted with a scientist!")
 	}
 }
@@ -261,8 +267,14 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 
 		_ = relativePosition
 		g.createImpactEffects(nil, wep.Op{Puff: wep.PuffExplosion}, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
-		if hitObject != nil && projectileComponent.HitEffect > 0 && hitObject.DisplayName == "Scientist" {
-			hitObject.Sprite().PlayAnimationFreezeLastFrame(int(quads.AnimDying))
+		if projectileComponent.HitEffect > 0 {
+			// A direct projectile hit always kills outright, same as before -
+			// routed through TakeDamage(headshot: true) now so the corpse
+			// actually stops moving, stops colliding and stops taking further
+			// hits instead of just freezing its sprite. See actor.go's die().
+			if actor := g.actorFor(hitObject); actor != nil {
+				actor.TakeDamage(true)
+			}
 		}
 	}
 }
@@ -278,22 +290,27 @@ func (g *Game) splatterBehind(hitPos, direction mgl32.Vec3) {
 	if !behind.HitInfo.Hit || behind.HitObject != nil || behind.HitInfo.Distance > bloodSplatterRange {
 		return
 	}
+	// behind.HitObject is always nil here - the guard above already bailed
+	// out on hitting one - so this always lands on raw terrain, never on a
+	// door or anything else that could carry it away.
 	g.addDecal(wep.BloodSplatSprite, behind.HitInfo.CollisionWorldPosition,
-		behind.HitInfo.Side.AsDirection().ToVec3())
+		behind.HitInfo.Side.AsDirection().ToVec3(), behind.HitObject)
 }
 
-// addDecal sticks one of the engine's own decal pictures on a wall. They live
-// in the shared picture store with everything else a weapon throws at a wall,
-// so they are packed into the same atlas as the rest and are found by name
-// rather than by a tile number somebody has to keep in step with a sheet.
-func (g *Game) addDecal(sprite string, pos, normal mgl32.Vec3) {
+// addDecal sticks one of the engine's own decal pictures on a wall - or, if
+// hitObject is not nil, on that GameObject, so it moves with it from then on
+// (a bullet hole on a door, say - see quads.decal's own doc comment). They
+// live in the shared picture store with everything else a weapon throws at a
+// wall, so they are packed into the same atlas as the rest and are found by
+// name rather than by a tile number somebody has to keep in step with a sheet.
+func (g *Game) addDecal(sprite string, pos, normal mgl32.Vec3, hitObject *quads.GameObject) {
 	index, known := g.sharedSpriteIndex[sprite]
 	if !known {
 		return
 	}
 	width, height := decalSize(g.sharedAtlas, index)
 	g.Sprites.AddDecal(g.sharedAtlas, uint16(index), pos, normal,
-		width, height, g.bakedLightAt(pos, normal))
+		width, height, g.bakedLightAt(pos, normal), hitObject)
 }
 
 // decalSize is how much wall a decal covers, which is ZDoom's own rule: a
@@ -359,7 +376,7 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 		g.EmitParticlesByName(quads.ParticlesBulletImpact, pos, 30)
 	}
 	if name := g.decalFor(weapon, shot.PuffActor); leavesABulletHole(name) {
-		g.addDecal(wep.BulletChipSprites[rand.Intn(len(wep.BulletChipSprites))], pos, surfaceNormal)
+		g.addDecal(wep.BulletChipSprites[rand.Intn(len(wep.BulletChipSprites))], pos, surfaceNormal, hitObject)
 	}
 }
 

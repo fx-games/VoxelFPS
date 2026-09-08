@@ -23,7 +23,7 @@ import (
 // particular gun is written here.
 type Weapon struct {
 	Data   *wep.Weapon
-	Actors map[string]*wep.Actor
+	Actors map[string]*wep.Effect
 	Atlas  *glhf.TextureAtlasPacked
 
 	// atlasPath and soundsPath are where this weapon's pictures and sounds
@@ -56,7 +56,7 @@ type Weapon struct {
 
 // NewWeapon wires a loaded weapon to where its pictures and sounds are. They
 // are not read until the weapon is first held.
-func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Actor, atlasPath, soundsPath string) *Weapon {
+func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Effect, atlasPath, soundsPath string) *Weapon {
 	weapon := &Weapon{
 		Data:       data,
 		Actors:     actors,
@@ -271,16 +271,35 @@ func (g *Game) weaponBob() (x, y float64) {
 	if weapon == nil || g.player == nil || !weapon.cursor.Bobs() {
 		return 0, 0
 	}
-	// Doom measures its own speed in units a tic, and this engine in voxels a
-	// second.
-	velocity := g.player.Physics().Velocity()
-	speed := math.Hypot(float64(velocity.X()), float64(velocity.Z())) /
-		worldUnitsPerDoomUnit / wep.TicRate
-	x, y = weaponBobAt(speed, g.bobTics)
+	x, y = weaponBobAt(g.bobSpeed, g.bobTics)
 	if debugWeapon {
-		log.Printf("[bob] speed=%.1f units/tic x=%+.1f y=%+.1f", speed, x, y)
+		log.Printf("[bob] speed=%.1f units/tic x=%+.1f y=%+.1f", g.bobSpeed, x, y)
 	}
 	return x, y
+}
+
+// bobSpeedSmoothing is how fast bobSpeed eases toward the player's actual
+// speed: small enough that one bad frame (see bobSpeed's own doc comment)
+// barely moves it, large enough that a real stop or start still reads within
+// a couple of frames rather than as a slow fade.
+const bobSpeedSmoothing = 0.08
+
+// updateBobSpeed sets bobSpeed's target for weaponBob to ease toward: the
+// player's horizontal speed, in the same Doom-units-a-tic weaponBobAt has
+// always taken. Reading physics velocity here, once a tick with elapsed on
+// hand, rather than fresh at draw time, is what lets it be smoothed at all.
+func (g *Game) updateBobSpeed(elapsed float64) {
+	if g.player == nil {
+		return
+	}
+	velocity := g.player.Physics().Velocity()
+	rawSpeed := math.Hypot(float64(velocity.X()), float64(velocity.Z())) /
+		worldUnitsPerDoomUnit / wep.TicRate
+	alpha := elapsed / bobSpeedSmoothing
+	if alpha > 1 {
+		alpha = 1
+	}
+	g.bobSpeed += (rawSpeed - g.bobSpeed) * alpha
 }
 
 // weaponBobAt is the sway itself: how fast the player is going, in Doom units
@@ -569,6 +588,7 @@ func (g *Game) updateWeapon(elapsed float64) {
 	// weapon is being put away and the next one comes up mid swing rather than
 	// starting its own.
 	g.bobTics += elapsed * wep.TicRate
+	g.updateBobSpeed(elapsed)
 
 	input := wep.Input{Trigger: g.triggerHeld, Alt: g.altHeld, Reload: g.reloadPressed}
 	g.reloadPressed = false // a reload is a press, not a state
@@ -576,7 +596,7 @@ func (g *Game) updateWeapon(elapsed float64) {
 	for _, op := range weapon.Update(input, elapsed) {
 		g.applyWeaponOp(weapon, op)
 	}
-	g.updateWorldActors(elapsed)
+	g.updateEffects(elapsed)
 }
 
 // applyWeaponOp is the whole of what a compiled weapon can ask the world for.
@@ -759,12 +779,41 @@ func (g *Game) listenerFor(position mgl32.Vec3, volume float64) (pan, scaled flo
 // soundHalfDistance is how far away a sound has to be to lose half its volume.
 const soundHalfDistance = 8.0
 
+// explodeArgs reads A_Explode(damage, radius) back out of a compiled op.
+// zdwep's lowerExplode fills Op.Args in call order - op.Damage is a
+// different op's field, never this one's, so reading it instead of Args[0]
+// silently priced every frag grenade's blast at zero. Radius comes back in
+// world units, ready to compare against a position delta.
+//
+// DamageType "Avoid" is not a call argument; it is read off the exploding
+// actor's own class (see lowerExplode) and zeroes the damage outright.
+// Brutal Doom's GrenadeAlerter is the case this exists for: it fires a real
+// A_Explode every fuse tick while a thrown grenade is still counting down,
+// purely to give monsters a whiff of it, and every monster class in the mod
+// answers "Avoid" with DamageFactor 0 - it is not meant to hurt or flinch
+// anyone. Without this, a bystander took a real hit, flinch included, once a
+// second for as long as the grenade was in the air, well before it exploded.
+func explodeArgs(op wep.Op) (damage int, radius float32) {
+	if strings.EqualFold(op.DamageType, "Avoid") {
+		return 0, 0
+	}
+	if len(op.Args) > 0 {
+		damage = int(op.Args[0])
+	}
+	if len(op.Args) > 1 {
+		radius = float32(op.Args[1]) * worldUnitsPerDoomUnit
+	}
+	return damage, radius
+}
+
 // explodeAt is A_Explode on a world actor already mid its own Death sprite: the
 // mod's own frames are the explosion, so this only does the blast's damage,
 // rather than laying the engine's generic explosion particles over the top of
 // a picture that is already drawing one.
 func (g *Game) explodeAt(position mgl32.Vec3, op wep.Op) {
-	events.Publish(events.EventDamage, DamageEvent{Amount: op.Damage, Where: position})
+	damage, radius := explodeArgs(op)
+	events.Publish(events.EventDamage, DamageEvent{Amount: damage, Where: position})
+	g.radiusDamage(position, radius, damage)
 }
 
 // aim is the ray from the middle of the screen.
@@ -799,9 +848,11 @@ func (g *Game) explode(op wep.Op) {
 	position := hit.WorldPosition()
 	g.createImpactEffects(nil, wep.Op{Puff: wep.PuffExplosion}, hit.HitObject, position,
 		hit.HitInfo.Side.AsDirection().ToVec3())
+	damage, radius := explodeArgs(op)
 	events.Publish(events.EventDamage, DamageEvent{
-		Target: hit.HitObject, Amount: op.Damage, Where: position,
+		Target: hit.HitObject, Amount: damage, Where: position,
 	})
+	g.radiusDamage(position, radius, damage)
 }
 
 // setWeaponZoom narrows the view the way a scope does. A factor of one or less

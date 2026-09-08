@@ -176,7 +176,7 @@ func TestAPointBlankMissileOfYourOwnIsNotDrawn(t *testing.T) {
 		object := quads.NewGameObject("t")
 		object.Transform().SetPosition(at)
 		return &WorldActor{
-			data:     &wep.Actor{Missile: true, Speed: speed},
+			data:     &wep.Effect{Missile: true, Speed: speed},
 			owner:    &wep.Runtime{},
 			object:   object,
 			velocity: velocity,
@@ -198,4 +198,156 @@ func TestAPointBlankMissileOfYourOwnIsNotDrawn(t *testing.T) {
 	stray := fired(120, quick, mgl32.Vec3{0.16, 0, 0})
 	stray.owner = nil
 	assert.False(t, stray.hiddenAtPointBlank(eye))
+}
+
+// A frag grenade's own fireball and the smoke column it spawns in the same
+// breath (A_SpawnItem, no offset) land on the exact same call-site position -
+// see spawnActorAt. spawnJitter is what keeps that from being a literal
+// coincident point in world space, which two textured quads sharing a depth
+// buffer cannot resolve cleanly at any bias (see the comment on spawnJitter):
+// distinct sequence numbers must come back distinct, the offset has to stay
+// small enough that nobody notices, and it has to stay bounded rather than
+// drifting a long-lived actor further from its script's own position the
+// longer the game session runs.
+func TestSpawnJitterSeparatesCoincidentSpawnsWithoutDriftingFar(t *testing.T) {
+	base := mgl32.Vec3{1, 2, 3}
+
+	a := spawnJitter(base, 41)
+	b := spawnJitter(base, 42)
+	assert.NotEqual(t, a, b, "consecutive spawns landed on the exact same point again")
+
+	for _, seq := range []int{0, 1, 5, 100, 100000} {
+		got := spawnJitter(base, seq)
+		assert.InDelta(t, 0, got.X()-base.X(), 1e-6, "only height should move")
+		assert.InDelta(t, 0, got.Z()-base.Z(), 1e-6, "only height should move")
+		assert.Less(t, got.Y()-base.Y(), spawnJitterStep*spawnJitterCycle,
+			"a session's worth of spawns must not push this arbitrarily far off script")
+		assert.GreaterOrEqual(t, got.Y(), base.Y())
+	}
+
+	// The cycle repeats rather than growing forever.
+	assert.Equal(t, spawnJitter(base, 3), spawnJitter(base, 3+spawnJitterCycle))
+}
+
+// A frag grenade sets +BOUNCEONFLOORS/+BOUNCEONWALLS/+BOUNCEONCEILINGS with a
+// BounceFactor of 0.5 and a WallBounceFactor of 0.25 (see
+// weapons/bd_frag_grenade/source.txt); before bounceOff existed, move() froze
+// anything that touched a solid voxel in place regardless of what its own
+// class asked for, which is what "grenades stick to walls" was - a bouncing
+// actor treated exactly like a bullet's puff. These pin the physics down
+// without a voxel world behind it: bounceOff takes which axis move found
+// blocked as plain bools instead of asking solidAt itself.
+func TestBounceOffReflectsOnlyTheAxisTheSurfaceBlocked(t *testing.T) {
+	grenade := &WorldActor{data: &wep.Effect{
+		BounceFloors: true, BounceWalls: true, BounceCeilings: true,
+		BounceFactor: 0.5, WallBounceFactor: 0.25,
+	}}
+
+	// Falling, and the floor is what stops it: only Y reflects, scaled by
+	// BounceFactor, and it keeps moving up as far as it fell down - the
+	// grenade goes on falling next frame, not stuck at the last airborne inch.
+	grenade.velocity = mgl32.Vec3{2, -10, 0}
+	from := mgl32.Vec3{0, 1, 0}
+	step := grenade.velocity.Mul(0.1) // {0.2, -1, 0}
+	to := from.Add(step)
+	next, bounced := grenade.bounceOff(from, to, step, false, false, true)
+	assert.True(t, bounced)
+	assert.Equal(t, mgl32.Vec3{2, 5, 0}, grenade.velocity, "Y reflects at half speed, X is untouched")
+	assert.Equal(t, to.X(), next.X(), "the clear horizontal axis still moves")
+	assert.Equal(t, from.Y(), next.Y(), "the blocked vertical axis does not - there is nowhere to put it")
+
+	// Flying dead into a wall square-on (no Z component at all): only X
+	// reflects, at WallBounceFactor, and Y (unblocked) keeps falling under
+	// gravity as normal.
+	grenade.velocity = mgl32.Vec3{4, -1, 0}
+	from = mgl32.Vec3{0, 1, 0}
+	step = grenade.velocity.Mul(0.1) // {0.4, -0.1, 0}
+	to = from.Add(step)
+	next, bounced = grenade.bounceOff(from, to, step, true, false, false)
+	assert.True(t, bounced)
+	assert.Equal(t, mgl32.Vec3{-1, -1, 0}, grenade.velocity, "X reflects at a quarter speed, Y is untouched")
+	assert.Equal(t, from.X(), next.X(), "the blocked wall axis does not move")
+	assert.Equal(t, to.Y(), next.Y(), "the clear vertical axis still moves")
+
+	// A ceiling bounces too - the flag is its own, checked by the sign of the
+	// step rather than assumed from BounceFloors.
+	grenade.velocity = mgl32.Vec3{0, 6, 0}
+	from = mgl32.Vec3{0, 1, 0}
+	step = grenade.velocity.Mul(0.1)
+	to = from.Add(step)
+	_, bounced = grenade.bounceOff(from, to, step, false, false, true)
+	assert.True(t, bounced)
+	assert.Equal(t, float32(-3), grenade.velocity.Y())
+
+	// Something that does not bounce off a wall at all - only floors and
+	// ceilings - stops there instead, the way every actor did before bounce
+	// flags existed: settling is move()'s job once bounceOff reports false,
+	// not bounceOff's, so nothing here should have touched the velocity.
+	shell := &WorldActor{data: &wep.Effect{BounceFloors: true, BounceFactor: 0.5}}
+	shell.velocity = mgl32.Vec3{3, -1, 0}
+	from = mgl32.Vec3{0, 1, 0}
+	step = shell.velocity.Mul(0.1)
+	to = from.Add(step)
+	_, bounced = shell.bounceOff(from, to, step, true, false, false)
+	assert.False(t, bounced, "no BounceWalls, so a wall hit is not a bounce")
+	assert.Equal(t, mgl32.Vec3{3, -1, 0}, shell.velocity, "and bounceOff must not have touched it")
+}
+
+// The bug report this pins down: a grenade clipping a flat wall at a shallow
+// angle used to reverse its ENTIRE horizontal velocity - X and Z both -
+// because the old blockedByWall was one bool for the whole horizontal step,
+// with no way to say which axis the wall actually opposed. A wall that only
+// blocks X (it runs along X, facing along Z - a corridor's side wall, say)
+// must only reflect X; Z, running along the wall, is untouched and the
+// grenade deflects and slides rather than bouncing straight back the way it
+// came.
+func TestBounceOffOnlyReflectsTheAxisTheWallActuallyBlocked(t *testing.T) {
+	grenade := &WorldActor{data: &wep.Effect{
+		BounceWalls: true, WallBounceFactor: 1, // no damping, so the angle math is exact
+	}}
+
+	// Moving mostly along Z, grazing in the +X direction, into a wall that
+	// only blocks X (its face runs along X, i.e. it opposes Z... no: it
+	// blocks the X axis of the step, so it is a wall facing along X,
+	// perpendicular to the corridor - the grenade is sliding along it).
+	incoming := mgl32.Vec3{1, 0, 5}
+	grenade.velocity = incoming
+	from := mgl32.Vec3{0, 1, 0}
+	step := incoming.Mul(0.1)
+	to := from.Add(step)
+
+	next, bounced := grenade.bounceOff(from, to, step, true, false, false)
+	require.True(t, bounced)
+
+	want := mgl32.Vec3{-incoming.X(), 0, incoming.Z()}
+	assert.Equal(t, want, grenade.velocity,
+		"only X should reflect - Z runs along the wall and must be left alone")
+	assert.NotEqual(t, mgl32.Vec3{-incoming.X(), 0, -incoming.Z()}, grenade.velocity,
+		"the old bug: reversing the whole horizontal vector instead of just the blocked axis")
+	assert.Equal(t, from.X(), next.X(), "the blocked axis does not move")
+	assert.Equal(t, to.Z(), next.Z(), "the clear axis keeps moving")
+
+	// The reflection is shallow, not a reversal: the angle it turns through
+	// is small (twice the angle between the incoming path and the wall,
+	// here close to 180 minus a shallow glancing angle - the point is it is
+	// nowhere near the ~0 turn a dead-on wall hit would keep it from having,
+	// nor the near-180 a full reversal would produce for a mostly-Z path).
+	turned := angleBetween(incoming, grenade.velocity)
+	assert.Less(t, turned, 90.0, "a shallow graze should deflect, not reverse")
+
+	// The symmetric case: only Z blocked, X must be left alone.
+	grenade.velocity = incoming
+	next, bounced = grenade.bounceOff(from, to, step, false, true, false)
+	require.True(t, bounced)
+	assert.Equal(t, mgl32.Vec3{incoming.X(), 0, -incoming.Z()}, grenade.velocity,
+		"only Z should reflect - X runs along this wall")
+	assert.Equal(t, to.X(), next.X(), "the clear axis keeps moving")
+	assert.Equal(t, from.Z(), next.Z(), "the blocked axis does not move")
+
+	// A true corner hit - both axes actually blocked - still reverses both,
+	// same as a dead-on hit would.
+	grenade.velocity = incoming
+	_, bounced = grenade.bounceOff(from, to, step, true, true, false)
+	require.True(t, bounced)
+	assert.Equal(t, mgl32.Vec3{-incoming.X(), 0, -incoming.Z()}, grenade.velocity)
 }

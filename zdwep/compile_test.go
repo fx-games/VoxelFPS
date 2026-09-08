@@ -1005,3 +1005,142 @@ ACTOR TestMag : Ammo { Inventory.MaxAmount 30 }
 	assert.Equal(t, 200, result.Weapon.Items["Clip"].Max)
 	assert.Equal(t, 30, result.Weapon.Items["TestMag"].Max)
 }
+
+// A_Explode's DamageType is not one of its own arguments - ZDoom reads it off
+// the exploding actor's own class, the same way it reads a shooter's
+// DamageType off a bullet. Brutal Doom's GrenadeAlerter overrides its
+// parent's Spawn state with a small A_Explode and DamageType "Avoid" purely
+// to alert monsters without hurting them; the engine has no DamageFactor
+// table to honour that with, so the compiler has to carry the class's own
+// DamageType onto the op for the one caller (explode, in weapon.go) that
+// checks it. TestBigBoom stands in for FragGrenadeExplosion, and TestAlerter
+// for GrenadeAlerter: same parent, an overridden Spawn state, a different
+// DamageType.
+func TestCompileCarriesTheExplodingActorsOwnDamageType(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestSpawnerWeapon : Weapon
+{
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_SpawnItem("TestBigBoom")
+    TNT1 A 0 A_SpawnItem("TestAlerter")
+    Goto Ready
+  }
+}
+
+ACTOR TestBigBoom
+{
+  States
+  {
+  Spawn:
+    TNT1 A 0 A_Explode(67, 160)
+    Stop
+  }
+}
+
+ACTOR TestAlerter : TestBigBoom
+{
+  DamageType "Avoid"
+  States
+  {
+  Spawn:
+    TNT1 A 4 A_Explode(2, 240)
+    Stop
+  }
+}
+`})
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestSpawnerWeapon")
+	require.NoError(t, err)
+
+	bigBoom, ok := result.Actors["testbigboom"]
+	require.True(t, ok)
+	bigBoomOps := opsAt(t, bigBoom.States, "Spawn")
+	require.Len(t, bigBoomOps, 1)
+	assert.Equal(t, wep.OpExplode, bigBoomOps[0].Op)
+	assert.Equal(t, "", bigBoomOps[0].DamageType, "TestBigBoom writes no DamageType of its own")
+
+	alerter, ok := result.Actors["testalerter"]
+	require.True(t, ok)
+	alerterOps := opsAt(t, alerter.States, "Spawn")
+	require.Len(t, alerterOps, 1)
+	assert.Equal(t, wep.OpExplode, alerterOps[0].Op)
+	assert.Equal(t, []float64{2, 240}, alerterOps[0].Args, "the subclass's own arguments, not the parent's")
+	assert.Equal(t, "Avoid", alerterOps[0].DamageType)
+}
+
+// A frag grenade's own +BOUNCEONFLOORS/+BOUNCEONWALLS/+BOUNCEONCEILINGS and
+// BounceFactor/WallBounceFactor are plain DECORATE flags and properties, read
+// the same way as any other - see bounceOf in compile_weapon.go. What is
+// worth pinning down: an actor with none of the three flags carries no bounce
+// factor of its own (the compiler should not manufacture one for something
+// that never bounces), and one that does bounce but never mentions a factor
+// falls back to ZDoom's own default of 0.7 rather than zero, which would
+// otherwise read as "stop dead on the first bounce".
+func TestCompileReadsBounceFlagsAndFactors(t *testing.T) {
+	idx := indexFromFiles(t, map[string]string{"DECORATE": `
+ACTOR TestSpawnerWeapon : Weapon
+{
+  States
+  {
+  Ready:
+    TNT1 A 1 A_WeaponReady
+    Loop
+  Fire:
+    TNT1 A 0 A_SpawnItem("TestGrenade")
+    TNT1 A 0 A_SpawnItem("TestDefaultBouncer")
+    TNT1 A 0 A_SpawnItem("TestShellCasing")
+    Goto Ready
+  }
+}
+
+ACTOR TestGrenade
+{
+  +BOUNCEONFLOORS
+  +BOUNCEONWALLS
+  +BOUNCEONCEILINGS
+  BounceFactor 0.5
+  WallBounceFactor 0.25
+  States { Spawn: TNT1 A 1 Loop }
+}
+
+ACTOR TestDefaultBouncer
+{
+  +BOUNCEONFLOORS
+  States { Spawn: TNT1 A 1 Loop }
+}
+
+ACTOR TestShellCasing
+{
+  States { Spawn: TNT1 A 1 Loop }
+}
+`})
+	result, err := CompileWeapon(idx, DefaultPolicy(), "TestSpawnerWeapon")
+	require.NoError(t, err)
+
+	grenade, ok := result.Actors["testgrenade"]
+	require.True(t, ok)
+	assert.True(t, grenade.BounceFloors)
+	assert.True(t, grenade.BounceWalls)
+	assert.True(t, grenade.BounceCeilings)
+	assert.Equal(t, 0.5, grenade.BounceFactor)
+	assert.Equal(t, 0.25, grenade.WallBounceFactor)
+
+	defaultBouncer, ok := result.Actors["testdefaultbouncer"]
+	require.True(t, ok)
+	assert.True(t, defaultBouncer.BounceFloors)
+	assert.False(t, defaultBouncer.BounceWalls)
+	assert.Equal(t, 0.7, defaultBouncer.BounceFactor, "ZDoom's own default, not zero")
+	assert.Equal(t, 0.7, defaultBouncer.WallBounceFactor, "unset, but still defaulted: nothing says only one axis defaults")
+
+	casing, ok := result.Actors["testshellcasing"]
+	require.True(t, ok)
+	assert.False(t, casing.BounceFloors)
+	assert.False(t, casing.BounceWalls)
+	assert.False(t, casing.BounceCeilings)
+	assert.Equal(t, 0.0, casing.BounceFactor, "never bounces, so no factor was manufactured for it")
+	assert.Equal(t, 0.0, casing.WallBounceFactor)
+}

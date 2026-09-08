@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/geometry"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
@@ -95,26 +96,27 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	physics := quads.NewPhysicsComponent(false, aabb)
 	goFromEntity.SetComponent(physics)
 
-	if entity.Name == "Scientist" { // TODO: REPLACE
-		sprite := goFromEntity.Sprite()
-		atlas := sprite.AtlasTexture
-		dyingAABB := voxel.NewAABB(
-			atlas.AABBFromOpaqueAtIndex(int(g.Sprites.GetLastFrameIndex(int(quads.AnimDying), 0))),
-		)
+	if actorNames[entity.Name] {
+		g.spawnActor(goFromEntity, physics, entity, spawnPos)
+	}
 
-		physics.SetAABBForAnimation(quads.AnimDying, dyingAABB)
+	switch entity.MeshName {
+	case doorSlideMeshName:
+		g.spawnDoor(goFromEntity, doorSlide, spawnPos)
+	case doorSwingLeafMeshName:
+		g.spawnDoor(goFromEntity, doorSwing, spawnPos)
+	}
 
-		pather := quads.NewPathingComponent()
-		// The far end of the beat used to be this one literal, which only made sense
-		// for the LDtk test map. A map that wants a different one says so.
-		destination := mgl32.Vec3{5.5, 1, 2.5}
-		if entity.PatrolTo != nil {
-			destination = *entity.PatrolTo
-		}
-		pather.SetDestination(destination)
-		goFromEntity.SetComponent(pather)
+	if piece, isScenery := g.scenery[entity.MeshName]; isScenery && len(piece.Climbable) > 0 {
+		g.registerClimbable(goFromEntity, piece, entity.ClimbTo)
+	}
 
-		g.Pathfinder.AddMovingObject(pather)
+	// A staircase (or anything else bridging an elevation change) tells
+	// pathfinding about the two tiles it connects; see core.MapEntity.StepTo.
+	if entity.StepTo != nil && g.Pathfinder != nil {
+		from := geometry.Point{X: int(spawnPos.X()), Y: int(spawnPos.Z())}
+		to := geometry.Point{X: int(entity.StepTo.X()), Y: int(entity.StepTo.Z())}
+		g.Pathfinder.AddWalkLink(from, to)
 	}
 
 	// A piece of scenery that names its own boxes collides as those instead of

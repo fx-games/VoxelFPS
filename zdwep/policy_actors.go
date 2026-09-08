@@ -28,7 +28,7 @@ func actorFunctions() map[string]Lowering {
 		"a_settics":      lowerSetTics,
 
 		// Damage.
-		"a_explode":        args(wep.OpExplode, "damage", "radius"),
+		"a_explode":        lowerExplode,
 		"a_radiusthrust":   args(wep.OpRadiusThrust, "force", "radius"),
 		"a_radiusgive":     lowerRadiusGive,
 		"a_railattack":     lowerRailAttack,
@@ -160,6 +160,30 @@ func lowerTakeFromTarget(c *Compiler, call Call) ([]wep.Op, error) {
 func lowerCheckReload(c *Compiler, call Call) ([]wep.Op, error) {
 	c.needLabel("Reload")
 	return []wep.Op{{Op: wep.OpCheckReload, To: "Reload", Source: call.Raw}}, nil
+}
+
+// A_Explode(damage, radius): the two numbers are the call's own arguments, but
+// DamageType is not - ZDoom reads that off the class doing the exploding, the
+// same way A_Explode reads the shooter's own DamageType off a bullet. Brutal
+// Doom's GrenadeAlerter (`GrenadeAlerter : FragGrenadeExplosion`) overrides
+// its parent's Spawn state with a tiny A_Explode(2, 240) and DamageType
+// "Avoid" purely to give monsters a whiff of a live grenade nearby - it is
+// not meant to hurt or flinch anyone, which is why Brutal Doom's monster base
+// classes all answer "Avoid" with DamageFactor 0. This engine has no
+// DamageFactor table, so carrying the type through lets the one caller that
+// applies it (explode, in weapon.go) skip the damage and the flinch outright
+// instead of playing every fuse tick as a real hit.
+func lowerExplode(c *Compiler, call Call) ([]wep.Op, error) {
+	values, programs, err := c.evalArgs(call, "0", "0")
+	if err != nil {
+		return nil, fmt.Errorf("damage, radius: %w", err)
+	}
+	damageType, _ := c.mergedProperty(c.actorName, "damagetype")
+	return []wep.Op{{
+		Op: wep.OpExplode, Args: values, ArgExprs: programs,
+		DamageType: strings.Trim(damageType, `"`),
+		Flags:      flagWords(call), Source: call.Raw,
+	}}, nil
 }
 
 // A_JumpIfCloser(distance, label) branches on how far off the target is.

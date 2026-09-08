@@ -51,9 +51,15 @@ func NewDefaultPerspectiveTransform(width, height int) *PerspectiveTransform {
 			rotation:    mgl32.QuatIdent(),
 			scale:       mgl32.Vec3{1, 1, 1},
 		},
-		fov:           DoomVerticalFOV,
-		defaultFOV:    DoomVerticalFOV,
-		nearPlaneDist: 0.15,
+		fov:        DoomVerticalFOV,
+		defaultFOV: DoomVerticalFOV,
+		// The player's own collision box gives the camera about 0.2 units of
+		// clearance at most when pressed flush against a flat wall - 0.15 here
+		// left only a hair of margin, and anything that isn't flat (a ladder's
+		// rungs, a shelf's edge) pokes closer than that from some angles and
+		// clips through the near plane. 0.05 keeps a real margin without giving
+		// up meaningful depth precision against a 100-unit far plane.
+		nearPlaneDist: 0.05,
 		farPlaneDist:  100.0,
 		windowWidth:   width,
 		windowHeight:  height,

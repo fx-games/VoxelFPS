@@ -50,6 +50,21 @@ func (g *Game) pollInput(elapsed float64) {
 
 	physics := g.player.Physics()
 
+	// The direction the player is asking to move in, flattened: looking up must
+	// not slow you down.
+	var wishDir mgl32.Vec3
+	if moveDir[0] != 0 || moveDir[1] != 0 {
+		desired := g.Camera.GetDesiredPosition(1, moveDir).Sub(g.Camera.GetPosition())
+		wishDir = mgl32.Vec3{desired.X(), 0, desired.Z()}
+		if wishDir.Len() > 0 {
+			wishDir = wishDir.Normalize()
+		}
+	}
+
+	if g.gravitationEnabled && g.climbVelocity(physics, wishDir, moveDir, upDown) {
+		return
+	}
+
 	if !g.gravitationEnabled {
 		// Free flight: no Quake physics, space and C move straight up and down.
 		const flySpeed = 7.0
@@ -61,17 +76,6 @@ func (g *Game) pollInput(elapsed float64) {
 		physics.SetGrounded(false)
 		physics.SetVelocity(flyVelocity.Add(mgl32.Vec3{0, float32(upDown) * flySpeed, 0}))
 		return
-	}
-
-	// The direction the player is asking to move in, flattened: looking up must
-	// not slow you down.
-	var wishDir mgl32.Vec3
-	if moveDir[0] != 0 || moveDir[1] != 0 {
-		desired := g.Camera.GetDesiredPosition(1, moveDir).Sub(g.Camera.GetPosition())
-		wishDir = mgl32.Vec3{desired.X(), 0, desired.Z()}
-		if wishDir.Len() > 0 {
-			wishDir = wishDir.Normalize()
-		}
 	}
 
 	velocity := physics.Velocity()
@@ -104,16 +108,33 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		}
 	}
 
-	if key == glfw.KeyTab && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
+	if g.editor.active {
+		if key == glfw.KeyTab {
+			g.editor.addMode = !g.editor.addMode
+			g.editor.pendingStart = nil
+			g.editor.voxelBrush = nil
+			g.Toast(map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode])
+		}
+		if key >= glfw.Key1 && key <= glfw.Key5 {
+			g.editor.shapeMethod = EditShape(key-glfw.Key1) + 1
+			g.editor.pendingStart = nil
+			g.editor.voxelBrush = nil
+			g.Toast(g.editor.shapeMethod.String())
+		}
+	} else if key == glfw.KeyTab && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
 		rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
 		hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
 		g.editor.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
 		g.Toast(fmt.Sprintf("Block textures copied from %v", rayHitBlock))
 	}
 
-	if key >= glfw.Key1 && key <= glfw.Key9 {
+	if !g.editor.active && key >= glfw.Key1 && key <= glfw.Key9 {
 		// The binding is the weapons folder's, not ours.
 		g.selectWeaponByKey(int(key-glfw.Key1) + 1)
+	}
+
+	if key == glfw.KeyF5 {
+		g.toggleEditorMode()
 	}
 
 	// Reload is a press the weapon's script may or may not act on: a gun with
@@ -153,11 +174,6 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	}
 	if key == glfw.KeyF4 {
 		g.changeDecorationTexture()
-	}
-
-	if key == glfw.KeyF5 {
-		g.startVoxelEditing()
-
 	}
 
 	if key == glfw.KeyF6 {
@@ -225,7 +241,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.spawnCurrentGameObject()
 	}
 
-	if key == glfw.KeyR && !g.isMouseCursorCaptured {
+	if key == glfw.KeyR && (!g.isMouseCursorCaptured || g.editor.active) {
 		g.openVoxelEditMenu()
 	}
 
@@ -302,11 +318,6 @@ func (g *Game) HandleMousePosEvents(xpos float64, ypos float64) {
 	g.lastMouseY = ypos
 
 	if !g.isMouseCursorCaptured {
-		if g.isMouseBeingDragged {
-			g.HandleDragMove(xpos, ypos)
-		} else {
-			g.HandleMouseMove(xpos, ypos)
-		}
 		return
 	}
 
@@ -337,12 +348,20 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 
 	if button == glfw.MouseButtonRight {
 		// While the game has the mouse, the right button is ZDoom's
-		// +altattack: a scope, a bayonet, a grenade under the barrel. It only
-		// goes back to being the way out of mouse capture once the mouse is
-		// already free, and F2 does that from either side.
+		// +altattack: a scope, a bayonet, a grenade under the barrel - except
+		// in editor mode, where nothing is held and it instead drops whatever
+		// Line/Plane/Cube corner is pending. It only goes back to being the way
+		// out of mouse capture once the mouse is already free, and F2 does
+		// that from either side.
 		if !g.isMouseCursorCaptured {
 			if action == glfw.Press {
 				g.toggleMouseCapture()
+			}
+			return
+		}
+		if g.editor.active {
+			if action == glfw.Press {
+				g.cancelEditorSelection()
 			}
 			return
 		}
@@ -359,6 +378,12 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		if button != glfw.MouseButtonLeft {
 			return
 		}
+		if g.editor.active {
+			if action == glfw.Press {
+				g.applyEditorEdit()
+			}
+			return
+		}
 		if g.editor.tool != EditorToolNone {
 			if action == glfw.Press {
 				g.applyEditorTool()
@@ -368,65 +393,6 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		// The trigger is held, not pulled: a weapon's script decides what a
 		// held trigger does, and several of them keep firing while it is down.
 		g.triggerHeld = action == glfw.Press
-	} else if button == glfw.MouseButtonLeft {
-		switch action {
-		case glfw.Press:
-			g.isMouseBeingDragged = true
-			g.HandleDragStart(g.Window.GetCursorPos())
-		case glfw.Release:
-			if g.isMouseBeingDragged {
-				g.HandleDragStop(g.Window.GetCursorPos())
-				g.isMouseBeingDragged = false
-			}
-		}
-	}
-}
-
-// brushTarget is the voxel the brush is pointing at: the solid one under the
-// cursor, or the empty one in front of it when placing. Reports false when the
-// ray hit nothing, so the brush does not act on a bogus grid position.
-func (g *Game) brushTarget(x, y float64) (voxel.Int3, bool) {
-	if g.editor.voxelBrush == nil {
-		return voxel.Int3{}, false
-	}
-	result := g.rayCastFromScreenPos(x, y)
-	if !result.HitInfo.Hit {
-		return voxel.Int3{}, false
-	}
-	if g.editor.voxelSelectionEmpty {
-		return result.HitInfo.PreviousGridPosition, true
-	}
-	return result.HitInfo.CollisionGridPosition, true
-}
-
-func (g *Game) HandleMouseMove(x float64, y float64) {
-	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.editor.voxelSelection = g.editor.voxelBrush.StartDrag(blockHit)
-	}
-}
-
-func (g *Game) HandleDragStart(x float64, y float64) {
-	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.editor.voxelSelection = g.editor.voxelBrush.StartDrag(blockHit)
-	}
-}
-
-func (g *Game) HandleDragMove(x float64, y float64) {
-	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.editor.voxelSelection = g.editor.voxelBrush.Drag(blockHit)
-	}
-}
-
-func (g *Game) HandleDragStop(x float64, y float64) {
-	if g.editor.voxelBrush == nil {
-		return
-	}
-	// A drag that ends off the map keeps the selection it had, but still commits.
-	if blockHit, hit := g.brushTarget(x, y); hit {
-		g.editor.voxelSelection = g.editor.voxelBrush.Drag(blockHit)
-	}
-	if g.editor.voxelSelectionAction != nil {
-		g.editor.voxelSelectionAction(g.editor.voxelSelection)
 	}
 }
 

@@ -1,15 +1,13 @@
 package main
 
 import (
-	hex2 "encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/dungen"
 	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/ldtk"
 	"image/color"
-	"io"
 	"math/rand"
 	"os"
 )
@@ -111,276 +109,87 @@ func loadDungeonMap(generatedMap *dungen.DungeonMap) core.MapLoadResult {
 	return loadResult
 }
 
-// loadLDTK reads a map from an LDtk project file. It returns an error rather
-// than panicking because the file watcher re-reads this file every time LDtk
-// saves it: a half-written or malformed save used to take the running engine
-// down with it, losing whatever was not saved on the Go side.
-func loadLDTK(filename string) (core.MapLoadResult, error) {
-	file, err := os.Open(filename)
+// mapFile is core.MapLoadResult's on-disk shape: the same fields, but with a
+// JSON-friendly concrete color instead of the color.Color interface. This is
+// the entire map format - one struct, marshaled with encoding/json. No editor,
+// no schema, no external tool: a level is a text file you can read and hand-edit.
+type mapFile struct {
+	TileSize          int
+	AtlasFilename     string
+	PlayerSpawn       mgl32.Vec3
+	PlayerDir         mgl32.Vec2
+	CeilingHeight     int
+	IsFloorTextured   bool
+	IsCeilingTextured bool
+	CeilingColor      color.RGBA
+	FloorColor        color.RGBA
+	MapDimensions     [3]int
+	MapData           []core.TileInfo
+	Lights            []core.MapLight
+}
+
+func toMapFile(m core.MapLoadResult) mapFile {
+	toRGBA := func(c color.Color) color.RGBA {
+		if c == nil {
+			return color.RGBA{}
+		}
+		r, g, b, a := c.RGBA()
+		return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
+	}
+	return mapFile{
+		TileSize:          m.TileSize,
+		AtlasFilename:     m.AtlasFilename,
+		PlayerSpawn:       m.PlayerSpawn,
+		PlayerDir:         m.PlayerDir,
+		CeilingHeight:     m.CeilingHeight,
+		IsFloorTextured:   m.IsFloorTextured,
+		IsCeilingTextured: m.IsCeilingTextured,
+		CeilingColor:      toRGBA(m.CeilingColor),
+		FloorColor:        toRGBA(m.FloorColor),
+		MapDimensions:     m.MapDimensions,
+		MapData:           m.MapData,
+		Lights:            m.Lights,
+	}
+}
+
+func (f mapFile) toLoadResult() core.MapLoadResult {
+	return core.MapLoadResult{
+		TileSize:          f.TileSize,
+		AtlasFilename:     f.AtlasFilename,
+		PlayerSpawn:       f.PlayerSpawn,
+		PlayerDir:         f.PlayerDir,
+		CeilingHeight:     f.CeilingHeight,
+		IsFloorTextured:   f.IsFloorTextured,
+		IsCeilingTextured: f.IsCeilingTextured,
+		CeilingColor:      f.CeilingColor,
+		FloorColor:        f.FloorColor,
+		MapDimensions:     f.MapDimensions,
+		MapData:           f.MapData,
+		Lights:            f.Lights,
+	}
+}
+
+// saveJSONMap writes a map in goray's own format: see mapFile.
+func saveJSONMap(filename string, m core.MapLoadResult) error {
+	data, err := json.MarshalIndent(toMapFile(m), "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0o644)
+}
+
+// loadJSONMap reads a map in goray's own format. It returns an error rather
+// than panicking because the file watcher re-reads this file on every save: a
+// half-written save used to take the running engine down with it, losing
+// whatever was not saved on the Go side.
+func loadJSONMap(filename string) (core.MapLoadResult, error) {
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return core.MapLoadResult{}, fmt.Errorf("open %s: %w", filename, err)
 	}
-	defer file.Close()
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return core.MapLoadResult{}, fmt.Errorf("read %s: %w", filename, err)
-	}
-	ldtkProject, err := ldtk.UnmarshalLdtkJSON(data)
-	if err != nil {
+	var f mapFile
+	if err := json.Unmarshal(data, &f); err != nil {
 		return core.MapLoadResult{}, fmt.Errorf("parse %s: %w", filename, err)
 	}
-
-	loadResult := core.MapLoadResult{}
-
-	tileSet := ldtkProject.Defs.Tilesets[0]
-	tileSetFilename := tileSet.RelPath
-	tileSize := int(tileSet.TileGridSize)
-	atlasGridWidth := tileSet.CWid
-
-	level := ldtkProject.Levels[0]
-
-	for _, levelDataField := range level.FieldInstances {
-		switch levelDataField.Identifier {
-		case "CeilingHeight":
-			if ceilingHeight, isOk := levelDataField.Value.(float64); isOk {
-				loadResult.CeilingHeight = int(ceilingHeight)
-			}
-		case "IsFloorTextured":
-			if isFloorTextured, isOk := levelDataField.Value.(bool); isOk {
-				loadResult.IsFloorTextured = isFloorTextured
-			}
-		case "IsCeilingTextured":
-			if isCeilingTextured, isOk := levelDataField.Value.(bool); isOk {
-				loadResult.IsCeilingTextured = isCeilingTextured
-			}
-		case "CeilingColor":
-			if colorHex, isOk := levelDataField.Value.(string); isOk {
-				loadResult.CeilingColor = colorFromHex(colorHex)
-			}
-		case "FloorColor":
-			if colorHex, isOk := levelDataField.Value.(string); isOk {
-				loadResult.FloorColor = colorFromHex(colorHex)
-			}
-		}
-	}
-
-	layerOne := level.LayerInstances[0]
-	mapSizeX := int(layerOne.CWid)
-	mapSizeZ := int(layerOne.CHei)
-	var spawnPos mgl32.Vec3
-	var spawnDir mgl32.Vec2
-
-	mapData := make([]core.TileInfo, mapSizeX*mapSizeZ)
-
-	atlasIndexFromField := func(field ldtk.FieldInstance) int {
-		if field.Value == nil {
-			return -1
-		}
-		rectObj, ok := field.Value.(map[string]interface{})
-		if !ok {
-			return -1
-		}
-		pixX := int64(rectObj["x"].(float64))
-		pixY := int64(rectObj["y"].(float64))
-		gridX := pixX / int64(tileSet.TileGridSize)
-		gridY := pixY / int64(tileSet.TileGridSize)
-		atlasIndex := int64(atlasGridWidth)*gridY + gridX
-		return int(atlasIndex)
-	}
-
-	for _, layer := range level.LayerInstances {
-		layerId := layer.Identifier
-		layerType := ldtk.Type(layer.Type)
-		switch layerType {
-		case ldtk.Entities:
-			for _, entity := range layer.EntityInstances {
-				gridPos := entity.Grid
-				entityId := entity.Identifier
-				switch entityId {
-				case "PlayerSpawn":
-					spawnPos = mgl32.Vec3{float32(gridPos[0]), 1, float32(gridPos[1])}
-					if lookDirName, isOk := entity.FieldInstances[0].Value.(string); isOk {
-						switch lookDirName {
-						case "North":
-							spawnDir = mgl32.Vec2{0, 1}
-						case "South":
-							spawnDir = mgl32.Vec2{0, -1}
-						case "East":
-							spawnDir = mgl32.Vec2{1, 0}
-						case "West":
-							spawnDir = mgl32.Vec2{-1, 0}
-						}
-					}
-				case "Light":
-					// A light is not a tile entity: it does not sit in mapData, it
-					// goes on the load result, and the renderer replaces the scene's
-					// lights with the whole list. Grid position plus half a tile puts
-					// it in the middle of the tile it was dropped on, and Height is
-					// above the map floor.
-					light := core.MapLight{
-						Position: mgl32.Vec3{float32(gridPos[0]) + 0.5, 2, float32(gridPos[1]) + 0.5},
-						Color:    mgl32.Vec3{1, 1, 1},
-					}
-					for _, field := range entity.FieldInstances {
-						value, isNumber := field.Value.(float64)
-						switch field.Identifier {
-						case "Height":
-							if isNumber {
-								light.Position[1] = float32(value)
-							}
-						case "Yaw":
-							if isNumber {
-								light.Yaw = float32(value)
-							}
-						case "Pitch":
-							if isNumber {
-								light.Pitch = float32(value)
-							}
-						case "Intensity":
-							if isNumber {
-								light.Intensity = float32(value)
-							}
-						case "Angle":
-							if isNumber {
-								light.Angle = float32(value)
-							}
-						case "Reach":
-							if isNumber {
-								light.Reach = float32(value)
-							}
-						case "Color":
-							if hex, isString := field.Value.(string); isString {
-								light.Color = colorVecFromHex(hex)
-							}
-						case "Baked":
-							// A Light entity is a dynamic spotlight unless it asks to
-							// be baked into the level instead. A Torch entity is the
-							// other way round - see below.
-							if baked, isBool := field.Value.(bool); isBool {
-								light.Baked = baked
-							}
-						}
-					}
-					loadResult.Lights = append(loadResult.Lights, light)
-				case "Torch":
-					// A torch is a baked light and nothing else: it floods the voxel
-					// light once at load and then costs nothing, which is what lets a
-					// level hold as many as it likes. A torch that has to move or
-					// switch off is a Light entity with Baked off.
-					torch := core.MapLight{
-						Position: mgl32.Vec3{float32(gridPos[0]) + 0.5, torchLightHeight, float32(gridPos[1]) + 0.5},
-						Color:    mgl32.Vec3{1, 1, 1},
-						Baked:    true,
-					}
-					for _, field := range entity.FieldInstances {
-						if field.Identifier == "Height" {
-							if value, isNumber := field.Value.(float64); isNumber {
-								torch.Position[1] = float32(value)
-							}
-						}
-					}
-					loadResult.Lights = append(loadResult.Lights, torch)
-				case "Mod":
-					mapIndex := int(gridPos[1])*int(mapSizeX) + int(gridPos[0])
-					for _, field := range entity.FieldInstances {
-						switch field.Identifier {
-						case "WallHeight":
-							mapData[mapIndex].WallHeight = int(field.Value.(float64))
-						case "WallOffset":
-							if field.Value != nil {
-								mapData[mapIndex].WallOffset = int(field.Value.(float64))
-							}
-						case "CeilingHeight":
-							if field.Value != nil {
-								mapData[mapIndex].CeilingHeight = int(field.Value.(float64))
-							}
-						case "FloorOffset":
-							if field.Value != nil {
-								mapData[mapIndex].FloorOffset = int(field.Value.(float64))
-							}
-						case "WallTex":
-							if field.Value != nil {
-								mapData[mapIndex].WallTex = atlasIndexFromField(field)
-							}
-						}
-					}
-
-				default:
-					mapEntity := core.MapEntity{
-						Name:           entityId,
-						CreateCollider: true,
-					}
-					for _, field := range entity.FieldInstances {
-						switch field.Identifier {
-						case "TextureIndex":
-							texIndex := atlasIndexFromField(field)
-							mapEntity.TextureIndices = []uint16{uint16(texIndex)}
-						case "TextureIndices":
-							texIndices := field.Value.([]interface{})
-							for _, texIndex := range texIndices {
-								mapEntity.TextureIndices = append(mapEntity.TextureIndices, uint16(texIndex.(float64)))
-							}
-						case "MeshName":
-							mapEntity.MeshName = field.Value.(string)
-						case "SpriteSheetName":
-							mapEntity.SpriteSheetName = field.Value.(string)
-						case "SpriteSheetTileSize":
-							spriteSize := field.Value.([]interface{})
-							mapEntity.SpriteSheetTileSize = geometry.Point{X: int(spriteSize[0].(float64)), Y: int(spriteSize[1].(float64))}
-						}
-					}
-					spawnX := gridPos[0]
-					spawnY := gridPos[1]
-					mapIndex := int(spawnY)*mapSizeX + int(spawnX)
-
-					mapData[mapIndex].Entities = append(mapData[mapIndex].Entities, mapEntity)
-				}
-			}
-		case ldtk.Tiles:
-			for _, tile := range layer.GridTiles {
-				textureIndex := tile.T
-				tileIndex := tile.D[0]
-				switch layerId {
-				case "Walls":
-					mapData[tileIndex].WallTex = int(textureIndex)
-					mapData[tileIndex].WallHeight = max(1, mapData[tileIndex].WallHeight)
-				case "Floors":
-					mapData[tileIndex].FloorTex = int(textureIndex)
-				case "Ceilings":
-					mapData[tileIndex].CeilTex = int(textureIndex)
-				}
-			}
-		}
-	}
-	mapSizeY := loadResult.CeilingHeight + 2
-
-	//voxelMap.ChangeMaxChunkHeightForDraw(64)
-	//voxelMap.ForceUpload()
-
-	loadResult.MapData = mapData
-	loadResult.TileSize = tileSize
-	loadResult.AtlasFilename = *tileSetFilename
-	loadResult.PlayerSpawn = spawnPos
-	loadResult.PlayerDir = spawnDir
-	loadResult.MapDimensions = [3]int{mapSizeX, mapSizeY, mapSizeZ}
-
-	return loadResult, nil
-}
-
-// colorVecFromHex is the linear-ish 0..1 form of an authored "#RRGGBB", which is what
-// a light wants; colorFromHex below returns the color.Color the tile layers want.
-func colorVecFromHex(hex string) mgl32.Vec3 {
-	rgba, isRGBA := colorFromHex(hex).(color.RGBA)
-	if !isRGBA {
-		return mgl32.Vec3{1, 1, 1}
-	}
-	return mgl32.Vec3{float32(rgba.R) / 255, float32(rgba.G) / 255, float32(rgba.B) / 255}
-}
-
-func colorFromHex(hex string) color.Color {
-	bytes, err := hex2.DecodeString(hex[1:])
-	if err != nil {
-		return color.RGBA{}
-	}
-	return color.RGBA{R: bytes[0], G: bytes[1], B: bytes[2], A: 255}
+	return f.toLoadResult(), nil
 }
