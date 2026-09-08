@@ -66,7 +66,35 @@ func NewWeapon(game *Game, data *wep.Weapon, actors map[string]*wep.Effect, atla
 		runtime:    wep.NewRuntime(data, rand.New(rand.NewSource(1))),
 	}
 	weapon.cursor = wep.NewCursor(&data.States, "Ready")
+	game.shareInventory(weapon.runtime)
 	return weapon
+}
+
+// shareInventory folds a freshly built weapon's inventory and caps into the
+// player's one shared pool and repoints the runtime at it, so ammo two guns
+// both spend - Doom's Clip, Shell, Cell, Rocket, and a migrated mod's own
+// names for the same thing - is one count instead of each gun's own copy. See
+// docs/adr/0003-single-inventory-map.md.
+//
+// A weapon-private counter, like a chambered-round count or an overload flag,
+// is namespaced with the weapon's own name by the migration, so it never
+// collides with another weapon's key - it lives in the same shared map without
+// being shared by anything.
+func (g *Game) shareInventory(runtime *wep.Runtime) {
+	if g.playerInventory == nil {
+		g.playerInventory = make(wep.Inventory)
+		g.playerCaps = make(wep.Caps)
+	}
+	for item, amount := range runtime.Caps {
+		g.playerCaps[item] = amount
+	}
+	for item, amount := range runtime.Inventory {
+		if _, already := g.playerInventory[item]; !already {
+			g.playerInventory[item] = amount
+		}
+	}
+	runtime.Inventory = g.playerInventory
+	runtime.Caps = g.playerCaps
 }
 
 // load reads the weapon's atlas, once, and keeps it for the life of the game.

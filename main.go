@@ -244,6 +244,11 @@ type Game struct {
 	// weaponKeys and weaponByID come out of the weapons folder's key map.
 	weaponKeys map[int]string
 	weaponByID map[string]int
+	// playerInventory and playerCaps are the one pool of ammo, chambered rounds
+	// and flags every weapon's runtime reads and writes - see docs/adr/0003 and
+	// shareInventory. Two guns that both spend Shells share the same Shells.
+	playerInventory wep.Inventory
+	playerCaps      wep.Caps
 	// recentWeapons is which weapons still have their pictures loaded, oldest
 	// first. See keepLoaded.
 	recentWeapons []*Weapon

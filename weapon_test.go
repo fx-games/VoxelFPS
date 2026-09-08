@@ -140,6 +140,41 @@ func TestTheWeaponSwaysTheWayDoomsDoes(t *testing.T) {
 	}
 }
 
+// Two guns that spend the same ammo type - a pistol and a chaingun both
+// drawing on Doom's Clip - share one count rather than each carrying its own
+// full magazine: picking up a box for one and firing the other should move
+// the same number. See docs/adr/0003-single-inventory-map.md and
+// Game.shareInventory.
+func TestTwoWeaponsSpendingTheSameAmmoShareOnePool(t *testing.T) {
+	game := &Game{}
+	pistol := NewWeapon(game, &wep.Weapon{
+		ID:   "pistol",
+		Ammo: wep.Ammo{Type: "Clip", Use: 1},
+		Items: map[string]wep.Item{
+			"Clip": {Max: 200, Initial: 50},
+		},
+	}, nil, "", "")
+	chaingun := NewWeapon(game, &wep.Weapon{
+		ID:   "chaingun",
+		Ammo: wep.Ammo{Type: "Clip", Use: 2},
+		Items: map[string]wep.Item{
+			"Clip": {Max: 200, Initial: 50},
+		},
+	}, nil, "", "")
+
+	// A reserve ammo type is filled to its cap when a weapon that spends it is
+	// built, not to Item.Initial - see wep.NewRuntime - so both start full.
+	if got := chaingun.AmmoLine(); got != "200/200" {
+		t.Fatalf("chaingun ammo before firing = %q, want 200/200", got)
+	}
+
+	pistol.runtime.Inventory.Take("Clip", 10)
+
+	if got := chaingun.AmmoLine(); got != "190/200" {
+		t.Errorf("chaingun ammo after the pistol spent Clip = %q, want 190/200 - the pools are not shared", got)
+	}
+}
+
 // A_Explode(damage, radius) compiles to Op.Args in call order, not to
 // Op.Damage - see explodeArgs. A frag grenade's own JSON carries {67, 160},
 // so this pins the mapping down against a real compiled call rather than a

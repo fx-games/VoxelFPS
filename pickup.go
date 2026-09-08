@@ -209,12 +209,9 @@ func (g *Game) takeHoveredPickup() bool {
 }
 
 // take hands one over and clears it out of the world: the weapon joins the
-// inventory, or the box of ammo goes into the weapon it belongs to.
-//
-// ponytail: ammo goes to that one weapon's own runtime, because that is where
-// an inventory lives here - every weapon carries its own. A single player
-// inventory the weapons draw from is the honest shape and it is a change to
-// wep.Runtime, not to this.
+// inventory, or the box of ammo goes into the player's shared pool - see
+// shareInventory - so it counts for every other gun that spends the same
+// ammo, not only the one it was standing next to.
 func (g *Game) take(pickup *Pickup) {
 	pickup.object.Kill()
 	g.Sprites.Remove(pickup.sprite)
