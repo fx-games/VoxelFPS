@@ -37,6 +37,7 @@ func main() {
 	stairsTest := flag.Bool("stairs", false, "load the stairs test map: a staircase onto a platform, to walk the step-up")
 	actorTest := flag.Bool("actors", false, "load the actor pathfinding test map: a hundred patrolling actors, a platform reached by stairs, a platform reached by ladder")
 	doorsTest := flag.Bool("doors", false, "load the doors test map: three slide doors (front/mid/back placed) and one swing door")
+	computerTest := flag.Bool("computer", false, "load the computer test map: one Computer prop, screen facing the player spawn")
 	// The two shadow knobs are also flags, not only config menu sliders, so a
 	// before/after can be run from a script instead of from muscle memory.
 	shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
@@ -75,6 +76,8 @@ func main() {
 		mapLoad = loadActorTestMap()
 	} else if *doorsTest {
 		mapLoad = loadDoorTestMap()
+	} else if *computerTest {
+		mapLoad = loadComputerTestMap()
 	} else if *stress {
 		stressConfig = &StressConfig{
 			Size:          *stressSize,
@@ -334,12 +337,17 @@ type Game struct {
 
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
+
+	// keys is action name -> bound key, loaded from keyBindingsFile. See
+	// keybindings.go.
+	keys map[string]glfw.Key
 }
 
 func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) {
 	// Basics (Window / Camera)
 	g.editor.currentPaintGunTextureIndex = -1
 	g.GlApplication = app
+	g.keys = loadKeyBindings(keyBindingsFile)
 
 	g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
 	g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))

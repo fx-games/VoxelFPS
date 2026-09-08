@@ -15,6 +15,12 @@ type MeshDrawer struct {
 	nameCache          map[string]int
 	drawCalls          int
 	trianglesDrawn     int
+
+	// screenAnims is one flipbook clock per meshIndex, not per placed
+	// instance - loadGLTF already shares one CompoundMesh across every
+	// instance of the same file, so a screen's animation is a property of
+	// the model, the same way its geometry is.
+	screenAnims map[int]*ScreenAnimation
 }
 
 type MeshComponent struct {
@@ -46,7 +52,25 @@ func NewMeshDrawer(shader *glhf.Shader) *MeshDrawer {
 		shader:             shader,
 		gameObjectsPerMesh: make(map[int][]*MeshComponent),
 		nameCache:          make(map[string]int),
+		screenAnims:        make(map[int]*ScreenAnimation),
 	}
+}
+
+// EnsureScreenAnimation makes every placed instance of meshIndex's model play
+// a looping flipbook of the numbered frames in dir on its textureIndex
+// material slot - a computer screen turning on. Safe to call once per spawn
+// of the piece: the frames are only ever loaded once per meshIndex, the first
+// time this is called for it.
+func (q *MeshDrawer) EnsureScreenAnimation(meshIndex, textureIndex int, dir string, frameSeconds float64) error {
+	if _, wired := q.screenAnims[meshIndex]; wired {
+		return nil
+	}
+	frames, err := LoadScreenFrames(dir)
+	if err != nil {
+		return err
+	}
+	q.screenAnims[meshIndex] = NewScreenAnimation(textureIndex, frameSeconds, frames)
+	return nil
 }
 
 func (q *MeshDrawer) loadGLTF(fileName string) (meshIndex int) {
@@ -75,6 +99,9 @@ func (q *MeshDrawer) NewMesh(gltfFile string) (*MeshComponent, voxel.AABB) {
 }
 
 func (q *MeshDrawer) Update(elapsed float64) {
+	for meshIndex, anim := range q.screenAnims {
+		anim.tick(q.loadedMeshes[meshIndex], elapsed)
+	}
 	for index, meshes := range q.gameObjectsPerMesh {
 		for i := len(meshes) - 1; i >= 0; i-- {
 			if meshes[i].IsDead(elapsed) {

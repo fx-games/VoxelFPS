@@ -30,21 +30,21 @@ func (g *Game) pollInput(elapsed float64) {
 	moveDir := [2]int{0, 0}
 	upDown := int(0)
 	inputSrc := g.GlApplication.Window
-	if g.autoWalk || inputSrc.GetKey(glfw.KeyW) == glfw.Press {
+	if g.autoWalk || inputSrc.GetKey(g.key(ActionMoveForward)) == glfw.Press {
 		moveDir[1] = 1
-	} else if inputSrc.GetKey(glfw.KeyS) == glfw.Press {
+	} else if inputSrc.GetKey(g.key(ActionMoveBackward)) == glfw.Press {
 		moveDir[1] = -1
 	}
 
-	if inputSrc.GetKey(glfw.KeyA) == glfw.Press {
+	if inputSrc.GetKey(g.key(ActionMoveLeft)) == glfw.Press {
 		moveDir[0] = -1
-	} else if inputSrc.GetKey(glfw.KeyD) == glfw.Press {
+	} else if inputSrc.GetKey(g.key(ActionMoveRight)) == glfw.Press {
 		moveDir[0] = 1
 	}
 
-	if inputSrc.GetKey(glfw.KeyC) == glfw.Press {
+	if inputSrc.GetKey(g.key(ActionCrouch)) == glfw.Press {
 		upDown = -1
-	} else if inputSrc.GetKey(glfw.KeySpace) == glfw.Press {
+	} else if inputSrc.GetKey(g.key(ActionJump)) == glfw.Press {
 		upDown = 1
 	}
 
@@ -101,7 +101,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		return
 	}
 
-	if key == glfw.KeyG && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
+	if key == g.key(ActionToggleEmissiveTexture) && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
 		hit := g.lastHitResult.HitInfo
 		if textureIndex, nowGlowing, ok := g.ToggleEmissiveTextureAt(hit.CollisionGridPosition, hit.Side); ok {
 			g.Toast(fmt.Sprintf("Texture %d %s", textureIndex, map[bool]string{true: "glowing", false: "back to normal"}[nowGlowing]))
@@ -109,7 +109,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	}
 
 	if g.editor.active {
-		if key == glfw.KeyTab {
+		if key == g.key(ActionEditorTabAction) {
 			g.editor.addMode = !g.editor.addMode
 			g.editor.pendingStart = nil
 			g.editor.voxelBrush = nil
@@ -121,7 +121,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 			g.editor.voxelBrush = nil
 			g.Toast(g.editor.shapeMethod.String())
 		}
-	} else if key == glfw.KeyTab && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
+	} else if key == g.key(ActionEditorTabAction) && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
 		rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
 		hitBlock := g.CubeMap.GetGlobalBlock(rayHitBlock.X, rayHitBlock.Y, rayHitBlock.Z)
 		g.editor.voxelBlock.Textures = maps.Clone(hitBlock.Textures)
@@ -133,50 +133,50 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		g.selectWeaponByKey(int(key-glfw.Key1) + 1)
 	}
 
-	if key == glfw.KeyF5 {
+	if key == g.key(ActionToggleEditorMode) {
 		g.toggleEditorMode()
 	}
 
 	// Reload is a press the weapon's script may or may not act on: a gun with
 	// no Reload state, like a pump shotgun that works itself, ignores it.
-	if key == glfw.KeyR && g.isMouseCursorCaptured {
+	if key == g.key(ActionReload) && g.isMouseCursorCaptured {
 		g.reloadPressed = true
 	}
 
 	// Nine number keys against a hundred and forty migrated weapons, so , and .
 	// walk through the whole folder.
-	if key == glfw.KeyComma {
+	if key == g.key(ActionPreviousWeapon) {
 		g.cycleWeapon(-1)
 	}
-	if key == glfw.KeyPeriod {
+	if key == g.key(ActionNextWeapon) {
 		g.cycleWeapon(1)
 	}
 
 	// The inventory: what has been picked up, and a way back into anything
 	// that is not on a number key.
-	if key == glfw.KeyI {
+	if key == g.key(ActionOpenInventory) {
 		g.openInventory()
 	}
 
-	if key == glfw.KeyEscape {
+	if key == g.key(ActionOpenEscapeMenu) {
 		g.openEscapeMenu()
 	}
-	if key == glfw.KeyF1 {
+	if key == g.key(ActionOpenWizardMenu) {
 		g.openWizardMenu()
 	}
 
-	if key == glfw.KeyF2 {
+	if key == g.key(ActionToggleMouseCapture) {
 		g.toggleMouseCapture()
 	}
 
-	if key == glfw.KeyF3 {
+	if key == g.key(ActionToggleSpawnMode) {
 		g.toggleSpawnMode()
 	}
-	if key == glfw.KeyF4 {
+	if key == g.key(ActionChangeDecorationTexture) {
 		g.changeDecorationTexture()
 	}
 
-	if key == glfw.KeyF6 {
+	if key == g.key(ActionOpenCubeTextureMapper) {
 		g.openCubeTextureMapper()
 	}
 
@@ -195,37 +195,37 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	// The field of view the player plays at, which a scope divides rather than
 	// replaces - so widening the view while scoped widens what unscoping goes
 	// back to, and does not fight the scope for the camera.
-	if key == glfw.KeyF9 {
+	if key == g.key(ActionIncreaseFOV) {
 		g.changeBaseFOV(5)
 		g.Camera.LookSensitivity += 0.01
 	}
-	if key == glfw.KeyF10 {
+	if key == g.key(ActionDecreaseFOV) {
 		g.changeBaseFOV(-5)
 		g.Camera.LookSensitivity -= 0.01
 	}
 
-	if key == glfw.KeyF7 {
+	if key == g.key(ActionWireframeOff) {
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 	}
-	if key == glfw.KeyF8 {
+	if key == g.key(ActionWireframeOn) {
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 	}
 
-	if key == glfw.KeyF11 {
+	if key == g.key(ActionTestAtlasPicker) {
 		g.testPackedAtlasPicker()
 	}
 
-	if key == glfw.KeyF12 {
+	if key == g.key(ActionSaveScreenshot) {
 		g.SaveScreenshot("screenshot00.png")
 		//g.SaveShadowMaps("./temp")
 	}
 
-	if key == glfw.KeyF {
+	if key == g.key(ActionToggleGravity) {
 		g.gravitationEnabled = !g.gravitationEnabled
 		g.physicsSystem.SetGravityEnabled(g.gravitationEnabled)
 		g.Toast(fmt.Sprintf("Gravity %s", map[bool]string{true: "on", false: "off"}[g.gravitationEnabled]))
 	}
-	if key == glfw.KeyT {
+	if key == g.key(ActionCyclePlayerLight) {
 		// One key, one slot: off -> flashlight -> torch -> off. The player carries a
 		// single light, so picking one puts the other away.
 		g.Toast(fmt.Sprintf("Player light: %s", g.CyclePlayerLight()))
@@ -234,28 +234,28 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	// has picked out is taken, and anything else is interacted with. The item
 	// wins because it is the nearer of the two - the beam only holds one that
 	// is in front of whatever the ray hit.
-	if key == glfw.KeyE && !g.takeHoveredPickup() && g.isHoveringObject() {
+	if key == g.key(ActionInteract) && !g.takeHoveredPickup() && g.isHoveringObject() {
 		events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
 	}
-	if key == glfw.KeyV {
+	if key == g.key(ActionSpawnGameObject) {
 		g.spawnCurrentGameObject()
 	}
 
-	if key == glfw.KeyR && (!g.isMouseCursorCaptured || g.editor.active) {
+	if key == g.key(ActionOpenVoxelEditMenu) && (!g.isMouseCursorCaptured || g.editor.active) {
 		g.openVoxelEditMenu()
 	}
 
-	if key == glfw.KeyL {
+	if key == g.key(ActionEntityMenuNext) {
 		g.entityMenu.SelectNext()
 	}
-	if key == glfw.KeyK {
+	if key == g.key(ActionEntityMenuPrevious) {
 		g.entityMenu.SelectPrevious()
 	}
 
-	if key == glfw.KeyO {
+	if key == g.key(ActionEntityMenuScrollUp) {
 		g.entityMenu.ScrollUp()
 	}
-	if key == glfw.KeyP {
+	if key == g.key(ActionEntityMenuScrollDown) {
 		g.entityMenu.ScrollDown()
 	}
 }

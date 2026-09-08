@@ -244,8 +244,8 @@ func (g *Game) playerInteractWith(id events.EventID, event events.Event) {
 		door.Interact()
 		return
 	}
-	if hoveredObj.DisplayName == "Scientist" {
-		g.Toast("You interacted with a scientist!")
+	if actor := g.actorFor(hoveredObj); actor != nil && actor.Dialogue != nil {
+		g.openDialogue(actor.Dialogue)
 	}
 }
 func (g *Game) physicsCollision(id events.EventID, event events.Event) {

@@ -1,0 +1,43 @@
+# Keyboard bindings. One per line: `<Key> => <Action>`.
+# Lines starting with # and blank lines are ignored.
+# An action left out, or a file that isn't here at all, keeps its default.
+# Weapon select (1-9) and editor shape (1-5) are slot numbers, not
+# remappable actions, and aren't listed here.
+
+W => MoveForward
+S => MoveBackward
+A => MoveLeft
+D => MoveRight
+C => Crouch
+Space => Jump
+
+R => Reload
+Comma => PreviousWeapon
+Period => NextWeapon
+E => Interact
+
+I => OpenInventory
+Escape => OpenEscapeMenu
+F1 => OpenWizardMenu
+F2 => ToggleMouseCapture
+
+F3 => ToggleSpawnMode
+F4 => ChangeDecorationTexture
+F5 => ToggleEditorMode
+F6 => OpenCubeTextureMapper
+F7 => WireframeOff
+F8 => WireframeOn
+F9 => IncreaseFOV
+F10 => DecreaseFOV
+F11 => TestAtlasPicker
+F12 => SaveScreenshot
+F => ToggleGravity
+T => CyclePlayerLight
+V => SpawnGameObject
+R => OpenVoxelEditMenu
+Tab => EditorTabAction
+G => ToggleEmissiveTexture
+L => EntityMenuNext
+K => EntityMenuPrevious
+O => EntityMenuScrollUp
+P => EntityMenuScrollDown

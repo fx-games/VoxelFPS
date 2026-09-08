@@ -48,6 +48,20 @@ type Scenery struct {
 	// That bakes in "this ladder climbs towards +Z"; a ladder facing another
 	// way needs its own box, there is no rotation to derive it from yet.
 	Climbable [][2]mgl32.Vec3 `json:"climbable"`
+
+	// Screen, if set, makes this piece's given material slot play a looping
+	// flipbook instead of showing its baked-in texture - a computer monitor
+	// turning on. Frames are read from a "screen" folder beside mesh.gltf:
+	// "0.png", "1.png", ... See quads.MeshDrawer.EnsureScreenAnimation.
+	Screen *ScreenSpec `json:"screen"`
+}
+
+// ScreenSpec names which material slot animates and how fast. Material is
+// whatever index the model's own glTF export gave that face - check the
+// model in Blockbench (or the exported .gltf's materials list) to know it.
+type ScreenSpec struct {
+	Material int     `json:"material"`
+	FPS      float64 `json:"fps"`
 }
 
 // sceneryDir is the folder of folders, one to a piece.

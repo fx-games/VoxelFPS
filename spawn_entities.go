@@ -64,6 +64,17 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 
 		goFromEntity.SetComponent(mesh)
 		g.Meshes.Add(mesh)
+
+		if piece, isScenery := g.scenery[entity.MeshName]; isScenery && piece.Screen != nil {
+			fps := piece.Screen.FPS
+			if fps <= 0 {
+				fps = 4
+			}
+			screenDir := filepath.Join(sceneryDir, entity.MeshName, "screen")
+			if err := g.Meshes.EnsureScreenAnimation(mesh.MeshIndex, piece.Screen.Material, screenDir, 1/fps); err != nil {
+				panic(fmt.Sprintf("scenery %s: %s", entity.MeshName, err))
+			}
+		}
 	}
 
 	if len(entity.TextureIndices) > 0 {

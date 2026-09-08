@@ -1,0 +1,7 @@
+{
+  "name": "Computer",
+  "screen": {
+    "material": 1,
+    "fps": 4
+  }
+}

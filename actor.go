@@ -34,6 +34,11 @@ type Actor struct {
 	Health    int
 	MaxHealth int
 
+	// Dialogue is the root line of this actor's conversation tree, or nil for
+	// an actor nobody can talk to (every monster today). See dialogueFor and
+	// GuiDialogue.
+	Dialogue *quads.DialogueLine
+
 	object        *quads.GameObject
 	pathing       *quads.PathingComponent
 	physicsSystem *quads.PhysicsSystem
@@ -89,6 +94,7 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		Name:          entity.Name,
 		Health:        defaultActorHealth,
 		MaxHealth:     defaultActorHealth,
+		Dialogue:      dialogueFor(entity.Name),
 		object:        object,
 		pathing:       pather,
 		physicsSystem: g.physicsSystem,
