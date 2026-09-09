@@ -237,23 +237,25 @@ func (g *GuiConfig) handleKeys(index int, key glfw.Key, scancode int, action glf
 		return false
 	}
 	selectedOption := g.options[selected]
+	// Both hands do the same thing: WASD+E and the cursor keys+Enter are one
+	// vocabulary, so no menu ever has to be learned twice.
 	switch key {
-	case glfw.KeyE:
+	case glfw.KeyE, glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace:
 		selectedOption.Activate()
 		g.ReplaceText(selected, selectedOption.String())
 		return true
-	case glfw.KeyD:
+	case glfw.KeyD, glfw.KeyRight:
 		selectedOption.More()
 		g.ReplaceText(selected, selectedOption.String())
 		return true
-	case glfw.KeyA:
+	case glfw.KeyA, glfw.KeyLeft:
 		selectedOption.Less()
 		g.ReplaceText(selected, selectedOption.String())
 		return true
-	case glfw.KeyW:
+	case glfw.KeyW, glfw.KeyUp:
 		g.SelectPrevious()
 		return true
-	case glfw.KeyS:
+	case glfw.KeyS, glfw.KeyDown:
 		g.SelectNext()
 		return true
 	case glfw.KeyEscape:

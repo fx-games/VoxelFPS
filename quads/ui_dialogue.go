@@ -109,7 +109,7 @@ func (d *GuiDialogue) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Ac
 		d.replies.SelectNext()
 	case glfw.KeyUp, glfw.KeyW:
 		d.replies.SelectPrevious()
-	case glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace:
+	case glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace, glfw.KeyE:
 		d.choose()
 	default:
 		return false

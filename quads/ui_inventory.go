@@ -128,7 +128,7 @@ func (v *GuiInventory) HandleKeyEvents(key glfw.Key, scancode int, action glfw.A
 		v.list.SelectNext()
 	case glfw.KeyUp, glfw.KeyW:
 		v.list.SelectPrevious()
-	case glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace:
+	case glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace, glfw.KeyE:
 		v.selected()
 	default:
 		return false

@@ -414,7 +414,18 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.entityMenu = g.NewList()
 	g.entityMenu.SetTextCentered(true)
 	g.entityMenu.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
-		if key == glfw.KeyEnter {
+		// Same vocabulary as every other menu: cursor keys or WASD to move,
+		// Enter or E to act. W/S stay out of it - the menu is not modal and
+		// the player is still walking around while it is up.
+		switch key {
+		case glfw.KeyUp:
+			g.entityMenu.SelectPrevious()
+			return true
+		case glfw.KeyDown:
+			g.entityMenu.SelectNext()
+			return true
+		}
+		if key == glfw.KeyEnter || key == glfw.KeyKPEnter || key == glfw.KeyE {
 			switch selectedIndex {
 			case 0:
 				hoveredObj := g.hoveredObj()
