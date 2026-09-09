@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // stairsMeshName is the scenery folder the staircase lives in. Its steps are one
@@ -33,52 +34,37 @@ const (
 	stairsTileZ = stairsPlatformZ0 - 2
 )
 
-func loadStairsTestMap() core.MapLoadResult {
-	size := stairsMapSize
-	mapData := make([]core.TileInfo, size*size)
+func loadStairsTestMap() (core.MapLoadResult, *voxel.Map) {
+	size := int32(stairsMapSize)
+	blocks := newLevel(voxel.Int3{X: size, Y: stairsCeiling + 1, Z: size})
+	block := roomBlock(0, 2, 3)
+	paintRoom(blocks, block)
 
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := &mapData[z*size+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			tile.WallTex = 0
-			tile.CeilingHeight = stairsCeiling
+	// One voxel up: low enough that the physics step height cannot carry
+	// anything onto it, which is what makes the staircase the point of the map.
+	fillBlocks(blocks,
+		voxel.Int3{X: stairsPlatformX0, Y: groundLevel, Z: stairsPlatformZ0},
+		voxel.Int3{X: stairsPlatformX1, Y: groundLevel, Z: stairsPlatformZ1},
+		block)
 
-			if x == 0 || z == 0 || x == size-1 || z == size-1 {
-				tile.WallHeight = stairsCeiling
-				continue
-			}
-			onPlatform := x >= stairsPlatformX0 && x <= stairsPlatformX1 &&
-				z >= stairsPlatformZ0 && z <= stairsPlatformZ1
-			if onPlatform {
-				tile.WallHeight = 1
-			}
-		}
+	stairs := core.EntitySpawn{
+		Position: tileCentre(stairsTileX, stairsTileZ, groundLevel),
+		Entity: core.MapEntity{
+			Name:           "Stairs",
+			MeshName:       stairsMeshName,
+			CreateCollider: true,
+		},
 	}
-
-	stairsTile := &mapData[stairsTileZ*size+stairsTileX]
-	stairsTile.Entities = append(stairsTile.Entities, core.MapEntity{
-		Name:           "Stairs",
-		MeshName:       stairsMeshName,
-		CreateCollider: true,
-	})
 
 	return core.MapLoadResult{
-		TileSize:      64,
-		AtlasFilename: "_internal",
 		// A few tiles back from the stairs, looking straight at them.
-		PlayerSpawn:       mgl32.Vec3{float32(stairsTileX) + 0.5, 1, 2.5},
-		PlayerDir:         mgl32.Vec2{0, 1},
-		CeilingHeight:     stairsCeiling,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{60, 60, 70, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{size, stairsCeiling + 1, size},
-		MapData:           mapData,
-		Lights:            stairsTestLights(),
-	}
+		PlayerSpawn:  mgl32.Vec3{float32(stairsTileX) + 0.5, 1, 2.5},
+		PlayerDir:    mgl32.Vec2{0, 1},
+		CeilingColor: color.RGBA{60, 60, 70, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     []core.EntitySpawn{stairs},
+		Lights:       stairsTestLights(),
+	}, blocks
 }
 
 // Two lights: one over the stairs so the steps read as steps, one over the far

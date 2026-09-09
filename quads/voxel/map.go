@@ -25,6 +25,7 @@ type Map struct {
 	width           int32
 	height          int32
 	depth           int32
+	bounds          Int3
 	chunkShader     *glhf.Shader
 	terrainTexture  *glhf.TextureAtlasFixed
 	mapInfoLogger   func(string)
@@ -83,6 +84,29 @@ func NewMapWithEmptyChunks(width, height, depth, chunkSizeHorizontal, chunkSizeH
 // agree on these numbers, so they come from here and nowhere else.
 func (m *Map) VoxelDimensions() (int32, int32, int32) {
 	return m.width * m.ChunkSizeHorizontal, m.height * m.ChunkSizeHeight, m.depth * m.ChunkSizeHorizontal
+}
+
+// SetBounds records how big the level itself is, which is not how big the buffer
+// holding it is: chunks are 32 on a side, so a 55x30x53 level lives in a 64x32x64
+// buffer and every voxel past the level is padding rather than air anything could
+// reach. It is saved with the map, because the map is the only thing that knows.
+func (m *Map) SetBounds(bounds Int3) {
+	m.bounds = bounds
+}
+
+// Bounds is the level's own size in voxels. Anything that walks or draws the
+// *level* rather than the buffer - the pathfinder's ground search, the minimap -
+// has to use this: the padding above a level reads as solid, and a ground search
+// that ran to the top of the buffer found "floor" on the padding of every column.
+//
+// A map with none recorded is one whose whole buffer is the level, which is what
+// a map built to a whole number of chunks is.
+func (m *Map) Bounds() Int3 {
+	if m.bounds.X > 0 && m.bounds.Y > 0 && m.bounds.Z > 0 {
+		return m.bounds
+	}
+	x, y, z := m.VoxelDimensions()
+	return Int3{x, y, z}
 }
 
 func (m *Map) SetLogger(mapLogger func(string), gameErrorLogger func(string)) {
@@ -970,6 +994,11 @@ func (m *Map) SaveToDisk(filename string) error {
 	binary.Write(gzipWriter, binary.LittleEndian, m.width)
 	binary.Write(gzipWriter, binary.LittleEndian, m.height)
 	binary.Write(gzipWriter, binary.LittleEndian, m.depth)
+	// ...and the level's own size inside that buffer, see SetBounds.
+	bounds := m.Bounds()
+	binary.Write(gzipWriter, binary.LittleEndian, bounds.X)
+	binary.Write(gzipWriter, binary.LittleEndian, bounds.Y)
+	binary.Write(gzipWriter, binary.LittleEndian, bounds.Z)
 	// write the map dimensions
 	m.logVoxelInfo(fmt.Sprintf("[Map] Saving map with dimensions %d %d %d", m.width, m.height, m.depth))
 
@@ -1048,6 +1077,9 @@ func (m *Map) LoadFromMemory(source []byte) {
 	binary.Read(gzipReader, binary.LittleEndian, &m.width)
 	binary.Read(gzipReader, binary.LittleEndian, &m.height)
 	binary.Read(gzipReader, binary.LittleEndian, &m.depth)
+	binary.Read(gzipReader, binary.LittleEndian, &m.bounds.X)
+	binary.Read(gzipReader, binary.LittleEndian, &m.bounds.Y)
+	binary.Read(gzipReader, binary.LittleEndian, &m.bounds.Z)
 	m.logVoxelInfo(fmt.Sprintf("[Map] Loading map with dimensions %d %d %d", m.width, m.height, m.depth))
 
 	// read the number of chunks

@@ -38,10 +38,6 @@ func TestJSONMapCarriesItsLights(t *testing.T) {
 		if light.Position.Y() < 1 {
 			t.Errorf("light at %v is at or below the floor", light.Position)
 		}
-		x, z := int(light.Position.X()), int(light.Position.Z())
-		if x < 0 || z < 0 || z*result.MapDimensions[0]+x >= len(result.MapData) {
-			t.Errorf("light at %v is outside the map", light.Position)
-		}
 		// Tilted down at least a little, so the map shows floor shadows. Two
 		// perfectly horizontal lights are what made finding #22 so hard to read.
 		if light.Pitch <= 0 {

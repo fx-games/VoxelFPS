@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // The doors test map: two rooms split by one wall, four doorways cut into it.
@@ -35,92 +36,87 @@ const (
 	doorSwingHingeOffset = -0.375
 )
 
-func loadDoorTestMap() core.MapLoadResult {
+func loadDoorTestMap() (core.MapLoadResult, *voxel.Map) {
 	sizeX, sizeZ := doorMapSizeX, doorMapSizeZ
-	mapData := make([]core.TileInfo, sizeX*sizeZ)
+	blocks := newLevel(voxel.Int3{X: int32(sizeX), Y: doorMapHeight + 1, Z: int32(sizeZ)})
+	block := roomBlock(0, 2, 3)
+	paintRoom(blocks, block)
 
-	isDoorGap := func(x, z int) bool {
-		return z == doorMapWallZ && (x == doorFrontX || x == doorMidX || x == doorBackX || x == doorSwingX)
+	// The wall that splits the map in two, with a gap left in it for each door.
+	isDoorGap := func(x int) bool {
+		return x == doorFrontX || x == doorMidX || x == doorBackX || x == doorSwingX
+	}
+	for x := int32(1); x < int32(sizeX)-1; x++ {
+		if isDoorGap(int(x)) {
+			continue
+		}
+		fillBlocks(blocks,
+			voxel.Int3{X: x, Y: groundLevel, Z: doorMapWallZ},
+			voxel.Int3{X: x, Y: doorMapHeight - 1, Z: doorMapWallZ},
+			block)
 	}
 
-	for z := 0; z < sizeZ; z++ {
-		for x := 0; x < sizeX; x++ {
-			tile := &mapData[z*sizeX+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			tile.CeilingHeight = doorMapHeight
-
-			onBorder := x == 0 || z == 0 || x == sizeX-1 || z == sizeZ-1
-			onWallRow := z == doorMapWallZ
-			if (onBorder || onWallRow) && !isDoorGap(x, z) {
-				tile.WallHeight = doorMapHeight
-			}
+	// A door plane is a full voxel wide and tall but a sixteenth as deep, so
+	// where in the depth of its opening it sits is the thing being tested:
+	// against the front face, in the middle, against the back.
+	slideDoor := func(x int, depthOffset float32) core.EntitySpawn {
+		return core.EntitySpawn{
+			Position: tileCentre(x, doorMapWallZ, groundLevel).Add(mgl32.Vec3{0, 0, depthOffset}),
+			Entity: core.MapEntity{
+				Name:           "SlideDoor",
+				MeshName:       doorSlideMeshName,
+				CreateCollider: true,
+			},
 		}
 	}
 
-	slideDoor := func(depthOffset float32) core.MapEntity {
-		return core.MapEntity{
-			Name:           "SlideDoor",
-			MeshName:       doorSlideMeshName,
-			CreateCollider: true,
-			LocalOffset:    mgl32.Vec3{0, 0, depthOffset},
-		}
+	entities := []core.EntitySpawn{
+		slideDoor(doorFrontX, -0.5+doorHalfThickness),
+		slideDoor(doorMidX, 0),
+		slideDoor(doorBackX, 0.5-doorHalfThickness),
+		{
+			Position: tileCentre(doorSwingX, doorMapWallZ, groundLevel),
+			Entity: core.MapEntity{
+				Name:           "DoorFrame",
+				MeshName:       "door_swing_frame",
+				CreateCollider: true,
+			},
+		},
+		{
+			Position: tileCentre(doorSwingX, doorMapWallZ, groundLevel).Add(mgl32.Vec3{doorSwingHingeOffset, 0, 0}),
+			Entity: core.MapEntity{
+				Name:           "DoorLeaf",
+				MeshName:       doorSwingLeafMeshName,
+				CreateCollider: true,
+			},
+		},
 	}
-	tileAt := func(x, z int) *core.TileInfo { return &mapData[z*sizeX+x] }
-
-	front := tileAt(doorFrontX, doorMapWallZ)
-	front.Entities = append(front.Entities, slideDoor(-0.5+doorHalfThickness))
-
-	mid := tileAt(doorMidX, doorMapWallZ)
-	mid.Entities = append(mid.Entities, slideDoor(0))
-
-	back := tileAt(doorBackX, doorMapWallZ)
-	back.Entities = append(back.Entities, slideDoor(0.5-doorHalfThickness))
-
-	swing := tileAt(doorSwingX, doorMapWallZ)
-	swing.Entities = append(swing.Entities,
-		core.MapEntity{
-			Name:           "DoorFrame",
-			MeshName:       "door_swing_frame",
-			CreateCollider: true,
-		},
-		core.MapEntity{
-			Name:           "DoorLeaf",
-			MeshName:       doorSwingLeafMeshName,
-			CreateCollider: true,
-			LocalOffset:    mgl32.Vec3{doorSwingHingeOffset, 0, 0},
-		},
-	)
 
 	// A Scientist patrolling straight across the swing doorway, spawned on
 	// the far side, and back - proof a closed door blocks a pathing NPC's
 	// physics exactly the way it blocks the player, not just something to
 	// take on faith from watching the player alone.
 	patrolNear := mgl32.Vec3{float32(doorSwingX) + 0.5, 1, float32(doorMapWallZ) - 2.5}
-	farTile := tileAt(doorSwingX, doorMapWallZ+3)
-	farTile.Entities = append(farTile.Entities, core.MapEntity{
-		Name:                "Scientist",
-		TextureIndices:      []uint16{0, 1, 2, 3, 4, 5, 6, 7},
-		SpriteSheetName:     "scientist",
-		SpriteSheetTileSize: geometry.Point{X: 64, Y: 64},
-		CreateCollider:      true,
-		PatrolTo:            &patrolNear,
+	entities = append(entities, core.EntitySpawn{
+		Position: tileCentre(doorSwingX, doorMapWallZ+3, groundLevel),
+		Entity: core.MapEntity{
+			Name:                "Scientist",
+			TextureIndices:      []uint16{0, 1, 2, 3, 4, 5, 6, 7},
+			SpriteSheetName:     "scientist",
+			SpriteSheetTileSize: geometry.Point{X: 64, Y: 64},
+			CreateCollider:      true,
+			PatrolTo:            &patrolNear,
+		},
 	})
 
 	return core.MapLoadResult{
-		TileSize:          64,
-		AtlasFilename:     "_internal",
-		PlayerSpawn:       mgl32.Vec3{float32(doorMapSizeX) / 2, 1, 2.5},
-		PlayerDir:         mgl32.Vec2{0, 1},
-		CeilingHeight:     doorMapHeight,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{60, 60, 70, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{sizeX, doorMapHeight + 1, sizeZ},
-		MapData:           mapData,
-		Lights:            doorTestLights(),
-	}
+		PlayerSpawn:  mgl32.Vec3{float32(doorMapSizeX) / 2, 1, 2.5},
+		PlayerDir:    mgl32.Vec2{0, 1},
+		CeilingColor: color.RGBA{60, 60, 70, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     entities,
+		Lights:       doorTestLights(),
+	}, blocks
 }
 
 // One light over each doorway, aimed down at it, plus one in each room so

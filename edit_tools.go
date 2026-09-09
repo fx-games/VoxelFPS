@@ -495,35 +495,24 @@ func (g *Game) placedRecord(object *quads.GameObject) *placedEntity {
 	return nil
 }
 
-// mapWithPlacedEntities is the loaded map with its entity lists rebuilt from
-// what is actually standing in the world right now. Every tile's list is
-// cleared first, so something the editor deleted is gone from the file rather
-// than merely dead in memory, and the map the editor started from is not
-// mutated - a failed save leaves the running level alone.
+// mapWithPlacedEntities is the loaded map with its entity list rebuilt from
+// what is actually standing in the world right now. Everything is listed fresh,
+// so something the editor deleted is gone from the file rather than merely dead
+// in memory, and the map the editor started from is not mutated - a failed save
+// leaves the running level alone.
 //
-// A position becomes a tile plus an offset inside it, because that is the shape
-// the format has: see toVoxelMap, which spawns from tile centre + LocalOffset.
-// That is what lets free placement round-trip at all - a prop dropped between
-// two tile centres comes back exactly where it was put.
+// A position is a position: the format used to hold a tile index and an offset
+// inside the tile, because the geometry was a tile grid, and free placement had
+// to be smuggled through the offset. The geometry is voxels now and this is
+// simply where the thing stands.
 func (g *Game) mapWithPlacedEntities() core.MapLoadResult {
 	result := g.mapSource
-	tiles := slices.Clone(result.MapData)
-	for i := range tiles {
-		tiles[i].Entities = nil
-	}
-	width := result.MapDimensions[0]
+	result.Entities = nil
 	for _, placed := range g.placed {
 		if placed.object != nil && !placed.object.IsAlive() {
 			continue
 		}
-		tileX := int(math.Floor(float64(placed.pos.X())))
-		tileZ := int(math.Floor(float64(placed.pos.Z())))
-		index := tileZ*width + tileX
-		if tileX < 0 || tileX >= width || index < 0 || index >= len(tiles) {
-			continue
-		}
 		entity := placed.entity
-		entity.LocalOffset = placed.pos.Sub(tileSpawnPoint(tileX, tileZ, tiles[index].FloorOffset))
 		if actor := g.actorFor(placed.object); actor != nil && len(actor.patrol) > 1 {
 			// The live route, not the one it was spawned with: the path tool
 			// edits the actor, and the actor is what the file has to agree with.
@@ -531,16 +520,9 @@ func (g *Game) mapWithPlacedEntities() core.MapLoadResult {
 			entity.Patrol = slices.Clone(actor.patrol[1:])
 			entity.PatrolTo = nil
 		}
-		tiles[index].Entities = append(tiles[index].Entities, entity)
+		result.Entities = append(result.Entities, core.EntitySpawn{Position: placed.pos, Entity: entity})
 	}
-	result.MapData = tiles
 	return result
-}
-
-// tileSpawnPoint is where toVoxelMap puts an entity with no offset: the middle
-// of the tile, standing on its floor.
-func tileSpawnPoint(x, z, floorOffset int) mgl32.Vec3 {
-	return mgl32.Vec3{float32(x) + 0.5, float32(floorOffset + 1), float32(z) + 0.5}
 }
 
 // drawEditorHUD is the editor's whole interface, and the reason none of it

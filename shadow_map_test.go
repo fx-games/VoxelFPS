@@ -10,28 +10,27 @@ import (
 // The map is only useful if the caster can actually walk its beat and the light
 // actually reaches it. Both are easy to break by moving one constant.
 func TestShadowTestMapHasAWallAndAClearBeat(t *testing.T) {
-	result := loadShadowTestMap()
-	size := shadowMapSize
+	result, blocks := loadShadowTestMap()
 
-	if len(result.MapData) != size*size {
-		t.Fatalf("len(MapData) = %d, want %d", len(result.MapData), size*size)
+	if got := blocks.Bounds(); got.X != shadowMapSize || got.Z != shadowMapSize {
+		t.Fatalf("bounds = %v, want %d square", got, shadowMapSize)
 	}
 
-	for x := shadowWallMinX; x <= shadowWallMaxX; x++ {
-		if result.MapData[shadowWallZ*size+x].WallHeight <= 0 {
+	for x := int32(shadowWallMinX); x <= shadowWallMaxX; x++ {
+		if !blocks.IsSolidBlockAt(x, groundLevel, shadowWallZ) {
 			t.Fatalf("hole in the back wall at x=%d", x)
 		}
 	}
 	// A wall that spans the room is a room divider, and the caster could not be
 	// seen from the player's side of it.
-	if result.MapData[shadowWallZ*size+1].WallHeight > 0 {
+	if blocks.IsSolidBlockAt(1, groundLevel, shadowWallZ) {
 		t.Error("the back wall reaches the border, so it is not a free standing wall")
 	}
 
 	// The pathfinder walks tile to tile in a straight line here; a single solid
 	// tile on the beat makes it path around, or fail, and the shadow stops moving.
-	for x := shadowPatrolMinX; x <= shadowPatrolMaxX; x++ {
-		if result.MapData[shadowPatrolZ*size+x].WallHeight > 0 {
+	for x := int32(shadowPatrolMinX); x <= shadowPatrolMaxX; x++ {
+		if blocks.IsSolidBlockAt(x, groundLevel, shadowPatrolZ) {
 			t.Fatalf("the beat is blocked at x=%d", x)
 		}
 	}
@@ -40,24 +39,26 @@ func TestShadowTestMapHasAWallAndAClearBeat(t *testing.T) {
 		t.Fatalf("the beat at z=%d is behind the wall at z=%d", shadowPatrolZ, shadowWallZ)
 	}
 
-	spawn := result.MapData[shadowPatrolZ*size+shadowPatrolMinX]
-	if len(spawn.Entities) != 1 {
-		t.Fatalf("%d entities at the spawn tile, want exactly the one caster", len(spawn.Entities))
+	if len(result.Entities) != 1 {
+		t.Fatalf("%d entities in the map, want exactly the one caster", len(result.Entities))
 	}
-	caster := spawn.Entities[0]
+	caster := result.Entities[0]
+	if got := int(caster.Position.Z()); got != shadowPatrolZ {
+		t.Errorf("caster spawns at z=%d, want the beat at z=%d", got, shadowPatrolZ)
+	}
 	// spawnEntity keys the pathing component off this name.
-	if caster.Name != "Scientist" {
-		t.Errorf("caster is %q, which gets no pathing component and will not move", caster.Name)
+	if caster.Entity.Name != "Scientist" {
+		t.Errorf("caster is %q, which gets no pathing component and will not move", caster.Entity.Name)
 	}
-	if caster.PatrolTo == nil {
+	if caster.Entity.PatrolTo == nil {
 		t.Fatal("caster has no patrol destination, so it stands still")
 	}
-	if got := int(caster.PatrolTo.Z()); got != shadowPatrolZ {
+	if got := int(caster.Entity.PatrolTo.Z()); got != shadowPatrolZ {
 		t.Errorf("patrol ends at z=%d, want the beat at z=%d", got, shadowPatrolZ)
 	}
 
-	spawnX, spawnZ := int(result.PlayerSpawn.X()), int(result.PlayerSpawn.Z())
-	if result.MapData[spawnZ*size+spawnX].WallHeight > 0 {
+	spawnX, spawnZ := int32(result.PlayerSpawn.X()), int32(result.PlayerSpawn.Z())
+	if blocks.IsSolidBlockAt(spawnX, groundLevel, spawnZ) {
 		t.Errorf("player spawns inside a wall at %d,%d", spawnX, spawnZ)
 	}
 }

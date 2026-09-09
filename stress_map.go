@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // StressConfig describes a generated map built to load the renderer, so the
@@ -37,22 +38,22 @@ const barrelTextureIndex = 136
 // a grid of barrels. The pillars are there on purpose: a flat floor and four
 // outer walls collapse into a handful of quads under greedy meshing, which would
 // stress nothing.
-func loadStressMap(cfg StressConfig) core.MapLoadResult {
-	size := cfg.Size
-	mapData := make([]core.TileInfo, size*size)
+func loadStressMap(cfg StressConfig) (core.MapLoadResult, *voxel.Map) {
+	size := int32(cfg.Size)
+	// Floor at 0, walls at 1, ceiling at 2 - the shape every one of these maps
+	// is, only wider.
+	blocks := newLevel(voxel.Int3{X: size, Y: 3, Z: size})
+	paintRoom(blocks, roomBlock(0, 2, 3))
 
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := &mapData[z*size+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			// Alternating wall texture so the atlas lookup is not one constant.
-			tile.WallTex = (x + z) % 2
-
-			isBorder := x == 0 || z == 0 || x == size-1 || z == size-1
-			isPillar := cfg.PillarSpacing > 0 && x%cfg.PillarSpacing == 0 && z%cfg.PillarSpacing == 0
-			if isBorder || isPillar {
-				tile.WallHeight = 1
+	var entities []core.EntitySpawn
+	for z := int32(1); z < size-1; z++ {
+		for x := int32(1); x < size-1; x++ {
+			// The pillars are there on purpose, and so is the alternating wall
+			// texture: one constant texture index would not exercise the atlas
+			// lookup any more than a flat floor would exercise the mesher.
+			if cfg.PillarSpacing > 0 && x%int32(cfg.PillarSpacing) == 0 && z%int32(cfg.PillarSpacing) == 0 {
+				pillar := voxel.Int3{X: x, Y: groundLevel, Z: z}
+				fillBlocks(blocks, pillar, pillar, roomBlock(uint16((x+z)%2), 2, 3))
 				continue
 			}
 
@@ -62,12 +63,15 @@ func loadStressMap(cfg StressConfig) core.MapLoadResult {
 			// exactly the setting someone reaches for to make sprites the bottleneck.
 			// Half the spacing is 2 at the default of 4, so the default map is
 			// unchanged.
-			spriteOffset := cfg.SpriteSpacing / 2
-			if cfg.SpriteSpacing > 0 && x%cfg.SpriteSpacing == spriteOffset && z%cfg.SpriteSpacing == spriteOffset {
-				tile.Entities = append(tile.Entities, core.MapEntity{
-					Name:           "StressBarrel",
-					TextureIndices: []uint16{barrelTextureIndex},
-					CreateCollider: true,
+			spriteOffset := int32(cfg.SpriteSpacing / 2)
+			if cfg.SpriteSpacing > 0 && x%int32(cfg.SpriteSpacing) == spriteOffset && z%int32(cfg.SpriteSpacing) == spriteOffset {
+				entities = append(entities, core.EntitySpawn{
+					Position: tileCentre(int(x), int(z), groundLevel),
+					Entity: core.MapEntity{
+						Name:           "StressBarrel",
+						TextureIndices: []uint16{barrelTextureIndex},
+						CreateCollider: true,
+					},
 				})
 			}
 		}
@@ -75,25 +79,19 @@ func loadStressMap(cfg StressConfig) core.MapLoadResult {
 
 	// The centre tile is a pillar whenever the spacing happens to divide it, and
 	// spawning inside a solid block drops the player through the floor.
-	spawn := size / 2
+	spawn := cfg.Size / 2
 	if cfg.PillarSpacing > 0 && spawn%cfg.PillarSpacing == 0 {
 		spawn++
 	}
 
 	return core.MapLoadResult{
-		TileSize:          64,
-		AtlasFilename:     "_internal",
-		PlayerSpawn:       mgl32.Vec3{float32(spawn) + 0.5, 1, float32(spawn) + 0.5},
-		PlayerDir:         mgl32.Vec2{0, 1},
-		CeilingHeight:     1,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{80, 80, 80, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{size, 3, size},
-		MapData:           mapData,
-		Lights:            stressLights(cfg),
-	}
+		PlayerSpawn:  mgl32.Vec3{float32(spawn) + 0.5, 1, float32(spawn) + 0.5},
+		PlayerDir:    mgl32.Vec2{0, 1},
+		CeilingColor: color.RGBA{80, 80, 80, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     entities,
+		Lights:       stressLights(cfg),
+	}, blocks
 }
 
 // stressLights spreads shadow casting spotlights over the map, pointing straight

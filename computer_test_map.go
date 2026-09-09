@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // The computer test map: one room, one Computer prop against the far wall,
@@ -16,28 +17,19 @@ const (
 	computerMapHeight = 4
 )
 
-func loadComputerTestMap() core.MapLoadResult {
+func loadComputerTestMap() (core.MapLoadResult, *voxel.Map) {
 	size := computerMapSize
-	mapData := make([]core.TileInfo, size*size)
+	blocks := newLevel(voxel.Int3{X: int32(size), Y: computerMapHeight + 1, Z: int32(size)})
+	paintRoom(blocks, roomBlock(0, 2, 3))
 
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := &mapData[z*size+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			tile.CeilingHeight = computerMapHeight
-			if x == 0 || z == 0 || x == size-1 || z == size-1 {
-				tile.WallHeight = computerMapHeight
-			}
-		}
-	}
-
-	against := &mapData[(size-2)*size+size/2]
-	against.Entities = append(against.Entities, core.MapEntity{
-		Name:           "Computer",
-		MeshName:       "computer",
-		CreateCollider: true,
-	})
+	entities := []core.EntitySpawn{{
+		Position: tileCentre(size/2, size-2, groundLevel),
+		Entity: core.MapEntity{
+			Name:           "Computer",
+			MeshName:       "computer",
+			CreateCollider: true,
+		},
+	}}
 
 	light := core.MapLight{
 		Position:  mgl32.Vec3{float32(size) / 2, float32(computerMapHeight) - 0.5, float32(size) / 2},
@@ -46,17 +38,11 @@ func loadComputerTestMap() core.MapLoadResult {
 	}.LookAt(mgl32.Vec3{float32(size) / 2, 0, float32(size) / 2})
 
 	return core.MapLoadResult{
-		TileSize:          64,
-		AtlasFilename:     "_internal",
-		PlayerSpawn:       mgl32.Vec3{float32(size) / 2, 1, float32(size) - 4.5},
-		PlayerDir:         mgl32.Vec2{0, 1},
-		CeilingHeight:     computerMapHeight,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{60, 60, 70, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{size, computerMapHeight + 1, size},
-		MapData:           mapData,
-		Lights:            []core.MapLight{light},
-	}
+		PlayerSpawn:  mgl32.Vec3{float32(size) / 2, 1, float32(size) - 4.5},
+		PlayerDir:    mgl32.Vec2{0, 1},
+		CeilingColor: color.RGBA{60, 60, 70, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     entities,
+		Lights:       []core.MapLight{light},
+	}, blocks
 }

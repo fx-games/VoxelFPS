@@ -8,23 +8,20 @@ import (
 
 func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {
 	cfg := DefaultStressConfig()
-	result := loadStressMap(cfg)
+	result, blocks := loadStressMap(cfg)
 
-	size := cfg.Size
-	if got := result.MapDimensions; got != [3]int{size, 3, size} {
-		t.Errorf("dimensions = %v, want {%d 3 %d}", got, size, size)
-	}
-	if len(result.MapData) != size*size {
-		t.Fatalf("len(MapData) = %d, want %d", len(result.MapData), size*size)
+	size := int32(cfg.Size)
+	if got := blocks.Bounds(); got.X != size || got.Y != 3 || got.Z != size {
+		t.Errorf("bounds = %v, want {%d 3 %d}", got, size, size)
 	}
 
-	sprites := 0
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := result.MapData[z*size+x]
-			solid := tile.WallHeight > 0
+	for z := int32(0); z < size; z++ {
+		for x := int32(0); x < size; x++ {
+			// Everything is judged at the one height a wall occupies: floor
+			// below it and ceiling above it are solid everywhere by design.
+			solid := blocks.IsSolidBlockAt(x, groundLevel, z)
 			onBorder := x == 0 || z == 0 || x == size-1 || z == size-1
-			onPillar := x%cfg.PillarSpacing == 0 && z%cfg.PillarSpacing == 0
+			onPillar := x%int32(cfg.PillarSpacing) == 0 && z%int32(cfg.PillarSpacing) == 0
 
 			if onBorder && !solid {
 				t.Fatalf("hole in the border wall at %d,%d", x, z)
@@ -32,21 +29,24 @@ func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {
 			if solid != (onBorder || onPillar) {
 				t.Fatalf("solid = %v at %d,%d, want %v", solid, x, z, onBorder || onPillar)
 			}
-			if solid && len(tile.Entities) > 0 {
-				t.Fatalf("sprite inside a wall at %d,%d", x, z)
-			}
-			sprites += len(tile.Entities)
+		}
+	}
+
+	for _, spawn := range result.Entities {
+		x, z := int32(spawn.Position.X()), int32(spawn.Position.Z())
+		if blocks.IsSolidBlockAt(x, groundLevel, z) {
+			t.Fatalf("sprite inside a wall at %d,%d", x, z)
 		}
 	}
 
 	// The point of the map is that there is a lot to draw.
-	if sprites < 500 {
-		t.Errorf("only %d sprites, that is not a stress map", sprites)
+	if len(result.Entities) < 500 {
+		t.Errorf("only %d sprites, that is not a stress map", len(result.Entities))
 	}
 
 	// Spawning inside a pillar drops the player through the floor.
-	spawnX, spawnZ := int(result.PlayerSpawn.X()), int(result.PlayerSpawn.Z())
-	if result.MapData[spawnZ*size+spawnX].WallHeight > 0 {
+	spawnX, spawnZ := int32(result.PlayerSpawn.X()), int32(result.PlayerSpawn.Z())
+	if blocks.IsSolidBlockAt(spawnX, groundLevel, spawnZ) {
 		t.Errorf("player spawns inside a wall at %d,%d", spawnX, spawnZ)
 	}
 }
@@ -56,11 +56,8 @@ func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {
 func TestTightSpriteSpacingStillPlacesSprites(t *testing.T) {
 	for _, spacing := range []int{1, 2, 3, 4, 8} {
 		cfg := StressConfig{Size: 32, PillarSpacing: 0, SpriteSpacing: spacing}
-		sprites := 0
-		for _, tile := range loadStressMap(cfg).MapData {
-			sprites += len(tile.Entities)
-		}
-		if sprites == 0 {
+		result, _ := loadStressMap(cfg)
+		if len(result.Entities) == 0 {
 			t.Errorf("-stress-sprites %d placed no sprites at all", spacing)
 		}
 	}
@@ -68,15 +65,21 @@ func TestTightSpriteSpacingStillPlacesSprites(t *testing.T) {
 
 // Same config, same map: a measurement you cannot repeat is not a measurement.
 func TestStressMapIsDeterministic(t *testing.T) {
-	first := loadStressMap(DefaultStressConfig())
-	second := loadStressMap(DefaultStressConfig())
+	first, firstBlocks := loadStressMap(DefaultStressConfig())
+	second, secondBlocks := loadStressMap(DefaultStressConfig())
 
-	for i := range first.MapData {
-		if first.MapData[i].WallHeight != second.MapData[i].WallHeight ||
-			first.MapData[i].WallTex != second.MapData[i].WallTex ||
-			len(first.MapData[i].Entities) != len(second.MapData[i].Entities) {
-			t.Fatalf("tile %d differs between two generations", i)
+	size := int32(DefaultStressConfig().Size)
+	for z := int32(0); z < size; z++ {
+		for x := int32(0); x < size; x++ {
+			for y := int32(0); y < 3; y++ {
+				if firstBlocks.IsSolidBlockAt(x, y, z) != secondBlocks.IsSolidBlockAt(x, y, z) {
+					t.Fatalf("block %d,%d,%d differs between two generations", x, y, z)
+				}
+			}
 		}
+	}
+	if len(first.Entities) != len(second.Entities) {
+		t.Fatalf("%d entities one time and %d the next", len(first.Entities), len(second.Entities))
 	}
 }
 

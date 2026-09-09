@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // The shadow test map. Its whole reason to exist: shadows showed up on walls
@@ -60,56 +61,40 @@ func scientistEntity(patrolTo mgl32.Vec3) core.MapEntity {
 	}
 }
 
-func loadShadowTestMap() core.MapLoadResult {
-	size := shadowMapSize
-	mapData := make([]core.TileInfo, size*size)
+func loadShadowTestMap() (core.MapLoadResult, *voxel.Map) {
+	size := int32(shadowMapSize)
+	blocks := newLevel(voxel.Int3{X: size, Y: shadowCeiling + 1, Z: size})
+	wall := roomBlock(0, 2, 3)
+	paintRoom(blocks, wall)
 
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := &mapData[z*size+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			tile.WallTex = 0
-			tile.CeilingHeight = shadowCeiling
-
-			isBorder := x == 0 || z == 0 || x == size-1 || z == size-1
-			isBackWall := z == shadowWallZ && x >= shadowWallMinX && x <= shadowWallMaxX
-			if isBorder {
-				tile.WallHeight = shadowCeiling
-				continue
-			}
-			if isBackWall {
-				tile.WallHeight = shadowWallHeigh
-				continue
-			}
-		}
-	}
+	// The one thing in the room besides the caster: a wall for its shadow to
+	// climb, short enough to see over from the corner the player stands in.
+	fillBlocks(blocks,
+		voxel.Int3{X: shadowWallMinX, Y: groundLevel, Z: shadowWallZ},
+		voxel.Int3{X: shadowWallMaxX, Y: shadowWallHeigh, Z: shadowWallZ},
+		wall)
 
 	// The caster spawns at one end of its beat and walks to the other. The pathfinder
 	// sends it back to where it started once it arrives, so this is a patrol without
 	// anything else having to drive it.
-	spawnTile := &mapData[shadowPatrolZ*size+shadowPatrolMinX]
-	spawnTile.Entities = append(spawnTile.Entities, scientistEntity(
-		mgl32.Vec3{float32(shadowPatrolMaxX) + 0.5, 1, float32(shadowPatrolZ) + 0.5},
-	))
+	caster := core.EntitySpawn{
+		Position: tileCentre(shadowPatrolMinX, shadowPatrolZ, groundLevel),
+		Entity: scientistEntity(
+			mgl32.Vec3{float32(shadowPatrolMaxX) + 0.5, 1, float32(shadowPatrolZ) + 0.5},
+		),
+	}
 
 	return core.MapLoadResult{
-		TileSize:      64,
-		AtlasFilename: "_internal",
 		// Off to one side on purpose. Head on, the caster stands between the camera
 		// and its own floor shadow and hides the very thing the map is for. From the
 		// corner the shadow rakes across the floor and up the wall in full view.
-		PlayerSpawn:       mgl32.Vec3{15.5, 1, 13.5},
-		PlayerDir:         mgl32.Vec2{-4.5, -5.5},
-		CeilingHeight:     shadowCeiling,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{60, 60, 70, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{size, shadowCeiling + 1, size},
-		MapData:           mapData,
-		Lights:            []core.MapLight{shadowTestLight()},
-	}
+		PlayerSpawn:  mgl32.Vec3{15.5, 1, 13.5},
+		PlayerDir:    mgl32.Vec2{-4.5, -5.5},
+		CeilingColor: color.RGBA{60, 60, 70, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     []core.EntitySpawn{caster},
+		Lights:       []core.MapLight{shadowTestLight()},
+	}, blocks
 }
 
 // shadowTestLight is the single light the map is judged by: above and behind the

@@ -23,13 +23,6 @@ import (
 	"strings"
 )
 
-var stringMapData = `################
-#              #
-#        #     #
-#   P          #
-#         #    #
-################`
-
 func main() {
 	defaults := DefaultStressConfig()
 	stress := flag.Bool("stress", false, "generate a stress map instead of loading the default map")
@@ -71,17 +64,21 @@ func main() {
 	// The file the map came from, empty for a generated one. It is what the
 	// editor saves back to, and what names the voxel file beside it.
 	var mapPath string
+	// The level's blocks. There is one description of them: painted here by a
+	// generator, or read out of the voxel file beside the map. Whichever it
+	// was, by this point it is the same thing.
+	var blocks *voxel.Map
 	shadowTestMap := *shadowTest
 	if shadowTestMap {
-		mapLoad = loadShadowTestMap()
+		mapLoad, blocks = loadShadowTestMap()
 	} else if *stairsTest {
-		mapLoad = loadStairsTestMap()
+		mapLoad, blocks = loadStairsTestMap()
 	} else if *actorTest {
-		mapLoad = loadActorTestMap()
+		mapLoad, blocks = loadActorTestMap()
 	} else if *doorsTest {
-		mapLoad = loadDoorTestMap()
+		mapLoad, blocks = loadDoorTestMap()
 	} else if *computerTest {
-		mapLoad = loadComputerTestMap()
+		mapLoad, blocks = loadComputerTestMap()
 	} else if *stress {
 		stressConfig = &StressConfig{
 			Size:          *stressSize,
@@ -89,7 +86,7 @@ func main() {
 			SpriteSpacing: *stressSprites,
 			Lights:        *stressLightCount,
 		}
-		mapLoad = loadStressMap(*stressConfig)
+		mapLoad, blocks = loadStressMap(*stressConfig)
 	} else {
 		var err error
 		mapPath = filepath.Join("assets", "raymap.json")
@@ -97,7 +94,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		//mapLoad = loadText(strings.Split(stringMapData, "\n"))
+		blocks = loadVoxelFile(voxelFileFor(mapPath))
 	}
 
 	if *cpuProfile != "" {
@@ -124,6 +121,7 @@ func main() {
 		game.autoWalk = *autoWalk
 		game.autoCycle = *autoCycle
 		game.mapPath = mapPath
+		game.blocks = blocks
 		game.startEditorMode = *startEditor
 		game.startTimeFactor = *timeFactor
 		game.startWeapon = *startWeapon
@@ -257,6 +255,9 @@ type Game struct {
 	mapSource core.MapLoadResult
 	mapPath   string
 	placed    []placedEntity
+	// blocks is the level's geometry, and the only description of it there is:
+	// what LoadVoxelMap is handed and what the editor saves back out.
+	blocks *voxel.Map
 
 	weapons            []*Weapon
 	currentWeaponIndex int
@@ -604,36 +605,20 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.companionTarget = nil
 	g.doors = nil
 
-	// Load Map
-	entitySpawns := g.LoadVoxelMap(mapLoad)
+	// Load Map. The blocks came off disk or out of a generator before there was
+	// a window; this is where they become the scene's.
+	g.LoadVoxelMap(mapLoad, g.blocks)
 
-	// The tile grid the map file holds is the level's starting shape; the voxel
-	// file beside it, if the editor has ever written one, is what has been
-	// carved since, and it wins. Without this the block tools are the only
-	// half of the editor whose work does not survive the run.
+	// Which wall textures carry a lit fitting is recorded in the atlas itself, in its
+	// emIS chunk - see AtlasIndex.EmissiveChunkKey. It is a fact about the pictures
+	// (slot 49 glows because of what is painted in slot 49), so it travels with the
+	// file rather than sitting in a list here that went stale the moment the editor
+	// could add a texture. Press G at any wall to add one; that writes back.
 	//
-	// It has to be the same map's own file (see voxelFile) and therefore the
-	// same dimensions: a voxel file saved from a differently sized map would
-	// disagree with the size the cube shader was just told about.
-	if voxelFile := g.voxelFile(); g.mapPath != "" && quads.FileExists(voxelFile) {
-		g.CubeMap.LoadFromDisk(voxelFile)
-	}
-
-	// The wall textures in the Blake Stone sheet that carry a lit fitting: the cyan tube
-	// panels (19, 27) and the console screens (47), which are the three this map actually
-	// uses, plus the lit strips (29, 30), FOOD UNIT signs (45, 46) and cyan vent (26) for
-	// other maps. Marking a texture does not light the whole tile - only the texels that
-	// are both bright and colourful, so the tubes and screens come on and the grey metal
-	// panel they are mounted on stays dark.
-	//
-	// 49 is a brightened copy of the console panel 47, written into the free slot in the
-	// wall sheet's last row: same art with its screen readouts lifted, so the screens
-	// clear the emissive cutoff by a wide margin and read as lit rather than as painted.
-	// raymap.json points the two console walls at it.
-	//
-	// Indices are literal because this atlas's layout is fixed and indexed directly
-	// everywhere else too, see ISSUES.md. Press G at any wall to add another at runtime.
-	g.CubeMap.SetEmissiveTextures([]uint16{19, 26, 27, 29, 30, 45, 46, 47, 49})
+	// Marking a texture does not light the whole tile - only the texels that are both
+	// bright and colourful, so the tubes and screens come on and the grey metal panel
+	// they are mounted on stays dark.
+	g.CubeMap.SetEmissiveTextures(g.MapTextures.Emissive())
 
 	/*
 	   sphere := physics.NewSphericalHull(5)
@@ -646,20 +631,20 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.physicsSystem = quads.NewCollisionSolver(g.CubeMap.IsSolidBlockAt, g.CubeMap.ContainsVec)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
-	// mapLoad.MapDimensions, not CubeMap.VoxelDimensions: the voxel buffer is
-	// padded up to a whole number of chunks (a 7-tall map allocates a 32-tall
-	// buffer), and every layer above what the map actually declared is chunk
-	// padding, not carved-out air - it reads as solid. Scanning up to the
-	// padded height made groundHeight find "floor" at y=33 on every column
-	// instead of the real surface, and the search only ever explored a stack
-	// of one-tile-wide solid ceilings that no path could get down from.
-	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, int32(mapLoad.MapDimensions[1]))
+	// Bounds, not VoxelDimensions: the voxel buffer is padded up to a whole
+	// number of chunks (a 7-tall level allocates a 32-tall buffer), and every
+	// layer above the level itself is chunk padding, not carved-out air - it
+	// reads as solid. Scanning up to the padded height made groundHeight find
+	// "floor" at y=33 on every column instead of the real surface, and the
+	// search only ever explored a stack of one-tile-wide solid ceilings that no
+	// path could get down from.
+	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, g.CubeMap.Bounds().Y)
 
 	// Spawn Entities. Each one is remembered as it goes in, so that a save
 	// writes the whole level back out rather than only the part of it the
 	// editor happened to add this run.
 	g.placed = nil
-	for _, spawn := range entitySpawns {
+	for _, spawn := range mapLoad.Entities {
 		spawnPos, entity := spawn.Position, spawn.Entity
 		object := g.spawnEntity(spawnPos, entity)
 		if entity.MeshName == torchMeshName {
@@ -702,7 +687,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
 	//scientist.Sprite().PlayAnimationLooping(int(quads.AnimWalk))
-	g.SetupMinimap(mapLoad.MapDimensions[0], mapLoad.MapDimensions[2], g.colorForMinimap)
+	bounds := g.CubeMap.Bounds()
+	g.SetupMinimap(int(bounds.X), int(bounds.Z), g.colorForMinimap)
 
 }
 

@@ -9,7 +9,6 @@ import (
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 	"path/filepath"
-	"strings"
 )
 
 // openSceneryMenu is the placement half of the scenery folder: whatever is in
@@ -127,14 +126,14 @@ func (g *Game) saveMap() error {
 	return saveJSONMap(g.mapPath, g.mapWithPlacedEntities())
 }
 
-// voxelFile is where this map's voxels live: beside the map file and named
-// after it, so a map and its carved geometry travel together. A generated map
-// has no name of its own and falls back to the shared scratch file.
+// voxelFile is where this level's blocks live. A generated map has no file of
+// its own and falls back to a scratch name, so a level started from the stress
+// rig or one of the test maps can still be saved and then opened as a map.
 func (g *Game) voxelFile() string {
 	if g.mapPath == "" {
-		return filepath.Join("assets", "map.bin")
+		return filepath.Join("assets", "scratch.bin")
 	}
-	return strings.TrimSuffix(g.mapPath, filepath.Ext(g.mapPath)) + ".bin"
+	return voxelFileFor(g.mapPath)
 }
 
 // saveMapWithToast is the save every caller wants: it says on screen what

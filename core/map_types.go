@@ -64,23 +64,30 @@ func (l MapLight) Forward() mgl32.Vec3 {
 	}.Normalize()
 }
 
+// MapLoadResult is everything about a level that is not its blocks. The blocks
+// are the level's voxel file and nothing else: there is one description of the
+// geometry, it is the one the game runs on and the one the editor writes, and
+// this holds the things a grid of blocks has no room for.
 type MapLoadResult struct {
-	TileSize int
-	// AtlasFilename leave empty to use the embedded texture
-	AtlasFilename     string
-	PlayerSpawn       mgl32.Vec3
-	PlayerDir         mgl32.Vec2
-	CeilingHeight     int
-	IsFloorTextured   bool
-	IsCeilingTextured bool
-	CeilingColor      color.Color
-	FloorColor        color.Color
-	MapDimensions     [3]int
-	MapData           []TileInfo
+	PlayerSpawn  mgl32.Vec3
+	PlayerDir    mgl32.Vec2
+	CeilingColor color.Color
+	FloorColor   color.Color
+	// Entities are the things standing in the level, at absolute positions.
+	Entities []EntitySpawn
 	// Lights the map brings with it. Loading a map replaces the scene's lights with
 	// these, so an empty list means an unlit map rather than the previous map's
 	// lights left standing.
 	Lights []MapLight
+}
+
+// EntitySpawn is one entity and where it stands, in world units. A slice, not a
+// map keyed by position: a level may put two things in the same place - two
+// props snapped to the same tile centre is the obvious one - and a map keyed by
+// position silently keeps only the last of them.
+type EntitySpawn struct {
+	Position mgl32.Vec3
+	Entity   MapEntity
 }
 
 func (m MapLoadResult) CeilingColorVec4() mgl32.Vec4 {
@@ -127,29 +134,6 @@ type MapEntity struct {
 	// ordinary walk: gravity and the physics step-up carry the moment across,
 	// the same as they do for the player on the same staircase.
 	StepTo *mgl32.Vec3
-
-	// LocalOffset shifts this entity off the tile centre toVoxelMap otherwise
-	// always spawns it at. Doors are why this exists: a door plane is a full
-	// voxel wide and tall but a sixteenth as deep, and it has to be placeable
-	// at the front, back or middle of its tile rather than always centred -
-	// see door.go. Nil is the zero offset, not a special case.
-	LocalOffset mgl32.Vec3
-}
-
-type TileInfo struct {
-	WallTex  int
-	FloorTex int
-	CeilTex  int
-
-	WallOffset    int
-	WallHeight    int
-	Entities      []MapEntity
-	CeilingHeight int
-	FloorOffset   int
-}
-
-func (t TileInfo) isWall() bool {
-	return t.WallHeight > 0
 }
 
 func LineToPlaneIntersection(lineStart, lineEnd, planeCoord, planeNormal mgl32.Vec3) float32 {

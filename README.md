@@ -20,8 +20,8 @@ voxel cubes, meshes, sprites, lines, skybox, GUI and post-processing.
 - Fog, and a `-shadowtest` map built to judge shadow bias by
 - Render-to-framebuffer + post-processing pass, screenshot capture (F12)
 
-**World & entities** — a plain JSON map format or ASCII string maps, voxel blocks with
-DDA raycasting, AABB/OBB/MPR collision (`quads/voxel/`), a simple physics system with
+**World & entities** — a map is voxel blocks in a gzipped dump plus a small JSON
+file for everything that is not blocks; DDA raycasting, AABB/OBB/MPR collision (`quads/voxel/`), a simple physics system with
 optional gravity, projectiles, particles, animated sprites, paths and pathfinding
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
 
@@ -135,11 +135,29 @@ what a key cannot carry: a texture out of an atlas of hundreds, load, clear.
 `-editor blocks|props|actors` boots straight into it, which is how a screenshot of
 the editor is taken (see AGENTS.md - a capture takes no keystrokes).
 
+### One description of the geometry
+
+A level used to have two shapes. The map file held a grid of tiles - a wall
+height and three texture indices per column - which the loader expanded into
+voxels on every load, and the editor's block tools wrote voxels to a separate
+file that nothing read at startup. Neither could say what the other said: a tile
+grid cannot express a carved-out arch, and a voxel dump cannot be hand-edited
+into being. So a level had geometry you could edit and geometry you could ship,
+and they were not the same geometry.
+
+The voxels won, because they are what the game actually runs on, what the editor
+already writes, and the only one of the two that can hold an arbitrary shape.
+`core.TileInfo` and the loader's expansion of it are gone; the generated test
+maps paint blocks directly (`map_build.go` is the whole of what they need), and
+the map file keeps only what a grid of blocks has no room for. For the shipped
+map that turned 580 KB of tile grid into 3.6 KB of JSON and 1.5 KB of blocks.
+
 ## Layout
 
 ```
 main.go handlers.go input.go load_map.go edit_map.go spawn_entities.go doom_weapon.go
 scenery.go  pickup.go   the furniture folder and what stands on it
+map_build.go            painting a level's blocks, for the generated test maps
 quads/      renderer, systems, UI widgets, shaders
 quads/glhf/ OpenGL abstraction layer
 quads/voxel/ voxel block/chunk/mesh, raycast, collision shapes
@@ -164,8 +182,13 @@ assets/
   skybox/      six faces to a set
   textures/    the texture library the editor picks from, dropped/ included
   weapons/     one folder per weapon, plus the shared actor and sprite stores
-  raymap.json  the map
+  raymap.json  the map: player spawn, colours, lights, and what stands in it
+  raymap.bin   the same map's blocks - the only description of its geometry
 ```
+
+The two halves are named after each other on purpose, so a map cannot be opened
+against another one's geometry. A map file with no `.bin` beside it is a level
+with nothing in it yet, which is where building one from scratch starts.
 
 The UI atlas and the bitmap font are the exception: they are baked into the
 binary from `eassets/files/`, so a build with no `assets/` next to it still draws

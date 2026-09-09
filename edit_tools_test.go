@@ -9,53 +9,33 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
-// A prop dropped anywhere - on a tile centre, between two of them, on a tile
-// whose floor is raised - has to come back exactly where it was put. The map
-// format has no room for a position, only a tile and an offset inside it, so
-// this is the one calculation the whole of free placement rests on: it is
-// reversed by toVoxelMap, which spawns from tile centre + LocalOffset.
-func TestPlacedPropsRoundTripThroughTileOffsets(t *testing.T) {
-	game := &Game{
-		mapSource: core.MapLoadResult{
-			MapDimensions: [3]int{8, 4, 8},
-			MapData:       make([]core.TileInfo, 8*8),
-		},
-	}
-	// One tile with a floor a voxel up, so the height half of the offset is
-	// exercised rather than always cancelling out.
-	game.mapSource.MapData[3*8+6].FloorOffset = 1
-
+// A prop dropped anywhere - snapped to a tile centre or free between two of
+// them - has to come back exactly where it was put. It used to have to survive
+// being taken apart into a tile index and an offset inside the tile, because
+// the geometry was a grid of tiles; now the position is simply the position,
+// and this is what says it stays that way.
+func TestPlacedPropsKeepTheirPositions(t *testing.T) {
+	game := &Game{}
 	positions := []mgl32.Vec3{
-		{2.5, 1, 4.5},   // dead centre of a tile
-		{2.9, 1, 4.1},   // free placement, off centre
-		{6.5, 2, 3.5},   // on the raised tile
-		{0.01, 1, 7.99}, // hard against two edges of the map
+		{2.5, 1, 4.5},
+		{2.9, 1, 4.1},
+		{6.5, 2, 3.5},
+		{0.01, 1, 7.99},
 	}
 	for _, at := range positions {
 		game.recordPlaced(nil, core.MapEntity{Name: "Table", MeshName: "table"}, at)
 	}
 
 	saved := game.mapWithPlacedEntities()
-
-	// Tile order, not placement order, is what comes back out of the file, so
-	// every position has to be accounted for rather than matched up in turn.
-	var respawned []mgl32.Vec3
-	for index, tile := range saved.MapData {
-		for _, entity := range tile.Entities {
-			tileX, tileZ := index%saved.MapDimensions[0], index/saved.MapDimensions[0]
-			respawned = append(respawned, tileSpawnPoint(tileX, tileZ, tile.FloorOffset).Add(entity.LocalOffset))
-		}
+	if len(saved.Entities) != len(positions) {
+		t.Fatalf("saved %d entities, placed %d", len(saved.Entities), len(positions))
 	}
-	if len(respawned) != len(positions) {
-		t.Fatalf("saved %d entities, placed %d", len(respawned), len(positions))
-	}
-	for _, want := range positions {
-		if !slices.ContainsFunc(respawned, func(got mgl32.Vec3) bool {
-			return got.ApproxEqualThreshold(want, 1e-5)
-		}) {
-			t.Errorf("a prop placed at %v respawns somewhere else; got %v", want, respawned)
+	for i, spawn := range saved.Entities {
+		if spawn.Position != positions[i] {
+			t.Errorf("a prop placed at %v was saved at %v", positions[i], spawn.Position)
 		}
 	}
 }
@@ -65,26 +45,21 @@ func TestPlacedPropsRoundTripThroughTileOffsets(t *testing.T) {
 func TestDeletedPropsAreNotSaved(t *testing.T) {
 	game := &Game{
 		mapSource: core.MapLoadResult{
-			MapDimensions: [3]int{4, 4, 4},
-			MapData:       make([]core.TileInfo, 4*4),
+			Entities: []core.EntitySpawn{{Entity: core.MapEntity{Name: "Stale"}}},
 		},
 	}
-	game.mapSource.MapData[0].Entities = []core.MapEntity{{Name: "Stale"}}
 
 	dead := quads.NewGameObject("prop")
 	dead.Kill()
 	game.recordPlaced(dead, core.MapEntity{Name: "Deleted"}, mgl32.Vec3{1.5, 1, 1.5})
 	game.recordPlaced(quads.NewGameObject("prop"), core.MapEntity{Name: "Kept"}, mgl32.Vec3{2.5, 1, 1.5})
 
-	for _, tile := range game.mapWithPlacedEntities().MapData {
-		for _, entity := range tile.Entities {
-			if entity.Name != "Kept" {
-				t.Errorf("saved %q, want only the entity that is still alive", entity.Name)
-			}
-		}
+	saved := game.mapWithPlacedEntities()
+	if len(saved.Entities) != 1 || saved.Entities[0].Entity.Name != "Kept" {
+		t.Errorf("saved %v, want only the entity that is still alive", saved.Entities)
 	}
-	if game.mapSource.MapData[0].Entities == nil {
-		t.Error("saving cleared the loaded map's own entity list; it must be left alone")
+	if len(game.mapSource.Entities) != 1 {
+		t.Error("saving rewrote the loaded map's own entity list; it must be left alone")
 	}
 }
 
@@ -125,21 +100,19 @@ func TestPatrolRouteKeepsTheWholeRoute(t *testing.T) {
 	}
 }
 
-// The two fields the editor's actor and prop tools added have to survive the
-// trip through the file, or a route laid out by hand comes back as an actor
-// standing still - which is exactly what it looks like when a new field is
-// added to the in-memory type and not to the one on disk.
+// What the editor writes has to survive the trip through the file, or a route
+// laid out by hand comes back as an actor standing still - which is exactly what
+// it looks like when a field is added to the in-memory type and not to the one
+// on disk.
 func TestEditorFieldsSurviveTheMapFile(t *testing.T) {
 	route := []mgl32.Vec3{{2, 1, 2}, {5, 1, 7}}
 	source := core.MapLoadResult{
-		MapDimensions: [3]int{4, 4, 4},
-		MapData:       make([]core.TileInfo, 4*4),
-		CeilingColor:  color.RGBA{},
-		FloorColor:    color.RGBA{},
-	}
-	source.MapData[5].Entities = []core.MapEntity{
-		{Name: "Scientist", Patrol: route},
-		{Name: "Table", MeshName: "table", Facing: mgl32.Vec3{0, 0, 1}, LocalOffset: mgl32.Vec3{0.3, 0, -0.2}},
+		CeilingColor: color.RGBA{},
+		FloorColor:   color.RGBA{},
+		Entities: []core.EntitySpawn{
+			{Position: mgl32.Vec3{1.5, 1, 1.5}, Entity: core.MapEntity{Name: "Scientist", Patrol: route}},
+			{Position: mgl32.Vec3{3.8, 1, 2.2}, Entity: core.MapEntity{Name: "Table", MeshName: "table", Facing: mgl32.Vec3{0, 0, 1}}},
+		},
 	}
 
 	path := filepath.Join(t.TempDir(), "round-trip.json")
@@ -151,14 +124,72 @@ func TestEditorFieldsSurviveTheMapFile(t *testing.T) {
 		t.Fatalf("load: %s", err)
 	}
 
-	got := loaded.MapData[5].Entities
-	if len(got) != 2 {
-		t.Fatalf("tile came back with %d entities, want 2", len(got))
+	if len(loaded.Entities) != 2 {
+		t.Fatalf("came back with %d entities, want 2", len(loaded.Entities))
 	}
-	if !slices.Equal(got[0].Patrol, route) {
-		t.Errorf("patrol came back as %v, want %v", got[0].Patrol, route)
+	if !slices.Equal(loaded.Entities[0].Entity.Patrol, route) {
+		t.Errorf("patrol came back as %v, want %v", loaded.Entities[0].Entity.Patrol, route)
 	}
-	if got[1].Facing != (mgl32.Vec3{0, 0, 1}) || got[1].LocalOffset != (mgl32.Vec3{0.3, 0, -0.2}) {
-		t.Errorf("prop came back facing %v at offset %v", got[1].Facing, got[1].LocalOffset)
+	table := loaded.Entities[1]
+	if table.Position != (mgl32.Vec3{3.8, 1, 2.2}) || table.Entity.Facing != (mgl32.Vec3{0, 0, 1}) {
+		t.Errorf("prop came back at %v facing %v", table.Position, table.Entity.Facing)
+	}
+}
+
+// Every generated test map is this one call plus a few boxes, so a room that
+// comes out open at the top or walled across the middle takes all six of them
+// with it. A level is only blocks now - there is no tile grid left to check it
+// against, which is exactly why this is worth checking.
+func TestPaintRoomIsHollowWithAFloorAndAWall(t *testing.T) {
+	size := voxel.Int3{X: 6, Y: 4, Z: 5}
+	blocks := newLevel(size)
+	paintRoom(blocks, roomBlock(0, 2, 3))
+
+	if got := blocks.Bounds(); got != size {
+		t.Fatalf("level reports bounds %v, want the size it was built at, %v", got, size)
+	}
+
+	solid := func(x, y, z int32) bool { return blocks.IsSolidBlockAt(x, y, z) }
+
+	for x := int32(0); x < size.X; x++ {
+		for z := int32(0); z < size.Z; z++ {
+			if !solid(x, 0, z) {
+				t.Errorf("floor has a hole at %d,%d", x, z)
+			}
+			if !solid(x, size.Y-1, z) {
+				t.Errorf("ceiling has a hole at %d,%d", x, z)
+			}
+		}
+	}
+
+	// The four walls, and nothing between them: a room you cannot stand in is
+	// not a room.
+	for y := int32(1); y < size.Y-1; y++ {
+		for x := int32(0); x < size.X; x++ {
+			for z := int32(0); z < size.Z; z++ {
+				onEdge := x == 0 || z == 0 || x == size.X-1 || z == size.Z-1
+				if solid(x, y, z) != onEdge {
+					t.Errorf("at %d,%d,%d solid=%v, want %v", x, y, z, !onEdge, onEdge)
+				}
+			}
+		}
+	}
+}
+
+// fillBlocks is what every platform, pillar and dividing wall in the test maps
+// is made of, and it takes its two corners in either order.
+func TestFillBlocksIsInclusiveAndOrderIndependent(t *testing.T) {
+	blocks := newLevel(voxel.Int3{X: 8, Y: 8, Z: 8})
+	fillBlocks(blocks, voxel.Int3{X: 5, Y: 3, Z: 4}, voxel.Int3{X: 2, Y: 1, Z: 2}, roomBlock(0, 0, 0))
+
+	for x := int32(0); x < 8; x++ {
+		for y := int32(0); y < 8; y++ {
+			for z := int32(0); z < 8; z++ {
+				inBox := x >= 2 && x <= 5 && y >= 1 && y <= 3 && z >= 2 && z <= 4
+				if blocks.IsSolidBlockAt(x, y, z) != inBox {
+					t.Fatalf("at %d,%d,%d solid=%v, want %v", x, y, z, !inBox, inBox)
+				}
+			}
+		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // The actor pathfinding test map: one big ground floor, one platform a single
@@ -49,9 +50,11 @@ const (
 	actorPopulation = 100
 )
 
-func loadActorTestMap() core.MapLoadResult {
+func loadActorTestMap() (core.MapLoadResult, *voxel.Map) {
 	size := actorMapSize
-	mapData := make([]core.TileInfo, size*size)
+	blocks := newLevel(voxel.Int3{X: int32(size), Y: actorMapCeiling + 1, Z: int32(size)})
+	block := roomBlock(0, 2, 3)
+	paintRoom(blocks, block)
 
 	onPlatformA := func(x, z int) bool {
 		return x >= platformAX0 && x <= platformAX1 && z >= platformAZ0 && z <= platformAZ1
@@ -60,35 +63,27 @@ func loadActorTestMap() core.MapLoadResult {
 		return x >= platformBX0 && x <= platformBX1 && z >= platformBZ0 && z <= platformBZ1
 	}
 
-	for z := 0; z < size; z++ {
-		for x := 0; x < size; x++ {
-			tile := &mapData[z*size+x]
-			tile.FloorTex = 2
-			tile.CeilTex = 3
-			tile.CeilingHeight = actorMapCeiling
-
-			if x == 0 || z == 0 || x == size-1 || z == size-1 {
-				tile.WallHeight = actorMapCeiling
-				continue
-			}
-			if onPlatformA(x, z) {
-				tile.WallHeight = platformAHeight
-			}
-			if onPlatformB(x, z) {
-				tile.WallHeight = platformBHeight
-			}
-		}
-	}
+	// One platform a single voxel up, reached by an ordinary staircase, and one
+	// four up, too tall for the step height and reached only by the ladder.
+	fillBlocks(blocks,
+		voxel.Int3{X: platformAX0, Y: groundLevel, Z: platformAZ0},
+		voxel.Int3{X: platformAX1, Y: platformAHeight, Z: platformAZ1}, block)
+	fillBlocks(blocks,
+		voxel.Int3{X: platformBX0, Y: groundLevel, Z: platformBZ0},
+		voxel.Int3{X: platformBX1, Y: platformBHeight, Z: platformBZ1}, block)
 
 	stairsTop := mgl32.Vec3{float32(stairsAX) + 0.5, platformASurfaceY, float32(platformAZ0) + 0.5}
-	mapData[stairsAZ*size+stairsAX].Entities = append(mapData[stairsAZ*size+stairsAX].Entities, core.MapEntity{
-		Name: "Stairs", MeshName: stairsMeshName, CreateCollider: true, StepTo: &stairsTop,
-	})
-
 	landing := mgl32.Vec3{float32(ladderTopX) + 0.5, platformBSurfaceY, float32(ladderTopZ) + 0.5}
-	mapData[ladderZ*size+ladderX].Entities = append(mapData[ladderZ*size+ladderX].Entities, core.MapEntity{
-		Name: "Ladder", MeshName: "ladder", CreateCollider: true, ClimbTo: &landing,
-	})
+	entities := []core.EntitySpawn{
+		{
+			Position: tileCentre(stairsAX, stairsAZ, groundLevel),
+			Entity:   core.MapEntity{Name: "Stairs", MeshName: stairsMeshName, CreateCollider: true, StepTo: &stairsTop},
+		},
+		{
+			Position: tileCentre(ladderX, ladderZ, groundLevel),
+			Entity:   core.MapEntity{Name: "Ladder", MeshName: "ladder", CreateCollider: true, ClimbTo: &landing},
+		},
+	}
 
 	isGroundTile := func(x, z int) bool {
 		return x > 1 && x < size-2 && z > 1 && z < size-2 &&
@@ -121,32 +116,27 @@ func loadActorTestMap() core.MapLoadResult {
 		case i%37 == 0:
 			patrolTo = platformBTarget
 		}
-		entity := core.MapEntity{
-			Name:                "Scientist",
-			TextureIndices:      []uint16{0, 1, 2, 3, 4, 5, 6, 7},
-			SpriteSheetName:     "scientist",
-			SpriteSheetTileSize: geometry.Point{X: 64, Y: 64},
-			CreateCollider:      true,
-			PatrolTo:            &patrolTo,
-		}
-		idx := int(spawn.Y())*size + int(spawn.X())
-		mapData[idx].Entities = append(mapData[idx].Entities, entity)
+		entities = append(entities, core.EntitySpawn{
+			Position: tileCentre(int(spawn.X()), int(spawn.Y()), groundLevel),
+			Entity: core.MapEntity{
+				Name:                "Scientist",
+				TextureIndices:      []uint16{0, 1, 2, 3, 4, 5, 6, 7},
+				SpriteSheetName:     "scientist",
+				SpriteSheetTileSize: geometry.Point{X: 64, Y: 64},
+				CreateCollider:      true,
+				PatrolTo:            &patrolTo,
+			},
+		})
 	}
 
 	return core.MapLoadResult{
-		TileSize:          64,
-		AtlasFilename:     "_internal",
-		PlayerSpawn:       mgl32.Vec3{float32(size) / 2, 1, 2.5},
-		PlayerDir:         mgl32.Vec2{0, 1},
-		CeilingHeight:     actorMapCeiling,
-		IsFloorTextured:   true,
-		IsCeilingTextured: true,
-		CeilingColor:      color.RGBA{60, 60, 70, 255},
-		FloorColor:        color.RGBA{40, 40, 40, 255},
-		MapDimensions:     [3]int{size, actorMapCeiling + 1, size},
-		MapData:           mapData,
-		Lights:            actorTestLights(size),
-	}
+		PlayerSpawn:  mgl32.Vec3{float32(size) / 2, 1, 2.5},
+		PlayerDir:    mgl32.Vec2{0, 1},
+		CeilingColor: color.RGBA{60, 60, 70, 255},
+		FloorColor:   color.RGBA{40, 40, 40, 255},
+		Entities:     entities,
+		Lights:       actorTestLights(size),
+	}, blocks
 }
 
 func actorTestLights(size int) []core.MapLight {

@@ -1264,14 +1264,14 @@ func (a *GlApplication) SetEmissiveStrength(strength float32) {
 	a.cubeShader.End()
 }
 
-// SetEmissiveCutoff is the luminance above which a texel of an emissive texture glows.
-// Turn it down towards 0 to light the whole tile, up to pick out only the brightest
-// screens on a busy panel.
+// SetEmissiveCutoff is the luminance above which a texel of an emissive surface glows -
+// a wall face and a mesh alike, which is why it is set on both shaders. Turn it down
+// towards 0 to light the whole tile, up to pick out only the brightest screens on a
+// busy panel.
 func (a *GlApplication) SetEmissiveCutoff(cutoff float32) {
 	a.emissiveCutoff = cutoff
-	a.cubeShader.Begin()
-	a.cubeShader.SetUniformAttr(CubeShaderEmissiveCutoff, cutoff)
-	a.cubeShader.End()
+	setShaderFloat(a.cubeShader, CubeShaderEmissiveCutoff, cutoff)
+	setShaderFloat(a.meshShader, MeshShaderEmissiveCutoff, cutoff)
 }
 
 // SetEmissiveSaturation is how colourful a texel also has to be before it glows. It is
@@ -1279,9 +1279,17 @@ func (a *GlApplication) SetEmissiveCutoff(cutoff float32) {
 // to 0 to go back to a pure brightness mask.
 func (a *GlApplication) SetEmissiveSaturation(saturation float32) {
 	a.emissiveSaturation = saturation
-	a.cubeShader.Begin()
-	a.cubeShader.SetUniformAttr(CubeShaderEmissiveSaturation, saturation)
-	a.cubeShader.End()
+	setShaderFloat(a.cubeShader, CubeShaderEmissiveSaturation, saturation)
+	setShaderFloat(a.meshShader, MeshShaderEmissiveSaturation, saturation)
+}
+
+// setShaderFloat is the Begin/set/End every one of these needs. The thresholds live
+// in the shared fragment header but a uniform is per program, so each shader that
+// masks emissive texels has to be handed the same number.
+func setShaderFloat(shader *glhf.Shader, uniform int, value float32) {
+	shader.Begin()
+	shader.SetUniformAttr(uniform, value)
+	shader.End()
 }
 
 func (a *GlApplication) EmissiveSaturation() float32 { return a.emissiveSaturation }
@@ -1291,13 +1299,22 @@ func (a *GlApplication) EmissiveCutoff() float32   { return a.emissiveCutoff }
 
 // ToggleEmissiveTextureAt makes every face using the texture on this block side glow,
 // or stops it. Returns the texture index and its new state.
+//
+// The map holds the set the renderer reads every frame; the atlas holds the record of
+// it. Both are written here, so a texture marked with G is still marked next time the
+// atlas is loaded instead of being forgotten with the session.
 func (a *GlApplication) ToggleEmissiveTextureAt(gridPos voxel.Int3, side voxel.CubeSide) (uint16, bool, bool) {
 	block := a.CubeMap.GetGlobalBlock(gridPos.X, gridPos.Y, gridPos.Z)
 	if block == nil || block.IsAir() {
 		return 0, false, false
 	}
 	textureIndex := block.GetTexture(side)
-	return textureIndex, a.CubeMap.ToggleEmissiveTexture(textureIndex), true
+	nowGlowing := a.CubeMap.ToggleEmissiveTexture(textureIndex)
+	if err := a.MapTextures.SetEmissive(textureIndex, nowGlowing); err != nil {
+		// The wall in front of you glows either way; only the record failed.
+		log.Printf("[atlas] could not record texture %d as emissive: %v", textureIndex, err)
+	}
+	return textureIndex, nowGlowing, true
 }
 
 func (a *GlApplication) SetBloom(threshold, strength float32) {
@@ -1478,18 +1495,27 @@ func (a *GlApplication) setMainUBOCam(pos, dir mgl32.Vec3, projectionView mgl32.
 	a.mainUbo.End()
 }
 
-// EntitySpawn is one entity the map asks for and where it stands. A slice, not
-// a map keyed by position: a level may put two things in the same place - two
-// props snapped to the same tile centre is the obvious one - and a map keyed by
-// position silently keeps only the last of them.
-type EntitySpawn struct {
-	Position mgl32.Vec3
-	Entity   core.MapEntity
-}
-
-func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) []EntitySpawn {
-	cubeMap, entitySpawns := toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
+// LoadVoxelMap takes the level's blocks - read off disk or painted by a
+// generator, they are the same thing by the time they get here - and makes them
+// the scene's: the shader and the atlas they draw with, and the lights the map
+// file says burn in them.
+//
+// There is no other description of the geometry. There used to be a tile grid in
+// the map file that this inflated into voxels on every load, which meant a level
+// had two shapes that could disagree and only one of them was editable.
+func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult, cubeMap *voxel.Map) {
 	a.CubeMap = cubeMap
+	cubeMap.SetShader(a.cubeShader)
+	cubeMap.SetModelTransformAttrIndex(CubeShaderModelTransform)
+	cubeMap.SetTerrainTexture(a.AtlasMap)
+
+	a.cubeShader.Begin()
+	a.cubeShader.SetUniformAttr(CubeShaderAtlasGridSize, glhf.IntVec2{int32(a.AtlasMap.GridWidth()), int32(a.AtlasMap.GridHeight())})
+	// The voxel lookup buffer is strided by the chunk-aligned grid size, not by
+	// the level's own bounds, so the uniform has to come from the map itself.
+	gridX, gridY, gridZ := cubeMap.VoxelDimensions()
+	a.cubeShader.SetUniformAttr(CubeShaderMapSize, glhf.IntVec4{gridX, gridY, gridZ, 0})
+	a.cubeShader.End()
 
 	// The map owns its lighting. This replaces rather than appends, so a hot reload
 	// or a second map does not leave the previous map's lights burning, and a map
@@ -1509,8 +1535,6 @@ func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) []EntitySpaw
 		a.Toast(fmt.Sprintf("%d of the map's %d dynamic lights did not fit under the %d slot cap",
 			dropped, len(lights), MaxLights))
 	}
-
-	return entitySpawns
 }
 
 // OnResize takes the new window size in screen coordinates. Everything measured in
@@ -1828,92 +1852,4 @@ func skyboxVertices() []glhf.GlFloat {
 		-1.0, -1.0, 1.0,
 		1.0, -1.0, 1.0,
 	}
-}
-
-func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, shader *glhf.Shader) (*voxel.Map, []EntitySpawn) {
-	chunkSize := 32
-	mapData := loadResult.MapData
-	mapSizeX, mapSizeY, mapSizeZ := loadResult.MapDimensions[0], loadResult.MapDimensions[1], loadResult.MapDimensions[2]
-
-	chunksNeededX := int32(math.Ceil(float64(mapSizeX) / float64(chunkSize)))
-	chunksNeededY := int32(math.Ceil(float64(mapSizeY) / float64(chunkSize)))
-	chunksNeededZ := int32(math.Ceil(float64(mapSizeZ) / float64(chunkSize)))
-
-	voxelMap := voxel.NewMapWithEmptyChunks(chunksNeededX, chunksNeededY, chunksNeededZ, int32(chunkSize), int32(chunkSize))
-	voxelMap.SetShader(shader)
-	voxelMap.SetModelTransformAttrIndex(CubeShaderModelTransform)
-
-	shader.Begin()
-	shader.SetUniformAttr(CubeShaderAtlasGridSize, glhf.IntVec2{int32(atlas.GridWidth()), int32(atlas.GridHeight())})
-	// The voxel lookup buffer is strided by the chunk-aligned grid size, not by the
-	// dimensions LDtk reports, so the uniform has to come from the map itself.
-	gridX, gridY, gridZ := voxelMap.VoxelDimensions()
-	shader.SetUniformAttr(CubeShaderMapSize, glhf.IntVec4{gridX, gridY, gridZ, 0})
-	shader.End()
-
-	voxelMap.SetTerrainTexture(atlas)
-
-	var entitySpawns []EntitySpawn
-
-	safeTex := func(tex int) uint16 {
-		if tex < 0 {
-			return 0
-		}
-		if tex > atlas.LastValidIndex() {
-			return 0
-		}
-		return uint16(tex)
-	}
-
-	for z := 0; z < mapSizeZ; z++ {
-		for x := 0; x < mapSizeX; x++ {
-			mapIndex := z*mapSizeX + x
-			tileInfo := mapData[mapIndex]
-
-			floorStartsAt := tileInfo.FloorOffset
-			ceilingStartsAt := mapSizeY - 1
-			if tileInfo.CeilingHeight > 0 {
-				ceilingStartsAt = tileInfo.CeilingHeight
-			}
-
-			wallStartsAt := 0
-			wallEndsAt := 0
-
-			if tileInfo.WallHeight > 0 {
-				wallStartsAt = tileInfo.WallOffset + 1
-				wallEndsAt = wallStartsAt + tileInfo.WallHeight
-			}
-
-			for y := 0; y < mapSizeY; y++ {
-				// 0 = floor layer
-				// 1 = ground layer
-				// mapSizeY - 1 = ceiling layer
-				cube := voxelMap.GetGlobalBlock(int32(x), int32(y), int32(z))
-				isFloorLevel := y == floorStartsAt+1
-
-				for _, entity := range tileInfo.Entities {
-					if isFloorLevel {
-						entitySpawnPos := mgl32.Vec3{float32(x) + 0.5, float32(y), float32(z) + 0.5}.Add(entity.LocalOffset)
-						entitySpawns = append(entitySpawns, EntitySpawn{Position: entitySpawnPos, Entity: entity})
-					}
-				}
-				isCeiling := y == ceilingStartsAt && loadResult.IsCeilingTextured
-				isWall := y <= floorStartsAt || y >= wallStartsAt && y < wallEndsAt
-				cube.IsSolid = isWall || isCeiling
-				cube.Textures = make(map[voxel.CubeSide]uint16)
-				// No light is seeded here. Torch light is owned by
-				// Map.bakeEmissiveTorchlight, which clears before it floods, and
-				// nothing reads sun light at all - GetSunLight has no callers. A
-				// level of 14 on every block in the map was a trap waiting for the
-				// first load where the bake had not run yet.
-				cube.Textures[voxel.North] = safeTex(tileInfo.WallTex)
-				cube.Textures[voxel.South] = safeTex(tileInfo.WallTex)
-				cube.Textures[voxel.East] = safeTex(tileInfo.WallTex)
-				cube.Textures[voxel.West] = safeTex(tileInfo.WallTex)
-				cube.Textures[voxel.Top] = safeTex(tileInfo.FloorTex)
-				cube.Textures[voxel.Bottom] = safeTex(tileInfo.CeilTex)
-			}
-		}
-	}
-	return voxelMap, entitySpawns
 }
