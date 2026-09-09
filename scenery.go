@@ -64,6 +64,11 @@ type ScreenSpec struct {
 	FPS      float64 `json:"fps"`
 }
 
+// stairsMeshName is the staircase, which the engine has to know by name: it is
+// what a map entity points its MeshName at to get one, and what
+// core.MapEntity.StepTo exists for - see spawn_entities.go.
+const stairsMeshName = "stairs"
+
 // meshDir is the folder of folders, one to a model: a mesh.gltf or mesh.glb and
 // whatever else that model needs beside it. A folder that also holds a
 // scenery.json is a piece of furniture; one that does not - the cube, the torch -

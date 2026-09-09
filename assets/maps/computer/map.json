@@ -1,0 +1,81 @@
+{
+  "PlayerSpawn": [
+    5,
+    1,
+    5.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 60,
+    "G": 60,
+    "B": 70,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 40,
+    "G": 40,
+    "B": 40,
+    "A": 255
+  },
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0,
+    0,
+    0
+  ],
+  "AmbientStrength": 0,
+  "Entities": [
+    {
+      "Position": [
+        5.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Computer",
+        "TextureIndices": null,
+        "MeshName": "computer",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    }
+  ],
+  "Lights": [
+    {
+      "Position": [
+        5,
+        3.5,
+        5
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        0.9,
+        0.92,
+        1
+      ],
+      "Intensity": 7,
+      "Angle": 140,
+      "Reach": 14,
+      "Baked": false
+    }
+  ]
+}

@@ -17,7 +17,7 @@ voxel cubes, meshes, sprites, lines, skybox, GUI and post-processing.
 - glTF/GLB static mesh loading (`qmuntal/gltf`)
 - Spotlights via UBO, authored in the map file (`Light` entries in the JSON map), with
   normal-offset shadow mapping, hardware PCF and per-light reach, cone and intensity
-- Fog, and a `-shadowtest` map built to judge shadow bias by
+- Fog, and a `shadowtest` map built to judge shadow bias by
 - Render-to-framebuffer + post-processing pass, screenshot capture (F12)
 
 **World & entities** — a map is voxel blocks in a gzipped dump plus a small JSON
@@ -52,12 +52,17 @@ Needs cgo, a C toolchain and GLFW system libs (`brew install glfw` on macOS).
 go run .
 ```
 
-Two generated maps stand in for the shipped one:
+`-map <name>` picks any level under `assets/maps/`, and `-stress` generates one
+instead of loading it:
 
 ```bash
-go run . -shadowtest                # one wall, one light, one walking caster
+go run . -map shadowtest            # one wall, one light, one walking caster
+go run . -map doors                 # three slide doors and a swing door
 go run . -stress -stress-lights 8   # a hall of pillars and barrels, for frame times
 ```
+
+The shipped levels are `raymap` (the default), `shadowtest`, `stairs`, `actors`,
+`doors` and `computer`.
 
 Frame times, for before/after on the render path:
 
@@ -69,9 +74,11 @@ go run . -stress -stress-size 96 -stress-sprites 2 -bench 10
 quits. VSync and the debug overlay go off with it. Judge frame time (ms), not FPS —
 FPS is a reciprocal and averaging it hides hitches.
 
-`-shadowtest` is a rig, not a level: it exists so shadow bias can be judged. The two
-knobs it is judged with are `-shadow-offset` (in shadow texels) and `-shadow-bias`,
-also live on sliders in the F1 menu.
+`shadowtest` is a rig, not a level: it exists so shadow bias can be judged, and it
+carries its own fog and ambient in its `map.json` so that nothing dims a surface
+for a reason other than shadow. The two knobs it is judged with are
+`-shadow-offset` (in shadow texels) and `-shadow-bias`, also live on sliders in
+the F1 menu.
 
 Windows cross-compile: `./build_win.sh` (mingw-w64). Tagged pushes (`v*.*.*`) build
 macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
@@ -93,6 +100,7 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 | `F2` | toggle mouse capture |
 | `F3` | spawn mode |
 | `F4` | cycle decoration texture |
+| `F1` | menu, including `Load Map` - every level under `assets/maps` |
 | `F5` | in and out of the map editor - see below |
 | `R` / `F6` / `Tab` | edit menu / cube texture mapper / copy block textures |
 | `F7` / `F8` | fill / wireframe |
@@ -127,9 +135,9 @@ the floor where it should walk; it starts walking the new leg as soon as it fini
 the one it is on, so a route is checked by watching it, and the selected actor's
 whole beat is ghosted as unit cubes while it is being drawn.
 
-`Ctrl+S` saves: the voxels to `assets/<map>.bin`, and everything standing in them -
-props, torches, actors and their routes - back into the map's own JSON. Both halves
-are loaded again at startup. `F` is the fly toggle, and `R` still opens the menu for
+`Ctrl+S` saves both halves of the level back into its own folder: the blocks to
+`map.bin`, and everything standing in them - props, torches, actors and their
+routes - to `map.json`. `F` is the fly toggle, and `R` still opens the menu for
 what a key cannot carry: a texture out of an atlas of hundreds, load, clear.
 
 `-editor blocks|props|actors` boots straight into it, which is how a screenshot of
@@ -157,7 +165,7 @@ map that turned 580 KB of tile grid into 3.6 KB of JSON and 1.5 KB of blocks.
 ```
 main.go handlers.go input.go load_map.go edit_map.go spawn_entities.go doom_weapon.go
 scenery.go  pickup.go   the furniture folder and what stands on it
-map_build.go            painting a level's blocks, for the generated test maps
+map_build.go            painting a level's blocks, for the generated stress map
 quads/      renderer, systems, UI widgets, shaders
 quads/glhf/ OpenGL abstraction layer
 quads/voxel/ voxel block/chunk/mesh, raycast, collision shapes
@@ -182,13 +190,20 @@ assets/
   skybox/      six faces to a set
   textures/    the texture library the editor picks from, dropped/ included
   weapons/     one folder per weapon, plus the shared actor and sprite stores
-  raymap.json  the map: player spawn, colours, lights, and what stands in it
-  raymap.bin   the same map's blocks - the only description of its geometry
+  maps/        one folder per level: map.json and the map.bin beside it
 ```
 
-The two halves are named after each other on purpose, so a map cannot be opened
-against another one's geometry. A map file with no `.bin` beside it is a level
-with nothing in it yet, which is where building one from scratch starts.
+A level is a folder under `assets/maps/`, and which levels exist is decided by
+which folders are present - the same rule the weapons and the scenery follow.
+`map.json` is the player spawn, the colours, the lights and what stands in the
+level; `map.bin` is its blocks, the only description of its geometry. They live
+together so a map can never be opened against another one's geometry, and a
+`map.json` with no `map.bin` beside it is an empty level, which is where
+building one from scratch starts.
+
+`-map <name>` picks one at startup (default `raymap`), and `F1 > Load Map` -
+or `R > Load Map` in the editor - switches between them while the game is
+running, listing whatever folders are there.
 
 The UI atlas and the bitmap font are the exception: they are baked into the
 binary from `eassets/files/`, so a build with no `assets/` next to it still draws

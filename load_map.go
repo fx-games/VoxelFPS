@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
@@ -27,8 +27,13 @@ type mapFile struct {
 	PlayerDir    mgl32.Vec2
 	CeilingColor color.RGBA
 	FloorColor   color.RGBA
-	Entities     []core.EntitySpawn
-	Lights       []core.MapLight
+
+	FogStart, FogEnd float32
+	AmbientColor     mgl32.Vec3
+	AmbientStrength  float32
+
+	Entities []core.EntitySpawn
+	Lights   []core.MapLight
 }
 
 func toMapFile(m core.MapLoadResult) mapFile {
@@ -40,23 +45,31 @@ func toMapFile(m core.MapLoadResult) mapFile {
 		return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
 	}
 	return mapFile{
-		PlayerSpawn:  m.PlayerSpawn,
-		PlayerDir:    m.PlayerDir,
-		CeilingColor: toRGBA(m.CeilingColor),
-		FloorColor:   toRGBA(m.FloorColor),
-		Entities:     m.Entities,
-		Lights:       m.Lights,
+		PlayerSpawn:     m.PlayerSpawn,
+		PlayerDir:       m.PlayerDir,
+		CeilingColor:    toRGBA(m.CeilingColor),
+		FloorColor:      toRGBA(m.FloorColor),
+		FogStart:        m.FogStart,
+		FogEnd:          m.FogEnd,
+		AmbientColor:    m.AmbientColor,
+		AmbientStrength: m.AmbientStrength,
+		Entities:        m.Entities,
+		Lights:          m.Lights,
 	}
 }
 
 func (f mapFile) toLoadResult() core.MapLoadResult {
 	return core.MapLoadResult{
-		PlayerSpawn:  f.PlayerSpawn,
-		PlayerDir:    f.PlayerDir,
-		CeilingColor: f.CeilingColor,
-		FloorColor:   f.FloorColor,
-		Entities:     f.Entities,
-		Lights:       f.Lights,
+		PlayerSpawn:     f.PlayerSpawn,
+		PlayerDir:       f.PlayerDir,
+		CeilingColor:    f.CeilingColor,
+		FloorColor:      f.FloorColor,
+		FogStart:        f.FogStart,
+		FogEnd:          f.FogEnd,
+		AmbientColor:    f.AmbientColor,
+		AmbientStrength: f.AmbientStrength,
+		Entities:        f.Entities,
+		Lights:          f.Lights,
 	}
 }
 
@@ -85,11 +98,63 @@ func loadJSONMap(filename string) (core.MapLoadResult, error) {
 	return f.toLoadResult(), nil
 }
 
-// voxelFileFor is where a map's blocks live: beside the map file and named
-// after it, so the two halves of a level travel together and a map can never be
-// opened against another one's geometry.
+// mapDir is the folder of folders, one to a level: a map.json and the map.bin
+// beside it. Which levels exist is decided by which folders are present, the
+// same way the weapons and the scenery decide what exists - a new level is a
+// folder, not a line of Go, which is the whole reason the test maps stopped
+// being Go in the first place.
+const mapDir = "assets/maps"
+
+// defaultMapName is the level a run with no -map starts in.
+const defaultMapName = "raymap"
+
+const (
+	mapFileName   = "map.json"
+	voxelFileName = "map.bin"
+)
+
+// mapPathFor and voxelPathFor are the two halves of the level called name.
+func mapPathFor(name string) string   { return filepath.Join(mapDir, name, mapFileName) }
+func voxelPathFor(name string) string { return filepath.Join(mapDir, name, voxelFileName) }
+
+// voxelFileFor is where the blocks of the map at this path live: beside it, so
+// the two halves of a level travel together and a map can never be opened
+// against another one's geometry.
 func voxelFileFor(mapPath string) string {
-	return strings.TrimSuffix(mapPath, filepath.Ext(mapPath)) + ".bin"
+	return filepath.Join(filepath.Dir(mapPath), voxelFileName)
+}
+
+// mapNames is every level under mapDir, in a fixed order, for a menu and for
+// the -map flag to be checked against. A folder with no map.json in it is not a
+// level - a stray directory is not an error to stop the game with.
+func mapNames() []string {
+	entries, err := os.ReadDir(mapDir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(mapPathFor(entry.Name())); err != nil {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	slices.Sort(names)
+	return names
+}
+
+// loadMap reads the level called name: both halves, or an error naming the one
+// that would not open. The blocks are allowed to be missing - that is an empty
+// level, which is where building one starts - but the map file is not.
+func loadMap(name string) (core.MapLoadResult, *voxel.Map, error) {
+	result, err := loadJSONMap(mapPathFor(name))
+	if err != nil {
+		return core.MapLoadResult{}, nil, err
+	}
+	return result, loadVoxelFile(voxelPathFor(name)), nil
 }
 
 // loadVoxelFile reads a level's blocks. It is the only way geometry ever comes

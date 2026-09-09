@@ -1,0 +1,4253 @@
+{
+  "PlayerSpawn": [
+    20,
+    1,
+    2.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 60,
+    "G": 60,
+    "B": 70,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 40,
+    "G": 40,
+    "B": 40,
+    "A": 255
+  },
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0,
+    0,
+    0
+  ],
+  "AmbientStrength": 0,
+  "Entities": [
+    {
+      "Position": [
+        8.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Stairs",
+        "TextureIndices": null,
+        "MeshName": "stairs",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": [
+          8.5,
+          2,
+          4.5
+        ]
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        26.5
+      ],
+      "Entity": {
+        "Name": "Ladder",
+        "TextureIndices": null,
+        "MeshName": "ladder",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": [
+          30.5,
+          5,
+          27.5
+        ],
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          2,
+          6.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        4.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          12.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        6.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          14.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        10.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        12.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          18.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          22.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          28.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          30.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          32.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          34.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          36.5,
+          1,
+          20.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        2.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          12.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          2,
+          6.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          18.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          22.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          28.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          30.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          32.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          34.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          36.5,
+          1,
+          22.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          29.5,
+          5,
+          29.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          14.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          2,
+          6.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        6.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          22.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          28.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          30.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          32.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          34.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          36.5,
+          1,
+          24.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          12.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          14.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          18.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          2,
+          6.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          28.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          32.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          34.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          36.5,
+          1,
+          26.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          12.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          14.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          29.5,
+          5,
+          29.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          18.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          22.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          28.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          2,
+          6.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        12.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        2.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        4.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        6.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        8.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        10.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          12.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        12.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          14.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          18.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        18.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          20.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        20.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          22.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        22.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          24.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        24.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          26.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        26.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          36.5,
+          1,
+          30.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        28.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          2.5,
+          1,
+          32.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        30.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          4.5,
+          1,
+          32.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        32.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          6.5,
+          1,
+          32.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          8.5,
+          1,
+          32.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        36.5,
+        1,
+        14.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          10.5,
+          1,
+          32.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    }
+  ],
+  "Lights": [
+    {
+      "Position": [
+        20,
+        5.5,
+        20
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.97,
+        0.9
+      ],
+      "Intensity": 8,
+      "Angle": 140,
+      "Reach": 40,
+      "Baked": false
+    },
+    {
+      "Position": [
+        8.5,
+        3.5,
+        2
+      ],
+      "Yaw": 180,
+      "Pitch": 68.19859,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 90,
+      "Reach": 16,
+      "Baked": false
+    },
+    {
+      "Position": [
+        30.5,
+        5.5,
+        26
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        0.85,
+        0.9,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 90,
+      "Reach": 16,
+      "Baked": false
+    }
+  ]
+}

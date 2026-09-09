@@ -26,11 +26,7 @@ import (
 func main() {
 	defaults := DefaultStressConfig()
 	stress := flag.Bool("stress", false, "generate a stress map instead of loading the default map")
-	shadowTest := flag.Bool("shadowtest", false, "load the shadow test map: one caster, one wall, one light from above")
-	stairsTest := flag.Bool("stairs", false, "load the stairs test map: a staircase onto a platform, to walk the step-up")
-	actorTest := flag.Bool("actors", false, "load the actor pathfinding test map: a hundred patrolling actors, a platform reached by stairs, a platform reached by ladder")
-	doorsTest := flag.Bool("doors", false, "load the doors test map: three slide doors (front/mid/back placed) and one swing door")
-	computerTest := flag.Bool("computer", false, "load the computer test map: one Computer prop, screen facing the player spawn")
+	mapName := flag.String("map", defaultMapName, "load this level, by its folder name under assets/maps")
 	// The two shadow knobs are also flags, not only config menu sliders, so a
 	// before/after can be run from a script instead of from muscle memory.
 	shadowOffset := flag.Float64("shadow-offset", float64(quads.DefaultShadowNormalOffset), "shadow normal offset, in shadow texels")
@@ -61,25 +57,15 @@ func main() {
 
 	var stressConfig *StressConfig
 	var mapLoad core.MapLoadResult
-	// The file the map came from, empty for a generated one. It is what the
-	// editor saves back to, and what names the voxel file beside it.
-	var mapPath string
-	// The level's blocks. There is one description of them: painted here by a
-	// generator, or read out of the voxel file beside the map. Whichever it
-	// was, by this point it is the same thing.
+	// The level being played, and the file it came from - empty for the stress
+	// rig, which is generated rather than loaded. The name is what the editor
+	// saves back to and what the benchmark report calls the run.
+	loadedMap := *mapName
+	// The level's blocks. There is one description of them: generated here, or
+	// read out of the voxel file beside the map. Either way, by this point it
+	// is the same thing.
 	var blocks *voxel.Map
-	shadowTestMap := *shadowTest
-	if shadowTestMap {
-		mapLoad, blocks = loadShadowTestMap()
-	} else if *stairsTest {
-		mapLoad, blocks = loadStairsTestMap()
-	} else if *actorTest {
-		mapLoad, blocks = loadActorTestMap()
-	} else if *doorsTest {
-		mapLoad, blocks = loadDoorTestMap()
-	} else if *computerTest {
-		mapLoad, blocks = loadComputerTestMap()
-	} else if *stress {
+	if *stress {
 		stressConfig = &StressConfig{
 			Size:          *stressSize,
 			PillarSpacing: *stressPillars,
@@ -87,14 +73,12 @@ func main() {
 			Lights:        *stressLightCount,
 		}
 		mapLoad, blocks = loadStressMap(*stressConfig)
+		loadedMap = ""
 	} else {
 		var err error
-		mapPath = filepath.Join("assets", "raymap.json")
-		mapLoad, err = loadJSONMap(mapPath)
-		if err != nil {
-			log.Fatal(err)
+		if mapLoad, blocks, err = loadMap(loadedMap); err != nil {
+			log.Fatalf("%s (levels in %s: %v)", err, mapDir, mapNames())
 		}
-		blocks = loadVoxelFile(voxelFileFor(mapPath))
 	}
 
 	if *cpuProfile != "" {
@@ -110,8 +94,6 @@ func main() {
 
 	glhf.Run(func() {
 		game := NewGame(stressConfig)
-		game.isShadowTest = shadowTestMap
-		game.isActorTest = *actorTest
 		game.shadowNormalOffset = float32(*shadowOffset)
 		game.shadowDepthBias = float32(*shadowBias)
 		game.benchSeconds = *benchSeconds
@@ -120,7 +102,7 @@ func main() {
 		fmt.Sscanf(*autoTap, "%d,%d", &game.tapDown, &game.tapUp)
 		game.autoWalk = *autoWalk
 		game.autoCycle = *autoCycle
-		game.mapPath = mapPath
+		game.mapName = loadedMap
 		game.blocks = blocks
 		game.startEditorMode = *startEditor
 		game.startTimeFactor = *timeFactor
@@ -129,11 +111,7 @@ func main() {
 			path: *shot, first: *shotFirst, every: *shotEvery, count: *shotCount,
 			step: 1 / *shotFPS, pitch: *shotPitch,
 		}
-		// The rig is looked at, not played, and a 640x480 shadow is a dozen pixels.
 		windowWidth, windowHeight := 640, 480
-		if shadowTestMap {
-			windowWidth, windowHeight = 1280, 800
-		}
 		if *width > 0 {
 			windowWidth = *width
 		}
@@ -211,8 +189,6 @@ type Game struct {
 	startTimeFactor        float64
 	currentWindowModeIndex int
 
-	isShadowTest bool
-	isActorTest  bool
 	benchSeconds float64
 	// bobTics is the clock the weapon's sway is a function of, in Doom tics.
 	bobTics float64
@@ -253,8 +229,10 @@ type Game struct {
 	// dropped since. Together they are what a save writes: see
 	// mapWithPlacedEntities.
 	mapSource core.MapLoadResult
-	mapPath   string
-	placed    []placedEntity
+	// mapName is the folder under assets/maps this level came from, empty for
+	// the generated stress rig. It is what the editor saves back to.
+	mapName string
+	placed  []placedEntity
 	// blocks is the level's geometry, and the only description of it there is:
 	// what LoadVoxelMap is handed and what the editor saves back out.
 	blocks *voxel.Map
@@ -570,13 +548,7 @@ func (g *Game) benchmarkLabel() string {
 		return fmt.Sprintf("stress %dx%d, pillars every %d, barrels every %d, %d lights",
 			cfg.Size, cfg.Size, cfg.PillarSpacing, cfg.SpriteSpacing, cfg.Lights)
 	}
-	if g.isShadowTest {
-		return "shadow test map"
-	}
-	if g.isActorTest {
-		return fmt.Sprintf("actor pathfinding test map, %d actors", actorPopulation)
-	}
-	return "raymap.json"
+	return fmt.Sprintf("%s, %d entities", g.mapName, len(g.mapSource.Entities))
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
@@ -662,15 +634,12 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	}
 	// Setup Ceiling & Fog
 	g.CeilingColor = mapLoad.CeilingColorVec4()
-	g.fogStart = 4
-	g.fogEnd = 22
-	if g.isShadowTest {
-		// The rig is a microscope, so everything that dims a surface for a reason
-		// other than shadow is pushed out of the way: fog past the far wall, and an
-		// ambient floor low enough that unlit really looks unlit. With the shipped
-		// values the light pool and the fog fade were the same shade of brown and
-		// the shadow could not be told from either.
-		g.fogStart, g.fogEnd = 60, 120
+	// A map that says nothing about how far it can be seen through gets the
+	// engine's own numbers; one that does - the shadow rig, whose fog would
+	// otherwise be the same shade of brown as the light pool - gets its own.
+	g.fogStart, g.fogEnd = 4, 22
+	if mapLoad.FogEnd > 0 {
+		g.fogStart, g.fogEnd = mapLoad.FogStart, mapLoad.FogEnd
 	}
 	g.skyHorizonFade = 7
 	g.exposure = quads.DefaultExposure
@@ -680,8 +649,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.emissiveCutoff = quads.DefaultEmissiveCutoff
 	g.emissiveSaturation = quads.DefaultEmissiveSaturation
 	g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
-	if g.isShadowTest {
-		g.SetAmbientLight(mgl32.Vec3{0.35, 0.4, 0.55}, 0.08)
+	if mapLoad.AmbientStrength > 0 {
+		g.SetAmbientLight(mapLoad.AmbientColor, mapLoad.AmbientStrength)
 	}
 	g.updateFog()
 	g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
@@ -1189,6 +1158,7 @@ func (g *Game) openWizardMenu() {
 	g.menuPreviousMouseState = g.setupModal()
 	top := g.OpenConfigMenu()
 	top.SetOptions([]quads.GuiOption{
+		quads.NewGuiOptionSubmenu("Load Map", func() { g.pushConfigSubmenu(g.mapOptions()) }),
 		quads.NewGuiOptionSubmenu("Show / Hide", func() { g.pushConfigSubmenu(g.showHideOptions()) }),
 		quads.NewGuiOptionSubmenu("Video", func() { g.pushConfigSubmenu(g.videoOptions()) }),
 		quads.NewGuiOptionSubmenu("Rendering", func() { g.pushConfigSubmenu(g.renderingOptions()) }),
@@ -1224,6 +1194,58 @@ func (g *Game) pushConfigSubmenu(options []quads.GuiOption) {
 	menu.HandleResize(guiWidth, guiHeight, g.UIScale)
 	menu.SetOnClose(g.popFromWidgetStack)
 	g.pushToWidgetStack(menu)
+}
+
+// mapOptions is the levels there are: one row per folder under assets/maps,
+// named after the folder. Nothing here knows what levels exist - a new one is a
+// folder with a map.json in it, the same way a new weapon or a new piece of
+// scenery is.
+func (g *Game) mapOptions() []quads.GuiOption {
+	names := mapNames()
+	if len(names) == 0 {
+		return []quads.GuiOption{quads.NewGuiOptionAction("no levels in "+mapDir, func() {})}
+	}
+	options := make([]quads.GuiOption, 0, len(names))
+	for _, name := range names {
+		label := name
+		if name == g.mapName {
+			label += "  (playing)"
+		}
+		options = append(options, quads.NewGuiOptionAction(label, func() {
+			g.closeAllMenus()
+			g.switchToMap(name)
+		}))
+	}
+	return options
+}
+
+// switchToMap loads a different level while the game is running: both halves of
+// it, and the player put down at its own spawn rather than left standing where
+// the last level happened to leave them. That is the whole difference from a hot
+// reload, which is the same map again and deliberately does not move anyone.
+func (g *Game) switchToMap(name string) {
+	result, blocks, err := loadMap(name)
+	if err != nil {
+		g.Toast("Load failed: " + err.Error())
+		return
+	}
+	g.clearGhost()
+	g.editor.selectedActor = nil
+	g.mapName = name
+	g.blocks = blocks
+	g.mapLoad(result, true)
+
+	// After mapLoad, not before: it builds a new collision solver and puts the
+	// player's collider into it, and the velocity to clear is the one on that
+	// side of the swap. A player who arrives still falling from the last map
+	// lands somewhere else entirely.
+	physics := g.player.Physics()
+	physics.SetVelocity(mgl32.Vec3{})
+	g.player.Transform().SetPosition(result.PlayerSpawn)
+	if dir := result.PlayerDir; dir.Len() > 0 {
+		g.Camera.SetForward2D(mgl32.Vec3{dir.X(), 0, dir.Y()}.Normalize())
+	}
+	g.Toast("Loaded " + name)
 }
 
 // showHideOptions is every render-pass toggle: the debug overlays and the
@@ -1483,7 +1505,7 @@ func (g *Game) watchFileChangesLoop() {
 	}
 	defer watcher.Close()
 	// Add a path.
-	fileToWatch := filepath.Join("assets", "raymap.json")
+	fileToWatch := mapPathFor(g.savedAs())
 	err = watcher.Add(fileToWatch)
 	if err != nil {
 		log.Fatal(err)

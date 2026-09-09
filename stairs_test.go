@@ -9,30 +9,31 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 )
 
-// The stairs test map in miniature: a floor at y < 1 and the platform the stairs
-// lead onto, one voxel tall, starting where the top step ends.
-func stairsWorld() (isSolid func(x, y, z int32) bool, isInside func(pos mgl32.Vec3) bool) {
-	isSolid = func(x, y, z int32) bool {
-		if y < 1 {
-			return true
+// stairsMap is the shipped stairs level: the blocks the game would put in the
+// world and the staircase standing in them. It is loaded rather than
+// reconstructed, so this walks the level that actually ships - the map is an
+// asset now, and a test against a copy of it would pass while the asset rotted.
+func stairsMap(t *testing.T) (blocks *voxel.Map, staircaseAt mgl32.Vec3) {
+	t.Helper()
+	result, blocks, err := loadMap("stairs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spawn := range result.Entities {
+		if spawn.Entity.MeshName == stairsMeshName {
+			return blocks, spawn.Position
 		}
-		onPlatform := z >= stairsPlatformZ0 && z <= stairsPlatformZ1 &&
-			x >= stairsPlatformX0 && x <= stairsPlatformX1
-		return onPlatform && y < 2
 	}
-	isInside = func(pos mgl32.Vec3) bool {
-		return pos.X() > 0 && pos.X() < stairsMapSize && pos.Z() > 0 && pos.Z() < stairsMapSize &&
-			pos.Y() > -1 && pos.Y() < stairsCeiling+1
-	}
-	return
+	t.Fatalf("no %s entity in the stairs map", stairsMeshName)
+	return nil, mgl32.Vec3{}
 }
 
 // walkUpTheStairs runs the real physics system: a player sized box is pushed at
-// walking speed towards the staircase and its final position is
-func walkUpTheStairs(t *testing.T, stepHeight float32) mgl32.Vec3 {
+// walking speed towards the staircase and its final position is returned.
+func walkUpTheStairs(t *testing.T, stepHeight float32) (end mgl32.Vec3, staircaseAt mgl32.Vec3) {
 	t.Helper()
-	isSolid, isInside := stairsWorld()
-	system := quads.NewCollisionSolver(isSolid, isInside)
+	blocks, staircaseAt := stairsMap(t)
+	system := quads.NewCollisionSolver(blocks.IsSolidBlockAt, blocks.ContainsVec)
 	system.SetGravityEnabled(true)
 	system.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	system.SetStepHeight(stepHeight)
@@ -51,13 +52,14 @@ func walkUpTheStairs(t *testing.T, stepHeight float32) mgl32.Vec3 {
 		t.Fatalf("stairs have %d colliders, want one per step", len(stairs.Colliders))
 	}
 	staircase := quads.NewGameObject("Stairs")
-	staircase.Transform().SetPosition(mgl32.Vec3{stairsTileX + 0.5, 1, stairsTileZ + 0.5})
+	staircase.Transform().SetPosition(staircaseAt)
 	for _, step := range stairs.colliders(staircase) {
 		system.AddObject(step)
 	}
 
 	object := quads.NewGameObject("Player")
-	object.Transform().SetPosition(mgl32.Vec3{stairsTileX + 0.5, 1, stairsTileZ - 0.5})
+	// One tile short of the bottom step, walking at it.
+	object.Transform().SetPosition(staircaseAt.Sub(mgl32.Vec3{0, 0, 1}))
 	player := quads.NewPhysicsComponent(true, voxel.NewAABB(
 		mgl32.Vec3{-0.2, 0, -0.2},
 		mgl32.Vec3{0.2, 0.9, 0.2},
@@ -73,30 +75,31 @@ func walkUpTheStairs(t *testing.T, stepHeight float32) mgl32.Vec3 {
 		player.SetVelocity(mgl32.Vec3{0, fall, pmSpeed})
 		system.Update(tick)
 	}
-	return player.Position()
+	return player.Position(), staircaseAt
 }
 
 // With the Quake 3 step height the player walks the staircase and ends up on the
 // platform, a whole voxel above where it started.
 func TestPlayerWalksUpTheStairs(t *testing.T) {
-	end := walkUpTheStairs(t, pmStepSize)
+	end, staircaseAt := walkUpTheStairs(t, pmStepSize)
 
 	if math.Abs(float64(end.Y()-2)) > 0.05 {
 		t.Errorf("ended at y = %f, want to be standing on the platform at y = 2", end.Y())
 	}
-	if end.Z() < stairsPlatformZ0 {
-		t.Errorf("did not reach the platform: z = %f", end.Z())
+	// The platform starts where the two-tile staircase ends.
+	if platformZ := staircaseAt.Z() + 2; end.Z() < platformZ {
+		t.Errorf("did not reach the platform at z = %f: z = %f", platformZ, end.Z())
 	}
 }
 
 // Without it every step is a wall, which is what the step-up is there to fix.
 func TestWithoutStepHeightTheStairsBlock(t *testing.T) {
-	end := walkUpTheStairs(t, 0)
+	end, staircaseAt := walkUpTheStairs(t, 0)
 
 	if end.Y() > 1.01 {
 		t.Errorf("climbed without a step height: y = %f", end.Y())
 	}
-	if end.Z() > stairsTileZ {
+	if end.Z() > staircaseAt.Z() {
 		t.Errorf("walked into the first step and through it: z = %f", end.Z())
 	}
 }

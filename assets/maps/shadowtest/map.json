@@ -1,0 +1,94 @@
+{
+  "PlayerSpawn": [
+    15.5,
+    1,
+    13.5
+  ],
+  "PlayerDir": [
+    -4.5,
+    -5.5
+  ],
+  "CeilingColor": {
+    "R": 60,
+    "G": 60,
+    "B": 70,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 40,
+    "G": 40,
+    "B": 40,
+    "A": 255
+  },
+  "FogStart": 60,
+  "FogEnd": 120,
+  "AmbientColor": [
+    0.35,
+    0.4,
+    0.55
+  ],
+  "AmbientStrength": 0.08,
+  "Entities": [
+    {
+      "Position": [
+        7.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          13.5,
+          1,
+          8.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    }
+  ],
+  "Lights": [
+    {
+      "Position": [
+        10,
+        4,
+        13.6
+      ],
+      "Yaw": 0,
+      "Pitch": 26.113913,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 8,
+      "Angle": 70,
+      "Reach": 20,
+      "Baked": false
+    }
+  ]
+}

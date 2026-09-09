@@ -1,38 +1,57 @@
 package png_chunks
 
 import (
-	"github.com/stretchr/testify/assert"
-	"os"
-	"path/filepath"
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func GimmeOrPanic[T any](val T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return val
-}
-func OrPanic(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
+// A text chunk long enough to be worth reading back: a whole ZDoom weapon
+// script, which is the thing this actually carries - see chunk_text.go.
+//
+// The PNG it is injected into is made here rather than read from assets/. It
+// used to be a checked-in file, written back out beside itself as
+// assets/test_text.png - a test that leaves scratch files in the game's asset
+// folder, and one that stops compiling the day that folder is tidied up. Which
+// is what happened.
 func TestReadTextChunkFromPNG(t *testing.T) {
+	var source bytes.Buffer
+	if err := png.Encode(&source, testImage()); err != nil {
+		t.Fatalf("encoding the source png: %s", err)
+	}
 
-	file := GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test.png")))
-	outFile := GimmeOrPanic(os.Create(filepath.Join("..", "assets", "test_text.png")))
+	var withText bytes.Buffer
+	if err := InjectTextChunkIntoPNG(bytes.NewReader(source.Bytes()), &withText, "AtlasInfo", longText); err != nil {
+		t.Fatalf("injecting the chunk: %s", err)
+	}
 
-	OrPanic(InjectTextChunkIntoPNG(file, outFile, "AtlasInfo", longText))
+	assert.Equal(t, longText, ReadTextChunkFromPNG(bytes.NewReader(withText.Bytes()), "AtlasInfo"))
 
-	outFile.Close()
-	file.Close()
+	// The picture has to survive the trip: a chunk written into the wrong place
+	// reads back fine and leaves an image no decoder will open.
+	decoded, err := png.Decode(bytes.NewReader(withText.Bytes()))
+	if err != nil {
+		t.Fatalf("the png with a chunk in it no longer decodes: %s", err)
+	}
+	if got := decoded.Bounds(); got != testImage().Bounds() {
+		t.Errorf("decoded bounds %v, want %v", got, testImage().Bounds())
+	}
+}
 
-	file = GimmeOrPanic(os.Open(filepath.Join("..", "assets", "test_text.png")))
-	readBack := ReadTextChunkFromPNG(file, "AtlasInfo")
-	file.Close()
-
-	assert.Equal(t, longText, readBack)
+// testImage is a few pixels of something, so the injected chunk has real image
+// data on both sides of it rather than an empty file.
+func testImage() *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			img.Set(x, y, color.RGBA{R: uint8(x * 32), G: uint8(y * 32), B: 128, A: 255})
+		}
+	}
+	return img
 }
 
 const longText = `

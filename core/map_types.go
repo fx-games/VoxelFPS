@@ -75,6 +75,16 @@ type MapLoadResult struct {
 	FloorColor   color.Color
 	// Entities are the things standing in the level, at absolute positions.
 	Entities []EntitySpawn
+
+	// How far the level can be seen through, and what an unlit corner of it
+	// looks like. Both are zero on a map that has nothing to say about either,
+	// which leaves the engine's own defaults alone - see Game.mapLoad. They are
+	// here because they are look decisions belonging to one level: the shadow
+	// rig pushes its fog past the far wall and drops its ambient floor so that
+	// unlit really looks unlit, and neither is true of anywhere else.
+	FogStart, FogEnd float32
+	AmbientColor     mgl32.Vec3
+	AmbientStrength  float32
 	// Lights the map brings with it. Loading a map replaces the scene's lights with
 	// these, so an empty list means an unlit map rather than the previous map's
 	// lights left standing.

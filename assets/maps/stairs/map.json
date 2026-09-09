@@ -1,0 +1,99 @@
+{
+  "PlayerSpawn": [
+    8.5,
+    1,
+    2.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 60,
+    "G": 60,
+    "B": 70,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 40,
+    "G": 40,
+    "B": 40,
+    "A": 255
+  },
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0,
+    0,
+    0
+  ],
+  "AmbientStrength": 0,
+  "Entities": [
+    {
+      "Position": [
+        8.5,
+        1,
+        4.5
+      ],
+      "Entity": {
+        "Name": "Stairs",
+        "TextureIndices": null,
+        "MeshName": "stairs",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    }
+  ],
+  "Lights": [
+    {
+      "Position": [
+        8.5,
+        3.5,
+        4
+      ],
+      "Yaw": 180,
+      "Pitch": 68.19859,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 90,
+      "Reach": 16,
+      "Baked": false
+    },
+    {
+      "Position": [
+        8.5,
+        3.5,
+        11
+      ],
+      "Yaw": 180,
+      "Pitch": 56.309933,
+      "Color": [
+        0.85,
+        0.9,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 90,
+      "Reach": 16,
+      "Baked": false
+    }
+  ]
+}

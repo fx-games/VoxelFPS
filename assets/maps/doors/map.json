@@ -1,0 +1,324 @@
+{
+  "PlayerSpawn": [
+    10,
+    1,
+    2.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 60,
+    "G": 60,
+    "B": 70,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 40,
+    "G": 40,
+    "B": 40,
+    "A": 255
+  },
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0,
+    0,
+    0
+  ],
+  "AmbientStrength": 0,
+  "Entities": [
+    {
+      "Position": [
+        4.5,
+        1,
+        8.03125
+      ],
+      "Entity": {
+        "Name": "SlideDoor",
+        "TextureIndices": null,
+        "MeshName": "door_slide",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        8.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "SlideDoor",
+        "TextureIndices": null,
+        "MeshName": "door_slide",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        12.5,
+        1,
+        8.96875
+      ],
+      "Entity": {
+        "Name": "SlideDoor",
+        "TextureIndices": null,
+        "MeshName": "door_slide",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "DoorFrame",
+        "TextureIndices": null,
+        "MeshName": "door_swing_frame",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.125,
+        1,
+        8.5
+      ],
+      "Entity": {
+        "Name": "DoorLeaf",
+        "TextureIndices": null,
+        "MeshName": "door_swing_leaf",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        11.5
+      ],
+      "Entity": {
+        "Name": "Scientist",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "scientist",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": [
+          16.5,
+          1,
+          5.5
+        ],
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "StepTo": null
+      }
+    }
+  ],
+  "Lights": [
+    {
+      "Position": [
+        4.5,
+        3.5,
+        8
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": false
+    },
+    {
+      "Position": [
+        8.5,
+        3.5,
+        8
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": false
+    },
+    {
+      "Position": [
+        12.5,
+        3.5,
+        8
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": false
+    },
+    {
+      "Position": [
+        16.5,
+        3.5,
+        8
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": false
+    },
+    {
+      "Position": [
+        10,
+        3.5,
+        3
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        0.9,
+        0.92,
+        1
+      ],
+      "Intensity": 7,
+      "Angle": 140,
+      "Reach": 18,
+      "Baked": false
+    },
+    {
+      "Position": [
+        10,
+        3.5,
+        12
+      ],
+      "Yaw": 180,
+      "Pitch": 90,
+      "Color": [
+        0.9,
+        0.92,
+        1
+      ],
+      "Intensity": 7,
+      "Angle": 140,
+      "Reach": 18,
+      "Baked": false
+    }
+  ]
+}

@@ -8,7 +8,6 @@ import (
 	"github.com/memmaker/goray/geometry"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
-	"path/filepath"
 )
 
 // openSceneryMenu is the placement half of the scenery folder: whatever is in
@@ -78,12 +77,8 @@ func (g *Game) openVoxelEditMenu() {
 			g.saveMapWithToast()
 			g.popFromWidgetStack()
 		}),
-		quads.NewGuiOptionAction("Load Map", func() {
-			g.CubeMap.LoadFromDisk(g.voxelFile())
-
-			g.Toast("Map loaded")
-
-			g.popFromWidgetStack()
+		quads.NewGuiOptionSubmenu("Load Map", func() {
+			g.pushConfigSubmenu(g.mapOptions())
 		}),
 		quads.NewGuiOptionAction("Clear Map", func() {
 			g.CubeMap.ClearAllChunks()
@@ -118,22 +113,28 @@ func (g *Game) saveMap() error {
 	if err := g.CubeMap.SaveToDisk(g.voxelFile()); err != nil {
 		return err
 	}
-	// A generated map - the stress rig, the test levels - has no file to go
-	// back to. Its voxels are still saved, so a level can be started from one.
-	if g.mapPath == "" {
+	// The generated stress rig has no folder to go back to. Its voxels are
+	// still saved, so a level can be started from one.
+	if g.mapName == "" {
 		return nil
 	}
-	return saveJSONMap(g.mapPath, g.mapWithPlacedEntities())
+	return saveJSONMap(mapPathFor(g.mapName), g.mapWithPlacedEntities())
 }
 
-// voxelFile is where this level's blocks live. A generated map has no file of
-// its own and falls back to a scratch name, so a level started from the stress
-// rig or one of the test maps can still be saved and then opened as a map.
+// voxelFile is where this level's blocks live. The generated stress rig has no
+// folder of its own and is saved into one called "scratch", so a level begun by
+// carving the rig up can be opened again by name like any other.
 func (g *Game) voxelFile() string {
-	if g.mapPath == "" {
-		return filepath.Join("assets", "scratch.bin")
+	return voxelPathFor(g.savedAs())
+}
+
+// savedAs is the folder this level is written to: its own, or "scratch" for the
+// generated rig.
+func (g *Game) savedAs() string {
+	if g.mapName == "" {
+		return "scratch"
 	}
-	return voxelFileFor(g.mapPath)
+	return g.mapName
 }
 
 // saveMapWithToast is the save every caller wants: it says on screen what

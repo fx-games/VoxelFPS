@@ -58,6 +58,7 @@ The flags:
 | `-tap D,U` | tap the trigger D tics down, U up, for a weapon that acts on a press |
 | `-width`/`-height` | window size, for a capture that needs more pixels than 640x480 |
 | `-editor MODE` | boot into the map editor in `blocks`, `props` or `actors` - a capture takes no keystrokes, so this is the only way to photograph the editor |
+| `-map NAME` | which level to load, by its folder under `assets/maps` (default `raymap`) |
 
 **A capture is deterministic.** `-shot-fps` makes every frame advance the world
 by the same amount whatever the machine took to draw it, so tick 120 of one run
