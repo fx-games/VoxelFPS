@@ -32,9 +32,11 @@ You start with what the mod's player class starts you with - the fists and a pis
 pick the rest up: the test map has a range room with every weapon in the folder lying on
 the floor, a box of ammo beside each.
 
-**In-game editor** (`edit_map.go`, `quads/ui_*.go`) — voxel painting and selection,
-per-face texture mapping, entity spawning, atlas pickers, minimap, toasts, lists and
-buttons drawn with a bitmap font. Assets hot-reload via `fsnotify`.
+**In-game editor** (`edit_map.go`, `edit_tools.go`, `quads/ui_*.go`) — three modes on
+one key: voxels, props, actors and the routes they walk. Per-face texture mapping,
+atlas pickers, minimap, toasts, lists and buttons drawn with a bitmap font. What it
+builds is saved back into the map file it was loaded from. Assets hot-reload via
+`fsnotify`.
 
 **Audio** (`audio/`) — beep-based playback and a MIDI/SoundFont synth (`go-meltysynth`).
 Present, not wired into the game loop.
@@ -91,12 +93,47 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 | `F2` | toggle mouse capture |
 | `F3` | spawn mode |
 | `F4` | cycle decoration texture |
-| `F5` / `R` / `F6` / `Tab` | voxel edit / edit menu / cube texture mapper / copy block textures |
+| `F5` | in and out of the map editor - see below |
+| `R` / `F6` / `Tab` | edit menu / cube texture mapper / copy block textures |
 | `F7` / `F8` | fill / wireframe |
 | `F9` / `F10` | FOV + sensitivity up / down |
 | `F11` | atlas picker test |
 | `F12` | screenshot |
 | `K` `L` `O` `P` | list select prev/next, scroll up/down |
+
+### Map editor
+
+`F5` swaps the whole game between playing and building; the mouse stays captured
+either way, because building aims with the crosshair the same as firing does.
+
+The editor is always in one of three modes, `Q` cycles them, and every other key
+means whatever that mode says it means. What that is, right now, is printed in the
+corner - which is the point: there is one legend and no tool that lives in a menu.
+
+| | `BLOCKS` | `PROPS` | `ACTORS` |
+|---|---|---|---|
+| `1`-`9` | `1`-`5` shape, `6`-`8` dig/paint/fill | palette slot | which NPC |
+| wheel | shape | palette | NPC |
+| `Tab` | ADD / DEL | snap to grid / free | deselect |
+| `Z` | | quarter turn | |
+| left click | build | place | place, select an actor, or add a waypoint to the selected one |
+| right click | cancel a drag | delete what the crosshair is on | drop the last waypoint |
+
+The palette is the `assets/meshes` folder plus the torch and the flat sprite
+decorations, so a new piece of scenery is a folder and not a line of Go. Placement
+is free by default - a prop lands exactly where the ray met the floor - and `Tab`
+snaps it to the middle of the tile instead. An actor's route is laid out by clicking
+the floor where it should walk; it starts walking the new leg as soon as it finishes
+the one it is on, so a route is checked by watching it, and the selected actor's
+whole beat is ghosted as unit cubes while it is being drawn.
+
+`Ctrl+S` saves: the voxels to `assets/<map>.bin`, and everything standing in them -
+props, torches, actors and their routes - back into the map's own JSON. Both halves
+are loaded again at startup. `F` is the fly toggle, and `R` still opens the menu for
+what a key cannot carry: a texture out of an atlas of hundreds, load, clear.
+
+`-editor blocks|props|actors` boots straight into it, which is how a screenshot of
+the editor is taken (see AGENTS.md - a capture takes no keystrokes).
 
 ## Layout
 
@@ -245,7 +282,8 @@ with two layouts. What makes a folder furniture is the `scenery.json` in it.
 Only the JSON is read at startup; a model is loaded the first time something
 spawns one, so a folder of scenery nobody has placed costs nothing. A map entity
 naming a piece in its `MeshName` field gets it, and everything in the folder is in
-the editor's `Place Scenery` menu (`F5`, then `R`) without a line of Go per piece.
+the editor's placement palette (`F5`, then `Q` to `PROPS`) without a line of Go per
+piece.
 
 `colliders` is why the format has anything in it at all. A model is one box to the
 drawer and would be one box to physics too, and one box is wrong twice: stairs are

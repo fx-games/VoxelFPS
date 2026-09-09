@@ -99,7 +99,18 @@ type MapEntity struct {
 
 	// PatrolTo is the far end of a walking entity's beat. It walks there, then back
 	// to where it spawned, forever. Nil means the spawner picks a default.
+	//
+	// Patrol supersedes it: a whole route, walked in order and then round to the
+	// first point again, which is what the editor's path tool writes. An entity
+	// with both keeps Patrol; one with neither gets the spawner's default.
 	PatrolTo *mgl32.Vec3
+	Patrol   []mgl32.Vec3
+
+	// Facing is which way this entity is turned, as a direction on the floor.
+	// The zero vector is "however the model was exported", which is what
+	// everything placed before there was a rotate key is. See the editor's
+	// prop rotation.
+	Facing mgl32.Vec3
 
 	// ClimbTo is the landing at the top of a ladder entity: the point pathfinding
 	// steps straight to from the ladder's foot, whatever the height difference.

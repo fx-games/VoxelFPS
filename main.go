@@ -56,6 +56,7 @@ func main() {
 	timeFactor := flag.Float64("time-factor", 1, "scale how fast time flows: 0.5 runs the whole world at half speed, 2 at double")
 	shotPitch := flag.Float64("pitch", 0, "start looking this many degrees down, for a capture of something on the floor")
 	autoWalk := flag.Bool("walk", false, "hold the forward key down, for looking at anything that only happens while moving")
+	startEditor := flag.String("editor", "", "start in the map editor, in this mode: blocks, props or actors")
 	autoCycle := flag.Float64("cycle", 0, "switch to the next weapon every this many seconds, for walking the whole folder in one run")
 	width := flag.Int("width", 0, "window width, 0 for the default")
 	height := flag.Int("height", 0, "window height, 0 for the default")
@@ -67,6 +68,9 @@ func main() {
 
 	var stressConfig *StressConfig
 	var mapLoad core.MapLoadResult
+	// The file the map came from, empty for a generated one. It is what the
+	// editor saves back to, and what names the voxel file beside it.
+	var mapPath string
 	shadowTestMap := *shadowTest
 	if shadowTestMap {
 		mapLoad = loadShadowTestMap()
@@ -88,7 +92,8 @@ func main() {
 		mapLoad = loadStressMap(*stressConfig)
 	} else {
 		var err error
-		mapLoad, err = loadJSONMap("assets/raymap.json")
+		mapPath = filepath.Join("assets", "raymap.json")
+		mapLoad, err = loadJSONMap(mapPath)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -118,6 +123,8 @@ func main() {
 		fmt.Sscanf(*autoTap, "%d,%d", &game.tapDown, &game.tapUp)
 		game.autoWalk = *autoWalk
 		game.autoCycle = *autoCycle
+		game.mapPath = mapPath
+		game.startEditorMode = *startEditor
 		game.startTimeFactor = *timeFactor
 		game.startWeapon = *startWeapon
 		game.shot = shotRun{
@@ -172,7 +179,10 @@ type Game struct {
 	// hand, beside its icon.
 	hudName *quads.BitmapFontMesh
 	hudAmmo *quads.BitmapFontMesh
-	player  *quads.GameObject
+	// editorHUD is the map editor's key legend, drawn in place of the weapon
+	// HUD while the editor is on.
+	editorHUD *quads.BitmapFontMesh
+	player    *quads.GameObject
 
 	relativeHitPos mgl32.Vec3
 	entityMenu     *quads.GuiList
@@ -238,6 +248,15 @@ type Game struct {
 	// player's, because the two are only ever touched by different halves of the
 	// code: nothing in a normal run reads any of it.
 	editor Editor
+
+	// mapSource is the map as it was loaded and mapPath the file it came from,
+	// empty for a generated one. placed is everything standing in the world
+	// that the map file holds - what the map spawned plus what the editor has
+	// dropped since. Together they are what a save writes: see
+	// mapWithPlacedEntities.
+	mapSource core.MapLoadResult
+	mapPath   string
+	placed    []placedEntity
 
 	weapons            []*Weapon
 	currentWeaponIndex int
@@ -347,6 +366,11 @@ type Game struct {
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
 
+	// startEditorMode is -editor: which editor mode to boot into, empty for a
+	// normal run. It is here so a screenshot can be taken of the editor at all
+	// - see AGENTS.md, a capture takes no keystrokes.
+	startEditorMode string
+
 	// keys is action name -> bound key, loaded from keyBindingsFile. See
 	// keybindings.go.
 	keys map[string]glfw.Key
@@ -380,6 +404,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		panic(err)
 	}
 	g.scenery = scenery
+	g.buildPropPalette()
+	g.editor.spriteTexture = defaultDecorationTexture
 	g.furniture = make(map[*quads.GameObject]bool)
 	g.pickupByObject = make(map[*quads.GameObject]*Pickup)
 
@@ -399,6 +425,12 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.hudName.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
 	g.hudAmmo = g.NewLabel()
 	g.hudAmmo.SetTintColor(mgl32.Vec4{0.3, 1, 0.3, 1})
+
+	// The editor's legend. It replaces the weapon HUD while building, and it is
+	// the only interface the three tools have - see drawEditorHUD.
+	g.editorHUD = g.NewLabel()
+	g.editorHUD.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
+	g.editorHUD.SetBackground(mgl32.Vec4{0, 0, 0, 0.7})
 
 	g.entityMenu = g.NewList()
 	g.entityMenu.SetTextCentered(true)
@@ -506,6 +538,11 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		g.Camera.Reposition(g.Camera.GetPosition(), yaw, float32(-g.shot.pitch))
 	}
 
+	if g.startEditorMode != "" {
+		g.toggleEditorMode()
+		g.setEditorMode(editorModeByName(g.startEditorMode))
+	}
+
 	g.HandleResize(g.WindowWidth, g.WindowHeight)
 }
 
@@ -542,6 +579,7 @@ func (g *Game) benchmarkLabel() string {
 }
 
 func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
+	g.mapSource = mapLoad
 	// A weapon's sounds stay loaded from the moment it is given out until the
 	// level that gave it out is gone - this is that moment. Ownership itself
 	// lives on the weapon, not the map, so ownership survives a reload and the
@@ -568,6 +606,18 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 
 	// Load Map
 	entitySpawns := g.LoadVoxelMap(mapLoad)
+
+	// The tile grid the map file holds is the level's starting shape; the voxel
+	// file beside it, if the editor has ever written one, is what has been
+	// carved since, and it wins. Without this the block tools are the only
+	// half of the editor whose work does not survive the run.
+	//
+	// It has to be the same map's own file (see voxelFile) and therefore the
+	// same dimensions: a voxel file saved from a differently sized map would
+	// disagree with the size the cube shader was just told about.
+	if voxelFile := g.voxelFile(); g.mapPath != "" && quads.FileExists(voxelFile) {
+		g.CubeMap.LoadFromDisk(voxelFile)
+	}
 
 	// The wall textures in the Blake Stone sheet that carry a lit fitting: the cyan tube
 	// panels (19, 27) and the console screens (47), which are the three this map actually
@@ -605,9 +655,20 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// of one-tile-wide solid ceilings that no path could get down from.
 	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, int32(mapLoad.MapDimensions[1]))
 
-	// Spawn Entities
-	for spawnPos, entity := range entitySpawns {
-		g.spawnEntity(spawnPos, entity)
+	// Spawn Entities. Each one is remembered as it goes in, so that a save
+	// writes the whole level back out rather than only the part of it the
+	// editor happened to add this run.
+	g.placed = nil
+	for _, spawn := range entitySpawns {
+		spawnPos, entity := spawn.Position, spawn.Entity
+		object := g.spawnEntity(spawnPos, entity)
+		if entity.MeshName == torchMeshName {
+			// The model is spawnEntity's; the light is not, because the
+			// editor's ghost goes through the same call and a ghost that lit
+			// the map would flood it from wherever it first appeared.
+			g.dropTorch(spawnPos)
+		}
+		g.recordPlaced(object, entity, spawnPos)
 	}
 	if hotReload {
 		g.physicsSystem.AddObject(g.player.Physics())
@@ -933,7 +994,7 @@ func (g *Game) updateGUI(elapsed float64) {
 	if g.editor.gameObjectForSpawning != nil {
 		groundPos, hitGround := g.lastHitResult.GroundPosition()
 		if hitGround {
-			g.editor.gameObjectForSpawning.Transform().SetPosition(groundPos)
+			g.editor.gameObjectForSpawning.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid))
 		}
 	}
 

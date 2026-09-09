@@ -5,10 +5,7 @@ import (
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/events"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
 	"maps"
 )
 
@@ -109,17 +106,27 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	}
 
 	if g.editor.active {
-		if key == g.key(ActionEditorTabAction) {
-			g.editor.addMode = !g.editor.addMode
-			g.editor.pendingStart = nil
-			g.editor.voxelBrush = nil
-			g.Toast(map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode])
+		// Ctrl+S, because the one keyboard shortcut everybody already knows is
+		// worth more than a rebindable action nobody would find. It is not in
+		// the bindings table for the same reason the number row is not: it is
+		// not a choice.
+		if key == glfw.KeyS && mods&glfw.ModControl != 0 {
+			g.saveMapWithToast()
 		}
-		if key >= glfw.Key1 && key <= glfw.Key5 {
-			g.editor.shapeMethod = EditShape(key-glfw.Key1) + 1
-			g.editor.pendingStart = nil
-			g.editor.voxelBrush = nil
-			g.Toast(g.editor.shapeMethod.String())
+		// Editor mode owns the number row, Tab and the two new keys. Which of
+		// its three tools they belong to is the mode, and the mode is on screen
+		// - see drawEditorHUD, which is the whole of the editor's interface.
+		if key == g.key(ActionEditorCycleMode) {
+			g.cycleEditorMode()
+		}
+		if key == g.key(ActionEditorTabAction) {
+			g.editorTabAction()
+		}
+		if key == g.key(ActionEditorRotate) {
+			g.rotateProp()
+		}
+		if key >= glfw.Key1 && key <= glfw.Key9 {
+			g.editorNumberKey(int(key - glfw.Key1))
 		}
 	} else if key == g.key(ActionEditorTabAction) && g.editor.voxelBlock != nil && g.lastHitResult != nil && g.lastHitResult.HitInfo.Hit {
 		rayHitBlock := g.lastHitResult.HitInfo.CollisionGridPosition
@@ -238,7 +245,7 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
 	}
 	if key == g.key(ActionSpawnGameObject) {
-		g.spawnCurrentGameObject()
+		g.placeProp()
 	}
 
 	if key == g.key(ActionOpenVoxelEditMenu) && (!g.isMouseCursorCaptured || g.editor.active) {
@@ -257,46 +264,6 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	}
 	if key == g.key(ActionEntityMenuScrollDown) {
 		g.entityMenu.ScrollDown()
-	}
-}
-
-func (g *Game) spawnCurrentGameObject() {
-	if g.editor.gameObjectForSpawning != nil {
-		decoToSpawn := g.editor.gameObjectForSpawning
-		if !decoToSpawn.HasComponent(quads.ComponentTypeSprite) {
-			// A mesh ghost. It is already the object it will be, so it only has
-			// to stop being the ghost, and a fresh ghost takes over the
-			// crosshair. What it takes to stop being one is the piece's own: a
-			// torch's light goes into the map, a shelf's colliders go into
-			// physics.
-			at := decoToSpawn.Transform().GetPosition()
-			if id := g.editor.sceneryToPlace; id != "" {
-				g.spawnScenery(id, at, true)
-				decoToSpawn.Kill()
-				g.editor.gameObjectForSpawning = g.spawnScenery(id, at, false)
-				return
-			}
-			g.dropTorch(at)
-			g.editor.gameObjectForSpawning = g.spawnTorch(at)
-			return
-		}
-		sprite := decoToSpawn.Sprite()
-		g.Sprites.Remove(sprite)
-		sprite.Tint = mgl32.Vec4{1, 1, 1, 1}
-		g.Sprites.Add(sprite)
-
-		aabb := voxel.NewAABB(sprite.AtlasTexture.AABBFromOpaqueAtIndex(int(sprite.TextureIndices[0])))
-		physicsComponent := quads.NewPhysicsComponent(false, aabb)
-		decoToSpawn.SetComponent(physicsComponent)
-		g.physicsSystem.AddObject(physicsComponent)
-
-		g.editor.gameObjectForSpawning = g.spawnEntity(decoToSpawn.Transform().GetPosition(), core.MapEntity{
-			Name:           decoToSpawn.DisplayName,
-			TextureIndices: sprite.TextureIndices,
-			CreateCollider: false,
-			IsTransparent:  true,
-		})
-		g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
 	}
 }
 
@@ -333,6 +300,13 @@ func (g *Game) HandleScrollEvents(xoff float64, yoff float64) {
 			return
 		}
 	}
+	if g.editor.active {
+		// The wheel walks whatever the number row picks - the shape, the
+		// placement palette, the kind of actor - so a palette longer than the
+		// number row still needs no menu.
+		g.editorScroll(yoff)
+		return
+	}
 	if g.entityMenu != nil && g.entityMenu.IsVisible() {
 		g.entityMenu.HandleScrollEvents(xoff, yoff)
 	}
@@ -346,42 +320,38 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		}
 	}
 
+	// The right button is the way back into mouse capture whenever the mouse is
+	// already free, whatever else is going on. F2 does it from either side.
+	if button == glfw.MouseButtonRight && !g.isMouseCursorCaptured {
+		if action == glfw.Press {
+			g.toggleMouseCapture()
+		}
+		return
+	}
+
+	// In editor mode both buttons belong to the current tool, and nothing is
+	// held to fire anyway.
+	if g.editor.active && g.isMouseCursorCaptured {
+		if action == glfw.Press {
+			g.editorClick(button)
+		}
+		return
+	}
+
 	if button == glfw.MouseButtonRight {
 		// While the game has the mouse, the right button is ZDoom's
-		// +altattack: a scope, a bayonet, a grenade under the barrel - except
-		// in editor mode, where nothing is held and it instead drops whatever
-		// Line/Plane/Cube corner is pending. It only goes back to being the way
-		// out of mouse capture once the mouse is already free, and F2 does
-		// that from either side.
-		if !g.isMouseCursorCaptured {
-			if action == glfw.Press {
-				g.toggleMouseCapture()
-			}
-			return
-		}
-		if g.editor.active {
-			if action == glfw.Press {
-				g.cancelEditorSelection()
-			}
-			return
-		}
+		// +altattack: a scope, a bayonet, a grenade under the barrel.
 		g.altHeld = action == glfw.Press
 		return
 	}
 
 	if g.editor.gameObjectForSpawning != nil && button == glfw.MouseButtonLeft && action == glfw.Press {
-		g.spawnCurrentGameObject()
+		g.placeProp()
 		return
 	}
 
 	if g.isMouseCursorCaptured {
 		if button != glfw.MouseButtonLeft {
-			return
-		}
-		if g.editor.active {
-			if action == glfw.Press {
-				g.applyEditorEdit()
-			}
 			return
 		}
 		if g.editor.tool != EditorToolNone {
@@ -393,6 +363,46 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 		// The trigger is held, not pulled: a weapon's script decides what a
 		// held trigger does, and several of them keep firing while it is down.
 		g.triggerHeld = action == glfw.Press
+	}
+}
+
+// editorClick is what the two mouse buttons do, which - like every other key in
+// editor mode - is whatever the current mode says. Left builds, right takes
+// back: a pending voxel corner, a prop, the last waypoint of a route.
+func (g *Game) editorClick(button glfw.MouseButton) {
+	switch g.editor.mode {
+	case ModeProps:
+		if button == glfw.MouseButtonRight {
+			g.deleteHovered()
+			return
+		}
+		if button == glfw.MouseButtonLeft {
+			g.placeProp()
+		}
+	case ModeActors:
+		if button == glfw.MouseButtonRight {
+			g.dropLastWaypoint()
+			return
+		}
+		if button == glfw.MouseButtonLeft {
+			g.actorClick()
+		}
+	default:
+		if button == glfw.MouseButtonRight {
+			g.cancelEditorSelection()
+			return
+		}
+		if button != glfw.MouseButtonLeft {
+			return
+		}
+		// A paint, dig or fill tool is picked off the same number row as the
+		// shapes, so having one in hand is what a click means until a shape
+		// puts it away again.
+		if g.editor.tool != EditorToolNone {
+			g.applyEditorTool()
+			return
+		}
+		g.applyEditorEdit()
 	}
 }
 

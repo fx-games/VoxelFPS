@@ -10,10 +10,15 @@ import (
 
 // actorNames is which map entity names spawn an Actor rather than a static
 // prop. A map says "Scientist"; this is the only place that has to know what
-// that means.
-var actorNames = map[string]bool{
-	"Scientist": true,
-}
+// that means, and it is read off actorKinds - the editor's placement table -
+// so that what can be placed and what walks are the same list.
+var actorNames = func() map[string]bool {
+	names := make(map[string]bool, len(actorKinds))
+	for _, kind := range actorKinds {
+		names[kind.Name] = true
+	}
+	return names
+}()
 
 // defaultActorHealth backs both the fall-damage pool and bodyShotsToKill: a
 // default NPC's whole health bar is sized so that two ordinary body hits (see
@@ -64,12 +69,9 @@ type Actor struct {
 	attackClock float64
 
 	// patrol is the beat this actor walks, one leg to the next and back to the
-	// first, forever.
-	//
-	// ponytail: always exactly two points (spawn and PatrolTo), because that is
-	// all the map format authors today. A real patrol route with several stops
-	// is a slice with more than two entries and updateActors already loops it
-	// correctly - it just has nothing today that writes a longer one.
+	// first, forever. The first point is always where the actor spawned; the
+	// rest are the map's own route - see patrolRoute and the editor's path
+	// tool, which appends to this slice live while a map is being built.
 	patrol      []mgl32.Vec3
 	patrolIndex int
 
@@ -97,10 +99,7 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 	pather := quads.NewPathingComponent()
 	object.SetComponent(pather)
 
-	farEnd := mgl32.Vec3{5.5, 1, 2.5}
-	if entity.PatrolTo != nil {
-		farEnd = *entity.PatrolTo
-	}
+	patrol := patrolRoute(entity, spawnPos)
 
 	actor := &Actor{
 		Name:          entity.Name,
@@ -109,17 +108,35 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		object:        object,
 		pathing:       pather,
 		physicsSystem: g.physicsSystem,
-		patrol:        []mgl32.Vec3{spawnPos, farEnd},
+		patrol:        patrol,
 		patrolIndex:   1,
 		fallOrigin:    spawnPos.Y(),
 		wasGrounded:   true,
 	}
 	actor.Dialogue = dialogueFor(actor)
-	pather.SetDestination(farEnd)
+	pather.SetDestination(patrol[1])
 
 	g.Pathfinder.AddMovingObject(pather)
 	g.actors = append(g.actors, actor)
 	return actor
+}
+
+// patrolRoute is the beat the map asked for: the whole route the editor's path
+// tool wrote, the one far end the older PatrolTo field names, or - for an entity
+// that says nothing - a default leg, so that an actor dropped into a map with no
+// route at all still walks rather than standing on its spawn forever.
+//
+// The route always starts at the spawn, so the loop closes back to where the
+// actor stands, and always has a second point for updateActors to head for.
+func patrolRoute(entity core.MapEntity, spawnPos mgl32.Vec3) []mgl32.Vec3 {
+	if len(entity.Patrol) > 0 {
+		return append([]mgl32.Vec3{spawnPos}, entity.Patrol...)
+	}
+	farEnd := mgl32.Vec3{5.5, 1, 2.5}
+	if entity.PatrolTo != nil {
+		farEnd = *entity.PatrolTo
+	}
+	return []mgl32.Vec3{spawnPos, farEnd}
 }
 
 // updateActors advances every actor's patrol: one that has arrived is given

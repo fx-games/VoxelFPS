@@ -1,7 +1,8 @@
 # Keyboard bindings. One per line: `<Key> => <Action>`.
 # Lines starting with # and blank lines are ignored.
 # An action left out, or a file that isn't here at all, keeps its default.
-# Weapon select (1-9) and editor shape (1-5) are slot numbers, not
+# Weapon select (1-9), the editor's own number row (1-8: shapes, tools,
+# palette slots) and the editor's Ctrl+S are slot numbers and reflexes, not
 # remappable actions, and aren't listed here.
 
 W => MoveForward
@@ -41,3 +42,5 @@ L => EntityMenuNext
 K => EntityMenuPrevious
 O => EntityMenuScrollUp
 P => EntityMenuScrollDown
+Q => EditorCycleMode
+Z => EditorRotate

@@ -51,6 +51,9 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	}
 	goFromEntity := quads.NewGameObject(entity.Name)
 	goFromEntity.Transform().SetPosition(spawnPos)
+	if entity.Facing.Len() > 0 {
+		goFromEntity.Transform().SetForward2D(entity.Facing)
+	}
 
 	var aabb voxel.AABB
 
@@ -116,6 +119,12 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		g.spawnDoor(goFromEntity, doorSlide, spawnPos)
 	case doorSwingLeafMeshName:
 		g.spawnDoor(goFromEntity, doorSwing, spawnPos)
+	case torchMeshName:
+		// A torch head is bright on screen wherever the torch came from, the
+		// map or the ghost on the editor's crosshair. Its light *in the map* is
+		// not: only a torch that has actually been dropped floods the voxels
+		// around it, see dropTorch.
+		goFromEntity.Mesh().EmissiveStrength = torchEmissiveStrength
 	}
 
 	if piece, isScenery := g.scenery[entity.MeshName]; isScenery && len(piece.Climbable) > 0 {

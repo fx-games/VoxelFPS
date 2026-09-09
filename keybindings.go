@@ -51,6 +51,8 @@ const (
 	ActionSpawnGameObject         = "SpawnGameObject"
 	ActionOpenVoxelEditMenu       = "OpenVoxelEditMenu"
 	ActionEditorTabAction         = "EditorTabAction"
+	ActionEditorCycleMode         = "EditorCycleMode"
+	ActionEditorRotate            = "EditorRotate"
 	ActionToggleEmissiveTexture   = "ToggleEmissiveTexture"
 	ActionEntityMenuNext          = "EntityMenuNext"
 	ActionEntityMenuPrevious      = "EntityMenuPrevious"
@@ -91,11 +93,15 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionSpawnGameObject:         glfw.KeyV,
 	ActionOpenVoxelEditMenu:       glfw.KeyR,
 	ActionEditorTabAction:         glfw.KeyTab,
-	ActionToggleEmissiveTexture:   glfw.KeyG,
-	ActionEntityMenuNext:          glfw.KeyL,
-	ActionEntityMenuPrevious:      glfw.KeyK,
-	ActionEntityMenuScrollUp:      glfw.KeyO,
-	ActionEntityMenuScrollDown:    glfw.KeyP,
+	// The editor's two new keys sit next to Tab and the number row, because in
+	// editor mode the left hand never leaves them: mode, toggle, slot.
+	ActionEditorCycleMode:       glfw.KeyQ,
+	ActionEditorRotate:          glfw.KeyZ,
+	ActionToggleEmissiveTexture: glfw.KeyG,
+	ActionEntityMenuNext:        glfw.KeyL,
+	ActionEntityMenuPrevious:    glfw.KeyK,
+	ActionEntityMenuScrollUp:    glfw.KeyO,
+	ActionEntityMenuScrollDown:  glfw.KeyP,
 }
 
 // keyByName is the vocabulary a keybindings.txt line can name a key with -

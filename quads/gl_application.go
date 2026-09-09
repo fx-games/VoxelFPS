@@ -1478,7 +1478,16 @@ func (a *GlApplication) setMainUBOCam(pos, dir mgl32.Vec3, projectionView mgl32.
 	a.mainUbo.End()
 }
 
-func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) map[mgl32.Vec3]core.MapEntity {
+// EntitySpawn is one entity the map asks for and where it stands. A slice, not
+// a map keyed by position: a level may put two things in the same place - two
+// props snapped to the same tile centre is the obvious one - and a map keyed by
+// position silently keeps only the last of them.
+type EntitySpawn struct {
+	Position mgl32.Vec3
+	Entity   core.MapEntity
+}
+
+func (a *GlApplication) LoadVoxelMap(loadResult core.MapLoadResult) []EntitySpawn {
 	cubeMap, entitySpawns := toVoxelMap(loadResult, a.AtlasMap, a.cubeShader)
 	a.CubeMap = cubeMap
 
@@ -1821,7 +1830,7 @@ func skyboxVertices() []glhf.GlFloat {
 	}
 }
 
-func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, shader *glhf.Shader) (*voxel.Map, map[mgl32.Vec3]core.MapEntity) {
+func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, shader *glhf.Shader) (*voxel.Map, []EntitySpawn) {
 	chunkSize := 32
 	mapData := loadResult.MapData
 	mapSizeX, mapSizeY, mapSizeZ := loadResult.MapDimensions[0], loadResult.MapDimensions[1], loadResult.MapDimensions[2]
@@ -1844,7 +1853,7 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, sh
 
 	voxelMap.SetTerrainTexture(atlas)
 
-	entitySpawns := make(map[mgl32.Vec3]core.MapEntity)
+	var entitySpawns []EntitySpawn
 
 	safeTex := func(tex int) uint16 {
 		if tex < 0 {
@@ -1885,7 +1894,7 @@ func toVoxelMap(loadResult core.MapLoadResult, atlas *glhf.TextureAtlasFixed, sh
 				for _, entity := range tileInfo.Entities {
 					if isFloorLevel {
 						entitySpawnPos := mgl32.Vec3{float32(x) + 0.5, float32(y), float32(z) + 0.5}.Add(entity.LocalOffset)
-						entitySpawns[entitySpawnPos] = entity
+						entitySpawns = append(entitySpawns, EntitySpawn{Position: entitySpawnPos, Entity: entity})
 					}
 				}
 				isCeiling := y == ceilingStartsAt && loadResult.IsCeilingTextured

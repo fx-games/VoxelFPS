@@ -9,6 +9,7 @@ import (
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 	"path/filepath"
+	"strings"
 )
 
 // openSceneryMenu is the placement half of the scenery folder: whatever is in
@@ -23,8 +24,7 @@ func (g *Game) openSceneryMenu() {
 	for _, id := range g.sceneryIDs() {
 		options = append(options, quads.NewGuiOptionAction(g.scenery[id].Name, func() {
 			g.captureMouse(previousMouseState)
-			g.startSceneryPlacement(id)
-			g.Toast("Left click drops " + g.scenery[id].Name)
+			g.selectPropByScenery(id)
 			g.popFromWidgetStack()
 		}))
 	}
@@ -38,10 +38,7 @@ func (g *Game) openSceneryMenu() {
 // startSceneryPlacement puts a piece on the cursor. The ghost is not solid: a
 // ghost you can walk into is a ghost that has already been placed.
 func (g *Game) startSceneryPlacement(id string) {
-	if g.editor.gameObjectForSpawning != nil {
-		g.editor.gameObjectForSpawning.Kill()
-	}
-	g.editor.sceneryToPlace = id
+	g.clearGhost()
 	g.editor.gameObjectForSpawning = g.spawnScenery(id, mgl32.Vec3{}, false)
 }
 
@@ -75,20 +72,15 @@ func (g *Game) openVoxelEditMenu() {
 		quads.NewGuiOptionAction("Place Scenery", g.openSceneryMenu),
 		quads.NewGuiOptionAction("Place Torches", func() {
 			g.captureMouse(previousMouseState)
-			g.startTorchPlacement()
-			g.Toast("Left click drops a torch")
+			g.selectProp(torchPaletteSlot)
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Save Map", func() {
-			if saveErr := g.saveMap(filepath.Join("assets", "map.bin")); saveErr != nil {
-				g.Toast(saveErr.Error())
-			} else {
-				g.Toast(fmt.Sprintf("Map saved, atlas baked to %d textures", g.MapTextures.Count()))
-			}
+			g.saveMapWithToast()
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Load Map", func() {
-			g.CubeMap.LoadFromDisk(filepath.Join("assets", "map.bin"))
+			g.CubeMap.LoadFromDisk(g.voxelFile())
 
 			g.Toast("Map loaded")
 
@@ -107,20 +99,53 @@ func (g *Game) openVoxelEditMenu() {
 	g.replaceWidgetStack(configMenu)
 }
 
-// saveMap writes the map out and bakes its atlas down to the textures the map
-// actually uses in the same breath. The two have to move together: baking renumbers
-// the atlas, so a map saved without it - or an atlas baked without saving the map -
-// points every wall at the wrong texture.
+// saveMap writes the whole map out: the voxels to their own file beside the map,
+// and everything standing in them - props, torches, actors and the routes they
+// walk - back into the map file itself. Both halves or neither: a level whose
+// walls were saved without its furniture is half a level.
 //
-// The library itself is never written to. The map's atlas holds copies, and this is
-// where the copies that nothing points at any more are dropped.
-func (g *Game) saveMap(filename string) error {
+// It bakes the atlas down to the textures the map actually uses in the same
+// breath. That has to move with the save: baking renumbers the atlas, so a map
+// saved without it - or an atlas baked without saving the map - points every
+// wall at the wrong texture. The library itself is never written to; the map's
+// atlas holds copies, and this is where the copies that nothing points at any
+// more are dropped.
+func (g *Game) saveMap() error {
 	remap, bakeErr := g.MapTextures.Bake(g.CubeMap.UsedTextureIndices())
 	if bakeErr != nil {
 		return bakeErr
 	}
 	g.CubeMap.RemapTextures(remap)
-	return g.CubeMap.SaveToDisk(filename)
+	if err := g.CubeMap.SaveToDisk(g.voxelFile()); err != nil {
+		return err
+	}
+	// A generated map - the stress rig, the test levels - has no file to go
+	// back to. Its voxels are still saved, so a level can be started from one.
+	if g.mapPath == "" {
+		return nil
+	}
+	return saveJSONMap(g.mapPath, g.mapWithPlacedEntities())
+}
+
+// voxelFile is where this map's voxels live: beside the map file and named
+// after it, so a map and its carved geometry travel together. A generated map
+// has no name of its own and falls back to the shared scratch file.
+func (g *Game) voxelFile() string {
+	if g.mapPath == "" {
+		return filepath.Join("assets", "map.bin")
+	}
+	return strings.TrimSuffix(g.mapPath, filepath.Ext(g.mapPath)) + ".bin"
+}
+
+// saveMapWithToast is the save every caller wants: it says on screen what
+// happened, because a save whose only sign of failure is a line on a terminal
+// nobody is looking at is a save that silently loses a level.
+func (g *Game) saveMapWithToast() {
+	if err := g.saveMap(); err != nil {
+		g.Toast("Save failed: " + err.Error())
+		return
+	}
+	g.Toast(fmt.Sprintf("Saved %s, atlas baked to %d textures", g.voxelFile(), g.MapTextures.Count()))
 }
 
 // Editor is the state the map editor keeps: what the brush is holding, what is
@@ -138,21 +163,42 @@ type Editor struct {
 	voxelSelection []voxel.Int3
 
 	// active is the Minecraft-creative toggle: whether the game is being played
-	// or built right now. addMode is Tab's state, ADD when true, DEL when
-	// false. shapeMethod is the number key's state, which geometry a click
-	// applies addMode to. pendingStart is the first corner of a Line/Plane/Cube
-	// drag, nil until a click sets it and nil again once the second click or a
-	// cancel clears it.
-	active       bool
+	// or built right now. mode is which family of tools the keys belong to
+	// while it is - see EditorMode, and drawEditorHUD, which prints what every
+	// key currently does so none of this has to be remembered.
+	active bool
+	mode   EditorMode
+
+	// addMode is the block mode's Tab state, ADD when true, DEL when false.
+	// shapeMethod is the number key's state, which geometry a click applies
+	// addMode to. pendingStart is the first corner of a Line/Plane/Cube drag,
+	// nil until a click sets it and nil again once the second click or a cancel
+	// clears it.
 	addMode      bool
 	shapeMethod  EditShape
 	pendingStart *voxel.Int3
 
-	// The ghost following the crosshair in spawn mode, placed by a click, and -
-	// when the ghost is a piece of scenery rather than a torch or a sprite -
-	// which piece it is.
+	// The prop mode's state: the placement palette built from assets/meshes at
+	// startup, which slot of it is on the crosshair, whether a click lands the
+	// piece on the tile's centre or exactly where the ray met the floor, how
+	// many quarter turns it has been turned, and which sprite the flat
+	// decorations are currently showing.
+	props         []propKind
+	propIndex     int
+	snapToGrid    bool
+	facing        int
+	spriteTexture int
+
+	// The actor mode's state: which kind a click places, and which actor the
+	// path tool is currently laying a route out for - nil when a floor click
+	// makes a new actor instead of a waypoint.
+	actorIndex    int
+	selectedActor *Actor
+
+	// The ghost following the crosshair: what a click would leave standing
+	// there. Which piece it is is the placement palette's own propIndex, so the
+	// two can never disagree about what is about to be placed.
 	gameObjectForSpawning *quads.GameObject
-	sceneryToPlace        string
 
 	currentPaintGunTextureIndex int
 
@@ -176,30 +222,36 @@ const (
 // sprite decorations use - updateGUI moves it to whatever ground the crosshair is
 // over, and a left click drops it.
 func (g *Game) startTorchPlacement() {
-	if g.editor.gameObjectForSpawning != nil {
-		g.editor.gameObjectForSpawning.Kill()
-	}
-	g.editor.sceneryToPlace = ""
+	g.clearGhost()
 	g.editor.gameObjectForSpawning = g.spawnTorch(mgl32.Vec3{})
 }
 
-// spawnTorch is the model half of a torch: six quads and a flame that glows. The
-// light half is CubeMap.AddTorchLight, which only the dropped copy gets - a ghost
-// following the crosshair would otherwise re-bake the map every frame.
+// spawnTorch is the model half of a torch: six quads and a flame that glows -
+// the glow is spawnEntity's, so a map-loaded torch is as bright as a placed one.
+// The light half is CubeMap.AddTorchLight, which only the dropped copy gets - a
+// ghost following the crosshair would otherwise re-bake the map every frame.
 func (g *Game) spawnTorch(pos mgl32.Vec3) *quads.GameObject {
-	torch := g.spawnEntity(pos, core.MapEntity{Name: "Torch", MeshName: torchMeshName})
-	torch.Mesh().EmissiveStrength = torchEmissiveStrength
-	return torch
+	return g.spawnEntity(pos, core.MapEntity{Name: "Torch", MeshName: torchMeshName})
 }
 
 // dropTorch turns the ghost standing at pos into a placed torch: it stays where it
 // is and its light goes into the map, where the next bake floods from it.
 func (g *Game) dropTorch(pos mgl32.Vec3) {
-	g.CubeMap.AddTorchLight(voxel.PositionToGridInt3(pos.Add(mgl32.Vec3{0, torchLightHeight, 0})))
+	g.CubeMap.AddTorchLight(torchLightCell(pos))
 }
 
+// torchLightCell is the voxel a torch standing at pos lights from. Removing a
+// torch has to name the same cell adding it did, so both go through here.
+func torchLightCell(pos mgl32.Vec3) voxel.Int3 {
+	return voxel.PositionToGridInt3(pos.Add(mgl32.Vec3{0, torchLightHeight, 0}))
+}
+
+// changeDecorationTexture picks which picture the flat decorations are placed
+// with. It is remembered rather than only pushed at the ghost on screen, so the
+// next sprite placed is the one that was chosen and not the barrel again.
 func (g *Game) changeDecorationTexture() {
 	g.pickTexture(g.SpriteTextures, func(selectedIndex int) {
+		g.editor.spriteTexture = selectedIndex
 		if g.editor.gameObjectForSpawning != nil && g.editor.gameObjectForSpawning.HasComponent(quads.ComponentTypeSprite) {
 			g.editor.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
 		}
@@ -218,29 +270,15 @@ func (g *Game) testPackedAtlasPicker() {
 	g.replaceWidgetStack(picker)
 }
 
+// toggleSpawnMode is the sprite decoration's own key, for putting one down
+// without going into editor mode at all: it puts the decoration ghost on the
+// crosshair, or takes whatever is on it back off.
 func (g *Game) toggleSpawnMode() {
 	if g.editor.gameObjectForSpawning != nil {
-		g.editor.gameObjectForSpawning.Kill()
-		g.editor.gameObjectForSpawning = nil
-		g.editor.sceneryToPlace = ""
+		g.clearGhost()
 		return
 	}
-	g.editor.sceneryToPlace = ""
-	if g.lastHitResult == nil {
-		return
-	}
-	spawnPos, hitGround := g.lastHitResult.GroundPosition()
-	if !hitGround {
-		return
-	}
-	entityDesc := core.MapEntity{
-		Name:           "Barrel",
-		TextureIndices: []uint16{136},
-		CreateCollider: false,
-		IsTransparent:  true,
-	}
-	g.editor.gameObjectForSpawning = g.spawnEntity(spawnPos, entityDesc)
-	g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+	g.selectProp(spritePaletteSlot)
 }
 
 // toggleEditorMode is the Minecraft-creative switch: F5 swaps the whole game
@@ -258,8 +296,17 @@ func (g *Game) toggleEditorMode() {
 			g.editor.shapeMethod = EditShapeSingle
 		}
 		g.editor.addMode = true
+		// Back into whichever mode was left, ghost and all - see setEditorMode.
+		// The legend in the corner says which one that is, so coming back into
+		// the editor is never a guess.
+		g.setEditorMode(g.editor.mode)
 		g.Toast("Map Editor: ON")
 	} else {
+		// Nothing of the editor survives leaving it: no ghost on the crosshair,
+		// no paint gun where a weapon should be.
+		g.clearGhost()
+		g.editor.tool = EditorToolNone
+		g.editor.selectedActor = nil
 		// Editor mode is the only place flying makes sense; leaving it always
 		// puts the player's feet back on the ground.
 		g.gravitationEnabled = true
@@ -341,6 +388,16 @@ func stampAround(center voxel.Int3) []voxel.Int3 {
 // is on, captured mouse or not, since the crosshair - not the OS cursor - is
 // what aims now.
 func (g *Game) updateEditorPreview() {
+	// Only the block tools ghost cells. The prop tools have a better preview -
+	// the piece itself, standing where it would land - and the actor tools use
+	// the same cubes for the selected actor's route instead.
+	switch g.editor.mode {
+	case ModeProps:
+		return
+	case ModeActors:
+		g.drawActorPath()
+		return
+	}
 	aim, hit := g.editorAimCell()
 	if !hit {
 		g.editor.voxelSelection = nil

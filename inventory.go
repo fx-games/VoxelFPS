@@ -140,31 +140,6 @@ func (g *Game) drawWeaponHUD() {
 	g.hudAmmo.Draw()
 }
 
-// drawEditorHUD is drawWeaponHUD's editor-mode counterpart: no weapon is
-// held, so the same two lines say what a click does instead - ADD or DEL, and
-// which of the five shapes it applies to - plus whether the player is flying
-// or walking to get there.
-func (g *Game) drawEditorHUD() {
-	if g.hudName == nil {
-		return
-	}
-	_, guiHeight := g.GuiSize()
-	bottom := float32(guiHeight - hudMargin)
-	textLeft := float32(hudMargin)
-
-	action := map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode]
-
-	_, lineHeight := g.hudName.Size()
-	g.hudName.SetText(action + " - " + g.editor.shapeMethod.String())
-	g.hudName.SetPosition(mgl32.Vec2{textLeft, bottom - float32(2*lineHeight)})
-	g.hudName.Draw()
-
-	movement := map[bool]string{true: "Walking", false: "Flying"}[g.gravitationEnabled]
-	g.hudAmmo.SetText(movement)
-	g.hudAmmo.SetPosition(mgl32.Vec2{textLeft, bottom - float32(lineHeight)})
-	g.hudAmmo.Draw()
-}
-
 // drawHudIcon paints the weapon's picture into the HUD's corner box.
 func (g *Game) drawHudIcon(index int, at mgl32.Vec2) {
 	quads.DrawIconInBox(g.sharedAtlas, index, at, hudIconBox)
