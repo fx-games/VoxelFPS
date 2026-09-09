@@ -1,5 +1,5 @@
 // Command gendecals writes the engine's own decal pictures into the shared
-// picture store, weapons/_sprites: GZDoom's five bullet chips and a blood
+// picture store, assets/weapons/_sprites: GZDoom's five bullet chips and a blood
 // splatter. The game packs that store into one atlas when it starts, so these
 // end up in the same sheet as everything else a weapon throws at a wall, and
 // they go in at the resolution they were authored - a seven pixel chip stays
@@ -14,7 +14,7 @@
 // chip is a small black splotch, and the greyscale is its coverage.
 //
 // Run with `go run ./tools/gendecals` from the repository root. It is
-// idempotent, and it deletes weapons/_sprites.png afterwards so the next run
+// idempotent, and it deletes assets/weapons/_sprites.png afterwards so the next run
 // of the game repacks the atlas with what it just wrote.
 package main
 
@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	weaponsDir = "weapons"
+	weaponsDir = "assets/weapons"
 	chipPath   = "assets/base/decals/chip%d.png"
 	// bloodSize is the blood splatter's own canvas. The numbers below - the
 	// blob's radius, how far the droplets are thrown - are pixels in it.

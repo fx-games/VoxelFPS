@@ -5,6 +5,7 @@ import (
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/goray/wep"
 )
 
 // actorNames is which map entity names spawn an Actor rather than a static
@@ -51,6 +52,17 @@ type Actor struct {
 	// otherwise keep walking a corpse toward its last patrol point.
 	dying bool
 
+	// following marks this actor as the player's companion: it walks after the
+	// player instead of its patrol beat, and shoots whatever the player last
+	// shot. Set and cleared from its own dialogue tree - see dialogueFor.
+	following bool
+
+	// repathClock and attackClock are the two cooldowns a companion runs on:
+	// how often it re-aims its path at the player, and how often it fires. See
+	// followPlayer and attack for why neither may happen every frame.
+	repathClock float64
+	attackClock float64
+
 	// patrol is the beat this actor walks, one leg to the next and back to the
 	// first, forever.
 	//
@@ -94,7 +106,6 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		Name:          entity.Name,
 		Health:        defaultActorHealth,
 		MaxHealth:     defaultActorHealth,
-		Dialogue:      dialogueFor(entity.Name),
 		object:        object,
 		pathing:       pather,
 		physicsSystem: g.physicsSystem,
@@ -103,6 +114,7 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		fallOrigin:    spawnPos.Y(),
 		wasGrounded:   true,
 	}
+	actor.Dialogue = dialogueFor(actor)
 	pather.SetDestination(farEnd)
 
 	g.Pathfinder.AddMovingObject(pather)
@@ -125,6 +137,10 @@ func (g *Game) updateActors(elapsed float64) {
 			actor.die()
 			continue
 		}
+		if actor.following {
+			g.updateCompanion(actor, elapsed)
+			continue
+		}
 		if len(actor.patrol) < 2 || !actor.pathing.HasArrived() {
 			continue
 		}
@@ -144,6 +160,140 @@ func (g *Game) actorFor(object *quads.GameObject) *Actor {
 		}
 	}
 	return nil
+}
+
+// Everything a companion does, in numbers. followDistance is how close it
+// keeps to the player - near enough to be there, far enough not to stand in
+// the shot. repathInterval is how often it re-aims its path at the player: a
+// path is a whole A* search, so this is a rate limit, not a preference, and
+// four a second is smooth enough to follow someone walking. engageRange is
+// how far away a fight is still the companion's business, and attackInterval
+// how often it fires at one.
+const (
+	companionFollowDistance = 3.0
+	companionRepathInterval = 0.25
+	companionEngageRange    = 20.0
+	companionAttackInterval = 1.2
+	// companionAttackDamage is one ordinary body hit's worth on a default
+	// actor, so a companion needs bodyShotsToKill of them the same as the
+	// player does. See TakeDamage - the shot is routed through the player's
+	// own hitscan path, which decides head vs. body itself.
+	companionAttackDamage = defaultActorHealth / bodyShotsToKill
+)
+
+// follow hires this actor as the player's companion, from its own dialogue.
+// Both clocks start expired so it sets off after the player, and shoots,
+// on the very next frame rather than up to a cooldown later.
+func (a *Actor) follow() {
+	a.following = true
+	a.repathClock = 0
+	a.attackClock = 0
+}
+
+// stopFollowing dismisses a companion: it stands where it was left. Dropping
+// the patrol is what makes that stick - updateActors walks the beat of any
+// actor that still has one, so a dismissed companion handed its old route
+// back would turn round and walk off across the map, and "wait here" means
+// here.
+func (a *Actor) stopFollowing() {
+	a.following = false
+	a.patrol = nil
+	a.halt()
+}
+
+// updateCompanion is one frame of a companion: shoot what the player is
+// fighting if it is still up and within reach, otherwise keep up with the
+// player. Nothing here decides *who* the enemy is - g.companionTarget is
+// whoever the player last shot, see damage().
+func (g *Game) updateCompanion(actor *Actor, elapsed float64) {
+	target := g.companionTarget
+	if target != nil && (target.dying || target.following || !target.object.IsAlive()) {
+		target, g.companionTarget = nil, nil
+	}
+	if target != nil {
+		center := actor.object.Physics().AABB().Center()
+		targetCenter := target.object.Physics().AABB().Center()
+		if flatDistance(center, targetCenter) <= companionEngageRange {
+			g.companionAttack(actor, center, targetCenter, elapsed)
+			return
+		}
+	}
+	// A companion that walks out of a fight starts the next one fresh rather
+	// than with a cooldown left over from the last shot it got off.
+	actor.attackClock = 0
+	g.followPlayer(actor, elapsed)
+}
+
+// companionAttack holds the companion still, faces it at the target and fires
+// on the cooldown. The shot is g.fireHitscanWith - the same call every one of
+// the player's own hitscan weapons makes - so the impact puff, the blood and
+// the damage all come out of the one path that already works.
+func (g *Game) companionAttack(actor *Actor, center, targetCenter mgl32.Vec3, elapsed float64) {
+	actor.halt()
+	actor.object.Transform().SetLookAt2D(targetCenter)
+
+	actor.attackClock -= elapsed
+	if actor.attackClock > 0 {
+		return
+	}
+	actor.attackClock = companionAttackInterval
+
+	direction := targetCenter.Sub(center).Normalize()
+	// The ray has to start clear of the shooter's own collider. rayCast takes
+	// the nearest box in a cell, and a ray starting inside a box reports a
+	// (negative, therefore nearest) hit on it - which is why the player is
+	// skipped there by name. A companion is not, so it would shoot itself in
+	// the chest every time.
+	half := actor.object.Physics().AABB().HalfExtents()
+	muzzle := center.Add(direction.Mul(max(half.X(), half.Z()) + 0.1))
+
+	actor.object.Sprite().PlayAnimationInterrupting(int(quads.AnimFire))
+	g.fireHitscanWith(nil, muzzle, direction, wep.Op{Damage: companionAttackDamage, Puff: wep.PuffBullet})
+}
+
+// followPlayer walks the companion after the player, and stops it once it is
+// close enough. The re-path is on a clock because SetDestination throws the
+// current route away and the pathfinder immediately runs a fresh A* for it:
+// doing that every frame is a whole grid search per companion per frame, for
+// a destination that has moved a few centimetres.
+func (g *Game) followPlayer(actor *Actor, elapsed float64) {
+	playerPos := g.player.Transform().GetPosition()
+	if flatDistance(actor.object.Transform().GetPosition(), playerPos) <= companionFollowDistance {
+		actor.halt()
+		return
+	}
+	actor.repathClock -= elapsed
+	if actor.repathClock > 0 {
+		return
+	}
+	actor.repathClock = companionRepathInterval
+	actor.pathing.SetDestination(playerPos)
+}
+
+// halt stops an actor where it stands. Nothing in the physics system slows a
+// body down on its own - the pathfinder simply writes a velocity every frame
+// while it has somewhere to be - so switching the pathing off is not enough
+// to stop anything: the last velocity it wrote would carry the actor off
+// across the room forever. Gravity goes back on because a halt part way up a
+// ladder is a halt on a waypoint that had switched it off.
+func (a *Actor) halt() {
+	a.pathing.Enabled = false
+	physics := a.object.Physics()
+	physics.SetVelocity(mgl32.Vec3{0, physics.Velocity().Y(), 0})
+	physics.ApplyGravity = true
+	// Only out of the walk. A hit or a shot animation is playing over the top
+	// of this and returns to whatever it interrupted by itself; cutting it
+	// short here would mean a companion under fire never finished a frame of
+	// anything.
+	if a.object.Sprite().CurrentAnimation() == int(quads.AnimWalk) {
+		a.object.Sprite().PlayAnimationLooping(int(quads.AnimIdle))
+	}
+}
+
+// flatDistance is the distance between two points ignoring height: a
+// companion one floor up is not standing next to you.
+func flatDistance(a, b mgl32.Vec3) float32 {
+	return mgl32.Vec2{a.X() - b.X(), a.Z() - b.Z()}.Len()
 }
 
 // radiusDamage is a blast: everyone still standing within radius of center

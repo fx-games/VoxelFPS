@@ -94,14 +94,30 @@ func (g *GuiTextureSlots) HandleMouseButtonEvents(xpos float64, ypos float64, bu
 	return false
 }
 func (g *GuiTextureSlots) SetSlotAt(xpos float64, ypos float64, texIndex int) bool {
+	slotIndex, overSlot := g.slotAt(xpos, ypos)
+	if !overSlot {
+		return false
+	}
+	g.assignedIndices[slotIndex] = texIndex
+	return true
+}
+
+// IsSlotAt answers whether a drop here would land on a side, without committing to
+// one. A picked texture costs the atlas a slot, so the caller has to be able to ask
+// before it pays for it.
+func (g *GuiTextureSlots) IsSlotAt(xpos float64, ypos float64) bool {
+	_, overSlot := g.slotAt(xpos, ypos)
+	return overSlot
+}
+
+func (g *GuiTextureSlots) slotAt(xpos float64, ypos float64) (int, bool) {
 	for slotIndex, slotPos := range g.slotPositions {
 		slotRect := mgl32.Vec4{slotPos.X(), slotPos.Y(), slotPos.X() + float32(g.slotSize), slotPos.Y() + float32(g.slotSize)}
 		if float32(xpos) >= slotRect[0] && float32(xpos) <= slotRect[2] && float32(ypos) >= slotRect[1] && float32(ypos) <= slotRect[3] {
-			g.assignedIndices[slotIndex] = texIndex
-			return true
+			return slotIndex, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func (g *GuiTextureSlots) HandleScrollEvents(xoff float64, yoff float64) (consumed bool) {

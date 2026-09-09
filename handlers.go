@@ -191,6 +191,17 @@ func (g *Game) damage(hit RaycastResult, amount int) {
 	if actor == nil {
 		return
 	}
+	// Whatever the player last shot is what the companions pile onto. That is
+	// the whole of the enemy model: there are no factions in this game, every
+	// actor is a Scientist, and "the one you are shooting at" is the only
+	// answer that does not need a map to declare who hates whom.
+	//
+	// ponytail: only the hitscan path sets this, which is every conventional
+	// weapon. A projectile kill (physicsCollision) does not - it kills what it
+	// hits outright, so there is nothing left to pile onto anyway.
+	if !actor.following {
+		g.companionTarget = actor
+	}
 	headshot := hit.Relative.Y() > 0.6 && hit.Relative.Y() < 0.8
 	actor.TakeDamage(headshot)
 }

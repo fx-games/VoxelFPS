@@ -11,7 +11,7 @@ import (
 )
 
 // keyBindingsFile lives next to the executable, in the same spirit as
-// weapons/keys.txt: plain text, hand-edited, one binding per line. Delete it
+// assets/weapons/keys.txt: plain text, hand-edited, one binding per line. Delete it
 // or leave a line out and that action falls back to its default below.
 const keyBindingsFile = "keybindings.txt"
 

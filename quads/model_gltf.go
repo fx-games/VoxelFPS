@@ -9,8 +9,7 @@ import (
 	"github.com/qmuntal/gltf"
 	"github.com/qmuntal/gltf/modeler"
 	_ "image/png"
-	"os"
-	"path"
+	"log"
 )
 
 func LoadGLTFWithTextures(filename string) *CompoundMesh {
@@ -186,10 +185,15 @@ func tryLoadTextures(doc *gltf.Document) []*glhf.Texture {
 		} else if imageSource.BufferView != nil {
 			results[texIndex] = loadBufferTexture(doc, imageSource)
 		} else {
-			fileTexture, err := loadFileTexture(imageSource)
-			if err == nil {
-				results[texIndex] = fileTexture
-			}
+			// Neither inline data nor a bufferView: an external URI. Nothing
+			// in the asset tree exports one - Blockbench and the generators
+			// all embed - and resolving it means plumbing the model's own
+			// directory down here, so it is reported rather than guessed at.
+			//
+			// ponytail: leaves the slot without a texture. Resolve
+			// imageSource.URI against the glTF's directory if a model ever
+			// ships its pictures beside it.
+			log.Printf("[gltf] image %q is an external reference, which is not loaded", imageSource.Name)
 		}
 	}
 	glError = gl.GetError()
@@ -197,25 +201,6 @@ func tryLoadTextures(doc *gltf.Document) []*glhf.Texture {
 		println("failure after textures", glError)
 	}
 	return results
-}
-
-func loadFileTexture(imageSource *gltf.Image) (*glhf.Texture, error) {
-	filename := imageSource.Name + ".png"
-	filePath := path.Join("assets", "rawpng", filename)
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		println(fmt.Sprintf("Error loading file texture: %s", err.Error()))
-		return nil, err
-	} else {
-		// load bytes from file
-		file, err := os.Open(filePath)
-		if err != nil {
-			println(fmt.Sprintf("Error loading file texture: %s", err.Error()))
-		}
-		loadedTexture, err := glhf.NewTextureFromReader(file)
-		file.Close()
-		//println(fmt.Sprintf("Loaded from file %s", filePath))
-		return loadedTexture, nil
-	}
 }
 
 func loadBufferTexture(doc *gltf.Document, imageSource *gltf.Image) *glhf.Texture {

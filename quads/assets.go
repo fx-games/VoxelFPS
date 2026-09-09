@@ -125,6 +125,25 @@ func (a Assets) Image(filePath string) image.Image {
 		return placeholderImage()
 	}
 	defer file.Close()
+	return decodeImage(file, filePath)
+}
+
+// ImageFromOSPath reads an image by an operating system path instead of a path
+// inside the asset tree. Disk is rooted at the working directory and an fs.FS
+// refuses an absolute path outright, so every file dragged onto the window -
+// which is the one case where the path comes from outside the tree - used to
+// decode as a magenta placeholder however good the PNG was.
+func ImageFromOSPath(filePath string) image.Image {
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("[Assets] could not open image %s: %v - using placeholder", filePath, err)
+		return placeholderImage()
+	}
+	defer file.Close()
+	return decodeImage(file, filePath)
+}
+
+func decodeImage(file io.Reader, filePath string) image.Image {
 	img, _, err := image.Decode(file)
 	if err != nil {
 		log.Printf("[Assets] could not decode image %s: %v - using placeholder", filePath, err)

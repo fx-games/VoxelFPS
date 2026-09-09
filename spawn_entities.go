@@ -70,7 +70,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 			if fps <= 0 {
 				fps = 4
 			}
-			screenDir := filepath.Join(sceneryDir, entity.MeshName, "screen")
+			screenDir := filepath.Join(meshDir, entity.MeshName, "screen")
 			if err := g.Meshes.EnsureScreenAnimation(mesh.MeshIndex, piece.Screen.Material, screenDir, 1/fps); err != nil {
 				panic(fmt.Sprintf("scenery %s: %s", entity.MeshName, err))
 			}

@@ -4,6 +4,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/wep"
 )
 
@@ -225,4 +226,61 @@ func peaks(values []float64) int {
 		}
 	}
 	return count
+}
+
+// A thrown weapon is never raised into view: its Select lifts a hand into
+// frame before dropping into an idle that draws nothing, which flashed a hand
+// on screen on every switch. See Equip and thrownWeapons.
+func TestEquippingAThrownWeaponSkipsTheRaise(t *testing.T) {
+	weapon := raisingStub("bd_frag_grenade")
+
+	weapon.Equip()
+
+	if got := weapon.cursor.Sprite(); got != "" {
+		t.Errorf("equipping a grenade drew %q, want nothing - Select is being played", got)
+	}
+	if _, y := weapon.cursor.Offsets(); y != wep.WeaponTop {
+		t.Errorf("equipped a grenade at y=%.0f, want %.0f - it is still down in its raise",
+			y, wep.WeaponTop)
+	}
+}
+
+// Everything else raises on every switch, whatever is in its magazine.
+func TestEquippingAHeldWeaponAlwaysRaises(t *testing.T) {
+	for _, id := range []string{"bd_shotgun", "bd_grenade_launcher"} {
+		weapon := raisingStub(id)
+		weapon.runtime.Inventory["Shell"] = 0 // fired dry, and still comes up
+
+		weapon.Equip()
+
+		if got := weapon.cursor.Sprite(); got != "GUNA0" {
+			t.Errorf("%s drew %q on equip, want GUNA0 - the raise is being skipped", id, got)
+		}
+		if _, y := weapon.cursor.Offsets(); y != wep.WeaponBottom {
+			t.Errorf("%s equipped at y=%.0f, want %.0f - the raise did not start",
+				id, y, wep.WeaponBottom)
+		}
+	}
+}
+
+// A Select that raises something into frame, and a Ready that draws nothing -
+// the shape that made the flash visible in the first place.
+func raisingStub(id string) *Weapon {
+	weapon := NewWeapon(&Game{}, &wep.Weapon{
+		ID:    id,
+		Ammo:  wep.Ammo{Type: "Shell", Use: 1},
+		Items: map[string]wep.Item{"Shell": {Max: 50}},
+		States: wep.StateMachine{
+			Labels: map[string]int{"select": 0, "ready": 2},
+			Steps: []wep.Step{
+				{Sprite: "GUNA0", Tics: 1, Ops: []wep.Op{{Op: wep.OpRaise}}},
+				{Tics: 0, Ops: []wep.Op{{Op: wep.OpLoop}}},
+
+				{Tics: 1, Ops: []wep.Op{{Op: wep.OpWeaponReady, AllowFire: true}}},
+				{Tics: 0, Ops: []wep.Op{{Op: wep.OpLoop}}},
+			},
+		},
+	}, nil, "", "")
+	weapon.Atlas = &glhf.TextureAtlasPacked{} // stands in for load()
+	return weapon
 }

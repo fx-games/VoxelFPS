@@ -11,16 +11,16 @@ import (
 // and the loader still agree: six quads, nothing else, and the box standing on the
 // floor rather than centred on it.
 func TestTorchModelIsSixQuads(t *testing.T) {
-	mesh := LoadGLTF(filepath.Join("..", "assets", "meshes", "torch.glb"), nil, nil)
+	mesh := LoadGLTF(filepath.Join("..", "assets", "meshes", "torch", "mesh.glb"), nil, nil)
 	if mesh == nil {
-		t.Fatal("torch.glb did not load - re-run: go run ./tools/gentorch")
+		t.Fatal("torch mesh.glb did not load - re-run: go run ./tools/gentorch")
 	}
 
 	if got := mesh.TriangleCount(); got != 12 {
 		t.Errorf("triangles: got %d want 12 (6 quads, 2 triangles each)", got)
 	}
 
-	doc, err := gltf.Open(filepath.Join("..", "assets", "meshes", "torch.glb"))
+	doc, err := gltf.Open(filepath.Join("..", "assets", "meshes", "torch", "mesh.glb"))
 	if err != nil {
 		t.Fatal(err)
 	}

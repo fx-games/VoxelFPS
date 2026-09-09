@@ -16,7 +16,7 @@ import (
 // written by the migration - see wep.MeasurePickups - and a folder that predates
 // it is filled in with `go run ./tools/genweapons -measure`.
 func TestEveryPickupPictureHasBeenMeasured(t *testing.T) {
-	library, err := wep.Load("weapons")
+	library, err := wep.Load("assets/weapons")
 	if err != nil {
 		t.Fatal(err)
 	}

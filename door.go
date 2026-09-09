@@ -8,7 +8,7 @@ import (
 // doorSlideMeshName and doorSwingLeafMeshName are the two prototype doors: a
 // door plane that slides on its own (see spawnEntity's switch), and the
 // moving leaf of a swing door - the frame it swings inside of is ordinary
-// static scenery (scenery/door_swing_frame), not a Door at all.
+// static scenery (assets/meshes/door_swing_frame), not a Door at all.
 const (
 	doorSlideMeshName     = "door_slide"
 	doorSwingLeafMeshName = "door_swing_leaf"
@@ -109,7 +109,7 @@ func (d *Door) Interact() {
 // updateDoors eases every door's openT toward its target and applies that to
 // the one thing that differs between the two kinds: a slide door translates,
 // a swing door rotates about its own local origin - which is why
-// scenery/door_swing_leaf's mesh has its hinge edge at that origin rather
+// assets/meshes/door_swing_leaf's mesh has its hinge edge at that origin rather
 // than at its centre. PassThrough comes off physics the instant a door
 // starts moving in either direction, not once it is fully open: waiting for
 // the animation to finish blocked the player on a door that was already most

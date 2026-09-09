@@ -147,6 +147,12 @@ type GlApplication struct {
 	AtlasMap          *glhf.TextureAtlasFixed
 	AtlasSprites      *glhf.TextureAtlasFixed
 
+	// The two atlases the editor writes into, each with the record of which library
+	// texture is in which of its slots. Everything that picks a texture picks it out
+	// of TexLibraryRoot and lands it in one of these.
+	MapTextures    *AtlasIndex
+	SpriteTextures *AtlasIndex
+
 	UIAtlas *glhf.TextureAtlasFixed
 	UIFont  BitmapFont
 
@@ -337,6 +343,10 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 		glApp.AtlasSprites.SetMaxSprites(10)
 		glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasMap.GetSpriteBatch())
 		glApp.spriteBatches = append(glApp.spriteBatches, glApp.AtlasSprites.GetSpriteBatch())
+
+		glApp.MapTextures = NewAtlasIndex(glApp.AtlasMap)
+		glApp.MapTextures.OnGrow(glApp.SetCubeAtlasGridSize)
+		glApp.SpriteTextures = NewAtlasIndex(glApp.AtlasSprites)
 
 		glApp.screenQuad = PostQuad(glApp.postShader)
 		// The bloom shader needs its own vertex array: glhf resolves attribute
@@ -793,7 +803,7 @@ func (a *GlApplication) Toast(labelText string) *GuiToast {
 }
 
 func (a *GlApplication) SetupUnitCubes() {
-	meshFile := filepath.Join("assets", "meshes", "cube.glb")
+	meshFile := filepath.Join("assets", "meshes", "cube", "mesh.glb")
 	mesh := LoadGLTFWithTextures(meshFile)
 	mesh.UploadVertexData(a.meshShader)
 	a.UnitCube = NewUnitCube(a.meshShader, mesh)
@@ -1342,19 +1352,43 @@ func (a *GlApplication) SetupUIFont(font BitmapFont) {
 	a.UIFont.Texture.SetMaxSprites(512)
 	a.spriteBatches = append(a.spriteBatches, a.UIFont.Texture.GetSpriteBatch())
 }
-func (a *GlApplication) OpenTextureCube(atlasForSelection *glhf.TextureAtlasFixed, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
-	return NewGuiTexturePickerCube(a.UiContext(), atlasForSelection, preselection, func(s string) {
+
+// SetCubeAtlasGridSize re-tells the cube shader how the terrain atlas is laid out.
+// The shader turns a texture index into UVs itself, so a picked texture that made
+// the atlas taller has to reach it or every wall in the map samples the old grid.
+func (a *GlApplication) SetCubeAtlasGridSize() {
+	gridSize := glhf.IntVec2{int32(a.AtlasMap.GridWidth()), int32(a.AtlasMap.GridHeight())}
+	a.cubeShader.Begin()
+	a.cubeShader.SetUniformAttr(CubeShaderAtlasGridSize, gridSize)
+	a.cubeShader.End()
+}
+
+// NewTexBrowser opens the texture library. Each directory it shows is a texture of
+// its own, so it is handed in and out of the 2D pass as the user walks around.
+func (a *GlApplication) NewTexBrowser(dest *AtlasIndex) *TexBrowser {
+	tileW, tileH := dest.Atlas.GetAtlasItemSize()
+	return NewTexBrowser(tileW, tileH, a.SetupSpriteBatch, a.DropSpriteBatch)
+}
+
+func (a *GlApplication) OpenTextureCube(dest *AtlasIndex, preselection map[voxel.CubeSide]uint16) *GuiTexturePickerCube {
+	return NewGuiTexturePickerCube(a.UiContext(), dest, a.NewTexBrowser(dest), preselection, func(s string) {
 		a.Toast(s)
-	}, func() {
-		gridSize := glhf.IntVec2{int32(atlasForSelection.GridWidth()), int32(atlasForSelection.GridHeight())}
-		a.cubeShader.Begin()
-		a.cubeShader.SetUniformAttr(CubeShaderAtlasGridSize, gridSize)
-		a.cubeShader.End()
 	})
 }
 
 func (a *GlApplication) OpenAtlasPicker(atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
 	picker := NewGuiAtlasPicker(a.UiContext(), atlasForSelection)
+	guiWidth, guiHeight := a.GuiSize()
+	picker.HandleResize(guiWidth, guiHeight, a.UIScale)
+	return picker
+}
+
+// OpenTextureBrowser is the plain "pick one texture" widget: the library, browsed,
+// with the chosen file copied into dest and its slot handed to the caller.
+func (a *GlApplication) OpenTextureBrowser(dest *AtlasIndex) *GuiAtlasPicker {
+	picker := NewGuiAtlasPicker(a.UiContext(), nil)
+	// The browser first: it is what the picker has an atlas to lay out at all.
+	picker.SetBrowser(a.NewTexBrowser(dest), dest, func(s string) { a.Toast(s) })
 	guiWidth, guiHeight := a.GuiSize()
 	picker.HandleResize(guiWidth, guiHeight, a.UIScale)
 	return picker

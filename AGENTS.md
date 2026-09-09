@@ -5,7 +5,7 @@ Notes for agents working in this repo.
 ## Searching
 
 `git grep -n pattern` searches the tracked tree. It is faster than `grep -r`
-and skips `weapons/`'s six thousand generated files, which is where a plain
+and skips `assets/weapons/`'s six thousand generated files, which is where a plain
 recursive grep spends all its time.
 
 ## Seeing what a change did: screenshots
@@ -51,7 +51,7 @@ The flags:
 | `-shot-fps N` | the frame time every frame is told it took (default 60) |
 | `-pitch N` | start looking N degrees down, for what a weapon leaves on the floor |
 | `-walk` | hold the forward key, for anything that only happens while moving |
-| `-weapon ID` | start holding this weapon, by its `weapons/` folder name |
+| `-weapon ID` | start holding this weapon, by its `assets/weapons/` folder name |
 | `-autofire` | hold the trigger down for the whole run |
 | `-altfire` | hold the second attack button down: a scope, a bayonet, a second mode |
 | `-cycle N` | put the next weapon in hand every N seconds, to walk the whole folder |
@@ -103,7 +103,7 @@ landed where the call asked or in the camera's lap.
 
 ## Where the weapons come from
 
-The `weapons/` folder is generated. `tools/genweapons` reads a mod and writes
+The `assets/weapons/` folder is generated. `tools/genweapons` reads a mod and writes
 it; it never runs while the game does, and `weapons.lock` records what the last
 run built from what.
 
@@ -169,7 +169,7 @@ that built the folder can be reconstructed from `provenance` rather than
 remembered. The two big mods were migrated with `-all`, which compiles
 leniently; the single-weapon mods were named one at a time. `-prune` afterwards
 deletes the shared actor files nothing points at any more, and deleting
-`weapons/_sprites.png` makes the next run repack the shared atlas.
+`assets/weapons/_sprites.png` makes the next run repack the shared atlas.
 
 **Every bd_ weapon compiles with five animations already gone.** BDCE's shared
 `BrutalWeapon` base class gives every one of its weapons a kick, a taunt, a
@@ -205,7 +205,7 @@ Two different things get added: a **weapon** (already migrated, see above) or
 a **scenery piece** (furniture - see the next section for its own folder
 format). Getting either one pickable in the world is a third, separate step.
 
-**A weapon needs nothing map-specific.** Every weapon in `weapons/` is
+**A weapon needs nothing map-specific.** Every weapon in `assets/weapons/` is
 automatically racked by `spawnWeaponRange` the moment the `WeaponRange` map
 entity loads (`assets/raymap.json`, the room east of spawn) - a rack of
 shelves per tile, a weapon and its own ammo side by side on a board. Add a
@@ -246,11 +246,14 @@ itself is pickup-specific.
 
 ## Where the furniture comes from
 
-`scenery/` is the weapons folder's shape applied to what a room is furnished
+`assets/meshes/` is the weapons folder's shape applied to what a room is furnished
 with: one folder per piece, holding a mesh (`mesh.gltf` or the older
 `mesh.glb` - `gltf.Open` sniffs the actual format from the file's own bytes,
 not the extension, so both load the same way) and a `scenery.json` (`name`
-and `colliders`). There is no list of pieces in Go and there must not be one -
+and `colliders`). Plain models with nothing to bump into - the torch, the
+cube, the door leaf - are folders in there too, without the `scenery.json`;
+that file is the only thing that makes a model furniture, and a folder
+without one is skipped by `loadScenery` rather than being an error. There is no list of pieces in Go and there must not be one -
 a map entity's `MeshName` and the editor's `Place Scenery` menu both go
 through `Game.scenery`, whatever `loadScenery` found on disk. Only the JSON is
 read at startup; the model loads the first time something spawns one.
@@ -260,7 +263,7 @@ names none collides as one box around the whole model, which is what a table
 wants. A piece that names its own - stairs, shelves - replaces that:
 
 - **Stairs** need a box per step, or the flight is a solid wall to climb into
-  rather than up. `scenery/stairs/scenery.json` holds four boxes;
+  rather than up. `assets/meshes/stairs/scenery.json` holds four boxes;
   `stairs_test.go` walks the real physics system over them.
 - **Shelves** need an open front, or nothing standing on a board is reachable
   by the pickup beam or by walking into it. The colliders are the two
@@ -269,14 +272,14 @@ wants. A piece that names its own - stairs, shelves - replaces that:
 `tools/genstairs` draws the same numbers its JSON collides with - generated
 because it is boxes, and because the stair rise has to stay under the physics
 system's step height. The shelves are modeled by hand instead, in
-`scenery/shelves/shelf.bbmodel` (kept beside the exported `mesh.gltf` for
+`assets/meshes/shelves/shelf.bbmodel` (kept beside the exported `mesh.gltf` for
 later edits) - see "Modeling scenery in Blockbench" below for how its scale
 and texture stay exact. `TestThingsStandOnTheShelfsOwnBoards` checks the
 weapon range stands things at heights the shelf actually has a board at.
 
 ## Modeling scenery in Blockbench
 
-`scenery/shelves` was modeled and textured in Blockbench through the
+`assets/meshes/shelves` was modeled and textured in Blockbench through the
 `blockbench-mcp-plugin` MCP server rather than generated, to see what that
 workflow costs. What it takes to get a correct, game-ready model out of it:
 
@@ -562,7 +565,7 @@ business (kick, taunt, sprint) matched anywhere in the name.
 
 ## Sprite and actor lookup gotchas
 
-- **A sprite name is only unique inside its own mod.** `weapons/_sprites/` is
+- **A sprite name is only unique inside its own mod.** `assets/weapons/_sprites/` is
   one store shared by every weapon, keyed by content hash
   (`SMOKA0.ac80a16d.png`), not by bare name - two mods' same-named, different
   pictures would otherwise collide. `-prune` clears anything no installed

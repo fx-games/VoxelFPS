@@ -282,6 +282,10 @@ type Game struct {
 
 	// actors are every NPC/monster in the level - see actor.go.
 	actors []*Actor
+	// companionTarget is the actor the player last shot, which is what every
+	// companion following the player attacks. nil when the last one died or
+	// nothing has been shot yet. See damage() and updateCompanion.
+	companionTarget *Actor
 
 	// doors are every slide or swing door in the level - see door.go.
 	doors []*Door
@@ -368,10 +372,10 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		panic(err)
 	}
 
-	// So is the furniture: one folder to a piece under scenery/, read for its
+	// So is the furniture: one folder to a piece under assets/meshes/, read for its
 	// name and its colliders here and for its model only when something spawns
 	// one.
-	scenery, err := loadScenery(sceneryDir)
+	scenery, err := loadScenery(meshDir)
 	if err != nil {
 		panic(err)
 	}
@@ -559,6 +563,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.pickups = nil
 	g.climbVolumes = nil
 	g.actors = nil
+	g.companionTarget = nil
 	g.doors = nil
 
 	// Load Map
@@ -1074,7 +1079,7 @@ func (g *Game) openCubeTextureMapper() {
 	g.SetMouseCapture(false)
 
 	g.widgetsAreBlockingMovement = true
-	atlasPicker := g.OpenTextureCube(g.AtlasMap, g.editor.voxelBlock.Textures)
+	atlasPicker := g.OpenTextureCube(g.MapTextures, g.editor.voxelBlock.Textures)
 	guiWidth, guiHeight := g.GuiSize()
 	atlasPicker.HandleResize(guiWidth, guiHeight, g.UIScale)
 
@@ -1084,11 +1089,16 @@ func (g *Game) openCubeTextureMapper() {
 	g.replaceWidgetStack(atlasPicker)
 }
 
-func (g *Game) pickTexture(atlas glhf.TextureAtlas, onSelected func(selectedIndex int)) {
+// pickTexture browses the texture library and hands back the slot the chosen file
+// landed in, in whichever atlas it was picked for.
+func (g *Game) pickTexture(dest *quads.AtlasIndex, onSelected func(selectedIndex int)) {
 	previousMouseState := g.setupModal()
 	g.widgetsAreBlockingMovement = true
-	atlasPicker := g.OpenAtlasPicker(atlas)
+	atlasPicker := g.OpenTextureBrowser(dest)
 	atlasPicker.SetOnIndexClicked(func(selection int) {
+		// Close, not just pop: the browser has a directory of the library uploaded
+		// and drawn, and popping the widget on its own leaves that behind.
+		atlasPicker.Close()
 		g.popFromWidgetStack()
 		onSelected(selection)
 	})

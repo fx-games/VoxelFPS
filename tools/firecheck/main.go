@@ -34,7 +34,7 @@ const (
 )
 
 func main() {
-	dir := flag.String("weapons", "weapons", "the weapons folder to check")
+	dir := flag.String("weapons", "assets/weapons", "the weapons folder to check")
 	verbose := flag.Bool("v", false, "list every weapon, not just the ones with a problem")
 	flag.Parse()
 

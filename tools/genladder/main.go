@@ -1,4 +1,4 @@
-// Command genladder writes scenery/ladder/mesh.glb: two rails and a run of
+// Command genladder writes assets/meshes/ladder/mesh.glb: two rails and a run of
 // rungs, with one 16x16 wood texture embedded the way gentorch/genstairs do
 // it. It is generated rather than modelled for the same reason stairs are -
 // it is a handful of boxes, and the height has to match ladderHeight in
@@ -22,7 +22,7 @@ import (
 )
 
 // The ladder, in world units where a voxel is 1. Height must match the
-// Climbable box in scenery/ladder/scenery.json.
+// Climbable box in assets/meshes/ladder/scenery.json.
 const (
 	ladderHeight  = 4.0
 	railThickness = 0.08
@@ -136,7 +136,7 @@ func main() {
 	})
 	doc.Scenes[0].Nodes = []int{0}
 
-	out := filepath.Join("scenery", "ladder", "mesh.glb")
+	out := filepath.Join("assets", "meshes", "ladder", "mesh.glb")
 	if err := gltf.SaveBinary(doc, out); err != nil {
 		log.Fatal(err)
 	}

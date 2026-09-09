@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
@@ -65,7 +67,7 @@ func (g *Game) openVoxelEditMenu() {
 			g.setEditorTool(EditorToolNone)
 		}),
 		quads.NewGuiOptionAction("Choose Paint Texture", func() {
-			g.pickTexture(g.AtlasMap, func(selectedIndex int) {
+			g.pickTexture(g.MapTextures, func(selectedIndex int) {
 				g.editor.currentPaintGunTextureIndex = selectedIndex
 			})
 		}),
@@ -78,11 +80,10 @@ func (g *Game) openVoxelEditMenu() {
 			g.popFromWidgetStack()
 		}),
 		quads.NewGuiOptionAction("Save Map", func() {
-			saveErr := g.CubeMap.SaveToDisk(filepath.Join("assets", "map.bin"))
-			if saveErr != nil {
+			if saveErr := g.saveMap(filepath.Join("assets", "map.bin")); saveErr != nil {
 				g.Toast(saveErr.Error())
 			} else {
-				g.Toast("Map saved")
+				g.Toast(fmt.Sprintf("Map saved, atlas baked to %d textures", g.MapTextures.Count()))
 			}
 			g.popFromWidgetStack()
 		}),
@@ -104,6 +105,22 @@ func (g *Game) openVoxelEditMenu() {
 	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
 
 	g.replaceWidgetStack(configMenu)
+}
+
+// saveMap writes the map out and bakes its atlas down to the textures the map
+// actually uses in the same breath. The two have to move together: baking renumbers
+// the atlas, so a map saved without it - or an atlas baked without saving the map -
+// points every wall at the wrong texture.
+//
+// The library itself is never written to. The map's atlas holds copies, and this is
+// where the copies that nothing points at any more are dropped.
+func (g *Game) saveMap(filename string) error {
+	remap, bakeErr := g.MapTextures.Bake(g.CubeMap.UsedTextureIndices())
+	if bakeErr != nil {
+		return bakeErr
+	}
+	g.CubeMap.RemapTextures(remap)
+	return g.CubeMap.SaveToDisk(filename)
 }
 
 // Editor is the state the map editor keeps: what the brush is holding, what is
@@ -182,7 +199,7 @@ func (g *Game) dropTorch(pos mgl32.Vec3) {
 }
 
 func (g *Game) changeDecorationTexture() {
-	g.pickTexture(g.AtlasSprites, func(selectedIndex int) {
+	g.pickTexture(g.SpriteTextures, func(selectedIndex int) {
 		if g.editor.gameObjectForSpawning != nil && g.editor.gameObjectForSpawning.HasComponent(quads.ComponentTypeSprite) {
 			g.editor.gameObjectForSpawning.Sprite().TextureIndices = []uint16{uint16(selectedIndex)}
 		}
@@ -194,9 +211,11 @@ func (g *Game) testPackedAtlasPicker() {
 		g.Toast("No packed atlas to pick from")
 		return
 	}
-	g.pickTexture(weapon.Atlas, func(selectedIndex int) {
+	picker := g.OpenAtlasPicker(weapon.Atlas)
+	picker.SetOnIndexClicked(func(selectedIndex int) {
 		println("Selected index", selectedIndex)
 	})
+	g.replaceWidgetStack(picker)
 }
 
 func (g *Game) toggleSpawnMode() {

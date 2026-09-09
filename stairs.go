@@ -8,7 +8,7 @@ import (
 )
 
 // stairsMeshName is the scenery folder the staircase lives in. Its steps are one
-// collider each, listed in scenery/stairs/scenery.json and drawn by
+// collider each, listed in assets/meshes/stairs/scenery.json and drawn by
 // tools/genstairs from the same numbers.
 //
 // The rise is what the whole thing is about: at 0.25 it is under the physics

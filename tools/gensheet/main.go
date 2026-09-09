@@ -34,7 +34,7 @@ func main() {
 	tics := flag.Int("tics", 2, "how long each firing frame lasts")
 	scale := flag.Int("scale", 1, "magnify every frame this many times, nearest neighbour")
 	damage := flag.Int("damage", 5, "damage per shot")
-	outDir := flag.String("out", "weapons", "the weapons folder to write into")
+	outDir := flag.String("out", "assets/weapons", "the weapons folder to write into")
 	flag.Parse()
 
 	if *sheet == "" || *id == "" || *prefix == "" || *frames == "" {

@@ -148,12 +148,21 @@ func (live *WorldActor) setMaster(master *WorldActor) {
 // spawnJitterStep and spawnJitterCycle turn a spawn's own sequence number into
 // a few centimetres of vertical offset - enough to break an exact tie, small
 // enough that nobody notices a puff of smoke sitting a hair off where it was
-// asked to be. The cycle wraps rather than growing without bound, so a long
-// session spawning thousands of effects never drifts one arbitrarily far from
-// where its script actually put it.
+// asked to be.
+//
+// What matters is the difference between two consecutive spawns, not the
+// distance either one ends up from its script's own position, so the offsets
+// straddle zero and the cycle is short: the whole range is a centimetre either
+// side, under a single Doom unit, and it stays under two even when a nested
+// spawn carries its parent's offset as well as its own. A long cycle counted
+// from zero instead put every spawn up to 22 steps - fourteen Doom units, a
+// quarter of the player's height - above where it was asked to be, and the
+// nesting stacked on top of that: a gun's muzzle smoke, spawned by a spawner
+// that was itself already lifted, drew a clear distance over the barrel and
+// jumped from shot to shot as the counter advanced.
 const (
-	spawnJitterStep  = float32(0.01)
-	spawnJitterCycle = 23 // coprime with the small counts effects spawn in, e.g. 5
+	spawnJitterStep  = float32(0.005)
+	spawnJitterCycle = 7 // coprime with the small counts effects spawn in, e.g. 5
 )
 
 // spawnJitter is why two effects that read the same X, Y, Z off the same
@@ -175,7 +184,8 @@ const (
 // difference sidesteps the precision question entirely instead of trying to
 // out-guess it.
 func spawnJitter(position mgl32.Vec3, sequence int) mgl32.Vec3 {
-	return position.Add(mgl32.Vec3{0, spawnJitterStep * float32(sequence%spawnJitterCycle), 0})
+	step := sequence%spawnJitterCycle - spawnJitterCycle/2
+	return position.Add(mgl32.Vec3{0, spawnJitterStep * float32(step), 0})
 }
 
 // spawnActorAt is the rest of it, once where has been decided. The label is

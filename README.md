@@ -26,7 +26,7 @@ optional gravity, projectiles, particles, animated sprites, paths and pathfindin
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
 
 **Doom asset import** — ZDoom-style weapon definitions (`zdwep/`) so Doom sprite weapons
-load and animate. 134 of them are in `weapons/`; the scripts are interpreted far enough to
+load and animate. 134 of them are in `assets/weapons/`; the scripts are interpreted far enough to
 play a firing animation and spend ammo, the effect of a shot is ours (`handlers.go`).
 You start with what the mod's player class starts you with - the fists and a pistol - and
 pick the rest up: the test map has a range room with every weapon in the folder lying on
@@ -115,6 +115,25 @@ tpack/ eassets/       texture packer, embedded assets
 audio/ events/ png_chunks/
 ```
 
+Everything the game reads at runtime is under `assets/`, resolved relative to the
+directory it is started from:
+
+```
+assets/
+  base/        the map and sprite atlases, by their tile size in the file name
+  dialogue/    one conversation per speaker, named after the actor
+  meshes/      one folder per model; a scenery.json in it makes it furniture
+  sheets/      per-entity sprite sheets
+  skybox/      six faces to a set
+  textures/    the texture library the editor picks from, dropped/ included
+  weapons/     one folder per weapon, plus the shared actor and sprite stores
+  raymap.json  the map
+```
+
+The UI atlas and the bitmap font are the exception: they are baked into the
+binary from `eassets/files/`, so a build with no `assets/` next to it still draws
+its own error messages.
+
 ~26k lines of Go. Tests cover `quads/voxel` (OBB sweep, DDA raycast), `png_chunks`,
 and the weapon pipeline end to end in `zdwep` (compile, write, load, fire).
 
@@ -122,11 +141,11 @@ and the weapon pipeline end to end in `zdwep` (compile, write, load, fire).
 
 Weapons are data, and they are picked up rather than handed out. Each carries a
 picture of itself lying on the floor, which is also its icon in the inventory (`I`)
-and on the HUD. `weapons/` holds one self-contained folder per weapon, plus
+and on the HUD. `assets/weapons/` holds one self-contained folder per weapon, plus
 `keys.txt` binding the number keys:
 
 ```
-weapons/
+assets/weapons/
   keys.txt              1: small_gun          (and , and . walk the rest)
   _actors/              every actor any weapon spawns, named by its content
     3f9a....json
@@ -202,11 +221,11 @@ The decisions behind all this are in [docs/adr/](docs/adr/), the vocabulary in
 ## Scenery
 
 Furniture is data too, the same way weapons are: one folder per piece under
-`scenery/`, holding the model and a line or two saying what it is called and what
+`assets/meshes/`, holding the model and a line or two saying what it is called and what
 you bump into.
 
 ```
-scenery/
+assets/meshes/
   table/
     mesh.glb            the model
     scenery.json        {"name": "Table"}
@@ -216,7 +235,12 @@ scenery/
   shelves/
     mesh.gltf           the model (plus shelf.bbmodel, the Blockbench source)
     scenery.json        two uprights and three boards
+  torch/
+    mesh.glb            no scenery.json: a plain model, spawned by name
 ```
+
+Scenery and the plain models share one folder because they were the same thing
+with two layouts. What makes a folder furniture is the `scenery.json` in it.
 
 Only the JSON is read at startup; a model is loaded the first time something
 spawns one, so a folder of scenery nobody has placed costs nothing. A map entity
@@ -238,6 +262,38 @@ go run ./tools/genstairs      # four steps, rise under the engine's step height
 Shelves are modeled by hand in Blockbench instead - see AGENTS.md for how
 the model keeps its scale exact.
 
+## Dialogue
+
+An actor with a file named after it in `assets/dialogue/` can be talked to;
+every other actor is a monster and stays quiet. The lines are a flat map rather
+than a nested tree, so three replies can end on the same line without it being
+written out three times, and a conversation may loop back on itself:
+
+```json
+{
+  "speaker": "Scientist",
+  "start": "greeting",
+  "lines": {
+    "greeting": {
+      "text": "You shouldn't be down here.",
+      "choices": [
+        { "text": "Come with me.", "next": "hired", "do": "follow" },
+        { "text": "Just passing through.", "next": "thanks" }
+      ]
+    },
+    "hired":  { "text": "Right behind you." },
+    "thanks": { "text": "Just be careful." }
+  }
+}
+```
+
+`do` is what picking a reply does in the world as opposed to what it says, and
+it can only name something in `dialogueActions` - today `follow` and `stay`.
+That list is the whole reach a dialogue file has into the game, and it is bound
+to the actor being spoken to, so a file can never act on anything else. A file
+that will not load leaves that actor mute and logs why rather than taking the
+map down: this is content edited while the game is running.
+
 ## Picking things up
 
 Two modes, switchable in the `F1` menu:
@@ -254,7 +310,7 @@ and `ammo_icon_box`. A weapons folder migrated before that gets them from:
 go run ./tools/genweapons -measure
 ```
 
-The weapon range east of the spawn room racks the whole `weapons/` folder on
+The weapon range east of the spawn room racks the whole `assets/weapons/` folder on
 shelves, a weapon and its own ammo side by side on a board, two boards to a rack
 and a rack on every other row so there are aisles to walk down.
 

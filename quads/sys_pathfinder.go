@@ -129,7 +129,14 @@ func (c *PathfindingSystem) Update(deltaTime float64) {
 
 		if !m.HasPathToDestination() {
 			m.SetWaypoints(c.calculatePath(gameObject.Transform().GetPosition(), m.currentDestination))
-			gameObject.Sprite().PlayAnimationLooping(int(AnimWalk))
+			// Only on the transition into walking. PlayAnimationLooping restarts
+			// the animation from frame 0, so calling it on every re-path froze
+			// the legs of anything re-pathing faster than the walk cycle - a
+			// companion re-aimed at a moving player four times a second (see
+			// followPlayer) never got past its first frame.
+			if gameObject.Sprite().CurrentAnimation() != int(AnimWalk) {
+				gameObject.Sprite().PlayAnimationLooping(int(AnimWalk))
+			}
 		}
 
 		if !m.HasWaypointsLeft() {

@@ -1,0 +1,30 @@
+{
+  "speaker": "Scientist",
+  "start": "greeting",
+  "lines": {
+    "greeting": {
+      "text": "You shouldn't be down here. This whole sub-level is off limits.",
+      "choices": [
+        { "text": "What happened here?", "next": "what_happened" },
+        { "text": "Come with me. Watch my back.", "next": "hired", "do": "follow" },
+        { "text": "Wait here.", "next": "dismissed", "do": "stay" },
+        { "text": "I'm just passing through.", "next": "thanks" }
+      ]
+    },
+    "what_happened": {
+      "text": "Power failed on sublevel three. By the time backup systems kicked in, half the containment logs were already gone.",
+      "choices": [
+        { "text": "Thanks for the warning.", "next": "thanks" }
+      ]
+    },
+    "hired": {
+      "text": "Right behind you. I'm not much of a shot, but I'm a worse hostage."
+    },
+    "dismissed": {
+      "text": "I'll hold this spot. Come back for me."
+    },
+    "thanks": {
+      "text": "Just be careful. Whatever got out down here didn't come from any of our tanks."
+    }
+  }
+}

@@ -30,8 +30,8 @@ const (
 	doorHalfThickness = 1.0 / 32.0
 
 	// doorSwingHingeOffset is the swing frame's opening's left edge, relative
-	// to its tile centre - see scenery/door_swing_frame's jamb positions and
-	// assets/meshes/door_swing_leaf.glb's hinge-at-origin modelling.
+	// to its tile centre - see assets/meshes/door_swing_frame's jamb positions and
+	// assets/meshes/door_swing_leaf/mesh.glb's hinge-at-origin modelling.
 	doorSwingHingeOffset = -0.375
 )
 

@@ -1,4 +1,4 @@
-// Command gentorch writes assets/meshes/torch.glb: a Minecraft-style torch as six
+// Command gentorch writes assets/meshes/torch/mesh.glb: a Minecraft-style torch as six
 // quads and one 16x16 texture, embedded in the .glb so the mesh loader's buffer
 // path picks it up without a side-car PNG.
 //
@@ -117,7 +117,7 @@ func main() {
 	})
 	doc.Scenes[0].Nodes = []int{0}
 
-	out := filepath.Join("assets", "meshes", "torch.glb")
+	out := filepath.Join("assets", "meshes", "torch", "mesh.glb")
 	if err := gltf.SaveBinary(doc, out); err != nil {
 		log.Fatal(err)
 	}

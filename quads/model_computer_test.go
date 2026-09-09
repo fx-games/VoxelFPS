@@ -14,10 +14,10 @@ import (
 // instead of just its screen. See AGENTS.md's Blockbench section for how
 // easy this kind of thing is to get wrong invisibly.
 func TestComputerScreenIsItsOwnMaterial(t *testing.T) {
-	path := filepath.Join("..", "scenery", "computer", "mesh.gltf")
+	path := filepath.Join("..", "assets", "meshes", "computer", "mesh.gltf")
 	mesh := LoadGLTF(path, nil, nil)
 	if mesh == nil {
-		t.Fatal("scenery/computer/mesh.gltf did not load")
+		t.Fatal("assets/meshes/computer/mesh.gltf did not load")
 	}
 	if got := mesh.TriangleCount(); got == 0 {
 		t.Fatal("computer mesh has no triangles")
@@ -58,6 +58,6 @@ func TestComputerScreenIsItsOwnMaterial(t *testing.T) {
 	// number honest against what the model actually compiled to.
 	const declaredScreenMaterial = 1
 	if screenTextureIndex != declaredScreenMaterial {
-		t.Errorf("Screen's texture index is %d, but scenery/computer/scenery.json declares material %d", screenTextureIndex, declaredScreenMaterial)
+		t.Errorf("Screen's texture index is %d, but assets/meshes/computer/scenery.json declares material %d", screenTextureIndex, declaredScreenMaterial)
 	}
 }

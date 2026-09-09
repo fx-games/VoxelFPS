@@ -15,7 +15,7 @@ import (
 )
 
 // Scenery is a piece of furniture the world is furnished with: a folder under
-// scenery/ holding the model and a scenery.json saying what it is called and
+// assets/meshes/ holding the model and a scenery.json saying what it is called and
 // what you bump into. The weapons folder works the same way and for the same
 // reason - which pieces exist is decided by which folders are present, so a new
 // table is a folder and not a line of Go.
@@ -42,7 +42,7 @@ type Scenery struct {
 	//
 	// ponytail: a climbable box that stopped exactly at the ladder's own model
 	// left nowhere to land - gravity always came back before the player was
-	// horizontally clear of the wall the ladder is mounted on. scenery/ladder's
+	// horizontally clear of the wall the ladder is mounted on. assets/meshes/ladder's
 	// box runs taller than the model and a tile past it, into the landing, so
 	// there is still a window with no gravity to walk out over the edge in.
 	// That bakes in "this ladder climbs towards +Z"; a ladder facing another
@@ -64,14 +64,18 @@ type ScreenSpec struct {
 	FPS      float64 `json:"fps"`
 }
 
-// sceneryDir is the folder of folders, one to a piece.
-const sceneryDir = "scenery"
+// meshDir is the folder of folders, one to a model: a mesh.gltf or mesh.glb and
+// whatever else that model needs beside it. A folder that also holds a
+// scenery.json is a piece of furniture; one that does not - the cube, the torch -
+// is just a mesh something spawns by name.
+const meshDir = "assets/meshes"
 
-// sceneryFile is what every one of them holds beside its mesh.glb or mesh.gltf.
+// sceneryFile is what a furniture folder holds beside its mesh.glb or mesh.gltf.
 const sceneryFile = "scenery.json"
 
-// loadScenery reads every folder under dir. A folder without a scenery.json is
-// a mistake worth hearing about rather than a piece to leave out silently.
+// loadScenery reads every folder under dir that has a scenery.json in it. A
+// folder without one is a plain model, not a mistake - they share a directory
+// since the meshes and the scenery were consolidated.
 func loadScenery(dir string) (map[string]*Scenery, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -83,6 +87,9 @@ func loadScenery(dir string) (map[string]*Scenery, error) {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, entry.Name(), sceneryFile))
+		if os.IsNotExist(err) {
+			continue // a model with no furniture attached to it
+		}
 		if err != nil {
 			return nil, fmt.Errorf("scenery: %w", err)
 		}
@@ -137,19 +144,16 @@ func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo 
 
 // meshFile is where a named model is. Scenery keeps its own beside its
 // scenery.json, as mesh.gltf (Blockbench's own export, JSON with embedded
-// buffers/images) if the piece has one, else the older generated mesh.glb -
+// buffers/images) if the model has one, else the older generated mesh.glb -
 // gltf.Open sniffs the content either way, so the extension only has to be
-// honest, not load-bearing. Everything else - the torch, the cube, the debug
-// meshes - is still a bare file under assets/meshes.
+// honest, not load-bearing. Scenery and the plain meshes answer to the same
+// shape now, so there is nothing to branch on.
 func (g *Game) meshFile(name string) string {
-	if _, isScenery := g.scenery[name]; isScenery {
-		dir := filepath.Join(sceneryDir, name)
-		if _, err := os.Stat(filepath.Join(dir, "mesh.gltf")); err == nil {
-			return filepath.Join(dir, "mesh.gltf")
-		}
-		return filepath.Join(dir, "mesh.glb")
+	dir := filepath.Join(meshDir, name)
+	if _, err := os.Stat(filepath.Join(dir, "mesh.gltf")); err == nil {
+		return filepath.Join(dir, "mesh.gltf")
 	}
-	return filepath.Join("assets", "meshes", name+".glb")
+	return filepath.Join(dir, "mesh.glb")
 }
 
 // sceneryIDs is the folder's contents in a fixed order, for a menu.

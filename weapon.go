@@ -134,11 +134,32 @@ func (w *Weapon) DisplayName() string { return w.Data.Tag }
 func (w *Weapon) Equip() {
 	w.load()
 	w.endFlash()
-	if w.cursor.Goto("Select") {
+	if !thrownWeapons[w.Data.ID] && w.cursor.Goto("Select") {
 		w.cursor.StartRaise()
 		return
 	}
 	w.cursor.Goto("Ready")
+}
+
+// thrownWeapons is what is thrown rather than held, by folder name, and so is
+// never raised into view on a switch.
+//
+// A gun is brought up and kept up, and its Select is written for that: a raise
+// loop and an animation of a hand lifting it into frame. A grenade is not held
+// at all - it is in a pouch until the moment it is thrown, and the throw is in
+// the firing states, which draw the whole of it. Running its Select anyway put
+// a hand on screen for a third of a second on every switch and then took it
+// away again, because the state the script idles in draws nothing.
+//
+// A list and not a rule, the same way squarePixelFrames below is. The rule
+// that suggests itself - skip the raise for a weapon with nothing to fire -
+// reads the wrong thing: it makes a gun fired dry pop into frame instead of
+// coming up, and it puts the grenade's own hand back the moment one is picked
+// up. Being thrown is a property of the weapon, not of what is in the pouch.
+// Brutal Doom's frag grenade is the only one in the folder today; the two
+// grenade launchers are guns and are held like guns.
+var thrownWeapons = map[string]bool{
+	"bd_frag_grenade": true,
 }
 
 // Unequip stops the overlay and the weapon's own hum, if it has one. Several
@@ -1062,6 +1083,6 @@ func (g *Game) setMuzzleFlash(level int) {
 		muzzleFlashIntensity*float32(level), muzzleFlashReach)
 }
 
-// weaponsDir is where the engine looks for weapons: a folder of that name in
-// the directory the game is started from.
-const weaponsDir = "weapons"
+// weaponsDir is where the engine looks for weapons, under the asset tree the
+// game is started next to.
+const weaponsDir = "assets/weapons"

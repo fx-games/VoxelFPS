@@ -1,6 +1,8 @@
 package quads
 
 import (
+	"fmt"
+
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/geometry"
@@ -33,6 +35,63 @@ type GuiAtlasPicker struct {
 	isDragging           bool
 	tileScaleFactor      float32
 	uiContext            UIContext
+
+	// Set together by SetBrowser, and nil for a picker that is showing a finished
+	// atlas rather than the texture library.
+	browser  *TexBrowser
+	dest     *AtlasIndex
+	toast    func(string)
+	dirLabel *BitmapFontMesh
+}
+
+// SetBrowser turns the picker into a file browser over the texture library.
+// Cells are then directories and library textures rather than atlas slots, and an
+// index handed to a caller is the slot the picked texture was copied into - dest
+// is what a texture is chosen *for*, the library is only where it is chosen from.
+func (a *GuiAtlasPicker) SetBrowser(browser *TexBrowser, dest *AtlasIndex, toast func(string)) {
+	a.browser = browser
+	a.dest = dest
+	a.toast = toast
+	a.dirLabel = NewBitmapFontMesh(a.uiContext.Shader, a.uiContext.Font, a.uiContext.ColorBatch)
+	a.dirLabel.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
+	a.showDir()
+}
+
+// showDir adopts whatever directory the browser is on now.
+func (a *GuiAtlasPicker) showDir() {
+	a.atlas = a.browser.Atlas()
+	a.verticalScrollOffset = 0
+	a.currentSelectionIndex = -1
+	a.dirLabel.SetText(a.browser.Dir())
+	if a.border != nil {
+		a.UpdateAtlas()
+	}
+}
+
+// Resolve turns a cell the user acted on into a texture slot in the destination
+// atlas, copying the library texture in if this is the first time it was picked.
+// A directory cell is navigation, not a choice, so it resolves to nothing.
+func (a *GuiAtlasPicker) Resolve(index int) (int, bool) {
+	if a.browser == nil {
+		return index, index >= 0
+	}
+	entry, isCell := a.browser.Entry(index)
+	if !isCell {
+		return -1, false
+	}
+	if entry.IsDir {
+		a.browser.Open(entry.Path)
+		a.showDir()
+		return -1, false
+	}
+	slot, err := a.dest.Import(entry.Path)
+	if err != nil {
+		if a.toast != nil {
+			a.toast(err.Error())
+		}
+		return -1, false
+	}
+	return slot, true
 }
 
 func NewGuiAtlasPicker(uiContext UIContext, atlasForSelection glhf.TextureAtlas) *GuiAtlasPicker {
@@ -58,6 +117,12 @@ func (a *GuiAtlasPicker) HandleKeyEvents(key glfw.Key, scancode int, action glfw
 	case glfw.KeyEscape:
 		a.Close()
 		return true
+	case glfw.KeyBackspace:
+		if a.browser != nil {
+			a.browser.Up()
+			a.showDir()
+			return true
+		}
 	}
 	return false
 }
@@ -87,7 +152,7 @@ func (a *GuiAtlasPicker) HandleMousePosEvents(xpos float64, ypos float64) (consu
 
 	if index != a.currentSelectionIndex {
 		a.currentSelectionIndex = index
-		a.indexLabel.SetText(strconv.Itoa(a.currentSelectionIndex))
+		a.indexLabel.SetText(a.labelFor(index))
 	}
 
 	return true
@@ -109,11 +174,21 @@ func (a *GuiAtlasPicker) HandleMouseButtonEvents(xpos float64, ypos float64, but
 		return false
 	}
 	a.currentSelectionIndex = a.indexFromScreenPos(xpos, ypos)
-	if a.onIndexClicked != nil {
-		a.onIndexClicked(a.currentSelectionIndex)
+	selected, isChoice := a.Resolve(a.currentSelectionIndex)
+	if isChoice && a.onIndexClicked != nil {
+		a.onIndexClicked(selected)
 	}
 
 	return true
+}
+
+// labelFor names the cell under the cursor: its file name while browsing the
+// library, its slot number while showing a finished atlas.
+func (a *GuiAtlasPicker) labelFor(index int) string {
+	if a.browser != nil {
+		return a.browser.Label(index)
+	}
+	return strconv.Itoa(index)
 }
 
 func (a *GuiAtlasPicker) HandleScrollEvents(xoff float64, yoff float64) (consumed bool) {
@@ -128,8 +203,10 @@ func (a *GuiAtlasPicker) HandleScrollEvents(xoff float64, yoff float64) (consume
 		a.verticalScrollOffset = 0
 	}
 
-	if a.verticalScrollOffset > float32(atlasHeight-scrollingSpace) {
-		a.verticalScrollOffset = float32(atlasHeight - scrollingSpace)
+	// A directory that does not fill the window has nothing to scroll: without the
+	// floor, the clamp is negative and scrolling pushes the page off the top.
+	if maxOffset := float32(max(atlasHeight-scrollingSpace, 0)); a.verticalScrollOffset > maxOffset {
+		a.verticalScrollOffset = maxOffset
 	}
 	return true
 }
@@ -139,6 +216,29 @@ func (a *GuiAtlasPicker) ShouldClose() bool {
 }
 
 func (a *GuiAtlasPicker) HandleDrop(names []string, xpos float64, ypos float64) bool {
+	if a.browser != nil {
+		// The library is the way in, so a dropped texture is put into it rather
+		// than refused: writing it straight into the page being browsed would
+		// put it somewhere nothing can point at afterwards, and telling the
+		// player to go and copy the file themselves is the same answer with
+		// more steps.
+		saved, err := a.browser.AcceptDropped(names)
+		if saved > 0 {
+			a.browser.Open(DroppedDir)
+			a.showDir()
+		}
+		if a.toast != nil {
+			switch {
+			case err != nil:
+				a.toast(err.Error())
+			case saved == 0:
+				a.toast("nothing dropped that is a PNG")
+			default:
+				a.toast(fmt.Sprintf("%d texture(s) added to %s/%s", saved, TexLibraryRoot, DroppedDir))
+			}
+		}
+		return true
+	}
 	if xpos < float64(a.atlasTopLeft.X) || xpos > float64(a.atlasTopLeft.X+a.atlasSize.X) {
 		return false
 	}
@@ -156,7 +256,7 @@ func (a *GuiAtlasPicker) HandleDrop(names []string, xpos float64, ypos float64) 
 		ext := filepath.Ext(name)
 		if strings.ToLower(ext) == ".png" {
 			loadedImage := tpack.NamedImage{
-				Image: Disk.Image(name),
+				Image: ImageFromOSPath(name),
 				Name:  realBaseName(name),
 			}
 			// REMINDER: This won't allow arbitrary sizes
@@ -203,6 +303,10 @@ func (a *GuiAtlasPicker) layoutAtlas(borderDrawPos geometry.Point, borderSize ge
 	a.scaledTileSize = geometry.PointF{X: float64(itemSizeX) * float64(a.tileScaleFactor), Y: float64(itemSizeY) * float64(a.tileScaleFactor)}
 
 	a.selectionTexture = glhf.NewRectOutlineTexture(int(a.scaledTileSize.X), int(a.scaledTileSize.Y), 1)
+
+	if a.dirLabel != nil {
+		a.dirLabel.SetPosition(mgl32.Vec2{float32(borderDrawPos.X) + 4, float32(borderDrawPos.Y) - float32(a.fontHeight) - 2})
+	}
 }
 
 func (a *GuiAtlasPicker) UpdateAtlas() {
@@ -216,6 +320,9 @@ func (a *GuiAtlasPicker) atlasCutoff() glhf.IntVec2 {
 
 func (a *GuiAtlasPicker) Draw() {
 	a.border.Draw()
+	if a.dirLabel != nil {
+		a.dirLabel.Draw()
+	}
 
 	batch := a.atlas.GetSpriteBatch()
 	batch.DrawTextured(a.atlasSrcRect(), a.atlasDstRect(), mgl32.Vec4{1, 1, 1, 1})
@@ -252,6 +359,9 @@ func (a *GuiAtlasPicker) atlasSrcRect() mgl32.Vec4 {
 }
 func (a *GuiAtlasPicker) Close() {
 	a.shouldClose = true
+	if a.browser != nil {
+		a.browser.Close()
+	}
 	if a.onClose != nil {
 		a.onClose()
 	}
@@ -269,6 +379,17 @@ func (a *GuiAtlasPicker) StartDrag(xpos float64, ypos float64) int {
 	isValid := a.HandleMousePosEvents(xpos, ypos)
 	if !isValid {
 		return -1
+	}
+	if a.browser != nil {
+		entry, isCell := a.browser.Entry(a.currentSelectionIndex)
+		if !isCell {
+			return -1
+		}
+		if entry.IsDir { // a folder is walked into, never dragged out
+			a.browser.Open(entry.Path)
+			a.showDir()
+			return -1
+		}
 	}
 	a.isDragging = true
 	return a.currentSelectionIndex

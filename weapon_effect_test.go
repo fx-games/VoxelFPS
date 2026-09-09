@@ -216,14 +216,31 @@ func TestSpawnJitterSeparatesCoincidentSpawnsWithoutDriftingFar(t *testing.T) {
 	b := spawnJitter(base, 42)
 	assert.NotEqual(t, a, b, "consecutive spawns landed on the exact same point again")
 
+	// Two Doom units, which is a thirtieth of a wall panel. A tie-break is
+	// allowed to be seen by the depth buffer and by nothing else: the offsets
+	// straddle zero rather than counting up from it, so no spawn is
+	// systematically lifted off the spot its script named, and a nested spawn
+	// carrying its parent's offset as well as its own is still within a
+	// muzzle's width of the barrel rather than hanging over it.
+	const imperceptible = float32(2 * worldUnitsPerDoomUnit)
+	worst := float32(0)
 	for _, seq := range []int{0, 1, 5, 100, 100000} {
 		got := spawnJitter(base, seq)
 		assert.InDelta(t, 0, got.X()-base.X(), 1e-6, "only height should move")
 		assert.InDelta(t, 0, got.Z()-base.Z(), 1e-6, "only height should move")
-		assert.Less(t, got.Y()-base.Y(), spawnJitterStep*spawnJitterCycle,
-			"a session's worth of spawns must not push this arbitrarily far off script")
-		assert.GreaterOrEqual(t, got.Y(), base.Y())
+		assert.LessOrEqual(t, absFloat(got.Y()-base.Y()), imperceptible,
+			"a session's worth of spawns must not push this visibly off script")
+		worst = max(worst, absFloat(got.Y()-base.Y()))
 	}
+	// Nesting - a spawner lifted by its own jitter spawning smoke lifted by
+	// another - compounds, and has to stay unnoticeable too.
+	assert.LessOrEqual(t, 2*worst, imperceptible,
+		"a spawn inside a spawn stacks both offsets and still may not be seen")
+
+	// Both signs are used, so the offsets cancel across a run rather than
+	// every effect in the game sitting above where it belongs.
+	assert.Less(t, spawnJitter(base, 0).Y(), base.Y())
+	assert.Greater(t, spawnJitter(base, spawnJitterCycle-1).Y(), base.Y())
 
 	// The cycle repeats rather than growing forever.
 	assert.Equal(t, spawnJitter(base, 3), spawnJitter(base, 3+spawnJitterCycle))
@@ -231,7 +248,7 @@ func TestSpawnJitterSeparatesCoincidentSpawnsWithoutDriftingFar(t *testing.T) {
 
 // A frag grenade sets +BOUNCEONFLOORS/+BOUNCEONWALLS/+BOUNCEONCEILINGS with a
 // BounceFactor of 0.5 and a WallBounceFactor of 0.25 (see
-// weapons/bd_frag_grenade/source.txt); before bounceOff existed, move() froze
+// assets/weapons/bd_frag_grenade/source.txt); before bounceOff existed, move() froze
 // anything that touched a solid voxel in place regardless of what its own
 // class asked for, which is what "grenades stick to walls" was - a bouncing
 // actor treated exactly like a bullet's puff. These pin the physics down

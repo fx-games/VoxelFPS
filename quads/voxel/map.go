@@ -11,6 +11,7 @@ import (
 	"github.com/memmaker/goray/quads/glhf"
 	"math"
 	"os"
+	"slices"
 	"time"
 )
 
@@ -1185,4 +1186,72 @@ func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index uint16) {
 			push(neighbor)
 		}
 	}
+}
+
+// UsedTextureIndices is every atlas slot the map's blocks actually point at,
+// ascending and without duplicates. Baking an atlas for this map means baking
+// exactly these, so the answer has to come from the blocks rather than from the
+// atlas - the atlas is the superset the editor accumulated, this is the subset
+// that survived.
+//
+// A solid block with a side missing from its map still draws that side, with
+// slot 0 (see Block.GetTexture), so a missing side counts as a use of 0.
+func (m *Map) UsedTextureIndices() []uint16 {
+	seen := make(map[uint16]bool)
+	for _, chunk := range m.chunks {
+		if chunk == nil {
+			continue
+		}
+		for _, block := range chunk.data {
+			if block == nil || !block.IsSolid {
+				continue
+			}
+			for cs := CubeSide(0); cs < 6; cs++ {
+				seen[block.GetTexture(cs)] = true
+			}
+		}
+	}
+	used := make([]uint16, 0, len(seen))
+	for index := range seen {
+		used = append(used, index)
+	}
+	slices.Sort(used)
+	return used
+}
+
+// RemapTextures moves every block onto new atlas slots, for after the atlas has
+// been baked down to the tiles the map still uses. Every side is written back
+// explicitly, including the ones that were only implicitly slot 0, so the block
+// says what it draws instead of relying on the same default twice.
+//
+// The emissive set is keyed by texture too, and is moved with them - a panel that
+// glowed before the bake has to still glow after it. Only the lookup buffer needs
+// rebuilding: meshes carry no texture (see VoxelFace.EqualForMerge).
+func (m *Map) RemapTextures(remap map[uint16]uint16) {
+	for _, chunk := range m.chunks {
+		if chunk == nil {
+			continue
+		}
+		for _, block := range chunk.data {
+			if block == nil || !block.IsSolid {
+				continue
+			}
+			if block.Textures == nil {
+				block.Textures = make(map[CubeSide]uint16, 6)
+			}
+			for cs := CubeSide(0); cs < 6; cs++ {
+				block.Textures[cs] = remap[block.GetTexture(cs)]
+			}
+		}
+	}
+	if len(m.emissiveTextures) > 0 {
+		moved := make(map[uint16]bool, len(m.emissiveTextures))
+		for old := range m.emissiveTextures {
+			if now, stillUsed := remap[old]; stillUsed {
+				moved[now] = true
+			}
+		}
+		m.emissiveTextures = moved
+	}
+	m.textureBufferIsDirty = true
 }

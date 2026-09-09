@@ -31,7 +31,7 @@ import (
 func main() {
 	source := flag.String("source", "", "the mod to migrate from: a .pk3 or a directory. Several, comma separated, are searched in order, so a mod can sit on top of the game data it takes for granted")
 	strictAssets := flag.Bool("strict-assets", false, "refuse a weapon whose pictures or sounds the sources do not have, instead of taking it without them")
-	outDir := flag.String("out", "weapons", "the weapons folder to write into")
+	outDir := flag.String("out", "assets/weapons", "the weapons folder to write into")
 	lockPath := flag.String("lock", "weapons.lock", "where to write the hashes of what was built")
 	revision := flag.String("revision", "", "the source's revision, recorded for provenance")
 	list := flag.Bool("list", false, "list the weapons in the mod and stop")

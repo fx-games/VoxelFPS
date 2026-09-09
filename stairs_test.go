@@ -37,15 +37,15 @@ func walkUpTheStairs(t *testing.T, stepHeight float32) mgl32.Vec3 {
 	system.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	system.SetStepHeight(stepHeight)
 
-	// The steps are data now, in scenery/stairs/scenery.json, so this walks the
+	// The steps are data now, in assets/meshes/stairs/scenery.json, so this walks the
 	// boxes the game itself would put in the world rather than a copy of them.
-	library, err := loadScenery(sceneryDir)
+	library, err := loadScenery(meshDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stairs, known := library[stairsMeshName]
 	if !known {
-		t.Fatalf("no %s in %s", stairsMeshName, sceneryDir)
+		t.Fatalf("no %s in %s", stairsMeshName, meshDir)
 	}
 	if len(stairs.Colliders) != 4 {
 		t.Fatalf("stairs have %d colliders, want one per step", len(stairs.Colliders))

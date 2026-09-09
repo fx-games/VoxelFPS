@@ -10,23 +10,23 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 )
 
-// Every folder under scenery/ has to load and to have the model the folder is
+// Every folder under assets/meshes/ has to load and to have the model the folder is
 // there for. A piece that only half exists is a panic at spawn time otherwise,
 // which is the first time anybody walks into that room.
 func TestEverySceneryFolderLoadsAndHasItsMesh(t *testing.T) {
-	library, err := loadScenery(sceneryDir)
+	library, err := loadScenery(meshDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(library) == 0 {
-		t.Fatalf("no scenery in %s", sceneryDir)
+		t.Fatalf("no scenery in %s", meshDir)
 	}
 	for id, piece := range library {
 		if piece.Name == "" {
 			t.Errorf("%s has no name", id)
 		}
-		gltf := filepath.Join(sceneryDir, id, "mesh.gltf")
-		glb := filepath.Join(sceneryDir, id, "mesh.glb")
+		gltf := filepath.Join(meshDir, id, "mesh.gltf")
+		glb := filepath.Join(meshDir, id, "mesh.glb")
 		if _, err := os.Stat(gltf); err != nil {
 			if _, err := os.Stat(glb); err != nil {
 				t.Errorf("%s: no mesh.gltf or mesh.glb", id)
@@ -36,17 +36,17 @@ func TestEverySceneryFolderLoadsAndHasItsMesh(t *testing.T) {
 }
 
 // The weapon range stands a gun on a shelf by standing it at the height of a
-// board, and the boards are boxes in scenery/shelves/scenery.json that match
-// scenery/shelves/shelf.bbmodel by hand. Nothing but these numbers links the
+// board, and the boards are boxes in assets/meshes/shelves/scenery.json that match
+// assets/meshes/shelves/shelf.bbmodel by hand. Nothing but these numbers links the
 // three, so when they drift the guns hang in the air or sink into the wood.
 func TestThingsStandOnTheShelfsOwnBoards(t *testing.T) {
-	library, err := loadScenery(sceneryDir)
+	library, err := loadScenery(meshDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	shelves, known := library[shelvesMeshName]
 	if !known {
-		t.Fatalf("no %s in %s", shelvesMeshName, sceneryDir)
+		t.Fatalf("no %s in %s", shelvesMeshName, meshDir)
 	}
 	for _, board := range shelfBoards {
 		headroom := float32(0)
@@ -74,13 +74,13 @@ func TestThingsStandOnTheShelfsOwnBoards(t *testing.T) {
 // nameless box. The selection then looks straight through it - furniture is
 // somewhere to put things, not something to pick out.
 func TestAShelfIsOneThingAndIsNotSelectable(t *testing.T) {
-	library, err := loadScenery(sceneryDir)
+	library, err := loadScenery(meshDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	shelves, known := library[shelvesMeshName]
 	if !known {
-		t.Fatalf("no %s in %s", shelvesMeshName, sceneryDir)
+		t.Fatalf("no %s in %s", shelvesMeshName, meshDir)
 	}
 	rack := quads.NewGameObject(shelves.Name)
 	rack.Transform().SetPosition(mgl32.Vec3{1, 1, 1})

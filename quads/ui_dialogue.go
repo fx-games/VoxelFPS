@@ -10,6 +10,11 @@ import (
 type DialogueChoice struct {
 	Text string
 	Next *DialogueLine
+	// Do is what picking this reply does in the world, as opposed to what it
+	// says - hiring a companion, dismissing one. Run once, when the reply is
+	// picked, before the conversation moves on to Next. nil for the ordinary
+	// reply that only talks.
+	Do func()
 }
 
 // DialogueLine is one thing an NPC says and what the player can say back -
@@ -123,7 +128,11 @@ func (d *GuiDialogue) choose() {
 	if index < 0 || index >= len(d.current.Choices) {
 		return
 	}
-	next := d.current.Choices[index].Next
+	choice := d.current.Choices[index]
+	if choice.Do != nil {
+		choice.Do()
+	}
+	next := choice.Next
 	if next == nil {
 		d.Close()
 		return
