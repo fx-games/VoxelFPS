@@ -2,11 +2,15 @@ package quads
 
 import (
 	"image"
+	"image/color"
 	"image/draw"
+	_ "image/png"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/memmaker/goray/png_chunks"
 
 	"github.com/memmaker/goray/quads/voxel"
 )
@@ -148,4 +152,181 @@ func names(entries []TexEntry) []string {
 		got[i] = e.Name
 	}
 	return got
+}
+
+// The emissive set used to be nine numbers hardcoded in main.go. It lives in the
+// atlas file now, so the round trip through a real PNG is the thing worth pinning:
+// what is written has to be what comes back, and the pixels have to survive it.
+func TestEmissiveChunkSurvivesTheRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atlas.png")
+	sheet := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	draw.Draw(sheet, sheet.Bounds(), &image.Uniform{C: color.RGBA{R: 3, G: 5, B: 7, A: 255}}, image.Point{}, draw.Src)
+
+	want := []uint16{19, 26, 47, 49}
+	if err := writePNG(path, sheet, want); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	got := parseEmissiveChunk(png_chunks.ReadTextChunkFromPNG(file, EmissiveChunkKey))
+	if len(got) != len(want) {
+		t.Fatalf("read back %d slots, wrote %d", len(got), len(want))
+	}
+	for _, slot := range want {
+		if !got[slot] {
+			t.Errorf("slot %d was written but did not come back", slot)
+		}
+	}
+
+	// The chunk must not have cost the atlas its pixels.
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	decoded, _, err := image.Decode(file)
+	if err != nil {
+		t.Fatalf("the atlas no longer decodes: %v", err)
+	}
+	if r, g, b, _ := decoded.At(4, 4).RGBA(); r>>8 != 3 || g>>8 != 5 || b>>8 != 7 {
+		t.Errorf("pixel came back as %v, want the 3,5,7 written", decoded.At(4, 4))
+	}
+}
+
+// Writing the record twice must leave one record, not two disagreeing ones.
+// InjectTextChunkIntoPNG adds a chunk rather than replacing one, so a writer that
+// patched the file in place would stack them - and the reader takes the first, which
+// means every G press after the first would silently do nothing.
+func TestRewritingTheEmissiveChunkReplacesIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atlas.png")
+	sheet := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	if err := writePNG(path, sheet, []uint16{1, 2, 3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePNG(path, sheet, []uint16{9}); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	got := parseEmissiveChunk(png_chunks.ReadTextChunkFromPNG(file, EmissiveChunkKey))
+	if len(got) != 1 || !got[9] {
+		t.Fatalf("after rewriting, the record is %v, want only slot 9", got)
+	}
+
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n := countTextChunks(t, file); n != 1 {
+		t.Errorf("the atlas carries %d tEXt chunks, want exactly 1", n)
+	}
+}
+
+func countTextChunks(t *testing.T, file *os.File) int {
+	t.Helper()
+	count := 0
+	if err := png_chunks.ReadChunksFromPNG(file, func(name string, _ png_chunks.BytePromise) bool {
+		if name == "tEXt" {
+			count++
+		}
+		return true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+// A smudged entry costs one panel's glow, not the level: the atlas is an editable
+// file and a half-written number is not a reason to refuse the whole map.
+func TestEmissiveChunkSkipsWhatItCannotRead(t *testing.T) {
+	got := parseEmissiveChunk("19, , 26,not-a-number,47,99999999")
+	want := []uint16{19, 26, 47}
+	if len(got) != len(want) {
+		t.Fatalf("parsed %v, want %v", got, want)
+	}
+	for _, slot := range want {
+		if !got[slot] {
+			t.Errorf("slot %d was readable but was dropped", slot)
+		}
+	}
+}
+
+// The real atlas has to carry the set the game used to hardcode, or every lit
+// fitting in the shipped map goes out.
+func TestShippedAtlasStillDeclaresItsLitFittings(t *testing.T) {
+	file, err := os.Open(filepath.Join("..", "assets", "base", "map_64x64.png"))
+	if err != nil {
+		t.Skipf("no map atlas to check: %v", err)
+	}
+	defer file.Close()
+	got := parseEmissiveChunk(png_chunks.ReadTextChunkFromPNG(file, EmissiveChunkKey))
+	for _, slot := range []uint16{19, 26, 27, 29, 30, 45, 46, 47, 49} {
+		if !got[slot] {
+			t.Errorf("slot %d no longer marked emissive in the shipped atlas", slot)
+		}
+	}
+}
+
+// The bake renumbers slots, and a panel that glowed before it has to glow after.
+func TestBakingMovesTheEmissiveSetOntoTheNewSlots(t *testing.T) {
+	a := &AtlasIndex{emissive: map[uint16]bool{4: true, 7: true, 11: true}}
+	remap := map[uint16]uint16{4: 0, 7: 1} // 11 was unused and is dropped by the bake
+
+	moved := make(map[uint16]bool, len(a.emissive))
+	for old := range a.emissive {
+		if now, kept := remap[old]; kept {
+			moved[now] = true
+		}
+	}
+	if !moved[0] || !moved[1] {
+		t.Errorf("slots 4 and 7 did not arrive at 0 and 1: %v", moved)
+	}
+	if len(moved) != 2 {
+		t.Errorf("the dropped slot came along: %v", moved)
+	}
+}
+
+// Rewriting the record must not touch the picture. The CPU sheet is bigger than the
+// file whenever the atlas has grown but not been baked, so a rewrite that encoded the
+// sheet instead of the file would silently renumber every slot.
+func TestRewritingTheRecordKeepsThePictureAndItsSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atlas.png")
+	sheet := image.NewRGBA(image.Rect(0, 0, 16, 4))
+	draw.Draw(sheet, sheet.Bounds(), &image.Uniform{C: color.RGBA{R: 200, G: 30, B: 90, A: 255}}, image.Point{}, draw.Src)
+	if err := writePNG(path, sheet, []uint16{2}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := rewriteEmissive(path, []uint16{2, 5}); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	decoded, _, err := image.Decode(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := decoded.Bounds(); got.Dx() != 16 || got.Dy() != 4 {
+		t.Errorf("atlas is now %v, want the 16x4 it was", got)
+	}
+	if r, g, b, _ := decoded.At(9, 2).RGBA(); r>>8 != 200 || g>>8 != 30 || b>>8 != 90 {
+		t.Errorf("pixel changed to %v", decoded.At(9, 2))
+	}
+
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	got := parseEmissiveChunk(png_chunks.ReadTextChunkFromPNG(file, EmissiveChunkKey))
+	if !got[2] || !got[5] || len(got) != 2 {
+		t.Errorf("record is %v, want slots 2 and 5", got)
+	}
 }

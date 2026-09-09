@@ -297,6 +297,30 @@ vec3 bakedLight(float lightLevel) {
     return BAKED_LIGHT_COLOR * BAKED_LIGHT_STRENGTH * (lightLevel / 15.0);
 }
 
+// The two halves of "which texels of a surface glow". They are uniforms in the shared
+// header, and therefore the same numbers in every shader that draws a surface, because
+// they are one look decision for the whole scene: a wall panel, a torch head and a
+// plasma bolt disagreeing about what counts as glowing is not art direction, it is a
+// bug you only see in one of the three. Both are on the F1 menu.
+uniform float emissiveCutoff;
+uniform float emissiveSaturation;
+
+// emissiveMask picks the texels that glow out of a surface that may glow: a texel has
+// to be both bright and colourful. That is what tells a cyan tube or a blue screen
+// readout apart from the grey metal panel it is mounted on, which is just as bright.
+// Soft edges on both terms so the boundary does not crawl as the texture minifies.
+//
+// How hard the glow is pushed is not decided here - see the emissiveStrength of each
+// shader, which is global for walls, per mesh for models and per instance for sprites.
+float emissiveMask(vec3 color) {
+    float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    float maxChannel = max(max(color.r, color.g), color.b);
+    float minChannel = min(min(color.r, color.g), color.b);
+    float saturation = maxChannel > 0.0001 ? (maxChannel - minChannel) / maxChannel : 0.0;
+    return smoothstep(emissiveCutoff, emissiveCutoff + 0.1, luminance)
+         * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
+}
+
 // emissive is added after the lighting multiply and before the fog: a glowing surface
 // does not care how lit it is, but it does still fade into the distance like everything
 // else. Values above 1.0 are the point - that is what the bloom threshold picks up.

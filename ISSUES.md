@@ -56,7 +56,11 @@ against the current source, not the review's own claims.
   places one in the running engine and toasts its yaw/pitch to copy into the map file
   by hand; it's gone on the next reload.
 - Baked voxel light is still flat per face — the resolution greedy meshing
-  leaves, and the resolution the emissive flag has always had.
+  leaves, and the resolution the emissive flag has always had. A texture with one
+  glowing texel seeds the same light as one that glows all over.
+- Sprites do not run the shared `emissiveMask`: a BRIGHT frame glows whole. That is
+  deliberate (see `lighting.md` §4) but it does mean the F1 threshold sliders move
+  walls and meshes and leave sprites alone.
 
 ## Dead code kept on purpose
 

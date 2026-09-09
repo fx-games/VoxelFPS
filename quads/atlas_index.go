@@ -1,13 +1,19 @@
 package quads
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/png"
+	"log"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+
+	"github.com/memmaker/goray/png_chunks"
 
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
@@ -33,8 +39,21 @@ type AtlasIndex struct {
 	sheet  *image.RGBA
 	paths  []string // slot -> library-relative source, "" for a slot from the original sheet
 	byPath map[string]int
-	onGrow func()
+	// emissive is which slots glow, and it is the authored truth about that: it is
+	// read from and written back to the atlas file itself. See EmissiveChunkKey.
+	emissive map[uint16]bool
+	onGrow   func()
 }
+
+// EmissiveChunkKey is the tEXt chunk in the atlas PNG listing the slots that glow,
+// as decimal numbers separated by commas.
+//
+// It rides in the atlas rather than in a sidecar or in Go because it is a property
+// of the pictures: slot 49 glows because of what is painted in slot 49, so the fact
+// travels with the file it is a fact about. A hardcoded list in Go went stale the
+// moment the editor could add a texture, and the numbers meant nothing to anyone
+// reading them.
+const EmissiveChunkKey = "emIS"
 
 // NewAtlasIndex adopts an atlas loaded from disk. Every slot it already has counts
 // as occupied - the hand-made sheets are indexed by number by the maps that shipped
@@ -51,7 +70,33 @@ func NewAtlasIndex(atlas *glhf.TextureAtlasFixed) *AtlasIndex {
 	}
 	a.paths = make([]string, atlas.LastValidIndex()+1)
 	a.loadPaths()
+	a.loadEmissive()
 	return a
+}
+
+// Emissive is the slots that glow, in order, for seeding the voxel map's own set.
+func (a *AtlasIndex) Emissive() []uint16 {
+	slots := make([]uint16, 0, len(a.emissive))
+	for slot := range a.emissive {
+		slots = append(slots, slot)
+	}
+	slices.Sort(slots)
+	return slots
+}
+
+// SetEmissive records that a slot does or does not glow and writes it back to the
+// atlas. Called by the G key, which is the only way a texture is marked today, so
+// what the editor did survives the session that did it.
+func (a *AtlasIndex) SetEmissive(slot uint16, glowing bool) error {
+	if a.emissive == nil {
+		a.emissive = make(map[uint16]bool)
+	}
+	if glowing {
+		a.emissive[slot] = true
+	} else {
+		delete(a.emissive, slot)
+	}
+	return a.saveEmissive()
 }
 
 // OnGrow is called when a pick made the atlas bigger. The cube shader is told the
@@ -116,6 +161,16 @@ func (a *AtlasIndex) Bake(used []uint16) (map[uint16]uint16, error) {
 			a.sheet, tileRect(int(old), columns, tileW, tileH).Min, draw.Src)
 	}
 
+	// The emissive set is keyed by slot, so it has to move with the slots or a panel
+	// that glowed before the bake stops glowing after it.
+	moved := make(map[uint16]bool, len(a.emissive))
+	for old := range a.emissive {
+		if now, kept := remap[old]; kept {
+			moved[now] = true
+		}
+	}
+	a.emissive = moved
+
 	a.sheet = packed
 	a.paths = paths
 	a.byPath = make(map[string]int, len(paths))
@@ -133,7 +188,7 @@ func (a *AtlasIndex) Bake(used []uint16) (map[uint16]uint16, error) {
 		rows = 1
 	}
 	baked := a.sheet.SubImage(image.Rect(0, 0, columns*tileW, rows*tileH))
-	if err := writePNG(a.Atlas.SourceFile(), baked); err != nil {
+	if err := writePNG(a.Atlas.SourceFile(), baked, a.Emissive()); err != nil {
 		return nil, err
 	}
 	return remap, a.savePaths()
@@ -221,11 +276,84 @@ func (a *AtlasIndex) savePaths() error {
 	return os.WriteFile(pathsFile(a.Atlas.SourceFile()), []byte(content), 0644)
 }
 
-func writePNG(filename string, img image.Image) error {
-	file, err := os.Create(filename)
+func (a *AtlasIndex) loadEmissive() {
+	file, err := os.Open(a.Atlas.SourceFile())
+	if err != nil {
+		return // no atlas to read a set out of: nothing glows
+	}
+	defer file.Close()
+	a.emissive = parseEmissiveChunk(png_chunks.ReadTextChunkFromPNG(file, EmissiveChunkKey))
+}
+
+// parseEmissiveChunk reads the chunk's slot list, skipping anything that is not a
+// number rather than refusing the atlas: this is metadata on an editable file, and a
+// smudged entry should cost one panel's glow, not the level.
+func parseEmissiveChunk(content string) map[uint16]bool {
+	set := make(map[uint16]bool)
+	for _, field := range strings.Split(content, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		slot, err := strconv.ParseUint(field, 10, 16)
+		if err != nil {
+			log.Printf("[atlas] %s: ignoring emissive entry %q: %v", EmissiveChunkKey, field, err)
+			continue
+		}
+		set[uint16(slot)] = true
+	}
+	return set
+}
+
+func emissiveChunk(slots []uint16) string {
+	fields := make([]string, len(slots))
+	for i, slot := range slots {
+		fields[i] = strconv.FormatUint(uint64(slot), 10)
+	}
+	return strings.Join(fields, ",")
+}
+
+// saveEmissive rewrites the atlas with the current set in its chunk. It decodes the
+// file and re-encodes it rather than patching the bytes in place, because
+// InjectTextChunkIntoPNG *adds* a chunk - it copies every chunk already there through
+// untouched and puts the new one before IEND. Patching a file that already carries an
+// emIS would leave two of them, and the reader takes the first, so the record would
+// freeze at whatever it said the first time and the file would grow on every G press.
+//
+// Decoding gives back the pixels and the dimensions that are actually on disk, which
+// is what makes this safe: the CPU sheet is bigger than the file whenever the atlas
+// has grown but not been baked, and writing that would move every slot.
+func (a *AtlasIndex) saveEmissive() error {
+	return rewriteEmissive(a.Atlas.SourceFile(), a.Emissive())
+}
+
+// rewriteEmissive re-encodes an atlas with a new emissive record, keeping the pixels
+// and the dimensions it finds on disk.
+func rewriteEmissive(filename string, slots []uint16) error {
+	file, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	return png.Encode(file, img)
+	img, _, err := image.Decode(file)
+	file.Close()
+	if err != nil {
+		return err
+	}
+	return writePNG(filename, img, slots)
+}
+
+// writePNG encodes img over filename with the emissive record in its chunk. It is the
+// only writer of an atlas, and it always encodes from scratch, so the file it leaves
+// has exactly one emIS in it. A bake rewrites the pixels, and a rewrite that dropped
+// the record would put every lit fitting in the level out.
+func writePNG(filename string, img image.Image, emissive []uint16) error {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, img); err != nil {
+		return err
+	}
+	var out bytes.Buffer
+	if err := png_chunks.InjectTextChunkIntoPNG(&encoded, &out, EmissiveChunkKey, emissiveChunk(emissive)); err != nil {
+		return err
+	}
+	return os.WriteFile(filename, out.Bytes(), 0644)
 }

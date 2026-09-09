@@ -333,25 +333,76 @@ needed to move at runtime. If it wants a slider it joins `shadowParams` in `main
 Not a light — a surface that emits. It lights nothing else directly; it feeds the baked
 fill (§3) and bloom (§5).
 
-The top bit of the lookup entry marks a face as emissive, but **marking a texture does
-not light the whole tile.** A texel glows only if it is both bright *and* colourful:
+**Which surfaces may glow** is authored. For a wall it is the top bit of the face lookup
+entry, set from the atlas's own emissive slot list (below). For a mesh it is
+`Mesh.EmissiveStrength` being non-zero. For a sprite it is `Sprite.Emissive`, which comes
+from the frame's ZDoom `BRIGHT` flag.
+
+**Which texels of such a surface glow** is a heuristic, and it is the same one everywhere
+it applies. `emissiveMask` lives in the shared fragment header
+([shader_header.go:315](quads/shader_header.go:315)), so the cube and mesh shaders call
+one function rather than keeping two copies of it:
 
 ```glsl
-float emissiveMask = smoothstep(emissiveCutoff, emissiveCutoff + 0.1, luminance)
-                   * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
-vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask * emissiveStrength;
+float emissiveMask(vec3 color) {
+    ...
+    return smoothstep(emissiveCutoff, emissiveCutoff + 0.1, luminance)
+         * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
+}
 ```
 
-That is what tells a cyan tube or a blue screen readout apart from the grey metal panel
-it is mounted on, which is just as bright. Soft edges on both terms so the boundary does
-not crawl as the texture minifies.
+A texel glows only if it is both bright *and* colourful. That is what tells a cyan tube or
+a blue screen readout apart from the grey metal panel it is mounted on, which is just as
+bright. Soft edges on both terms so the boundary does not crawl as the texture minifies.
 
-Defaults: strength 7.0, cutoff 0.35, saturation 0.35
-([shader_cubes.go:36](quads/shader_cubes.go:36)). Strength above 1.0 is the point — see
-below.
+`emissiveCutoff` and `emissiveSaturation` are uniforms declared in that same header, so
+the F1 sliders move walls and models together. Defaults: cutoff 0.35, saturation 0.35
+([shader_cubes.go:36](quads/shader_cubes.go:36)); `TestNoShaderCarriesItsOwnEmissiveThresholds`
+fails if anyone writes the numbers back into a shader.
 
-Press **G** at any wall to toggle its texture emissive at runtime. Keyed on the texture,
-not the block, so marking one screen panel lights every screen panel in the level.
+**Sprites are deliberately not masked.** A sprite's glow is declared per frame by the mod
+author — that is what `BRIGHT` means — so there is nothing for a discovery heuristic to
+discover, and running one over authored intent loses most of it: measured over the 574
+BRIGHT actor frames in `assets/weapons/_actors`, the mask leaves 39% of their glow, takes
+more than half from 62% of them and puts 21% out entirely.
+
+### Strength is per surface, thresholds are global
+
+The split is on purpose. The thresholds answer "which texels of this picture are the
+glowing bits", which is one look decision for the whole scene — a wall and a torch head
+disagreeing about that is a bug you only notice in one of them. Strength answers "how hard
+does this thing glow", which is art direction per object, and it is scoped to whatever
+carries the authored flag:
+
+| | may glow | how bright | scope |
+|---|---|---|---|
+| wall / floor | atlas emissive slot list | `emissiveStrength` uniform | global (F1) |
+| mesh | `Mesh.EmissiveStrength` > 0 | the same field | per mesh |
+| sprite | `Sprite.Emissive` > 0 | the same field | per instance |
+
+A mesh has no emissive flag of its own: strength doubles as the flag, which is why it is
+per mesh and a wall's is not. Walls have a real flag in the lookup entry, so their
+strength had nowhere it needed to vary and stayed one slider.
+
+### Where the slot list lives
+
+In the atlas PNG, as a `tEXt` chunk keyed `emIS` holding the glowing slots as decimal
+numbers ([atlas_index.go](quads/atlas_index.go)):
+
+```
+emIS = "19,26,27,29,30,45,46,47,49"
+```
+
+It is a fact about the pictures — slot 49 glows because of what is painted in slot 49 — so
+it travels with the file it is a fact about rather than sitting in a Go list that went
+stale the moment the editor could add a texture. `AtlasIndex` reads it on load, `Bake`
+moves it onto the renumbered slots, and pressing **G** at a wall writes it back, so a
+texture marked while playing is still marked next session.
+
+`go run ./tools/seedemissive <atlas.png> <slots>` sets the list without the editor.
+
+Marking is keyed on the texture, not the block, so marking one screen panel lights every
+screen panel in the level.
 
 ## 5. Where the light goes after `finalColor`
 

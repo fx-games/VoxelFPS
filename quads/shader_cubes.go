@@ -235,8 +235,6 @@ uniform ivec4 mapSize;
 uniform sampler2D tex;
 uniform usamplerBuffer voxelLookup;
 uniform float emissiveStrength;
-uniform float emissiveCutoff;
-uniform float emissiveSaturation;
 
 // One lookup entry describes one face: the top bit marks it emissive, the next four
 // carry its baked torch light, the rest is the texture index. See Map.packFaceLookup.
@@ -312,18 +310,9 @@ void main() {
     
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
-    // A texel of an emissive texture glows if it is both bright and colourful: that is
-    // what tells a cyan tube or a blue screen readout apart from the bare metal panel it
-    // is mounted on, which is just as bright but grey. Soft edges on both terms so the
-    // boundary does not crawl as the texture minifies.
-    float luminance = dot(surfaceColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    float maxChannel = max(max(surfaceColor.r, surfaceColor.g), surfaceColor.b);
-    float minChannel = min(min(surfaceColor.r, surfaceColor.g), surfaceColor.b);
-    float saturation = maxChannel > 0.0001 ? (maxChannel - minChannel) / maxChannel : 0.0;
-
-    float emissiveMask = smoothstep(emissiveCutoff, emissiveCutoff + 0.1, luminance)
-                       * smoothstep(emissiveSaturation, emissiveSaturation + 0.1, saturation);
-    vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask * emissiveStrength;
+    // Which texels of an emissive face actually glow is emissiveMask's decision, in
+    // the shared header, so this face agrees with a torch head and a plasma bolt.
+    vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask(surfaceColor.rgb) * emissiveStrength;
 
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(torchLight));
 }`

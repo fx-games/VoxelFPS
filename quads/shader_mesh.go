@@ -12,6 +12,11 @@ const (
 	// but the torch today. The depth-pass shader does not have it, and both are
 	// handed the same draw code, hence the HasUniform check in MeshDrawer.Draw.
 	MeshShaderEmissiveStrength
+	// The two thresholds deciding which of this mesh's texels count as glowing.
+	// Shared with the cube and sprite shaders and driven from the F1 menu - see
+	// emissiveMask in the fragment header.
+	MeshShaderEmissiveCutoff
+	MeshShaderEmissiveSaturation
 )
 
 func LoadMeshShader(uboBlock string) *glhf.Shader {
@@ -23,8 +28,10 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
 			{Name: "normal", Type: glhf.Vec3},
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4},    // 0
-			glhf.Attr{Name: "emissiveStrength", Type: glhf.Float}, // 1
+			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4},      // 0
+			glhf.Attr{Name: "emissiveStrength", Type: glhf.Float},   // 1
+			glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float},     // 2
+			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 3
 		}
 		shader *glhf.Shader
 	)
@@ -41,6 +48,8 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
 
 	shader.Begin()
 	shader.BindSamplerNameToTextureUnit("shadowMap", gl.TEXTURE2)
+	shader.SetUniformAttr(MeshShaderEmissiveCutoff, DefaultEmissiveCutoff)
+	shader.SetUniformAttr(MeshShaderEmissiveSaturation, DefaultEmissiveSaturation)
 	shader.End()
 
 	glErr := gl.GetError()
@@ -133,19 +142,10 @@ void main() {
     vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
-    // Same test the cube shader uses on an emissive face: a texel glows only if it
-    // is both bright and colourful, so a torch's flame glows and the dark stick
-    // holding it does not. Zero strength - every mesh but the torch - costs the
-    // multiply and nothing else.
-    //
-    // ponytail: the two cutoffs are constants here, mirroring the cube shader's
-    // defaults. They join emissiveStrength as uniforms if they ever need a slider.
-    float luminance = dot(surfaceColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    float maxChannel = max(max(surfaceColor.r, surfaceColor.g), surfaceColor.b);
-    float minChannel = min(min(surfaceColor.r, surfaceColor.g), surfaceColor.b);
-    float saturation = maxChannel > 0.0001 ? (maxChannel - minChannel) / maxChannel : 0.0;
-    float emissiveMask = smoothstep(0.35, 0.45, luminance) * smoothstep(0.35, 0.45, saturation);
-    vec3 emissive = surfaceColor.rgb * emissiveMask * emissiveStrength;
+    // The same emissiveMask a wall face and a sprite are put through, so a torch's
+    // flame glows and the dark stick holding it does not, by the same numbers.
+    // Zero strength - every mesh but the torch - costs the multiply and nothing else.
+    vec3 emissive = surfaceColor.rgb * emissiveMask(surfaceColor.rgb) * emissiveStrength;
 
     fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive);
 }
