@@ -1,6 +1,6 @@
 // Command gendecals writes the engine's own decal pictures into the shared
-// picture store, assets/weapons/_sprites: GZDoom's five bullet chips and a blood
-// splatter. The game packs that store into one atlas when it starts, so these
+// picture store, assets/weapons/_sprites: GZDoom's five bullet chips, a blood
+// splatter, and the sheet of glass a window is glazed with. The game packs that store into one atlas when it starts, so these
 // end up in the same sheet as everything else a weapon throws at a wall, and
 // they go in at the resolution they were authored - a seven pixel chip stays
 // seven pixels.
@@ -53,6 +53,7 @@ func main() {
 		write(store, name, bulletChip(fmt.Sprintf(chipPath, i+1)))
 	}
 	write(store, wep.BloodSplatSprite, bloodSplatter(rand.New(rand.NewSource(2))))
+	write(store, wep.WindowGlassSprite, windowGlass())
 
 	// The packed atlas is cached against the names and sizes of what went into
 	// it, and a picture replaced by one of exactly the same size would not
@@ -114,6 +115,33 @@ func bloodSplatter(rng *rand.Rand) *image.RGBA {
 		t := math.Min(dist/radius, 1)
 		return color.RGBA{uint8(70 + 60*t), uint8(4 + 8*t), uint8(4 + 8*t), 235}
 	})
+}
+
+// glassSize is the window pane's own canvas. Every pixel of it is the same,
+// which is the whole design: see windowGlass.
+const glassSize = 64
+
+// windowGlass is one sheet of glass, and it is a flat colour.
+//
+// Anything drawn *on* it - a frame round the edge, a diagonal sheen, a bevel -
+// is a feature of one pane, and a wall of glass is many panes side by side with
+// their edges touching. Every such feature therefore tiles, and a tiled feature
+// is a grid of seams across what is meant to read as one window. A frame in
+// particular turns a glazed ribbon into a wall of little windows, and the frame
+// on the face you are standing against reads as a gap rather than as glass.
+//
+// So the sheet carries nothing. What gives a window its shape is the hole in
+// the wall around it, which the level already built. The colour is a cool
+// almost-transparent blue, low because a glass voxel is glazed on both of its
+// faces and looking across a station is looking through four of them.
+func windowGlass() *image.RGBA {
+	tile := image.NewRGBA(image.Rect(0, 0, glassSize, glassSize))
+	for y := 0; y < glassSize; y++ {
+		for x := 0; x < glassSize; x++ {
+			tile.SetRGBA(x, y, color.RGBA{165, 200, 235, 30})
+		}
+	}
+	return tile
 }
 
 // paint fills the blood's canvas from a function of the offset from its centre.

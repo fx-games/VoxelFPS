@@ -77,11 +77,6 @@ func (g *Game) selectWeapon(index int) {
 	g.keepLoaded(weapon)
 	// The view belongs to the weapon in hand: a scope put away stops zooming.
 	g.applyWeaponZoom()
-	if ammo := weapon.AmmoLine(); ammo != "" {
-		g.Toast(fmt.Sprintf("%s (%s)", weapon.DisplayName(), ammo))
-		return
-	}
-	g.Toast(weapon.DisplayName())
 }
 
 // keepLoaded remembers which weapons have their pictures in memory and gives

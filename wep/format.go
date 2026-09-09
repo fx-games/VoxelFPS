@@ -51,12 +51,19 @@ const (
 // same stamp printed in a row.
 var BulletChipSprites = [5]string{"BULLETCHIP1", "BULLETCHIP2", "BULLETCHIP3", "BULLETCHIP4", "BULLETCHIP5"}
 
+// WindowGlassSprite is the sheet of glass in a window, by its name in the
+// shared picture store. It is not a decal - nothing shoots it onto a wall, a
+// level places it - but it is the same kind of thing: one quad, mostly
+// transparent, stamped from the same atlas.
+const WindowGlassSprite = "WINDOWGLASS"
+
 // EngineDecalSprites is every one of them together, for the sweep that deletes
 // what the store holds and no weapon names: no weapon.json names these, so
 // -prune would take them every single time.
 var EngineDecalSprites = []string{
 	BulletChipSprites[0], BulletChipSprites[1], BulletChipSprites[2],
 	BulletChipSprites[3], BulletChipSprites[4], BloodSplatSprite,
+	WindowGlassSprite,
 }
 
 // ViewDirections is how many angles a frame is drawn from, and the length of

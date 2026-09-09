@@ -76,9 +76,14 @@ void main() {
     // The sky meets the fog at the horizon: everything below it is solid fog colour, and the
     // sky fades in over a narrow band above it (Minecraft uses 7 degrees). The clear colour is
     // the fog colour, so the geometry, the fog and the sky all end up the same colour there.
+    // A fade of zero or less is a level with no horizon at all - space - where
+    // the cubemap covers the whole sphere and there is no fog below to meet.
     float pitch = asin(clamp(normalize(TexCoords).y, -1.0, 1.0));
-    float fadeWindow = max(radians(horizonFadeDegrees), 0.0001);
-    float skyAmount = smoothstep(0.0, 1.0, clamp(pitch / fadeWindow, 0.0, 1.0));
+    float skyAmount = 1.0;
+    if (horizonFadeDegrees > 0.0) {
+        float fadeWindow = radians(horizonFadeDegrees);
+        skyAmount = smoothstep(0.0, 1.0, clamp(pitch / fadeWindow, 0.0, 1.0));
+    }
     // Written into the linear HDR scene buffer, so both the fog colour and the cubemap
     // sample - authored in display range - are lifted to the HDR values that tone map
     // back to themselves in the post pass.

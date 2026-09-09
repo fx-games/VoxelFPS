@@ -520,3 +520,11 @@ func clampPan(pan float64) float64 {
 	}
 	return pan
 }
+
+// StopStream ends whatever the music or the streamed cue is, without touching
+// the sound channels. speaker.Clear would take those with it, and the mixers
+// the channels hold are what every weapon in hand is playing through.
+func (p *Player) StopStream() {
+	p.stopAndCloseStream()
+	p.currentStream = nil
+}

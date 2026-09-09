@@ -47,6 +47,11 @@ type SpriteDrawer struct {
 	decalAtlas glhf.TextureAtlas
 	nextDecal  int
 
+	// Panes are the level's own quads of the same kind: glass in a window. See
+	// AddPane - they are not a ring buffer and they are drawn after the sky.
+	panes     []decal
+	paneAtlas glhf.TextureAtlas
+
 	// Instance attribute scratch, reused every frame so the per-frame draw does
 	// not allocate. Three batches: a static sprite needs face culling off, and
 	// an additive one needs a blend function of its own.
@@ -550,6 +555,7 @@ func (q *SpriteDrawer) hasDebugBox(sprite *SpriteComponent, frustum core.Culler)
 func (q *SpriteDrawer) Clear() {
 	q.spritesPerTexture = make(map[glhf.TextureAtlas][]*SpriteComponent)
 	q.ClearDecals()
+	q.ClearPanes()
 }
 
 func (q *SpriteDrawer) GetFirstFrameIndex(anim int, viewDirection int) uint16 {

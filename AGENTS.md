@@ -103,6 +103,126 @@ in the dark. A size in the tens means the pixels-per-unit conversion is wrong
 for that sprite. `at=` next to the player's own position says whether a spawn
 landed where the call asked or in the camera's lap.
 
+## Making and changing a level, in text
+
+A level on disk is two files nothing can hand-edit - `map.bin` is gzipped
+chunks, `map.json` is generated JSON - so until now the only way to build one
+was the in-game editor, with a mouse in it. `tools/mapgen` is the other door: a
+level can also be a `build.map` beside them, one command a line.
+
+```bash
+go run ./tools/mapgen -map station            # build.map -> map.bin + map.json
+go run ./tools/mapgen -map station -show 12   # what is solid at height 12
+go run ./tools/mapgen -help                   # every command and its arguments
+```
+
+`-show` is the half that matters most when nobody is looking at the screen: it
+prints one character a voxel at one height, with a ruler, so a coordinate read
+off it is a coordinate to write back into the script. It reads `map.bin`, so it
+works on a level that was never scripted - `-map doors -show 1` prints the
+doors map's floor plan.
+
+The commands are in the package comment at the top of `tools/mapgen/main.go`,
+which is the only list of them. The shapes are `fill`, `clear`, `cyl` and
+`tube`; the rest of a level - where the player starts, what stands in it, its
+lights, fog and music - is the same file. Positional arguments come first and
+`key=value` options after, and a bare word among the options is a flag
+(`baked`).
+
+**A level is authored in the text or in the editor, not both.** Saving in the
+editor writes `map.bin` back, and the next `mapgen` run overwrites it. A level
+with a `build.map` is the script's; one without is the editor's.
+
+Two things a script cannot say, because they are facts about the atlas and the
+door rather than about the level:
+
+- **Nine atlas slots glow** (19, 26, 27, 29, 30, 45, 46, 47, 49 - the atlas's
+  own `emIS` chunk, see `AtlasIndex.EmissiveChunkKey`). Building a room out of
+  one of those is building a room out of light, which reads as a blown-out
+  white space rather than a lit one. Read the chunk before picking textures.
+- **A slide door needs two voxels of passage and the second one filled back
+  in.** The leaf is one voxel and opens by rising one (`doorSlideRise`), so a
+  one-voxel passage slides it into the wall, and a passage left two voxels tall
+  at the door itself leaves a slot of sky over a shut door. Bore the passage
+  two tall for headroom and then `fill` the voxel directly above each door: the
+  shut door is a shut doorway, and the open one has slid up inside the lintel.
+
+## Glass, and why it is not a block
+
+A window is a hole in the wall with a `glass` ring hanging in it. The glass is
+**quads, not blocks**, and that is not a shortcut - the chunk pass has no
+blending, and the greedy mesher culls the faces of whatever a block stands
+against, so a see-through block would show holes through the sill and the
+lintel it touches. A quad has none of those problems, and the renderer already
+had a translucent, world-oriented, one-draw-call pass for decals to live in.
+
+So a pane (`core.Pane`, `SpriteDrawer.AddPane`) is a decal that belongs to the
+level rather than to something that happened to it. Three differences from a
+bullet hole, all of them in `quads/decals.go`:
+
+- it is placed when the map loads and never overwritten, because a ring of
+  windows is more quads than `MaxDecals` holds;
+- it is drawn **after** the skybox, because a pane writes no depth and a sky
+  drawn later would paint straight over it - this is the whole reason
+  `DrawPanes` is not simply another line next to `DrawDecals`;
+- it is drawn **farthest first**. Nothing here writes depth, so what is drawn
+  last ends up on top whatever the distances say, and a ring of windows has its
+  far side behind its near side through the glass all day long. Decals never
+  need sorting because every decal on one wall is the same distance from it;
+- it is solid. The panes are what a level stores; which voxel each one fills is
+  worked back out of it at load time (`core.Pane.Cell`) and `Game.solidAt` adds
+  those cells to the blocks the physics pushes against. Deriving rather than
+  storing is what stops a level from saying the glass is drawn in one place and
+  solid in another.
+
+**A pane collides as a whole voxel, so every face of that voxel has to be
+glazed** - the inside as well as the outside. Glazing only the face that looks
+outwards leaves the other five solid and invisible, which is an invisible wall
+a voxel short of the window, and makes the unglazed side faces of the
+neighbouring cells read as gaps between the panes. `glazeRing` therefore takes
+the one-voxel-thick skin of the ring and puts a pane on every face of it that
+borders something that is not also glass. The two halves of that are what
+`TestTheGlassClosesTheRingTheWallLeftOpen` checks: a flood fill from outside
+never reaches the middle, and no glass face is left undrawn.
+
+The picture is `WINDOWGLASS` in the shared store, drawn by `tools/gendecals`
+alongside the bullet chips, and **it is a flat colour on purpose**. Anything
+drawn on a pane - a frame round the edge, a diagonal sheen, a bevel - is a
+feature of one pane, and a wall of glass is many panes with their edges
+touching, so every such feature tiles into a grid of seams across what is meant
+to read as one window. A frame is the worst of them: it turns a glazed ribbon
+into a wall of little windows, and the frame on the face you are standing
+against reads as a gap rather than as glass. What gives a window its shape is
+the hole in the wall around it, which the level already built.
+
+## The station, and what "spinning" means here
+
+`assets/maps/station` is a space station: one deck, a hub, two airlocks, a
+glazed window band the whole way round, and space outside to fly in. Two things
+in the engine are its and nothing else's, both switched on by the level rather
+than by a flag:
+
+- **`core.Station`** is the level as a rotating body. Nothing rotates. The
+  blocks never move and gravity inside stays -Y, which is the point: walking
+  and jumping on the deck are the ordinary ones because the station is the
+  frame everything is measured in. What turns is the sky, at `Spin` degrees a
+  second about Y (`Game.updateStationSpin` -> `SetSkyboxSpin`), which is the
+  same relative motion a turning hull under fixed stars would show - through a
+  window or from outside the hull. A player floating free outside therefore
+  turns with it rather than watching it turn; an inertial EVA needs the
+  centrifugal and Coriolis terms on the free player, or a world that really
+  rotates.
+- **The same struct's cylinder is where the air is**, and `eva.go` is what
+  happens outside it: no gravity, the movement keys become thrusters along the
+  full look direction, and velocity is kept between frames instead of being
+  walked off. Which side of the hull the player is on is a test on the position
+  and nothing else, so there is no entering and leaving to get wrong - an
+  airlock is only where the hull lets you cross, not a switch.
+
+`MapLoadResult.SkyFullSphere` is the third piece: a level with no horizon, so
+the cubemap covers the whole sphere instead of fading into fog below eye level.
+Every level written before there was one keeps its horizon.
+
 ## Where the weapons come from
 
 The `assets/weapons/` folder is generated. `tools/genweapons` reads a mod and writes

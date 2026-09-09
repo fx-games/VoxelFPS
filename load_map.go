@@ -34,6 +34,11 @@ type mapFile struct {
 
 	Entities []core.EntitySpawn
 	Lights   []core.MapLight
+	Music    string
+
+	SkyFullSphere bool
+	Station       *core.Station
+	Panes         []core.Pane
 }
 
 func toMapFile(m core.MapLoadResult) mapFile {
@@ -55,6 +60,10 @@ func toMapFile(m core.MapLoadResult) mapFile {
 		AmbientStrength: m.AmbientStrength,
 		Entities:        m.Entities,
 		Lights:          m.Lights,
+		Music:           m.Music,
+		SkyFullSphere:   m.SkyFullSphere,
+		Station:         m.Station,
+		Panes:           m.Panes,
 	}
 }
 
@@ -70,6 +79,10 @@ func (f mapFile) toLoadResult() core.MapLoadResult {
 		AmbientStrength: f.AmbientStrength,
 		Entities:        f.Entities,
 		Lights:          f.Lights,
+		Music:           f.Music,
+		SkyFullSphere:   f.SkyFullSphere,
+		Station:         f.Station,
+		Panes:           f.Panes,
 	}
 }
 

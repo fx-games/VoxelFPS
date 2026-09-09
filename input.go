@@ -62,6 +62,14 @@ func (g *Game) pollInput(elapsed float64) {
 		return
 	}
 
+	// Outside the hull the walk does not apply - see eva.go. It comes after the
+	// ladder for the same reason the ladder comes first: both of them switch
+	// gravity, and the one that is actually happening has to be the one that
+	// writes it last.
+	if g.gravitationEnabled && g.evaMove(physics, moveDir, upDown, elapsed) {
+		return
+	}
+
 	if !g.gravitationEnabled {
 		// Free flight: no Quake physics, space and C move straight up and down.
 		const flySpeed = 7.0

@@ -1,0 +1,108 @@
+# The station: one deck, a hub, two airlocks and a window band all the way
+# round. Built by `go run ./tools/mapgen -map station`; this file is the level,
+# map.bin and map.json are what it compiles to.
+#
+# The whole thing is described in the station's own frame, which is the only
+# frame there is: the blocks never move and gravity inside is the ordinary -Y,
+# so walking and jumping on the deck are the ordinary ones. The sky is what
+# turns - see `spin` - which is the same relative motion either way, through a
+# window or from outside the hull.
+
+size 96 24 96
+
+# Space: no horizon for the cubemap to fade into, nothing close enough to fog,
+# and enough ambient that the outside of the hull is not a silhouette.
+sky full
+spin 6
+fog 200 900
+ambient 0.25 0.30 0.45 0.10
+ceiling 4 5 10
+floor 4 5 10
+music maintenance
+
+# Inside this cylinder there is air, a floor and gravity; outside it there is
+# the suit. It is the hull and nothing else decides it - which is why an
+# airlock chamber, which sticks out past the hull, is already vacuum by the
+# time you are standing in it.
+pressure 48 48 26 10 15
+
+# --------------------------------------------------------------- materials ---
+# Three textures a block: the four sides, the top, the underside.
+block deck 21 22 20
+block roof 21 28 20
+block hull 28 28 28
+block hub 39 39 39
+block lock 20 22 20
+# The one texture here the atlas marks as glowing (see the emIS chunk): a lit
+# strip under the windows, which is the deck's own light indoors and the line
+# that makes the hull read as turning from outside.
+block trim 27 22 20
+
+# ------------------------------------------------------------------- decks ---
+# One deck: a floor slab, a ceiling slab, and three voxels of room between them
+# (y 11, 12, 13). Everything below stands on those numbers.
+cyl deck 48 48 26 10 10
+cyl roof 48 48 26 14 14
+
+# The outer wall, in two courses with nothing between them: a window band the
+# whole way round at y=12. The sill is a voxel above the floor, which is higher
+# than a jump, so it is a window rather than a way out.
+tube trim 48 48 26 25 11 11
+tube hull 48 48 26 25 13 13
+
+# ...and the glass in it. A pane is see-through to look at and wall to walk
+# into, so the band is a window rather than a way out or a way in.
+glass 48 48 26 25 12
+
+# The hub in the middle, so the deck is a ring corridor rather than a field.
+# Two doorways into it, east and west.
+tube hub 48 48 8 7 11 13
+clear 40 11 47 41 13 49
+clear 55 11 47 56 13 49
+
+# ---------------------------------------------------------------- airlocks ---
+# Each is a box hanging off the hull with a one-voxel passage bored through it,
+# an inner door in the hull course and an outer door at the far end. The mouth
+# past the outer door is open to space.
+#
+# The passage is two voxels tall because that is what a slide door needs: the
+# leaf is one voxel and it opens by rising one. The voxel above each door is
+# filled back in afterwards, so a shut door is a shut doorway rather than one
+# with a slot of sky over it, and an open one has slid up inside the lintel.
+fill lock 46 10 16 50 14 23
+clear 48 11 16 48 12 24
+fill lock 48 12 23 48 12 23
+fill lock 48 12 18 48 12 18
+entity SlideDoor mesh=door_slide at=48.5,11,23.5
+entity SlideDoor mesh=door_slide at=48.5,11,18.5
+
+fill lock 46 10 73 50 14 80
+clear 48 11 72 48 12 80
+fill lock 48 12 73 48 12 73
+fill lock 48 12 78 48 12 78
+entity SlideDoor mesh=door_slide at=48.5,11,73.5
+entity SlideDoor mesh=door_slide at=48.5,11,78.5
+
+# ------------------------------------------------------------------ lights ---
+# Baked, so the deck can have as many as it likes: eight round the ring, one in
+# the hub, one in each airlock.
+light 64.5 13.5 48.5 color=1,0.90,0.75 power=6 baked
+light 59.8 13.5 59.8 color=1,0.90,0.75 power=6 baked
+light 48.5 13.5 64.5 color=1,0.90,0.75 power=6 baked
+light 37.2 13.5 59.8 color=1,0.90,0.75 power=6 baked
+light 32.5 13.5 48.5 color=1,0.90,0.75 power=6 baked
+light 37.2 13.5 37.2 color=1,0.90,0.75 power=6 baked
+light 48.5 13.5 32.5 color=1,0.90,0.75 power=6 baked
+light 59.8 13.5 37.2 color=1,0.90,0.75 power=6 baked
+light 48.5 13.5 48.5 color=1,0.90,0.75 power=6 baked
+light 48.5 11.5 20.5 color=0.7,0.85,1 power=6 baked
+light 48.5 11.5 76.5 color=0.7,0.85,1 power=6 baked
+
+# Two lamps that cast a real shadow, one over each inner door, so the airlock
+# reads as a threshold rather than a hole.
+light 48.5 13.8 24.5 color=0.75,0.85,1 power=7 pitch=90 angle=110 reach=9
+light 48.5 13.8 71.5 color=0.75,0.85,1 power=7 pitch=90 angle=110 reach=9
+
+# ------------------------------------------------------------------- start ---
+# On the deck, in the ring corridor, facing the north airlock.
+spawn 48.5 11 28.5 dir=0,-1

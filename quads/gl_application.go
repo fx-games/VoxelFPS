@@ -89,8 +89,10 @@ type GlApplication struct {
 
 	skybox        *glhf.VertexArray[glhf.GlFloat]
 	skyboxCubeMap *glhf.Cubemap
-	mainUbo       *glhf.UniformBufferObject
-	lightsUbo     *LightsUBO
+	// skyboxSpin is how far the sky has turned about Y - see SetSkyboxSpin.
+	skyboxSpin float32
+	mainUbo    *glhf.UniformBufferObject
+	lightsUbo  *LightsUBO
 	// The one light slot that follows a game object around. -1 until something asks
 	// for it; the slot is then kept for good, see DetachLight.
 
@@ -682,6 +684,16 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 
 	if betweenPasses != nil {
 		betweenPasses()
+	}
+
+	// The glass in the windows, after the sky and never in a depth pass: a pane
+	// writes no depth, so a sky drawn after it would paint over it, and a pane
+	// in a light's depth map would shadow the room it is meant to let light
+	// into. See SpriteDrawer.AddPane.
+	if !forShadows {
+		gl.Enable(gl.BLEND)
+		a.Sprites.DrawPanes(observer, spriteShader)
+		gl.Disable(gl.BLEND)
 	}
 
 	if a.ShouldDrawSprites {
@@ -1325,9 +1337,17 @@ func (a *GlApplication) SetBloom(threshold, strength float32) {
 func (a *GlApplication) BloomThreshold() float32 { return a.bloomThreshold }
 func (a *GlApplication) BloomStrength() float32  { return a.bloomStrength }
 
+// SetSkyboxSpin turns the whole sky about Y, in radians. It is how a level that
+// is itself a turning body shows that it turns: the blocks stay put and the
+// stars go round, which is the same relative motion and costs one matrix.
+func (a *GlApplication) SetSkyboxSpin(radians float32) { a.skyboxSpin = radians }
+
 func (a *GlApplication) drawSkybox(cubemap *glhf.Cubemap) {
 	projection := a.Camera.GetProjectionMatrix()
 	view := a.Camera.GetViewMatrix().Mat3().Mat4() // remove translation
+	if a.skyboxSpin != 0 {
+		view = view.Mul4(mgl32.HomogRotate3DY(a.skyboxSpin))
+	}
 	projView := projection.Mul4(view)
 
 	gl.DepthMask(false)

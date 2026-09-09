@@ -1,170 +1,91 @@
 package audio
 
 import (
-	"encoding/binary"
-	"errors"
-	"github.com/sinshu/go-meltysynth/meltysynth"
 	"os"
-	"time"
+
+	"github.com/sinshu/go-meltysynth/meltysynth"
 )
 
-// RenderSMF renders a MIDI file using the given SoundFont file at sampleRate Hz.
-func RenderSMF(soundFontFilePath, midiFilePath string, sampleRate int32) (*RawSamples, error) {
-	// Load the MIDI file.
-	mid, err := os.Open(midiFilePath)
+// Music is a MIDI file played through a SoundFont, rendered as the speaker asks
+// for it rather than up front. A minute of the soundtrack is fifty megabytes of
+// samples and a second or two of synthesis if it is rendered whole, and the
+// game would pay both on every level load; synthesising the few thousand
+// samples the audio callback is actually asking for costs neither.
+//
+// The loop is the sequencer's own: it runs back to the top of the file without
+// the stream ever ending, so nothing above has to seek it.
+type Music struct {
+	sequencer *meltysynth.MidiFileSequencer
+	// left and right are the sequencer's mono-per-side scratch, kept between
+	// calls because the callback asks for the same length every time.
+	left, right []float32
+	// Gain is what the music plays at against the sound effects, which are
+	// mixed at full scale.
+	Gain    float64
+	stopped bool
+}
+
+// StreamMIDI opens a MIDI file and the SoundFont to play it with. The stream
+// loops for as long as it is played.
+func StreamMIDI(soundFontPath, midiPath string, sampleRate int32, gain float64) (*Music, error) {
+	mid, err := os.Open(midiPath)
 	if err != nil {
 		return nil, err
 	}
+	defer mid.Close()
 	midiFile, err := meltysynth.NewMidiFile(mid)
 	if err != nil {
 		return nil, err
 	}
-	mid.Close()
 
-	// Load the SoundFont.
-	sf2, err := os.Open(soundFontFilePath)
+	sf2, err := os.Open(soundFontPath)
 	if err != nil {
 		return nil, err
 	}
+	defer sf2.Close()
 	soundFont, err := meltysynth.NewSoundFont(sf2)
 	if err != nil {
 		return nil, err
 	}
-	sf2.Close()
-	// Create the synthesizer.
-	settings := meltysynth.NewSynthesizerSettings(sampleRate)
-	synthesizer, err := meltysynth.NewSynthesizer(soundFont, settings)
+
+	synthesizer, err := meltysynth.NewSynthesizer(soundFont, meltysynth.NewSynthesizerSettings(sampleRate))
 	if err != nil {
 		return nil, err
 	}
-	// Create the MIDI sequencer.
 	sequencer := meltysynth.NewMidiFileSequencer(synthesizer)
+	sequencer.Play(midiFile, true)
+	return &Music{sequencer: sequencer, Gain: gain}, nil
+}
 
-	sequencer.Play(midiFile, false)
-
-	// The output buffer.
-	length := int(float64(settings.SampleRate) * float64(midiFile.GetLength()) / float64(time.Second))
-	left := make([]float32, length)
-	right := make([]float32, length)
-
-	// Render the waveform.
-	sequencer.Render(left, right)
-	midiStream := &RawSamples{
-		left:  left,
-		right: right,
+func (m *Music) Stream(samples [][2]float64) (int, bool) {
+	if m.stopped {
+		return 0, false
 	}
-	return midiStream, nil
-}
-
-type RawSamples struct {
-	left, right  []float32
-	offset       int
-	lastSampleAt time.Time
-}
-
-func (m *RawSamples) Len() int {
-	return len(m.left)
-}
-
-func (m *RawSamples) Position() int {
-	return m.offset
-}
-
-func (m *RawSamples) Seek(p int) error {
-	if p < 0 || p >= len(m.left) {
-		return errors.New("invalid position")
+	if len(m.left) < len(samples) {
+		m.left = make([]float32, len(samples))
+		m.right = make([]float32, len(samples))
 	}
-	m.offset = p
+	left, right := m.left[:len(samples)], m.right[:len(samples)]
+	m.sequencer.Render(left, right)
+	for i := range samples {
+		samples[i][0] = float64(left[i]) * m.Gain
+		samples[i][1] = float64(right[i]) * m.Gain
+	}
+	return len(samples), true
+}
+
+// Close stops the music. It is what ends the stream: a looping sequencer never
+// runs out on its own, so without this the speaker would keep the old track
+// mixed in under the new one for the rest of the run.
+func (m *Music) Close() error {
+	m.stopped = true
 	return nil
 }
 
-func (m *RawSamples) Close() error {
-	return nil
-}
-
-func (m *RawSamples) IsPlaying() bool {
-	return time.Since(m.lastSampleAt) < time.Second
-}
-
-func (m *RawSamples) Stream(samples [][2]float64) (n int, ok bool) {
-	floatsAvailable := len(samples)
-	floatsAvailable = min(floatsAvailable, len(m.left)-m.offset)
-	for i := m.offset; i < m.offset+floatsAvailable; i++ {
-		sampleIndex := i - m.offset
-		samples[sampleIndex][0] = float64(m.left[i])
-		samples[sampleIndex][1] = float64(m.right[i])
-	}
-	m.offset += floatsAvailable
-	m.lastSampleAt = time.Now()
-	return floatsAvailable, floatsAvailable > 0
-}
-
-func (m *RawSamples) Err() error {
-	return nil
-}
-
-func (m *RawSamples) WriteTo(w *os.File) error {
-	countLeft := len(m.left)
-	countRight := len(m.right)
-	{
-		err := binary.Write(w, binary.LittleEndian, uint64(countLeft))
-		if err != nil {
-			return err
-		}
-	}
-	{
-		err := binary.Write(w, binary.LittleEndian, uint64(countRight))
-		if err != nil {
-			return err
-		}
-	}
-
-	for i := 0; i < len(m.left); i++ {
-		err := binary.Write(w, binary.LittleEndian, m.left[i])
-		if err != nil {
-			return err
-		}
-	}
-	for i := 0; i < len(m.right); i++ {
-		err := binary.Write(w, binary.LittleEndian, m.right[i])
-		if err != nil {
-			return err
-		}
-	}
-	return w.Sync()
-}
-
-func LoadRawSamples(r *os.File) (*RawSamples, error) {
-	var countLeft, countRight uint64
-	{
-		err := binary.Read(r, binary.LittleEndian, &countLeft)
-		if err != nil {
-			return nil, err
-		}
-	}
-	{
-		err := binary.Read(r, binary.LittleEndian, &countRight)
-		if err != nil {
-			return nil, err
-		}
-	}
-	left := make([]float32, countLeft)
-	right := make([]float32, countRight)
-	for i := uint64(0); i < countLeft; i++ {
-		err := binary.Read(r, binary.LittleEndian, &left[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	for i := uint64(0); i < countRight; i++ {
-		err := binary.Read(r, binary.LittleEndian, &right[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &RawSamples{
-		left:  left,
-		right: right,
-	}, nil
-
-}
+// The stream has no length and no position to seek to - it is synthesised on
+// demand and loops for ever - but StartStream takes what the OGG streams are,
+// so it answers as an endless one.
+func (m *Music) Len() int       { return 0 }
+func (m *Music) Position() int  { return 0 }
+func (m *Music) Seek(int) error { return nil }
+func (m *Music) Err() error     { return nil }

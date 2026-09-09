@@ -218,6 +218,19 @@ type Game struct {
 	gravitationEnabled bool
 	move               q3Move
 
+	// glassCells is which voxels the level's window panes fill. The panes
+	// themselves are quads in the sprite pass with no collider of their own, so
+	// this is what makes a window a wall to walk into - see solidAt.
+	glassCells map[core.Int3]bool
+
+	// station is the level's own rotating body, nil for a level that is just a
+	// place: what has air in it, and how fast the sky goes round. skySpin is how
+	// far round it is so far, in radians, and inEVA is only so that crossing the
+	// hull can say so once rather than every frame. See eva.go and core.Station.
+	station *core.Station
+	skySpin float32
+	inEVA   bool
+
 	// The map editor's half of the state. Kept together rather than mixed into the
 	// player's, because the two are only ever touched by different halves of the
 	// code: nothing in a normal run reads any of it.
@@ -297,6 +310,9 @@ type Game struct {
 	reloadPressed bool
 
 	audio *audio.Player
+	// musicName is the track playing now, so that loading the same level again
+	// leaves it playing rather than starting it over - see playMusic.
+	musicName string
 	// baseFOV is the view the player plays at, which a scope divides. The zoom
 	// itself lives on the weapon, the way ZDoom keeps it in Weapon.FOVScale,
 	// so putting a scoped weapon away puts the view back on its own.
@@ -487,18 +503,6 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.SetupParticleSystem(quads.ParticlesExplosion, 2000)
 	g.SetupParticleSystem(quads.ParticlesSmoke, 2000)
 	g.SetupParticleSystem(quads.ParticlesCustom, 2000)
-	//midiplayer := audio.NewPlayer(44100)
-	//midiStream, _ := audio.RenderSMF("assets/audio/SC-55.sf2", "assets/audio/duke1.mid", 44100)
-	/*
-	   file, err := os.Open("assets/out.raw")
-	   midiStream, _ := audio.LoadRawSamples(file)
-	   file.Close()
-	   if err != nil {
-	       fmt.Println(err)
-	   }
-	   midiplayer.StartStream(midiStream, false)
-	*/
-
 	g.mapLoad(mapLoadResult, false)
 
 	events.Subscribe(events.EventHitScanCollision, g.hitScanCollision)
@@ -610,8 +614,18 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	   bullet.BulletAddRigidBody(world, sphere.BulletHandle())
 	   bullet.BulletStepSimulation(world, 0.1)
 	*/
+	// The glass. A pane is drawn as a quad and collides as the voxel it glazes,
+	// so a window is see-through without being a way in - see core.Pane and
+	// SpriteDrawer.AddPane.
+	g.glassCells = make(map[core.Int3]bool, len(mapLoad.Panes))
+	for _, pane := range mapLoad.Panes {
+		g.glassCells[pane.Cell()] = true
+		g.Sprites.AddPane(g.sharedAtlas, uint16(g.sharedSpriteIndex[wep.WindowGlassSprite]),
+			pane.Position, pane.Normal, pane.Width, pane.Height, paneLight)
+	}
+
 	// Setup Collision Solver
-	g.physicsSystem = quads.NewCollisionSolver(g.CubeMap.IsSolidBlockAt, g.CubeMap.ContainsVec)
+	g.physicsSystem = quads.NewCollisionSolver(g.solidAt, g.CubeMap.ContainsVec)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
 	// Bounds, not VoxelDimensions: the voxel buffer is padded up to a whole
@@ -643,6 +657,9 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	} else {
 		g.player = g.spawnPlayer(g.Camera, mapLoad.PlayerSpawn, mapLoad.PlayerDir)
 	}
+	// The level's own track, which is silence for a level that names none.
+	g.playMusic(mapLoad.Music)
+
 	// Setup Ceiling & Fog
 	g.CeilingColor = mapLoad.CeilingColorVec4()
 	// A map that says nothing about how far it can be seen through gets the
@@ -652,7 +669,16 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	if mapLoad.FogEnd > 0 {
 		g.fogStart, g.fogEnd = mapLoad.FogStart, mapLoad.FogEnd
 	}
+	// A level with no horizon is one with nothing under it: space. Every other
+	// level keeps the horizon it has always had.
 	g.skyHorizonFade = 7
+	if mapLoad.SkyFullSphere {
+		g.skyHorizonFade = 0
+	}
+	g.station = mapLoad.Station
+	g.skySpin = 0
+	g.inEVA = false
+	g.SetSkyboxSpin(0)
 	g.exposure = quads.DefaultExposure
 	g.bloomThreshold = quads.DefaultBloomThreshold
 	g.bloomStrength = quads.DefaultBloomStrength
@@ -739,9 +765,36 @@ func (g *Game) Update(elapsed float64) {
 	g.updateWeapon(elapsed)
 	g.updateActors(elapsed)
 	g.updateDoors(elapsed)
+	g.updateStationSpin(elapsed)
 	g.physicsSystem.Update(elapsed)
 	g.updatePickups()
 	g.updateGUI(elapsed)
+}
+
+// updateStationSpin turns the sky. Nothing else moves: the station is the frame
+// everything in this level is measured in, so the relative motion has to go
+// somewhere and the sky is the cheap end of it. See core.Station.
+func (g *Game) updateStationSpin(elapsed float64) {
+	if g.station == nil || g.station.Spin == 0 {
+		return
+	}
+	turned := float64(g.skySpin) + float64(mgl32.DegToRad(g.station.Spin))*elapsed
+	g.skySpin = float32(math.Mod(turned, 2*math.Pi))
+	g.SetSkyboxSpin(g.skySpin)
+}
+
+// paneLight is the baked light level a window pane is drawn at. It is a fixed
+// number rather than the light where the pane hangs because the map's light is
+// not flooded until the first frame is drawn, which is after the panes are
+// placed - and a window is a hole in a wall, lit from both sides, rather than
+// something standing in a corner.
+const paneLight = 12
+
+// solidAt is the world the physics pushes against: the blocks, plus the voxels
+// the glass fills. It is one function rather than a check in the solver because
+// the solver is only ever handed "is this cell wall", and glass is.
+func (g *Game) solidAt(x, y, z int32) bool {
+	return g.CubeMap.IsSolidBlockAt(x, y, z) || g.glassCells[core.Int3{X: x, Y: y, Z: z}]
 }
 
 func (g *Game) printDebugInfo() {
@@ -1174,6 +1227,7 @@ func (g *Game) openWizardMenu() {
 		quads.NewGuiOptionSubmenu("Video", func() { g.pushConfigSubmenu(g.videoOptions()) }),
 		quads.NewGuiOptionSubmenu("Rendering", func() { g.pushConfigSubmenu(g.renderingOptions()) }),
 		quads.NewGuiOptionSubmenu("Global", func() { g.pushConfigSubmenu(g.globalOptions()) }),
+		quads.NewGuiOptionSubmenu("Music", func() { g.pushConfigSubmenu(g.musicOptions()) }),
 	})
 	guiWidth, guiHeight := g.GuiSize()
 	top.HandleResize(guiWidth, guiHeight, g.UIScale)

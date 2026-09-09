@@ -1,8 +1,10 @@
 package quads
 
 import (
+	"cmp"
 	"math"
 	"math/rand"
+	"slices"
 
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
@@ -123,7 +125,18 @@ func DecalModel(pos, normal mgl32.Vec3, width, height, roll float32) mgl32.Mat4 
 // of the shadow depth pass: a decal sits a centimetre off the wall it is stuck to,
 // so putting it in a light's depth map would shadow the very surface it decorates.
 func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Shader) {
-	if len(q.decals) == 0 || q.decalAtlas == nil {
+	// Oldest first, so a fresh decal blends over the ones it lands on. nextDecal
+	// is the oldest slot once the ring has wrapped, and 0 while it is still
+	// filling up, which is the insertion order either way.
+	q.drawQuads(observer, spriteShader, q.decalAtlas, q.decals, q.nextDecal)
+}
+
+// drawQuads is the one instanced call both decals and window panes come down
+// to: everything in quads that survives the frustum, packed into the instance
+// buffer starting at first and wrapping, and drawn blended without writing
+// depth.
+func (q *SpriteDrawer) drawQuads(observer core.Observer, spriteShader *glhf.Shader, atlas glhf.TextureAtlas, quads []decal, first int) {
+	if len(quads) == 0 || atlas == nil {
 		return
 	}
 	spriteShader.Begin()
@@ -132,36 +145,33 @@ func (q *SpriteDrawer) DrawDecals(observer core.Observer, spriteShader *glhf.Sha
 	}
 	q.quadVertices.Begin()
 
-	q.decalAtlas.BeginOnUnit(gl.TEXTURE0)
+	atlas.BeginOnUnit(gl.TEXTURE0)
 
-	// Oldest first, so a fresh decal blends over the ones it lands on. nextDecal
-	// is the oldest slot once the ring has wrapped, and 0 while it is still
-	// filling up, which is the insertion order either way.
 	q.culledBatch = q.culledBatch[:0]
-	for i := range q.decals {
-		d := &q.decals[(q.nextDecal+i)%len(q.decals)]
+	for i := range quads {
+		d := &quads[(first+i)%len(quads)]
 		model, center := d.worldSpace()
 		if !observer.IsSphereInViewFrustum(center, d.radius) {
 			continue
 		}
-		leftU, topV, rightU, bottomV := q.decalAtlas.GetUV(int(d.texIndex))
+		leftU, topV, rightU, bottomV := atlas.GetUV(int(d.texIndex))
 		q.culledBatch = appendDecalInstance(q.culledBatch, d, model,
 			float32(leftU), float32(topV), float32(rightU), float32(bottomV))
 	}
 	q.quadsDrawn += len(q.culledBatch) / QuadInstanceFloats
 	// No depth writes. Every decal on one wall sits at the same distance from it,
 	// so two overlapping ones have all but identical depth and z-fight for the
-	// pixels they share. Nothing needs to be occluded by a decal - they are the
-	// last thing drawn onto the geometry - so the fight is settled by not
-	// entering the fight: they depth-test against the wall and blend against
-	// each other in the order they were shot.
+	// pixels they share. Nothing needs to be occluded by one - they are the last
+	// thing drawn onto the geometry - so the fight is settled by not entering it:
+	// they depth-test against the wall and blend against each other in the order
+	// they were shot. A pane has the same reason with the sky behind it instead.
 	gl.DepthMask(false)
-	// Culling off: a decal keeps its own orientation and the observer can end up
-	// looking at the wall from the side the quad's back face is on.
+	// Culling off: these keep their own orientation and the observer can end up
+	// looking at the surface from the side the quad's back face is on.
 	q.drawCalls += q.drawBatch(q.culledBatch, false)
 	gl.DepthMask(true)
 
-	q.decalAtlas.End()
+	atlas.End()
 	q.quadVertices.End()
 	spriteShader.End()
 }
@@ -184,4 +194,53 @@ func appendDecalInstance(dst []float32, d *decal, model mgl32.Mat4, leftU, topV,
 func (q *SpriteDrawer) ClearDecals() {
 	q.decals = q.decals[:0]
 	q.nextDecal = 0
+}
+
+// A pane is the same quad as a decal and is drawn by the same call, but it is
+// part of the level rather than something that happened to it: the sheet of
+// glass in a window. Three things differ. It is placed when the map loads, it
+// is never overwritten by the next bullet hole - a ring of windows is more
+// quads than MaxDecals holds - and it is drawn after the sky rather than
+// before it, because what a window is for is showing the sky through it.
+
+// AddPane glazes a window: a quad at pos facing along normal, width by height
+// world units, lit by the baked light there. Unlike a decal it takes no roll
+// and no parent - a window is square to its frame and does not move.
+func (q *SpriteDrawer) AddPane(atlas glhf.TextureAtlas, texIndex uint16, pos, normal mgl32.Vec3, width, height, light float32) {
+	if normal.Len() == 0 {
+		return
+	}
+	q.paneAtlas = atlas
+	q.panes = append(q.panes, decal{
+		model:    DecalModel(pos, normal, width, height, 0),
+		center:   pos.Add(normal.Normalize().Mul(decalSurfaceOffset)),
+		radius:   float32(math.Hypot(float64(width), float64(height))) * 0.5,
+		light:    light,
+		texIndex: texIndex,
+	})
+}
+
+// ClearPanes takes the glass out, used when a new map is loaded.
+func (q *SpriteDrawer) ClearPanes() {
+	q.panes = q.panes[:0]
+	q.paneAtlas = nil
+}
+
+// DrawPanes draws every window in one instanced call. It belongs after the
+// skybox: a pane writes no depth, so a sky drawn later would paint straight
+// over it.
+//
+// Farthest first. None of these quads writes depth, so what is drawn last is
+// what ends up on top whatever the distances say - and a station's windows are
+// a ring, so the far side of it is behind the near side through the glass all
+// day long. A decal never needs this because every decal on one wall is at the
+// same distance from it; a window is the case where it matters. The panes are
+// sorted where they live rather than through an index, because nothing else
+// holds a reference to one and the order barely changes between frames.
+func (q *SpriteDrawer) DrawPanes(observer core.Observer, spriteShader *glhf.Shader) {
+	eye := observer.GetPosition()
+	slices.SortFunc(q.panes, func(a, b decal) int {
+		return cmp.Compare(b.center.Sub(eye).LenSqr(), a.center.Sub(eye).LenSqr())
+	})
+	q.drawQuads(observer, spriteShader, q.paneAtlas, q.panes, 0)
 }
