@@ -19,10 +19,6 @@ against the current source, not the review's own claims.
   `MaxShadowLayers = 16`, `quads/lights_ubo.go`) — a light past the last layer
   lights without casting a shadow. A light that changes layer drops its cached
   shadow map with it.
-- `CheckAABBVsOBB` (`quads/voxel/obb.go:42`) inflates the oriented box rather
-  than computing the exact (bevelled) Minkowski sum, so a glancing hit near an
-  edge of a rotated box reports slightly early. Marked with a `ponytail:`
-  comment; only the moving side is ever an AABB today, so it's never hit hard.
 - Scenery (`scenery.go`, `MeshDrawer`) still draws one `glDrawElements` call
   per placed piece. Since it never moves once placed, it belongs baked into
   the chunk mesh it stands in. Worth doing once a map places enough scenery
@@ -87,15 +83,15 @@ See `AGENTS.md` → "Keep the unused packages" for the rule. Not covered there:
 
 ## Tests
 
-Covered: `png_chunks`, `quads/voxel` (OBB sweep, DDA raycast), instancing
-attribute locations, shadow cache. `zdwep/weapon_test.go` was deleted (called
-an old signature, read from a gitignored fixture dir) — the Doom atlas parser
-is uncovered again.
+Covered: `png_chunks`, `quads/voxel` (swept SAT, AABB sweep, DDA raycast), the
+collision grid and the standing-on-it correction (`quads/sys_physics_test.go`),
+instancing attribute locations, shadow cache. `zdwep/weapon_test.go` was
+deleted (called an old signature, read from a gitignored fixture dir) — the
+Doom atlas parser is uncovered again.
 
-Untested and worth it: `voxel.SweepAABB`/`CheckAABBVsOBB` (the physics core),
-`tpack` atlas pack/decode round-trip, `quads/assets.go` loaders against a
-`fstest.MapFS`. `SpriteBatch.grow` needs a GL context so it's hand-verified
-only.
+Untested and worth it: `tpack` atlas pack/decode round-trip, `quads/assets.go`
+loaders against a `fstest.MapFS`. `SpriteBatch.grow` needs a GL context so it's
+hand-verified only.
 
 ## Known limits
 

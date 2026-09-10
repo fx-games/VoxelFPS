@@ -228,9 +228,13 @@ func (a AABB) Extremes() (mgl32.Vec3, mgl32.Vec3) {
 	return a.Min(), a.Max()
 }
 
-// SweepAABB will return a value between 0 and 1, where 0.5 means "a collision occurred halfway of the AABB's path" and 1 means "there was no collision".
-// Notably, if one of the AABB's is completely inside the other, it will return 1, meaning our AABBs will be "hollow".
-// It also returns the Normal to the surface that was hit. This will be useful when we implement wall sliding.
+// SweepAABB moves a along vel and reports when it first touches b: a time of
+// impact between 0 and 1, where 0.5 is halfway along the path and 1 is no
+// collision at all, together with the normal of the surface that was hit, which
+// is what movement is slid along.
+//
+// Boxes that already overlap collide at 0, along the shallowest way out - see
+// SweepAABBFromMinkowski.
 func SweepAABB(a, b AABB, vel mgl32.Vec3) CollisionInfo {
 	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
 	m := a.MinkowskiDifference(b)
@@ -238,6 +242,30 @@ func SweepAABB(a, b AABB, vel mgl32.Vec3) CollisionInfo {
 }
 
 func SweepAABBFromMinkowski(m AABB, vel mgl32.Vec3) CollisionInfo {
+	// Boxes that already overlap are the one case the plane tests below cannot
+	// answer. Every face of m is then behind the origin, so each of them
+	// reports a negative time and is thrown away, and the sweep comes back
+	// clear - the boxes are hollow, as this used to say. Something standing on
+	// the floor whose collider grew downwards by a hair was suddenly inside the
+	// floor, found nothing to stand on, and fell out of the map: a sprite
+	// changing animation does exactly that, because its box is measured off the
+	// picture and the pictures are not all the same height.
+	//
+	// So an overlap collides at once, pushed along the shallowest way out. It is
+	// what CheckAABBVsOBB has always done with a ray that starts inside the box;
+	// this is the axis aligned half of the same rule.
+	//
+	// ponytail: the caller separates them by its own epsilon per pass rather
+	// than by the depth this could report, so a deep overlap takes a few frames
+	// to climb out of. Return the depth if that ever shows.
+	if overlapsOrigin(m) {
+		return CollisionInfo{
+			TimeOfImpact:  0,
+			SurfaceNormal: m.GetNearestFaceNormal(mgl32.Vec3{}),
+			IsCollision:   true,
+		}
+	}
+
 	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
 	h := float32(1.0)
 	nx := 0
@@ -305,6 +333,49 @@ func SweepAABBFromMinkowski(m AABB, vel mgl32.Vec3) CollisionInfo {
 		SurfaceNormal: mgl32.Vec3{float32(nx), float32(ny), float32(nz)},
 		IsCollision:   h < 1,
 	}
+}
+
+// overlapsOrigin is whether the origin lies strictly inside this Minkowski
+// difference, which is what it means for the two boxes it was built from to
+// actually overlap. Strictly, because touching is not penetration: an object
+// resting on a surface is exactly there, and shoving it off would be a bounce.
+func overlapsOrigin(m AABB) bool {
+	for axis := 0; axis < 3; axis++ {
+		if m.Min()[axis] >= 0 || m.Max()[axis] <= 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// Union is the smallest box holding both. A box that measures nothing
+// contributes nothing, so a union over a list can start from the zero box.
+func (a AABB) Union(b AABB) AABB {
+	if a.IsEmpty() {
+		return b
+	}
+	if b.IsEmpty() {
+		return a
+	}
+	perAxis := func(pick func(a, b float64) float64, x, y mgl32.Vec3) mgl32.Vec3 {
+		return mgl32.Vec3{
+			float32(pick(float64(x.X()), float64(y.X()))),
+			float32(pick(float64(x.Y()), float64(y.Y()))),
+			float32(pick(float64(x.Z()), float64(y.Z()))),
+		}
+	}
+	return NewAABB(perAxis(math.Min, a.Min(), b.Min()), perAxis(math.Max, a.Max(), b.Max()))
+}
+
+// IsEmpty is a box with no room in it along some axis, which is what a frame
+// that draws nothing measures.
+func (a AABB) IsEmpty() bool {
+	for axis := 0; axis < 3; axis++ {
+		if a.maxCoords[axis] <= a.minCoords[axis] {
+			return true
+		}
+	}
+	return false
 }
 
 func InRange(x, min, max float32) bool {

@@ -447,3 +447,200 @@ func TestAThingWalkedThroughIsNotShovedByTheWalker(t *testing.T) {
 		t.Errorf("the item ended at %v, and nothing should have moved it off %v", corrected, falling)
 	}
 }
+
+// A thing resting on the floor whose collider grows downwards - which is what a
+// sprite changing animation does, since each animation's box is measured off its
+// own pictures - is pushed back out of the floor instead of falling through it
+// and out of the map.
+func TestGrowingColliderDoesNotFallThroughTheFloor(t *testing.T) {
+	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system.SetGravityEnabled(true)
+
+	standing := mover(t, mgl32.Vec3{0.5, 4, 0.5})
+	standing.ApplyGravity = true
+	system.AddObject(standing)
+
+	const frame = 1.0 / 60.0
+	for i := 0; i < 120; i++ {
+		system.Update(frame)
+	}
+	if !standing.IsGrounded() {
+		t.Fatal("expected the object to land first")
+	}
+
+	// The next animation is drawn a tenth of a unit lower in its own tile, so
+	// the box it stands in reaches that far into the floor.
+	standing.SetAABB(voxel.NewAABB(
+		mgl32.Vec3{-0.25, -0.35, -0.25},
+		mgl32.Vec3{0.25, 0.25, 0.25},
+	))
+
+	for i := 0; i < 120; i++ {
+		system.Update(frame)
+	}
+
+	if len(system.movingObjects) == 0 {
+		t.Fatal("the object fell out of the map")
+	}
+	if bottom := standing.AABB().Min().Y(); bottom < 1-epsilon {
+		t.Errorf("sank into the floor: box bottom at y = %f, want >= 1", bottom)
+	}
+	if !standing.IsGrounded() {
+		t.Error("expected the object to still be standing on the floor")
+	}
+}
+
+// A collider wider than a grid cell is listed in the cells in the middle of it
+// too, not only in the ones its corners land in. The picking ray tests what the
+// cell it is walking through lists and nothing else, so a gap in the middle is a
+// thing the crosshair sits on and does not select.
+func TestWideColliderIsOnTheGridCellsItCovers(t *testing.T) {
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+
+	object := NewGameObject("Cortex")
+	object.Transform().SetPosition(mgl32.Vec3{0.5, 0.5, 0.5})
+	// Two and a half cells across, so cells 1 and 2 are wholly inside it and
+	// neither holds a corner.
+	physics := NewPhysicsComponent(false, voxel.NewAABB(
+		mgl32.Vec3{-1.25, -0.25, -0.25},
+		mgl32.Vec3{1.25, 0.25, 0.25},
+	))
+	object.SetComponent(physics)
+	system.AddObject(physics)
+
+	for x := int32(-1); x <= 1; x++ {
+		if system.GetCollidersAt(x, 0, 0)[physics] != true {
+			t.Errorf("not listed in cell x = %d", x)
+		}
+	}
+}
+
+// The grid listing covers the picking boxes as well as the collision box. They
+// are different shapes - the collision box is one median over every facing, the
+// picking box is the picture actually on the screen - and a ray only ever tests
+// what the cell it is in lists.
+func TestGridListingCoversThePickingBoxes(t *testing.T) {
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+
+	object := NewGameObject("Cortex")
+	object.Transform().SetPosition(mgl32.Vec3{0.5, 0.5, 0.5})
+	physics := NewPhysicsComponent(false, voxel.NewAABB(
+		mgl32.Vec3{-0.25, -0.25, -0.25},
+		mgl32.Vec3{0.25, 0.25, 0.25},
+	))
+	object.SetComponent(physics)
+	// Seen from one facing it is drawn twice as wide as the box it collides by.
+	physics.SetPickBoxes(PickBoxes{AnimIdle: {
+		{voxel.NewAABB(mgl32.Vec3{-0.25, -0.25, -0.25}, mgl32.Vec3{0.25, 0.25, 0.25})},
+		{voxel.NewAABB(mgl32.Vec3{-1.25, -0.25, -0.25}, mgl32.Vec3{1.25, 0.25, 0.25})},
+	}})
+	system.AddObject(physics)
+
+	for x := int32(-1); x <= 1; x++ {
+		if system.GetCollidersAt(x, 0, 0)[physics] != true {
+			t.Errorf("not listed in cell x = %d", x)
+		}
+	}
+}
+
+// Moving takes the listing with it: the cells it was in are the cells it is
+// taken out of, whatever animation happens to be playing by then.
+func TestMovingLeavesNoStaleGridCells(t *testing.T) {
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+
+	moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+	moving.SetVelocity(mgl32.Vec3{3, 0, 0})
+	system.AddObject(moving)
+	moving.SetAABBForAnimation(AnimIdle, voxel.NewAABB(
+		mgl32.Vec3{-0.25, -0.25, -0.25},
+		mgl32.Vec3{0.25, 0.25, 0.25},
+	))
+
+	// Update caps how much it simulates in one call, so this is several
+	// seconds' worth: well clear of the cells it started in.
+	for i := 0; i < 10; i++ {
+		system.Update(1)
+	}
+
+	if moving.Position().X() < 3 {
+		t.Fatalf("expected it to have moved away, x = %f", moving.Position().X())
+	}
+	if system.GetCollidersAt(0, 0, 0)[moving] {
+		t.Error("still listed in the cell it started in")
+	}
+}
+
+// A billboard's box is swung round its own position to face the camera, so the
+// cells it is listed in have to be the ones it can reach into from any angle.
+// Face on it is wide and a sliver deep; from the side those swap over.
+func TestSwungRoundReachesBothWays(t *testing.T) {
+	facingBox := voxel.NewAABB(mgl32.Vec3{-0.7, 0, -0.07}, mgl32.Vec3{0.7, 1.4, 0.07})
+
+	swung := swungRound(facingBox)
+
+	if reach := swung.Max().Z(); reach < 0.7 {
+		t.Errorf("depth reaches %f, want the width it has when turned side on", reach)
+	}
+	if swung.Max().X() != swung.Max().Z() || swung.Min().X() != swung.Min().Z() {
+		t.Errorf("expected the same reach either way, got %v", swung)
+	}
+	if swung.Min().Y() != 0 || swung.Max().Y() != 1.4 {
+		t.Errorf("turning about the vertical axis should leave the height alone, got %v", swung)
+	}
+}
+
+// A collider that drops under a thing standing still takes the thing with it,
+// in the same step, rather than leaving it to be pushed back out of the floor
+// over the next few. This is a sprite changing animation: each one's box is
+// measured off its own pictures and they do not all leave the same gap under
+// the art.
+func TestColliderDroppingUnderAGroundedThingTakesItAlong(t *testing.T) {
+	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system.SetGravityEnabled(true)
+
+	standing := mover(t, mgl32.Vec3{0.5, 4, 0.5})
+	standing.ApplyGravity = true
+	system.AddObject(standing)
+
+	const frame = 1.0 / 60.0
+	for i := 0; i < 120; i++ {
+		system.Update(frame)
+	}
+	landedAt := standing.Position().Y()
+
+	// The next animation's box reaches a tenth of a unit further below the
+	// thing's own position than this one's did.
+	standing.SetAABB(voxel.NewAABB(
+		mgl32.Vec3{-0.25, -0.35, -0.25},
+		mgl32.Vec3{0.25, 0.25, 0.25},
+	))
+	system.Update(frame)
+
+	if risen := standing.Position().Y() - landedAt; math.Abs(float64(risen-0.1)) > 0.01 {
+		t.Errorf("moved up by %f, want the 0.1 the box dropped by", risen)
+	}
+	if bottom := standing.AABB().Min().Y(); bottom < 1-epsilon {
+		t.Errorf("box bottom at y = %f, want it still on the floor at 1", bottom)
+	}
+}
+
+// Getting lower is not the same as the collider getting lower: a thing walking
+// down off a ledge is not held up by this.
+func TestWalkingDownIsNotMistakenForADroppingCollider(t *testing.T) {
+	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system.SetGravityEnabled(true)
+
+	falling := mover(t, mgl32.Vec3{0.5, 4, 0.5})
+	falling.ApplyGravity = true
+	system.AddObject(falling)
+	falling.SetGrounded(true) // as if it had just stepped off something
+
+	const frame = 1.0 / 60.0
+	for i := 0; i < 120; i++ {
+		system.Update(frame)
+	}
+
+	if math.Abs(float64(falling.Position().Y()-1.25)) > 0.05 {
+		t.Errorf("came to rest at y = %f, want 1.25", falling.Position().Y())
+	}
+}

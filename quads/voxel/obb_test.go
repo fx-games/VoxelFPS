@@ -123,3 +123,63 @@ func TestCheckAABBVsOBBAlreadyOverlapping(t *testing.T) {
 		t.Errorf("expected an immediate collision, got %+v", info)
 	}
 }
+
+// Axis aligned boxes that already overlap collide at once and report the way
+// out, rather than reporting nothing at all. Without it a sprite whose collider
+// grew downwards into the floor found nothing under it and fell out of the map.
+func TestSweepAABBAlreadyOverlappingIsNotHollow(t *testing.T) {
+	floor := NewAABBFromMin(mgl32.Vec3{0, 0, 0}, mgl32.Vec3{1, 1, 1})
+	// Standing on the floor, then sunk two centimetres into it.
+	sunk := NewAABB(mgl32.Vec3{0.3, 0.98, 0.3}, mgl32.Vec3{0.7, 2.98, 0.7})
+	falling := mgl32.Vec3{0, -0.1, 0}
+
+	info := SweepAABB(sunk, floor, falling)
+
+	if !info.IsCollision || info.TimeOfImpact != 0 {
+		t.Fatalf("expected an immediate collision, got %+v", info)
+	}
+	if info.SurfaceNormal != (mgl32.Vec3{0, 1, 0}) {
+		t.Errorf("expected to be pushed up out of the floor, got normal %v", info.SurfaceNormal)
+	}
+}
+
+// Resting exactly on a surface is not penetration, so the sweep still reports
+// the surface ahead rather than an overlap behind.
+func TestSweepAABBTouchingIsNotOverlapping(t *testing.T) {
+	floor := NewAABBFromMin(mgl32.Vec3{0, 0, 0}, mgl32.Vec3{1, 1, 1})
+	resting := NewAABB(mgl32.Vec3{0.3, 1, 0.3}, mgl32.Vec3{0.7, 3, 0.7})
+
+	info := SweepAABB(resting, floor, mgl32.Vec3{0, -0.1, 0})
+
+	if info.TimeOfImpact != 0 || !info.IsCollision {
+		t.Fatalf("expected to stop on the surface, got %+v", info)
+	}
+	if info.SurfaceNormal != (mgl32.Vec3{0, 1, 0}) {
+		t.Errorf("expected the floor's own normal, got %v", info.SurfaceNormal)
+	}
+}
+
+// A mover passing the corner of a rotated box clears it, where inflating that
+// box reported a hit. The exact Minkowski sum of two boxes has bevelled corners
+// and an inflated box has square ones, and the difference is all in the corner.
+//
+// The unit cube turned by 45 degrees reaches sqrt(2)/2 along world z, so a mover
+// half a unit deep is clear of it past z = 1.2071. Inflating the cube by the
+// mover's reach along the cube's own two axes says nothing about world z at all,
+// and kept reporting a hit out to 1.7071.
+func TestCheckAABBVsOBBClearsACornerItUsedToCatchOn(t *testing.T) {
+	turned := OBB{AABB: boxAt(mgl32.Vec3{}, 0.5), Transform: mgl32.HomogRotate3DY(mgl32.DegToRad(45))}
+	velocity := mgl32.Vec3{6, 0, 0}
+
+	clear := CheckAABBVsOBB(boxAt(mgl32.Vec3{-3, 0, 1.4}, 0.5), turned, velocity)
+	if clear.IsCollision {
+		t.Errorf("caught on the corner it should have passed, got %+v", clear)
+	}
+
+	// And a hand's width closer it does hit, so this is a near miss rather than
+	// a sweep that stopped finding anything.
+	grazing := CheckAABBVsOBB(boxAt(mgl32.Vec3{-3, 0, 1.1}, 0.5), turned, velocity)
+	if !grazing.IsCollision {
+		t.Errorf("missed the corner it should have clipped, got %+v", grazing)
+	}
+}

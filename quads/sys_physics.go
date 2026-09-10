@@ -172,6 +172,10 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 			continue
 		}
 
+		// Before anything is done with it: a collider that changed shape under
+		// a thing standing still has left it inside the floor.
+		c.keepStandingOnIt(obj)
+
 		velocity := obj.Velocity()
 		if c.gravityEnabled && obj.AffectedByGravity() {
 			velocity = velocity.Add(c.accelerationFromGravity.Mul(float32(deltaTime)))
@@ -296,31 +300,76 @@ func (c *PhysicsSystem) PairsChecked() int {
 
 func (c *PhysicsSystem) AddObject(obj *PhysicsComponent) {
 	c.movingObjects = append(c.movingObjects, obj)
+	obj.colliderBottom = obj.CollisionAABBAt(zeroVec3).Min().Y()
 	c.addToGrid(obj.Position(), obj)
 }
 
+// keepStandingOnIt puts an object back on top of whatever it was resting on when
+// its collider changes shape underneath it.
+//
+// A sprite's box is measured off the picture it is drawn as, and each animation
+// is measured off its own - see PhysicsComponent.AABBAt. The pictures do not all
+// leave the same gap under the art, so the instant a guard stops walking and
+// starts firing, the box it stands in drops by however much that gap differs: a
+// pixel's worth for most of them, most of a tile for a turret's corpse. It is
+// inside the floor from that moment, and it used to fall through the world for
+// it. voxel.SweepAABB now pushes it back out instead, but over several frames
+// and visibly; moving it up by exactly what the box dropped is neither.
+//
+// Only the shape of the box is watched, never where it is. A thing walking down
+// a slope is getting lower too, and that is it doing its job rather than its
+// collider moving out from under it.
+//
+// ponytail: it goes up whether or not there is room above, on the grounds that
+// there was room a moment ago for a box that was no shorter. If a low ceiling
+// ever makes that wrong, the sweep pushes back out of it the frame after.
+func (c *PhysicsSystem) keepStandingOnIt(obj *PhysicsComponent) {
+	bottom := obj.CollisionAABBAt(zeroVec3).Min().Y()
+	if dropped := obj.colliderBottom - bottom; obj.IsGrounded() && dropped > 0 {
+		oldPos := obj.Position()
+		obj.SetPosition(oldPos.Add(mgl32.Vec3{0, dropped, 0}))
+		c.moveObjectOnGrid(obj, oldPos, obj.Position())
+	}
+	obj.colliderBottom = bottom
+}
+
 func (c *PhysicsSystem) addToGrid(pos mgl32.Vec3, obj *PhysicsComponent) {
-	// check all 8 corners of the AABBAt
-	aabb := obj.AABBAt(pos)
-
-	corners := aabb.Corners()
-
-	for _, corner := range corners {
-		gridPos := core.Int3{X: int32(corner.X()), Y: int32(corner.Y()), Z: int32(corner.Z())}
+	forEachGridCell(obj.gridAABBAt(pos), func(gridPos core.Int3) {
 		if c.objectsOnGrid[gridPos] == nil {
 			c.objectsOnGrid[gridPos] = make(map[*PhysicsComponent]bool)
 		}
 		c.objectsOnGrid[gridPos][obj] = true
-	}
+	})
 }
 
 func (c *PhysicsSystem) removeFromGrid(atPos mgl32.Vec3, obj *PhysicsComponent) {
-	aabb := obj.AABBAt(atPos)
-	corners := aabb.Corners()
-	for _, corner := range corners {
-		gridPos := core.Int3{X: int32(corner.X()), Y: int32(corner.Y()), Z: int32(corner.Z())}
+	forEachGridCell(obj.gridAABBAt(atPos), func(gridPos core.Int3) {
 		if c.objectsOnGrid[gridPos] != nil {
 			delete(c.objectsOnGrid[gridPos], obj)
+		}
+	})
+}
+
+// forEachGridCell visits every cell the box reaches into.
+//
+// Its eight corners are not enough, which is what this used to walk. A box wider
+// than a cell has whole cells in the middle of it that no corner of it lands in,
+// and a thing left out of those is a thing the picking ray walks straight
+// through: the ray tests what the cell it is in lists, and nothing else. Whether
+// that happened at all depended on which cells the ray happened to cross, which
+// is why it came and went with the angle you looked from.
+//
+// Floor rather than a cast, too: a cast truncates towards zero, so everything
+// between -1 and 0 landed in cell 0 and the half of the map with negative
+// coordinates was listed one cell over.
+func forEachGridCell(aabb voxel.AABB, visit func(core.Int3)) {
+	cell := func(v float32) int32 { return int32(math.Floor(float64(v))) }
+	min, max := aabb.Min(), aabb.Max()
+	for x := cell(min.X()); x <= cell(max.X()); x++ {
+		for y := cell(min.Y()); y <= cell(max.Y()); y++ {
+			for z := cell(min.Z()); z <= cell(max.Z()); z++ {
+				visit(core.Int3{X: x, Y: y, Z: z})
+			}
 		}
 	}
 }
