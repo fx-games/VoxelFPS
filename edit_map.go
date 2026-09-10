@@ -10,21 +10,34 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 )
 
-// openSceneryMenu is the placement half of the scenery folder: whatever is in
-// it is in this menu, without a line of Go per piece. Picking one puts a ghost
-// of it on the crosshair, and a left click drops it - the same ghost the sprite
-// decorations and the torch ride.
+// openSceneryMenu is the placement half of the two folders a prop can come out
+// of: the models under assets/meshes and the pictures under assets/sprites.
+// Whatever is in them is in this menu, without a line of Go per piece. Picking
+// one puts a ghost of it on the crosshair, and a left click drops it - the same
+// ghost the torch rides.
+//
+// It is a menu rather than only the number row because the row is ten keys and
+// the folders now hold several hundred pieces: importing two DOS games' worth
+// of scenery turned "wheel to the piece you want" into a minute of scrolling.
 func (g *Game) openSceneryMenu() {
 	previousMouseState := g.setupModal()
 	configMenu := g.OpenConfigMenu()
 
 	var options []quads.GuiOption
-	for _, id := range g.sceneryIDs() {
-		options = append(options, quads.NewGuiOptionAction(g.scenery[id].Name, func() {
+	place := func(id, name string) {
+		options = append(options, quads.NewGuiOptionAction(name, func() {
 			g.captureMouse(previousMouseState)
-			g.selectPropByScenery(id)
+			g.selectPropByID(id)
 			g.popFromWidgetStack()
 		}))
+	}
+	for _, id := range g.sceneryIDs() {
+		place(id, g.scenery[id].Name)
+	}
+	for _, id := range g.spriteKindIDs() {
+		if kind := g.spriteKinds[id]; !kind.Actor {
+			place(id, kind.Name)
+		}
 	}
 	configMenu.SetOptions(options)
 	guiWidth, guiHeight := g.GuiSize()
@@ -38,6 +51,30 @@ func (g *Game) openSceneryMenu() {
 func (g *Game) startSceneryPlacement(id string) {
 	g.clearGhost()
 	g.editor.gameObjectForSpawning = g.spawnScenery(id, mgl32.Vec3{}, false)
+}
+
+// openActorMenu is the same for the characters: every folder under
+// assets/sprites that says it is an actor, by name. Picking one switches to the
+// actor tool with that kind selected, which is what a click then places.
+func (g *Game) openActorMenu() {
+	previousMouseState := g.setupModal()
+	configMenu := g.OpenConfigMenu()
+
+	var options []quads.GuiOption
+	for index, entity := range g.editor.actors {
+		options = append(options, quads.NewGuiOptionAction(entity.Name, func() {
+			g.captureMouse(previousMouseState)
+			g.setEditorMode(ModeActors)
+			g.editor.actorIndex = index
+			g.Toast("Place: " + entity.Name)
+			g.popFromWidgetStack()
+		}))
+	}
+	configMenu.SetOptions(options)
+	guiWidth, guiHeight := g.GuiSize()
+	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
+
+	g.pushToWidgetStack(configMenu)
 }
 
 func (g *Game) openVoxelEditMenu() {
@@ -68,6 +105,7 @@ func (g *Game) openVoxelEditMenu() {
 		}),
 		quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
 		quads.NewGuiOptionAction("Place Scenery", g.openSceneryMenu),
+		quads.NewGuiOptionAction("Place Actor", g.openActorMenu),
 		quads.NewGuiOptionAction("Place Torches", func() {
 			g.captureMouse(previousMouseState)
 			g.selectProp(torchPaletteSlot)
@@ -189,9 +227,11 @@ type Editor struct {
 	facing        int
 	spriteTexture int
 
-	// The actor mode's state: which kind a click places, and which actor the
-	// path tool is currently laying a route out for - nil when a floor click
-	// makes a new actor instead of a waypoint.
+	// The actor mode's state: the placement palette built from assets/sprites
+	// at startup out of every folder that says it is an actor, which slot of it
+	// a click places, and which actor the path tool is currently laying a route
+	// out for - nil when a floor click makes a new actor instead of a waypoint.
+	actors        []core.MapEntity
 	actorIndex    int
 	selectedActor *Actor
 

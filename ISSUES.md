@@ -32,16 +32,21 @@ against the current source, not the review's own claims.
   needs no re-migration: `monster_action`, the mod's own ACS scripts
   (`run_script`), screen shake (`quake`), crosshairs, player flags, view zoom
   beyond the player's own; `give_to_target`/`radius_give`/`radius_thrust`
-  (nothing has health or mass).
+  (nothing has health or mass). A weapon that hands a flag to one of those
+  scripts to take back is no longer left holding it for ever —
+  `DropFlagsOnlyACSTakesBack` drops the give — but that is a workaround for one
+  shape of dependency, not ACS.
 - `A_PlaySound`'s attenuation is compiled but not acted on — a weapon's sounds
   always come from the listener's position.
 - The muzzle flash and projectile lights share the single tracked light slot
   (`quads/lights_ubo.go:452`, marked `ponytail:`), so firing while a bolt is
   in the air takes the light off the bolt.
-- 96 of 136 weapons fire when tapped like a player taps a trigger via
-  `tools/firecheck`; the rest are each their own scripted mechanic (charge
-  gauge, heat gauge, remote detonator) worth chasing one at a time with the
-  tool.
+- 153 of 155 weapons fire when tapped like a player taps a trigger via
+  `tools/firecheck`. The two that do not are `fd_halderman_device` and
+  `fd_nanocore`, each its own scripted mechanic (a charge gauge, a heat gauge)
+  worth chasing with the tool. Firing once and then never again is a different
+  failure and the tool does not see it: it taps, and a weapon that latches after
+  its first shot still passes. `bd_railgun` was that for a while.
 - 45 sprites and a handful of sounds are named by Final Doomer but shipped by
   neither it nor doom2.wad — those frames show nothing; each weapon lists
   which under `defaulted`.

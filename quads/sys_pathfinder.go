@@ -134,7 +134,7 @@ func (c *PathfindingSystem) Update(deltaTime float64) {
 			// the legs of anything re-pathing faster than the walk cycle - a
 			// companion re-aimed at a moving player four times a second (see
 			// followPlayer) never got past its first frame.
-			if gameObject.Sprite().CurrentAnimation() != int(AnimWalk) {
+			if !gameObject.Sprite().IsPlaying(int(AnimWalk)) {
 				gameObject.Sprite().PlayAnimationLooping(int(AnimWalk))
 			}
 		}

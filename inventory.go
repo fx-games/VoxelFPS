@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/quads"
 )
@@ -144,4 +146,21 @@ func (g *Game) drawWeaponHUD() {
 // drawHudIcon paints the weapon's picture into the HUD's corner box.
 func (g *Game) drawHudIcon(index int, at mgl32.Vec2) {
 	quads.DrawIconInBox(g.sharedAtlas, index, at, hudIconBox)
+}
+
+// drawHealthHUD says what is left of the player, in the corner opposite the
+// weapon. It is drawn whether or not anything is in hand: being empty handed is
+// not being unhurt.
+func (g *Game) drawHealthHUD() {
+	if g.hudHealth == nil || g.player == nil {
+		return
+	}
+	guiWidth, guiHeight := g.GuiSize()
+	g.hudHealth.SetText(fmt.Sprintf("HEALTH %d", g.player.Health()))
+	width, lineHeight := g.hudHealth.Size()
+	g.hudHealth.SetPosition(mgl32.Vec2{
+		float32(guiWidth - hudMargin - width),
+		float32(guiHeight-hudMargin) - float32(lineHeight),
+	})
+	g.hudHealth.Draw()
 }

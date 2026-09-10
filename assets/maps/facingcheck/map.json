@@ -1,0 +1,235 @@
+{
+  "PlayerSpawn": [
+    24.5,
+    1.5,
+    6.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 30,
+    "G": 30,
+    "B": 38,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 20,
+    "G": 20,
+    "B": 26,
+    "A": 255
+  },
+  "Entities": [
+    {
+      "Position": [
+        14.5,
+        1.2,
+        24.5
+      ],
+      "Entity": {
+        "Name": "HUMANOID",
+        "TextureIndices": [
+          0,
+          5,
+          10,
+          12,
+          14,
+          16,
+          18,
+          20
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_humanoid",
+        "SpriteSheetTileSize": {
+          "X": 78,
+          "Y": 80
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        21.5,
+        1.2,
+        26.5
+      ],
+      "Entity": {
+        "Name": "CYBERBABE",
+        "TextureIndices": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_cyberbabe",
+        "SpriteSheetTileSize": {
+          "X": 83,
+          "Y": 89
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        27.5,
+        1.2,
+        26.5
+      ],
+      "Entity": {
+        "Name": "AVIAN MUT",
+        "TextureIndices": [
+          0,
+          8,
+          16,
+          24,
+          32,
+          40,
+          48,
+          56
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_avian_mut",
+        "SpriteSheetTileSize": {
+          "X": 140,
+          "Y": 86
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        34.5,
+        1.2,
+        24.5
+      ],
+      "Entity": {
+        "Name": "Star Trooper",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "bs_star_trooper",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    }
+  ],
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0.55,
+    0.55,
+    0.6
+  ],
+  "AmbientStrength": 0.5,
+  "Lights": [
+    {
+      "Position": [
+        24.5,
+        8,
+        20.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 8,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        24.5,
+        8,
+        40.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 8,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    }
+  ],
+  "SkyFullSphere": false,
+  "Station": null,
+  "Panes": null,
+  "Music": ""
+}

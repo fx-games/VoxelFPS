@@ -1,0 +1,38 @@
+{
+  "name": "MUTSLOW",
+  "tile": {
+    "X": 21,
+    "Y": 18
+  },
+  "actor": false,
+  "scale": 0.1875,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.45238096,
+          0.055555582,
+          -0.05
+        ],
+        "max": [
+          0.45238096,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "2/1/3",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

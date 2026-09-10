@@ -1,0 +1,35 @@
+{
+  "name": "70 Ceiling Lamp #3",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.25,
+          0.875,
+          -0.05
+        ],
+        "max": [
+          0.21875,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_STAT_56",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

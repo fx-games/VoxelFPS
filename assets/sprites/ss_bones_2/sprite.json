@@ -1,0 +1,35 @@
+{
+  "name": "BONES 2",
+  "tile": {
+    "X": 38,
+    "Y": 14
+  },
+  "actor": false,
+  "scale": 0.14583333,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.47368422,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.42105263,
+          0.9285714,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/2/10",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

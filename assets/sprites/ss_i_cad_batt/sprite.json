@@ -1,0 +1,35 @@
+{
+  "name": "I-CAD BATT.",
+  "tile": {
+    "X": 14,
+    "Y": 11
+  },
+  "actor": false,
+  "scale": 0.114583336,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/3/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

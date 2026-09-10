@@ -1,0 +1,111 @@
+{
+  "name": "SECURITY-3",
+  "tile": {
+    "X": 2,
+    "Y": 2
+  },
+  "actor": true,
+  "scale": 0.020833334,
+  "animations": {
+    "dying": {
+      "frames": [
+        [
+          16
+        ]
+      ],
+      "fps": 3.5416667
+    },
+    "fire": {
+      "frames": [
+        [
+          19
+        ]
+      ],
+      "fps": 3.5416667
+    },
+    "hit": {
+      "frames": [
+        [
+          17
+        ]
+      ],
+      "fps": 3.5416667
+    },
+    "idle": {
+      "frames": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ],
+      "fps": 3.5416667,
+      "loop": true
+    },
+    "prepare_fire": {
+      "frames": [
+        [
+          18
+        ]
+      ],
+      "fps": 3.5416667
+    },
+    "walk": {
+      "frames": [
+        [
+          8
+        ],
+        [
+          9
+        ],
+        [
+          10
+        ],
+        [
+          11
+        ],
+        [
+          12
+        ],
+        [
+          13
+        ],
+        [
+          14
+        ],
+        [
+          15
+        ]
+      ],
+      "fps": 3.5416667,
+      "loop": true
+    }
+  },
+  "sounds": {
+    "alert": "alert"
+  },
+  "provenance": {
+    "actor": "14/1/11",
+    "file": "OBJART2.RES, OBJART3.RES",
+    "source": "System Shock (1994)"
+  }
+}

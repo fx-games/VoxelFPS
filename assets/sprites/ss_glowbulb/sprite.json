@@ -1,0 +1,35 @@
+{
+  "name": "GLOWBULB",
+  "tile": {
+    "X": 19,
+    "Y": 30
+  },
+  "actor": false,
+  "scale": 0.3125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.4473684,
+          0.03333336,
+          -0.05
+        ],
+        "max": [
+          0.44736844,
+          0.96666664,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/3/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

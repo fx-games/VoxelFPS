@@ -1,0 +1,35 @@
+{
+  "name": "ISO. CHIPSET",
+  "tile": {
+    "X": 29,
+    "Y": 13
+  },
+  "actor": false,
+  "scale": 0.13541667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.43103448,
+          0.07692307,
+          -0.05
+        ],
+        "max": [
+          0.46551722,
+          0.9230769,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/7/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

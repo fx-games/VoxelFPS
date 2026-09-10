@@ -1,0 +1,35 @@
+{
+  "name": "BOOSTER",
+  "tile": {
+    "X": 15,
+    "Y": 9
+  },
+  "actor": false,
+  "scale": 0.09375,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "5/1/7",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

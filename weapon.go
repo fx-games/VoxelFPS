@@ -89,7 +89,18 @@ func (g *Game) shareInventory(runtime *wep.Runtime) {
 		g.playerCaps[item] = amount
 	}
 	for item, amount := range runtime.Inventory {
-		if _, already := g.playerInventory[item]; !already {
+		// The most any weapon would start with, not the first weapon's figure.
+		// A pool one gun spends is often declared by another that only tops it
+		// up, and that one declares it empty: the Hellbound magnums carry
+		// FDHellboundBullets as a reserve at zero, the Zaiger rifle fires them
+		// and starts with a hundred, and first-wins by folder order handed the
+		// Zaiger the magnums' zero. It could never fire, and it dry-fired for
+		// ever because it has no reload to get out of that with.
+		//
+		// Safe because this only ever runs while a weapon is being built, and
+		// every weapon is built before the player can spend anything - see the
+		// only call site, in NewWeapon.
+		if existing, already := g.playerInventory[item]; !already || amount > existing {
 			g.playerInventory[item] = amount
 		}
 	}
@@ -401,6 +412,9 @@ func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32,
 	// recoil frame moves it a few pixels off that, and that difference is the
 	// animation.
 	hotspotX, hotspotY := w.Atlas.Hotspot(index)
+	if os.Getenv("HOTSPOT_ZERO") != "" {
+		hotspotX, hotspotY = 0, 0
+	}
 	scale := psprScale(float32(screenHeight))
 	if prefix, listed := squarePixelFrames[w.Data.ID]; listed && strings.HasPrefix(sprite, prefix) {
 		scale = mgl32.Vec2{scale.Y(), scale.Y()}
@@ -411,6 +425,9 @@ func (w *Weapon) drawCursor(cursor *wep.Cursor, screenWidth, screenHeight int32,
 	// packer trimmed the transparent edges off it, which is the corner the
 	// hotspot is measured from.
 	source, destination := w.Atlas.GetSourceAndDestRects(index, position, mgl32.Vec2{0, 0}, scale)
+	if debugWeapon {
+		log.Printf("[draw] %s hot=%d,%d xy=%.0f,%.0f pos=%v src=%v dst=%v", sprite, hotspotX, hotspotY, x, y, position, source, destination)
+	}
 	w.Atlas.GetSpriteBatch().DrawTextured(source, destination, mgl32.Vec4{1, 1, 1, 1})
 }
 
@@ -655,9 +672,11 @@ func (g *Game) applyWeaponOp(weapon *Weapon, op wep.Op) {
 		weapon.shots++
 		g.fireBullets(weapon, op, weapon.runtime.Rand)
 	case wep.OpRailAttack:
-		// A beam rather than a spread: one ray straight down the line of fire.
+		// A beam rather than a spread: one ray straight down the line of fire,
+		// and a bolt of light drawn along it as far as it got. See beam.go.
 		origin, direction := g.aim()
-		g.fireHitscanWith(weapon, origin, direction, op)
+		hit := g.fireHitscanWith(weapon, origin, direction, op)
+		g.spawnBeam(g.beamMuzzle(direction), beamEnd(origin, direction, hit))
 	case wep.OpCustomPunch, wep.OpSaw:
 		g.fireMelee(op)
 	case wep.OpExplode:
@@ -1079,7 +1098,7 @@ func (g *Game) setMuzzleFlash(level int) {
 		log.Printf("[light] muzzle flash on")
 	}
 	g.muzzleFlashLit = true
-	g.AttachLightTo(g.player, muzzleFlashColor,
+	g.AttachLightTo(g.player.GameObject, muzzleFlashColor,
 		muzzleFlashIntensity*float32(level), muzzleFlashReach)
 }
 

@@ -1,0 +1,40 @@
+{
+  "name": "Steam Vent",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.46875,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.359375,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_STEAM_%d",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

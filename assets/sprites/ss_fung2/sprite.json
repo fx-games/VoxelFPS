@@ -1,0 +1,35 @@
+{
+  "name": "FUNG2",
+  "tile": {
+    "X": 18,
+    "Y": 24
+  },
+  "actor": false,
+  "scale": 0.25,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/6/5",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "STATUE1",
+  "tile": {
+    "X": 1,
+    "Y": 1
+  },
+  "actor": false,
+  "scale": 0.010416667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "7/6/0",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

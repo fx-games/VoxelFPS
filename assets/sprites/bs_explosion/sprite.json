@@ -1,0 +1,41 @@
+{
+  "name": "Explosion",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "fps": 12,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.4375,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.484375,
+          0.96875,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_EXPLOSION_%d",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

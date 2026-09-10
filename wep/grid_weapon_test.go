@@ -1,4 +1,4 @@
-package main
+package wep
 
 import (
 	"image"
@@ -14,14 +14,14 @@ import (
 func TestAFrameHotspotStandsTheFrameOnTheBottomOfTheScreen(t *testing.T) {
 	const psy, spaceHeight = 32.0, 200.0
 	for _, height := range []int{64, 192, 256} {
-		_, hotspotY := frameHotspot(64, height)
+		_, hotspotY := FrameHotspot(64, height)
 		// weapon.go: the corner goes at psy - 100 - hotspot, from the middle.
 		bottom := spaceHeight/2 + (psy - spaceHeight/2 - float64(hotspotY) + float64(height))
 		if bottom != spaceHeight {
 			t.Errorf("a %dpx frame's bottom lands at %v, want %v", height, bottom, spaceHeight)
 		}
 	}
-	if x, _ := frameHotspot(192, 192); x != -64 {
+	if x, _ := FrameHotspot(192, 192); x != -64 {
 		t.Errorf("a 192px frame is centred at %d, want -64", x)
 	}
 }
@@ -31,7 +31,7 @@ func TestMagnifiedRepeatsEveryPixel(t *testing.T) {
 	source.Set(0, 0, color.RGBA{1, 0, 0, 255})
 	source.Set(1, 0, color.RGBA{2, 0, 0, 255})
 
-	out := magnified(source, 3)
+	out := Magnified(source, 3)
 	if got := out.Bounds().Size(); got != (image.Point{6, 3}) {
 		t.Fatalf("3x of a 2x1 frame is %v, want 6x3", got)
 	}

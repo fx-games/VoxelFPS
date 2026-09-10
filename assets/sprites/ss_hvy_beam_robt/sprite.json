@@ -1,0 +1,40 @@
+{
+  "name": "HVY BEAM ROBT",
+  "tile": {
+    "X": 30,
+    "Y": 30
+  },
+  "actor": false,
+  "scale": 0.3125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.46666667,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          0.93333334,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/1/10",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

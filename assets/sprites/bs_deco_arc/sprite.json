@@ -1,0 +1,39 @@
+{
+  "name": "Arc Decoration",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "fps": 8,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.203125,
+          0.8125,
+          -0.05
+        ],
+        "max": [
+          0.265625,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_DECO_ARC_%d",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

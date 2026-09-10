@@ -250,6 +250,23 @@ func (c *PerspectiveTransform) GetFarPlaneDist() float32 {
 	return c.farPlaneDist
 }
 
+// SetFarPlaneDist moves the back of the frustum. A level bigger than the
+// frustum has its far end clipped away and the sky shows through the wall at
+// the end of it, which is what a 272-tile hall against the 100 below looked
+// like.
+//
+// It costs almost nothing in depth precision: what a depth buffer can tell
+// apart at some distance goes as the square of that distance over the near
+// plane, and the far plane only enters as 1/far, which against a near plane of
+// 0.05 is noise. Precision at fifty units is the same whether the frustum ends
+// at a hundred or a thousand.
+func (c *PerspectiveTransform) SetFarPlaneDist(distance float32) {
+	if distance <= c.nearPlaneDist {
+		return
+	}
+	c.farPlaneDist = distance
+}
+
 // ConeCosine is the cosine of the half FOV: the widest angle off the forward axis
 // that a spotlight can light and still have depth information for it in its own
 // shadow map.

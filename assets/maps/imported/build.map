@@ -1,0 +1,813 @@
+# The imported gallery: one of everything the two DOS-game importers
+# brought in, in a hall you can walk the length of. It is the check that an
+# import worked, and the range the hostile AI is tried out in.
+#
+# Written by `go run ./tools/mapgen -gallery` out of whatever is installed,
+# then compiled by `go run ./tools/mapgen -map imported` like any other level.
+#
+# Four bays, in the order you meet them: the scenery, standing in rows with
+# room to walk between; the characters that do not fight; everything that
+# does; and the game's own 3D models at the far end. F1 -> Cheats -> Give
+# All Weapons before going past the second bay.
+
+size 160 6 272
+ambient 0.75 0.75 0.82 0.85
+ceiling 26 26 34
+floor 18 18 24
+fog 150 420
+
+block hall 21 22 20
+fill hall 0 0 0 159 5 271
+clear 2 1 2 157 3 269
+
+spawn 8.5 1.5 8.5 dir=0,1
+
+# --- light ------------------------------------------------------------------
+light 12.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 12.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 32.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 52.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 72.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 92.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 112.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 132.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 152.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 172.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 192.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 212.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 232.5 color=1,0.92,0.80 power=6 baked
+light 12.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 32.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 52.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 72.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 92.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 112.5 3 252.5 color=1,0.92,0.80 power=6 baked
+light 132.5 3 252.5 color=1,0.92,0.80 power=6 baked
+
+# --- bay one: the scenery, every frame it has ------------------------------
+entity - at=6.5,1,14 sprite=bs_air_vent passthrough=true
+entity - at=8.5,1,14 sprite=bs_auto_burst_rifle passthrough=true
+entity - at=10.5,1,14 sprite=bs_auto_charge_pistol passthrough=true
+entity - at=12.5,1,14 sprite=bs_big_charge_pack_clip passthrough=true
+entity - at=14.5,1,14 sprite=bs_black_ooze passthrough=true
+entity - at=16.5,1,14 sprite=bs_blood_drip passthrough=true
+entity - at=18.5,1,14 sprite=bs_blood_puddle passthrough=true
+entity - at=20.5,1,14 sprite=bs_blue_key passthrough=true
+entity - at=22.5,1,14 sprite=bs_body_can passthrough=true
+entity - at=24.5,1,14 sprite=bs_bonus passthrough=true
+entity - at=26.5,1,14 sprite=bs_candy_bar passthrough=true
+entity - at=28.5,1,14 sprite=bs_candy_bar_candy_bar passthrough=true
+entity - at=30.5,1,14 sprite=bs_candy_wrapper passthrough=true
+entity - at=32.5,1,14 sprite=bs_ceiling_lamp_2 passthrough=true
+entity - at=34.5,1,14 sprite=bs_ceiling_lamp_3 passthrough=true
+entity - at=36.5,1,14 sprite=bs_ceiling_light passthrough=true
+entity - at=38.5,1,14 sprite=bs_chair passthrough=true
+entity - at=40.5,1,14 sprite=bs_charge_unit passthrough=true
+entity - at=42.5,1,14 sprite=bs_chicken_bone passthrough=true
+entity - at=44.5,1,14 sprite=bs_chicken_leg passthrough=true
+entity - at=46.5,1,14 sprite=bs_concession_machine_money passthrough=true
+entity - at=48.5,1,14 sprite=bs_containment_canister passthrough=true
+entity - at=50.5,1,14 sprite=bs_crate_1 passthrough=true
+entity - at=52.5,1,14 sprite=bs_crate_2 passthrough=true
+entity - at=54.5,1,14 sprite=bs_crate_3 passthrough=true
+entity - at=56.5,1,14 sprite=bs_dead_gen_sci passthrough=true
+entity - at=58.5,1,14 sprite=bs_deco_arc passthrough=true
+entity - at=60.5,1,14 sprite=bs_empty_copy_of_71_body_parts passthrough=true
+entity - at=62.5,1,14 sprite=bs_empty_water_bowl passthrough=true
+entity - at=64.5,1,14 sprite=bs_exit_sign passthrough=true
+entity - at=66.5,1,14 sprite=bs_explosion passthrough=true
+entity - at=68.5,1,14 sprite=bs_ficus_tree passthrough=true
+entity - at=70.5,1,14 sprite=bs_first_aid passthrough=true
+entity - at=72.5,1,14 sprite=bs_floor_grate passthrough=true
+entity - at=6.5,1,16 sprite=bs_floor_lamp passthrough=true
+entity - at=8.5,1,16 sprite=bs_full_water_bowl passthrough=true
+entity - at=10.5,1,16 sprite=bs_general_chair passthrough=true
+entity - at=12.5,1,16 sprite=bs_general_table passthrough=true
+entity - at=14.5,1,16 sprite=bs_gold passthrough=true
+entity - at=16.5,1,16 sprite=bs_gold_1 passthrough=true
+entity - at=18.5,1,16 sprite=bs_gold_2 passthrough=true
+entity - at=20.5,1,16 sprite=bs_gold_3 passthrough=true
+entity - at=22.5,1,16 sprite=bs_gore passthrough=true
+entity - at=24.5,1,16 sprite=bs_grande_launcher passthrough=true
+entity - at=26.5,1,16 sprite=bs_grate passthrough=true
+entity - at=28.5,1,16 sprite=bs_greek_post passthrough=true
+entity - at=30.5,1,16 sprite=bs_green_ooze passthrough=true
+entity - at=32.5,1,16 sprite=bs_grenade_blast passthrough=true
+entity - at=34.5,1,16 sprite=bs_gurney_mut_empty_gurney_mutant passthrough=true
+entity - at=36.5,1,16 sprite=bs_gurney_mut_ready_gurney_mutant passthrough=true
+entity - at=38.5,1,16 sprite=bs_gurney_no_blood passthrough=true
+entity - at=40.5,1,16 sprite=bs_half_eaten_corpse passthrough=true
+entity - at=42.5,1,16 sprite=bs_ham passthrough=true
+entity - at=44.5,1,16 sprite=bs_ham_bone passthrough=true
+entity - at=46.5,1,16 sprite=bs_indirect_half_sphere passthrough=true
+entity - at=48.5,1,16 sprite=bs_kitchen_trash passthrough=true
+entity - at=50.5,1,16 sprite=bs_lab_table passthrough=true
+entity - at=52.5,1,16 sprite=bs_large_alien_canister passthrough=true
+entity - at=54.5,1,16 sprite=bs_lcan_alien_ready_large_alien_canister passthrough=true
+entity - at=56.5,1,16 sprite=bs_loot passthrough=true
+entity - at=58.5,1,16 sprite=bs_lunch_table passthrough=true
+entity - at=60.5,1,16 sprite=bs_money_bag passthrough=true
+entity - at=62.5,1,16 sprite=bs_office_chair passthrough=true
+entity - at=64.5,1,16 sprite=bs_office_desk passthrough=true
+entity - at=66.5,1,16 sprite=bs_office_sink passthrough=true
+entity - at=68.5,1,16 sprite=bs_office_trash passthrough=true
+entity - at=70.5,1,16 sprite=bs_or_lamp passthrough=true
+entity - at=72.5,1,16 sprite=bs_particle_charged_ion passthrough=true
+entity - at=6.5,1,18 sprite=bs_pillar passthrough=true
+entity - at=8.5,1,18 sprite=bs_pipe_steam passthrough=true
+entity - at=10.5,1,18 sprite=bs_piss_puddle passthrough=true
+entity - at=12.5,1,18 sprite=bs_pistol passthrough=true
+entity - at=14.5,1,18 sprite=bs_plant_1 passthrough=true
+entity - at=16.5,1,18 sprite=bs_plant_2 passthrough=true
+entity - at=18.5,1,18 sprite=bs_red_blue_post passthrough=true
+entity - at=20.5,1,18 sprite=bs_red_hitech_post passthrough=true
+entity - at=22.5,1,18 sprite=bs_red_key passthrough=true
+entity - at=24.5,1,18 sprite=bs_sandwich passthrough=true
+entity - at=26.5,1,18 sprite=bs_sandwich_sandwich passthrough=true
+entity - at=28.5,1,18 sprite=bs_sandwich_wrap passthrough=true
+entity - at=30.5,1,18 sprite=bs_scan_alien_ready_small_alien_canister passthrough=true
+entity - at=32.5,1,18 sprite=bs_security_desk passthrough=true
+entity - at=34.5,1,18 sprite=bs_security_lamp passthrough=true
+entity - at=36.5,1,18 sprite=bs_small_alien_canister passthrough=true
+entity - at=38.5,1,18 sprite=bs_spr_fscout_dead_dressing passthrough=true
+entity - at=40.5,1,18 sprite=bs_spr_rent_dead_dressing passthrough=true
+entity - at=42.5,1,18 sprite=bs_spr_stat_69_block passthrough=true
+entity - at=44.5,1,18 sprite=bs_spr_stat_71_block passthrough=true
+entity - at=46.5,1,18 sprite=bs_spr_stat_73_dressing passthrough=true
+entity - at=48.5,1,18 sprite=bs_spr_stat_75_dressing passthrough=true
+entity - at=50.5,1,18 sprite=bs_spr_swat_dead_dressing passthrough=true
+entity - at=52.5,1,18 sprite=bs_stat_78_concession_machine_money passthrough=true
+entity - at=54.5,1,18 sprite=bs_statue passthrough=true
+entity - at=56.5,1,18 sprite=bs_steam passthrough=true
+entity - at=58.5,1,18 sprite=bs_steam_pipe passthrough=true
+entity - at=60.5,1,18 sprite=bs_steam_pipe_steam_pipe passthrough=true
+entity - at=62.5,1,18 sprite=bs_stool passthrough=true
+entity - at=64.5,1,18 sprite=bs_table passthrough=true
+entity - at=66.5,1,18 sprite=bs_transporter passthrough=true
+entity - at=68.5,1,18 sprite=bs_vase passthrough=true
+entity - at=70.5,1,18 sprite=bs_video_game_machine passthrough=true
+entity - at=72.5,1,18 sprite=bs_water_air_vent passthrough=true
+entity - at=6.5,1,20 sprite=bs_water_drip passthrough=true
+entity - at=8.5,1,20 sprite=bs_water_fountain passthrough=true
+entity - at=10.5,1,20 sprite=bs_water_puddle passthrough=true
+entity - at=12.5,1,20 sprite=bs_yellow_key passthrough=true
+entity - at=14.5,1,20 sprite=ss_1st_aid_kit passthrough=true
+entity - at=16.5,1,20 sprite=ss_access_cards passthrough=true
+entity - at=18.5,1,20 sprite=ss_access_slot passthrough=true
+entity - at=20.5,1,20 sprite=ss_accessdoor passthrough=true
+entity - at=22.5,1,20 sprite=ss_accpanel1 passthrough=true
+entity - at=24.5,1,20 sprite=ss_accpanel2 passthrough=true
+entity - at=26.5,1,20 sprite=ss_accpanel3 passthrough=true
+entity - at=28.5,1,20 sprite=ss_accpanel4 passthrough=true
+entity - at=30.5,1,20 sprite=ss_accpanel5 passthrough=true
+entity - at=32.5,1,20 sprite=ss_accpanel6 passthrough=true
+entity - at=34.5,1,20 sprite=ss_acid_corr passthrough=true
+entity - at=36.5,1,20 sprite=ss_admin_card passthrough=true
+entity - at=38.5,1,20 sprite=ss_ai_hint passthrough=true
+entity - at=40.5,1,20 sprite=ss_aim passthrough=true
+entity - at=42.5,1,20 sprite=ss_ammo_vend passthrough=true
+entity - at=44.5,1,20 sprite=ss_antenna_pan passthrough=true
+entity - at=46.5,1,20 sprite=ss_aoe_con_trig passthrough=true
+entity - at=48.5,1,20 sprite=ss_aoe_ent_trig passthrough=true
+entity - at=50.5,1,20 sprite=ss_arrow passthrough=true
+entity - at=52.5,1,20 sprite=ss_asslow passthrough=true
+entity - at=54.5,1,20 sprite=ss_asslt_rifle passthrough=true
+entity - at=56.5,1,20 sprite=ss_atrace passthrough=true
+entity - at=58.5,1,20 sprite=ss_b_serk passthrough=true
+entity - at=60.5,1,20 sprite=ss_barricade passthrough=true
+entity - at=62.5,1,20 sprite=ss_batt_pack passthrough=true
+entity - at=64.5,1,20 sprite=ss_beaker passthrough=true
+entity - at=66.5,1,20 sprite=ss_beam_blast passthrough=true
+entity - at=68.5,1,20 sprite=ss_beverage passthrough=true
+entity - at=70.5,1,20 sprite=ss_big_bould passthrough=true
+entity - at=72.5,1,20 sprite=ss_big_lever passthrough=true
+entity - at=6.5,1,22 sprite=ss_big_red passthrough=true
+entity - at=8.5,1,22 sprite=ss_bigscreen passthrough=true
+entity - at=10.5,1,22 sprite=ss_biohazard passthrough=true
+entity - at=12.5,1,22 sprite=ss_bioscan passthrough=true
+entity - at=14.5,1,22 sprite=ss_blastdoor passthrough=true
+entity - at=16.5,1,22 sprite=ss_blaster passthrough=true
+entity - at=18.5,1,22 sprite=ss_blood passthrough=true
+entity - at=20.5,1,22 sprite=ss_board_slot passthrough=true
+entity - at=22.5,1,22 sprite=ss_bones_1 passthrough=true
+entity - at=24.5,1,22 sprite=ss_bones_2 passthrough=true
+entity - at=26.5,1,22 sprite=ss_booster passthrough=true
+entity - at=28.5,1,22 sprite=ss_br_lab_forc passthrough=true
+entity - at=30.5,1,22 sprite=ss_br_res_forc passthrough=true
+entity - at=32.5,1,22 sprite=ss_brass_rail passthrough=true
+entity - at=34.5,1,22 sprite=ss_bridge passthrough=true
+entity - at=36.5,1,22 sprite=ss_briefcase passthrough=true
+entity - at=38.5,1,22 sprite=ss_brj_doorway passthrough=true
+entity - at=40.5,1,22 sprite=ss_broken_clk passthrough=true
+entity - at=42.5,1,22 sprite=ss_broken_gun passthrough=true
+entity - at=44.5,1,22 sprite=ss_broken_lev passthrough=true
+entity - at=46.5,1,22 sprite=ss_broken_lev_8_1_9 passthrough=true
+entity - at=48.5,1,22 sprite=ss_broken_pan passthrough=true
+entity - at=50.5,1,22 sprite=ss_brokenlab1 passthrough=true
+entity - at=52.5,1,22 sprite=ss_brokenlab2 passthrough=true
+entity - at=54.5,1,22 sprite=ss_btrace passthrough=true
+entity - at=56.5,1,22 sprite=ss_bug passthrough=true
+entity - at=58.5,1,22 sprite=ss_bullet_hole passthrough=true
+entity - at=60.5,1,22 sprite=ss_bullet_robot passthrough=true
+entity - at=62.5,1,22 sprite=ss_burn_res passthrough=true
+entity - at=64.5,1,22 sprite=ss_button1 passthrough=true
+entity - at=66.5,1,22 sprite=ss_button2 passthrough=true
+entity - at=68.5,1,22 sprite=ss_c_shield passthrough=true
+entity - at=70.5,1,22 sprite=ss_cabinet passthrough=true
+entity - at=72.5,1,22 sprite=ss_cables passthrough=true
+entity - at=6.5,1,24 sprite=ss_cam_expl passthrough=true
+entity - at=8.5,1,24 sprite=ss_camera passthrough=true
+entity - at=10.5,1,24 sprite=ss_catwalk passthrough=true
+entity - at=12.5,1,24 sprite=ss_chair passthrough=true
+entity - at=14.5,1,24 sprite=ss_chair_7_4_5 passthrough=true
+entity - at=16.5,1,24 sprite=ss_chand passthrough=true
+entity - at=18.5,1,24 sprite=ss_chem_recep passthrough=true
+entity - at=20.5,1,24 sprite=ss_chem_stain passthrough=true
+entity - at=22.5,1,24 sprite=ss_chem_tank passthrough=true
+entity - at=24.5,1,24 sprite=ss_chemhazard passthrough=true
+entity - at=26.5,1,24 sprite=ss_clothes passthrough=true
+entity - at=28.5,1,24 sprite=ss_cmd_card passthrough=true
+entity - at=30.5,1,24 sprite=ss_coattree passthrough=true
+entity - at=32.5,1,24 sprite=ss_conc passthrough=true
+entity - at=34.5,1,24 sprite=ss_contin_trig passthrough=true
+entity - at=36.5,1,24 sprite=ss_controlpan passthrough=true
+entity - at=38.5,1,24 sprite=ss_controlped passthrough=true
+entity - at=40.5,1,24 sprite=ss_controlped_7_5_6 passthrough=true
+entity - at=42.5,1,24 sprite=ss_corpse passthrough=true
+entity - at=44.5,1,24 sprite=ss_corpse1 passthrough=true
+entity - at=46.5,1,24 sprite=ss_corpse2 passthrough=true
+entity - at=48.5,1,24 sprite=ss_corpse3 passthrough=true
+entity - at=50.5,1,24 sprite=ss_corpse4 passthrough=true
+entity - at=52.5,1,24 sprite=ss_corpse5 passthrough=true
+entity - at=54.5,1,24 sprite=ss_corpse6 passthrough=true
+entity - at=56.5,1,24 sprite=ss_corpse7 passthrough=true
+entity - at=58.5,1,24 sprite=ss_corpse8 passthrough=true
+entity - at=60.5,1,24 sprite=ss_corpse_13_6_1 passthrough=true
+entity - at=62.5,1,24 sprite=ss_corpse_13_6_2 passthrough=true
+entity - at=64.5,1,24 sprite=ss_corpse_13_6_3 passthrough=true
+entity - at=66.5,1,24 sprite=ss_corpse_13_6_4 passthrough=true
+entity - at=68.5,1,24 sprite=ss_corpse_13_6_5 passthrough=true
+entity - at=70.5,1,24 sprite=ss_corpse_13_6_6 passthrough=true
+entity - at=72.5,1,24 sprite=ss_corpse_13_6_7 passthrough=true
+entity - at=6.5,1,26 sprite=ss_corpse_expl1 passthrough=true
+entity - at=8.5,1,26 sprite=ss_corpse_expl2 passthrough=true
+entity - at=10.5,1,26 sprite=ss_couch passthrough=true
+entity - at=12.5,1,26 sprite=ss_crate_expl passthrough=true
+entity - at=14.5,1,26 sprite=ss_crate_frags passthrough=true
+entity - at=16.5,1,26 sprite=ss_cyb_genforc passthrough=true
+entity - at=18.5,1,26 sprite=ss_cyber_decoy passthrough=true
+entity - at=20.5,1,26 sprite=ss_cyber_term passthrough=true
+entity - at=22.5,1,26 sprite=ss_cyberaccess passthrough=true
+entity - at=24.5,1,26 sprite=ss_cybertog passthrough=true
+entity - at=26.5,1,26 sprite=ss_cybertog_9_5_1 passthrough=true
+entity - at=28.5,1,26 sprite=ss_cybertog_9_5_2 passthrough=true
+entity - at=30.5,1,26 sprite=ss_dartgun passthrough=true
+entity - at=32.5,1,26 sprite=ss_data_bolt passthrough=true
+entity - at=34.5,1,26 sprite=ss_data_reader passthrough=true
+entity - at=36.5,1,26 sprite=ss_datalet passthrough=true
+entity - at=38.5,1,26 sprite=ss_datastorm passthrough=true
+entity - at=40.5,1,26 sprite=ss_dead_cyborg passthrough=true
+entity - at=42.5,1,26 sprite=ss_dead_cyborg_13_5_1 passthrough=true
+entity - at=44.5,1,26 sprite=ss_dead_cyborg_13_5_2 passthrough=true
+entity - at=46.5,1,26 sprite=ss_dead_cyborg_13_5_3 passthrough=true
+entity - at=48.5,1,26 sprite=ss_dead_cyborg_13_5_4 passthrough=true
+entity - at=50.5,1,26 sprite=ss_dead_cyborg_13_5_5 passthrough=true
+entity - at=52.5,1,26 sprite=ss_dead_cyborg_13_5_6 passthrough=true
+entity - at=54.5,1,26 sprite=ss_dead_mut passthrough=true
+entity - at=56.5,1,26 sprite=ss_dead_mutant passthrough=true
+entity - at=58.5,1,26 sprite=ss_dead_mutant_13_3_1 passthrough=true
+entity - at=60.5,1,26 sprite=ss_dead_mutant_13_3_2 passthrough=true
+entity - at=62.5,1,26 sprite=ss_dead_mutant_13_3_3 passthrough=true
+entity - at=64.5,1,26 sprite=ss_dead_mutant_13_3_4 passthrough=true
+entity - at=66.5,1,26 sprite=ss_dead_mutant_13_3_5 passthrough=true
+entity - at=68.5,1,26 sprite=ss_dead_mutant_13_3_6 passthrough=true
+entity - at=70.5,1,26 sprite=ss_dead_mutant_13_3_7 passthrough=true
+entity - at=72.5,1,26 sprite=ss_dead_robot passthrough=true
+entity - at=6.5,1,28 sprite=ss_dead_robot_13_4_1 passthrough=true
+entity - at=8.5,1,28 sprite=ss_dead_robot_13_4_10 passthrough=true
+entity - at=10.5,1,28 sprite=ss_dead_robot_13_4_11 passthrough=true
+entity - at=12.5,1,28 sprite=ss_dead_robot_13_4_12 passthrough=true
+entity - at=14.5,1,28 sprite=ss_dead_robot_13_4_2 passthrough=true
+entity - at=16.5,1,28 sprite=ss_dead_robot_13_4_3 passthrough=true
+entity - at=18.5,1,28 sprite=ss_dead_robot_13_4_4 passthrough=true
+entity - at=20.5,1,28 sprite=ss_dead_robot_13_4_5 passthrough=true
+entity - at=22.5,1,28 sprite=ss_dead_robot_13_4_6 passthrough=true
+entity - at=24.5,1,28 sprite=ss_dead_robot_13_4_7 passthrough=true
+entity - at=26.5,1,28 sprite=ss_dead_robot_13_4_8 passthrough=true
+entity - at=28.5,1,28 sprite=ss_dead_robot_13_4_9 passthrough=true
+entity - at=30.5,1,28 sprite=ss_deathwatch passthrough=true
+entity - at=32.5,1,28 sprite=ss_decoy passthrough=true
+entity - at=34.5,1,28 sprite=ss_def_elev_1 passthrough=true
+entity - at=36.5,1,28 sprite=ss_def_elev_2 passthrough=true
+entity - at=38.5,1,28 sprite=ss_dest_antenn passthrough=true
+entity - at=40.5,1,28 sprite=ss_detox passthrough=true
+entity - at=42.5,1,28 sprite=ss_dial passthrough=true
+entity - at=44.5,1,28 sprite=ss_disc passthrough=true
+entity - at=46.5,1,28 sprite=ss_doubl_right passthrough=true
+entity - at=48.5,1,28 sprite=ss_double_left passthrough=true
+entity - at=50.5,1,28 sprite=ss_drill passthrough=true
+entity - at=52.5,1,28 sprite=ss_drill_bit passthrough=true
+entity - at=54.5,1,28 sprite=ss_droncam passthrough=true
+entity - at=56.5,1,28 sprite=ss_ecology passthrough=true
+entity - at=58.5,1,28 sprite=ss_elepanel1 passthrough=true
+entity - at=60.5,1,28 sprite=ss_elepanel2 passthrough=true
+entity - at=62.5,1,28 sprite=ss_elepanel3 passthrough=true
+entity - at=64.5,1,28 sprite=ss_eltslow passthrough=true
+entity - at=66.5,1,28 sprite=ss_email1 passthrough=true
+entity - at=68.5,1,28 sprite=ss_emp passthrough=true
+entity - at=70.5,1,28 sprite=ss_emp_expl passthrough=true
+entity - at=72.5,1,28 sprite=ss_end_table passthrough=true
+entity - at=6.5,1,30 sprite=ss_energy_chrg passthrough=true
+entity - at=8.5,1,30 sprite=ss_energy_mine passthrough=true
+entity - at=10.5,1,30 sprite=ss_eng_card passthrough=true
+entity - at=12.5,1,30 sprite=ss_entry_trig passthrough=true
+entity - at=14.5,1,30 sprite=ss_enviro_suit passthrough=true
+entity - at=16.5,1,30 sprite=ss_etrace passthrough=true
+entity - at=18.5,1,30 sprite=ss_exec_door passthrough=true
+entity - at=20.5,1,30 sprite=ss_exec_elev passthrough=true
+entity - at=22.5,1,30 sprite=ss_exechair passthrough=true
+entity - at=24.5,1,30 sprite=ss_exit_portal passthrough=true
+entity - at=26.5,1,30 sprite=ss_expcam passthrough=true
+entity - at=28.5,1,30 sprite=ss_expl_blast passthrough=true
+entity - at=30.5,1,30 sprite=ss_explo passthrough=true
+entity - at=32.5,1,30 sprite=ss_explosion passthrough=true
+entity - at=34.5,1,30 sprite=ss_explosion_11_2_1 passthrough=true
+entity - at=36.5,1,30 sprite=ss_explosion_11_2_2 passthrough=true
+entity - at=38.5,1,30 sprite=ss_fakeid passthrough=true
+entity - at=40.5,1,30 sprite=ss_fire_ext passthrough=true
+entity - at=42.5,1,30 sprite=ss_fixup_term passthrough=true
+entity - at=44.5,1,30 sprite=ss_flask passthrough=true
+entity - at=46.5,1,30 sprite=ss_flechette passthrough=true
+entity - at=48.5,1,30 sprite=ss_floor passthrough=true
+entity - at=50.5,1,30 sprite=ss_floorlamp passthrough=true
+entity - at=52.5,1,30 sprite=ss_forcebridge passthrough=true
+entity - at=54.5,1,30 sprite=ss_forcebridge_7_7_9 passthrough=true
+entity - at=56.5,1,30 sprite=ss_frag passthrough=true
+entity - at=58.5,1,30 sprite=ss_frt_elev passthrough=true
+entity - at=60.5,1,30 sprite=ss_funct_dsk passthrough=true
+entity - at=62.5,1,30 sprite=ss_fung1 passthrough=true
+entity - at=64.5,1,30 sprite=ss_fung2 passthrough=true
+entity - at=66.5,1,30 sprite=ss_funkpill passthrough=true
+entity - at=68.5,1,30 sprite=ss_games passthrough=true
+entity - at=70.5,1,30 sprite=ss_gas passthrough=true
+entity - at=72.5,1,30 sprite=ss_gas_expl passthrough=true
+entity - at=6.5,1,32 sprite=ss_gen_force passthrough=true
+entity - at=8.5,1,32 sprite=ss_genius passthrough=true
+entity - at=10.5,1,32 sprite=ss_glowbulb passthrough=true
+entity - at=12.5,1,32 sprite=ss_goat_cow passthrough=true
+entity - at=14.5,1,32 sprite=ss_graf passthrough=true
+entity - at=16.5,1,32 sprite=ss_grass passthrough=true
+entity - at=18.5,1,32 sprite=ss_grating_1 passthrough=true
+entity - at=20.5,1,32 sprite=ss_grating_2 passthrough=true
+entity - at=22.5,1,32 sprite=ss_grating_3 passthrough=true
+entity - at=24.5,1,32 sprite=ss_grating_4 passthrough=true
+entity - at=26.5,1,32 sprite=ss_group_card passthrough=true
+entity - at=28.5,1,32 sprite=ss_gtrace passthrough=true
+entity - at=30.5,1,32 sprite=ss_head passthrough=true
+entity - at=32.5,1,32 sprite=ss_head_8_2_14 passthrough=true
+entity - at=34.5,1,32 sprite=ss_heal_vend passthrough=true
+entity - at=36.5,1,32 sprite=ss_healing passthrough=true
+entity - at=38.5,1,32 sprite=ss_helmet passthrough=true
+entity - at=40.5,1,32 sprite=ss_hideaway_bd passthrough=true
+entity - at=42.5,1,32 sprite=ss_hollow passthrough=true
+entity - at=44.5,1,32 sprite=ss_hologram passthrough=true
+entity - at=46.5,1,32 sprite=ss_hornet passthrough=true
+entity - at=48.5,1,32 sprite=ss_horz_klax passthrough=true
+entity - at=50.5,1,32 sprite=ss_horz_klax_11_0_3 passthrough=true
+entity - at=52.5,1,32 sprite=ss_hosp_bed passthrough=true
+entity - at=54.5,1,32 sprite=ss_hosp_door passthrough=true
+entity - at=56.5,1,32 sprite=ss_hud passthrough=true
+entity - at=58.5,1,32 sprite=ss_hvy_beam_robt passthrough=true
+entity - at=60.5,1,32 sprite=ss_i_cad_batt passthrough=true
+entity - at=62.5,1,32 sprite=ss_ice passthrough=true
+entity - at=64.5,1,32 sprite=ss_icewall passthrough=true
+entity - at=66.5,1,32 sprite=ss_icon passthrough=true
+entity - at=68.5,1,32 sprite=ss_ident passthrough=true
+entity - at=70.5,1,32 sprite=ss_impact passthrough=true
+entity - at=72.5,1,32 sprite=ss_infonode passthrough=true
+entity - at=6.5,1,34 sprite=ss_infrared passthrough=true
+entity - at=8.5,1,34 sprite=ss_interface_demod passthrough=true
+entity - at=10.5,1,34 sprite=ss_invisoslow passthrough=true
+entity - at=12.5,1,34 sprite=ss_ion_beam passthrough=true
+entity - at=14.5,1,34 sprite=ss_iris_door passthrough=true
+entity - at=16.5,1,34 sprite=ss_iso_chipset passthrough=true
+entity - at=18.5,1,34 sprite=ss_isotope_x_22 passthrough=true
+entity - at=20.5,1,34 sprite=ss_isotope_x_22_8_7_3 passthrough=true
+entity - at=22.5,1,34 sprite=ss_jump_jet passthrough=true
+entity - at=24.5,1,34 sprite=ss_keyboard passthrough=true
+entity - at=26.5,1,34 sprite=ss_keypad1 passthrough=true
+entity - at=28.5,1,34 sprite=ss_keypad2 passthrough=true
+entity - at=30.5,1,34 sprite=ss_lab_door passthrough=true
+entity - at=32.5,1,34 sprite=ss_lab_doorway passthrough=true
+entity - at=34.5,1,34 sprite=ss_lab_force passthrough=true
+entity - at=36.5,1,34 sprite=ss_lamp passthrough=true
+entity - at=38.5,1,34 sprite=ss_lantern passthrough=true
+entity - at=40.5,1,34 sprite=ss_large_cpu passthrough=true
+entity - at=42.5,1,34 sprite=ss_large_crate passthrough=true
+entity - at=44.5,1,34 sprite=ss_large_expl passthrough=true
+entity - at=46.5,1,34 sprite=ss_large_slag passthrough=true
+entity - at=48.5,1,34 sprite=ss_laser_rapier passthrough=true
+entity - at=50.5,1,34 sprite=ss_level_trig passthrough=true
+entity - at=52.5,1,34 sprite=ss_lever1 passthrough=true
+entity - at=54.5,1,34 sprite=ss_lever2 passthrough=true
+entity - at=56.5,1,34 sprite=ss_lil_bould passthrough=true
+entity - at=58.5,1,34 sprite=ss_limb passthrough=true
+entity - at=60.5,1,34 sprite=ss_logic_probe passthrough=true
+entity - at=62.5,1,34 sprite=ss_lt_beam_robt passthrough=true
+entity - at=64.5,1,34 sprite=ss_lt_blood passthrough=true
+entity - at=66.5,1,34 sprite=ss_lux_dsk passthrough=true
+entity - at=68.5,1,34 sprite=ss_machinery passthrough=true
+entity - at=70.5,1,34 sprite=ss_mag_burst passthrough=true
+entity - at=72.5,1,34 sprite=ss_mag_cart passthrough=true
+entity - at=6.5,1,36 sprite=ss_magnesium passthrough=true
+entity - at=8.5,1,36 sprite=ss_magnum passthrough=true
+entity - at=10.5,1,36 sprite=ss_magpulse passthrough=true
+entity - at=12.5,1,36 sprite=ss_magpulse_hit passthrough=true
+entity - at=14.5,1,36 sprite=ss_maint_card passthrough=true
+entity - at=16.5,1,36 sprite=ss_maint_door passthrough=true
+entity - at=18.5,1,36 sprite=ss_map1 passthrough=true
+entity - at=20.5,1,36 sprite=ss_map_note passthrough=true
+entity - at=22.5,1,36 sprite=ss_mchunk1 passthrough=true
+entity - at=24.5,1,36 sprite=ss_mchunk2 passthrough=true
+entity - at=26.5,1,36 sprite=ss_mchunk3 passthrough=true
+entity - at=28.5,1,36 sprite=ss_med_card passthrough=true
+entity - at=30.5,1,36 sprite=ss_med_cart passthrough=true
+entity - at=32.5,1,36 sprite=ss_medi passthrough=true
+entity - at=34.5,1,36 sprite=ss_metal_scrap passthrough=true
+entity - at=36.5,1,36 sprite=ss_microscope passthrough=true
+entity - at=38.5,1,36 sprite=ss_mine passthrough=true
+entity - at=40.5,1,36 sprite=ss_mine_6_0_2 passthrough=true
+entity - at=42.5,1,36 sprite=ss_mntr_expl passthrough=true
+entity - at=44.5,1,36 sprite=ss_monitor passthrough=true
+entity - at=46.5,1,36 sprite=ss_monitr passthrough=true
+entity - at=48.5,1,36 sprite=ss_monopole_stab passthrough=true
+entity - at=50.5,1,36 sprite=ss_multiplexer passthrough=true
+entity - at=52.5,1,36 sprite=ss_music_mark passthrough=true
+entity - at=54.5,1,36 sprite=ss_mutant passthrough=true
+entity - at=56.5,1,36 sprite=ss_mutslow passthrough=true
+entity - at=58.5,1,36 sprite=ss_nav_unit passthrough=true
+entity - at=60.5,1,36 sprite=ss_needle passthrough=true
+entity - at=62.5,1,36 sprite=ss_no_door passthrough=true
+entity - at=64.5,1,36 sprite=ss_no_door_10_1_8 passthrough=true
+entity - at=66.5,1,36 sprite=ss_no_door_10_2_6 passthrough=true
+entity - at=68.5,1,36 sprite=ss_no_door_10_3_4 passthrough=true
+entity - at=70.5,1,36 sprite=ss_no_door_10_4_5 passthrough=true
+entity - at=72.5,1,36 sprite=ss_ntrace passthrough=true
+entity - at=6.5,1,38 sprite=ss_ntro passthrough=true
+entity - at=8.5,1,38 sprite=ss_null_trig passthrough=true
+entity - at=10.5,1,38 sprite=ss_oil_puddle passthrough=true
+entity - at=12.5,1,38 sprite=ss_old_fakeid passthrough=true
+entity - at=14.5,1,38 sprite=ss_oven passthrough=true
+entity - at=16.5,1,38 sprite=ss_paint passthrough=true
+entity - at=18.5,1,38 sprite=ss_papers passthrough=true
+entity - at=20.5,1,38 sprite=ss_penetrator passthrough=true
+entity - at=22.5,1,38 sprite=ss_pers_card passthrough=true
+entity - at=24.5,1,38 sprite=ss_phone passthrough=true
+entity - at=26.5,1,38 sprite=ss_pillar passthrough=true
+entity - at=28.5,1,38 sprite=ss_pipe passthrough=true
+entity - at=30.5,1,38 sprite=ss_pistol passthrough=true
+entity - at=32.5,1,38 sprite=ss_plant1 passthrough=true
+entity - at=34.5,1,38 sprite=ss_plant2 passthrough=true
+entity - at=36.5,1,38 sprite=ss_plant3 passthrough=true
+entity - at=38.5,1,38 sprite=ss_plant4 passthrough=true
+entity - at=40.5,1,38 sprite=ss_plantexpl passthrough=true
+entity - at=42.5,1,38 sprite=ss_plantslow passthrough=true
+entity - at=44.5,1,38 sprite=ss_plasma_blst passthrough=true
+entity - at=46.5,1,38 sprite=ss_plasma_hit passthrough=true
+entity - at=48.5,1,38 sprite=ss_plasma_rfl passthrough=true
+entity - at=50.5,1,38 sprite=ss_plast_anten passthrough=true
+entity - at=52.5,1,38 sprite=ss_plastique passthrough=true
+entity - at=54.5,1,38 sprite=ss_plr_death passthrough=true
+entity - at=56.5,1,38 sprite=ss_poster passthrough=true
+entity - at=58.5,1,38 sprite=ss_probe passthrough=true
+entity - at=60.5,1,38 sprite=ss_pulse passthrough=true
+entity - at=62.5,1,38 sprite=ss_pulser passthrough=true
+entity - at=64.5,1,38 sprite=ss_radhazard passthrough=true
+entity - at=66.5,1,38 sprite=ss_radioactive passthrough=true
+entity - at=68.5,1,38 sprite=ss_rail_clip passthrough=true
+entity - at=70.5,1,38 sprite=ss_rail_gun passthrough=true
+entity - at=72.5,1,38 sprite=ss_rail_slow passthrough=true
+entity - at=6.5,1,40 sprite=ss_rct_doorway passthrough=true
+entity - at=8.5,1,40 sprite=ss_rctr_door passthrough=true
+entity - at=10.5,1,40 sprite=ss_realwall passthrough=true
+entity - at=12.5,1,40 sprite=ss_recall passthrough=true
+entity - at=14.5,1,40 sprite=ss_reflex passthrough=true
+entity - at=16.5,1,40 sprite=ss_repulsawall passthrough=true
+entity - at=18.5,1,40 sprite=ss_repulsor passthrough=true
+entity - at=20.5,1,40 sprite=ss_res_door passthrough=true
+entity - at=22.5,1,40 sprite=ss_res_doorway passthrough=true
+entity - at=24.5,1,40 sprite=ss_res_force passthrough=true
+entity - at=26.5,1,40 sprite=ss_retina_scan passthrough=true
+entity - at=28.5,1,40 sprite=ss_riot_gun passthrough=true
+entity - at=30.5,1,40 sprite=ss_rtrace passthrough=true
+entity - at=32.5,1,40 sprite=ss_sci_card passthrough=true
+entity - at=34.5,1,40 sprite=ss_scope passthrough=true
+entity - at=36.5,1,40 sprite=ss_screen passthrough=true
+entity - at=38.5,1,40 sprite=ss_scrmbl passthrough=true
+entity - at=40.5,1,40 sprite=ss_secret_door passthrough=true
+entity - at=42.5,1,40 sprite=ss_secret_door_10_4_7 passthrough=true
+entity - at=44.5,1,40 sprite=ss_secret_door_10_4_8 passthrough=true
+entity - at=46.5,1,40 sprite=ss_secur_card passthrough=true
+entity - at=48.5,1,40 sprite=ss_secure_crate passthrough=true
+entity - at=50.5,1,40 sprite=ss_security passthrough=true
+entity - at=52.5,1,40 sprite=ss_sensaround passthrough=true
+entity - at=54.5,1,40 sprite=ss_shelf passthrough=true
+entity - at=56.5,1,40 sprite=ss_shield passthrough=true
+entity - at=58.5,1,40 sprite=ss_shkr passthrough=true
+entity - at=60.5,1,40 sprite=ss_shodan_12_0_12 passthrough=true
+entity - at=62.5,1,40 sprite=ss_shrine passthrough=true
+entity - at=64.5,1,40 sprite=ss_shrub1 passthrough=true
+entity - at=66.5,1,40 sprite=ss_shrub2 passthrough=true
+entity - at=68.5,1,40 sprite=ss_sight passthrough=true
+entity - at=70.5,1,40 sprite=ss_sign passthrough=true
+entity - at=72.5,1,40 sprite=ss_simpsmoke passthrough=true
+entity - at=6.5,1,42 sprite=ss_skel_rags passthrough=true
+entity - at=8.5,1,42 sprite=ss_skorpion passthrough=true
+entity - at=10.5,1,42 sprite=ss_skull passthrough=true
+entity - at=12.5,1,42 sprite=ss_slag passthrough=true
+entity - at=14.5,1,42 sprite=ss_slug passthrough=true
+entity - at=16.5,1,42 sprite=ss_slugs passthrough=true
+entity - at=18.5,1,42 sprite=ss_small_cpu passthrough=true
+entity - at=20.5,1,42 sprite=ss_small_crate passthrough=true
+entity - at=22.5,1,42 sprite=ss_smoke_expl passthrough=true
+entity - at=24.5,1,42 sprite=ss_sparq passthrough=true
+entity - at=26.5,1,42 sprite=ss_splinter passthrough=true
+entity - at=28.5,1,42 sprite=ss_stamup passthrough=true
+entity - at=30.5,1,42 sprite=ss_standard passthrough=true
+entity - at=32.5,1,42 sprite=ss_statue1 passthrough=true
+entity - at=34.5,1,42 sprite=ss_status passthrough=true
+entity - at=36.5,1,42 sprite=ss_std_card passthrough=true
+entity - at=38.5,1,42 sprite=ss_stereo passthrough=true
+entity - at=40.5,1,42 sprite=ss_sto_door passthrough=true
+entity - at=42.5,1,42 sprite=ss_stor_card passthrough=true
+entity - at=44.5,1,42 sprite=ss_stun_hit passthrough=true
+entity - at=46.5,1,42 sprite=ss_stun_wave passthrough=true
+entity - at=48.5,1,42 sprite=ss_stungun passthrough=true
+entity - at=50.5,1,42 sprite=ss_supercond_proc passthrough=true
+entity - at=52.5,1,42 sprite=ss_superscreen passthrough=true
+entity - at=54.5,1,42 sprite=ss_surg_mach passthrough=true
+entity - at=56.5,1,42 sprite=ss_switch1 passthrough=true
+entity - at=58.5,1,42 sprite=ss_switch2 passthrough=true
+entity - at=60.5,1,42 sprite=ss_systemic_seq passthrough=true
+entity - at=62.5,1,42 sprite=ss_target_info passthrough=true
+entity - at=64.5,1,42 sprite=ss_teflon passthrough=true
+entity - at=66.5,1,42 sprite=ss_tele_rod passthrough=true
+entity - at=68.5,1,42 sprite=ss_text1 passthrough=true
+entity - at=70.5,1,42 sprite=ss_thermos passthrough=true
+entity - at=72.5,1,42 sprite=ss_tmap passthrough=true
+entity - at=6.5,1,44 sprite=ss_toggle passthrough=true
+entity - at=8.5,1,44 sprite=ss_toxic passthrough=true
+entity - at=10.5,1,44 sprite=ss_trac_beam passthrough=true
+entity - at=12.5,1,44 sprite=ss_trace passthrough=true
+entity - at=14.5,1,44 sprite=ss_tranq passthrough=true
+entity - at=16.5,1,44 sprite=ss_tripbeam passthrough=true
+entity - at=18.5,1,44 sprite=ss_tron_disc passthrough=true
+entity - at=20.5,1,44 sprite=ss_tt_rack passthrough=true
+entity - at=22.5,1,44 sprite=ss_tubing passthrough=true
+entity - at=24.5,1,44 sprite=ss_turbo passthrough=true
+entity - at=26.5,1,44 sprite=ss_tv passthrough=true
+entity - at=28.5,1,44 sprite=ss_tv_expl passthrough=true
+entity - at=30.5,1,44 sprite=ss_vcr passthrough=true
+entity - at=32.5,1,44 sprite=ss_vert_klax passthrough=true
+entity - at=34.5,1,44 sprite=ss_vert_klax_11_0_1 passthrough=true
+entity - at=36.5,1,44 sprite=ss_vert_open passthrough=true
+entity - at=38.5,1,44 sprite=ss_vert_split passthrough=true
+entity - at=40.5,1,44 sprite=ss_vial passthrough=true
+entity - at=42.5,1,44 sprite=ss_view_control passthrough=true
+entity - at=44.5,1,44 sprite=ss_vine1 passthrough=true
+entity - at=46.5,1,44 sprite=ss_vine2 passthrough=true
+entity - at=48.5,1,44 sprite=ss_virus passthrough=true
+entity - at=50.5,1,44 sprite=ss_virushrub1 passthrough=true
+entity - at=52.5,1,44 sprite=ss_virushrub2 passthrough=true
+entity - at=54.5,1,44 sprite=ss_vrslow passthrough=true
+entity - at=56.5,1,44 sprite=ss_wall_hit_1 passthrough=true
+entity - at=58.5,1,44 sprite=ss_wall_hit_2 passthrough=true
+entity - at=60.5,1,44 sprite=ss_warecasing passthrough=true
+entity - at=62.5,1,44 sprite=ss_waste_sp_ill passthrough=true
+entity - at=64.5,1,44 sprite=ss_wood_rail passthrough=true
+entity - at=66.5,1,44 sprite=ss_words passthrough=true
+entity - at=68.5,1,44 sprite=ss_wrapper passthrough=true
+entity - at=70.5,1,44 sprite=ss_x_ray_mach passthrough=true
+entity - at=72.5,1,44 sprite=ss_zap passthrough=true
+entity - at=6.5,1,46 sprite=ss_zeroslow passthrough=true
+
+# --- bay two: the characters that do not fight -----------------------------
+entity - at=6.5,1,58 sprite=bs_electro_sphere
+entity - at=12.5,1,58 sprite=bs_floating_bomb
+entity - at=18.5,1,58 sprite=bs_gold_scout
+entity - at=24.5,1,58 sprite=bs_liquid_alien
+entity - at=30.5,1,58 sprite=bs_vital
+entity - at=36.5,1,58 sprite=scientist
+entity - at=42.5,1,58 sprite=ss_insect_mut
+entity - at=48.5,1,58 sprite=ss_large_turt
+entity - at=54.5,1,58 sprite=ss_lifter
+entity - at=60.5,1,58 sprite=ss_security_3
+
+# --- bay three: everything that shoots back --------------------------------
+entity - at=6.5,1,74 sprite=bs_boss_1
+entity - at=17.5,1,74 sprite=bs_boss_2
+entity - at=28.5,1,74 sprite=bs_boss_3
+entity - at=39.5,1,74 sprite=bs_boss_4
+entity - at=50.5,1,74 sprite=bs_boss_5
+entity - at=61.5,1,74 sprite=bs_boss_6
+entity - at=72.5,1,74 sprite=bs_electro_alien
+entity - at=83.5,1,74 sprite=bs_general_scientist
+entity - at=94.5,1,74 sprite=bs_genetic_guard
+entity - at=105.5,1,74 sprite=bs_goldstern
+entity - at=116.5,1,74 sprite=bs_gurney_mutant
+entity - at=127.5,1,74 sprite=bs_lcan_alien
+entity - at=6.5,1,85 sprite=bs_mutant_human_1
+entity - at=17.5,1,85 sprite=bs_mutant_human_2
+entity - at=28.5,1,85 sprite=bs_pod_alien
+entity - at=39.5,1,85 sprite=bs_scan_alien
+entity - at=50.5,1,85 sprite=bs_sector_patrol
+entity - at=61.5,1,85 sprite=bs_star_sentinel
+entity - at=72.5,1,85 sprite=bs_star_trooper
+entity - at=83.5,1,85 sprite=bs_turret
+entity - at=94.5,1,85 sprite=ss_assassin
+entity - at=105.5,1,85 sprite=ss_autobomb
+entity - at=116.5,1,85 sprite=ss_avian_mut
+entity - at=127.5,1,85 sprite=ss_cortex_rvr
+entity - at=6.5,1,96 sprite=ss_cortex_rvr_14_3_2
+entity - at=17.5,1,96 sprite=ss_cyberbabe
+entity - at=28.5,1,96 sprite=ss_cyberdog
+entity - at=39.5,1,96 sprite=ss_cyberguard
+entity - at=50.5,1,96 sprite=ss_cyberguard_14_3_6
+entity - at=61.5,1,96 sprite=ss_diegoborg
+entity - at=72.5,1,96 sprite=ss_drone
+entity - at=83.5,1,96 sprite=ss_dynamic_ice
+entity - at=94.5,1,96 sprite=ss_elite_guard
+entity - at=105.5,1,96 sprite=ss_exec_bot
+entity - at=116.5,1,96 sprite=ss_flier
+entity - at=127.5,1,96 sprite=ss_gor_tiger
+entity - at=6.5,1,107 sprite=ss_hopper
+entity - at=17.5,1,107 sprite=ss_humanoid
+entity - at=28.5,1,107 sprite=ss_humanoid_14_0_8
+entity - at=39.5,1,107 sprite=ss_hunterkill
+entity - at=50.5,1,107 sprite=ss_inviso
+entity - at=61.5,1,107 sprite=ss_mutantborg
+entity - at=72.5,1,107 sprite=ss_plant_mut
+entity - at=83.5,1,107 sprite=ss_repairbot
+entity - at=94.5,1,107 sprite=ss_repairbot2
+entity - at=105.5,1,107 sprite=ss_security_1
+entity - at=116.5,1,107 sprite=ss_security_2
+entity - at=127.5,1,107 sprite=ss_serv_bot
+entity - at=6.5,1,118 sprite=ss_shodan
+entity - at=17.5,1,118 sprite=ss_shodan_14_4_0
+entity - at=28.5,1,118 sprite=ss_sonic
+entity - at=39.5,1,118 sprite=ss_warrior
+entity - at=50.5,1,118 sprite=ss_zero_grav
+
+# --- bay four: the game's own 3D models ------------------------------------
+entity - at=6.5,1,139 mesh=ss3d_00_phone passthrough=true
+entity - at=19.5,1,139 mesh=ss3d_01_vcr passthrough=true
+entity - at=32.5,1,139 mesh=ss3d_02_oven passthrough=true
+entity - at=45.5,1,139 mesh=ss3d_03_stereo passthrough=true
+entity - at=58.5,1,139 mesh=ss3d_04_keyboard passthrough=true
+entity - at=71.5,1,139 mesh=ss3d_05_small_cpu passthrough=true
+entity - at=84.5,1,139 mesh=ss3d_06_tv passthrough=true
+entity - at=97.5,1,139 mesh=ss3d_07_monitor passthrough=true
+entity - at=110.5,1,139 mesh=ss3d_08_large_cpu passthrough=true
+entity - at=123.5,1,139 mesh=ss3d_09_lux_dsk passthrough=true
+entity - at=136.5,1,139 mesh=ss3d_10_funct_dsk passthrough=true
+entity - at=149.5,1,139 mesh=ss3d_11_cabinet passthrough=true
+entity - at=6.5,1,152 mesh=ss3d_12_shelf passthrough=true
+entity - at=19.5,1,152 mesh=ss3d_13_hideaway_bd passthrough=true
+entity - at=32.5,1,152 mesh=ss3d_14_chair passthrough=true
+entity - at=45.5,1,152 mesh=ss3d_15_end_table passthrough=true
+entity - at=58.5,1,152 mesh=ss3d_16_couch passthrough=true
+entity - at=71.5,1,152 mesh=ss3d_17_exechair passthrough=true
+entity - at=84.5,1,152 mesh=ss3d_18_controlped passthrough=true
+entity - at=97.5,1,152 mesh=ss3d_19_tubing passthrough=true
+entity - at=110.5,1,152 mesh=ss3d_20_med_cart passthrough=true
+entity - at=123.5,1,152 mesh=ss3d_21_surg_mach passthrough=true
+entity - at=136.5,1,152 mesh=ss3d_22_tt_rack passthrough=true
+entity - at=149.5,1,152 mesh=ss3d_23_chair passthrough=true
+entity - at=6.5,1,165 mesh=ss3d_24_hosp_bed passthrough=true
+entity - at=19.5,1,165 mesh=ss3d_25_microscope passthrough=true
+entity - at=32.5,1,165 mesh=ss3d_26_scope passthrough=true
+entity - at=45.5,1,165 mesh=ss3d_27_probe passthrough=true
+entity - at=58.5,1,165 mesh=ss3d_28_x_ray_mach passthrough=true
+entity - at=71.5,1,165 mesh=ss3d_29_camera passthrough=true
+entity - at=84.5,1,165 mesh=ss3d_30_controlpan passthrough=true
+entity - at=97.5,1,165 mesh=ss3d_31_controlped passthrough=true
+entity - at=110.5,1,165 mesh=ss3d_32_lil_bould passthrough=true
+entity - at=123.5,1,165 mesh=ss3d_33_big_bould passthrough=true
+entity - at=136.5,1,165 mesh=ss3d_34 passthrough=true
+entity - at=149.5,1,165 mesh=ss3d_35 passthrough=true
+entity - at=6.5,1,178 mesh=ss3d_36_realwall passthrough=true
+entity - at=19.5,1,178 mesh=ss3d_37 passthrough=true
+entity - at=32.5,1,178 mesh=ss3d_38_brass_rail passthrough=true
+entity - at=45.5,1,178 mesh=ss3d_39_wood_rail passthrough=true
+entity - at=58.5,1,178 mesh=ss3d_40_pillar passthrough=true
+entity - at=71.5,1,178 mesh=ss3d_41_multiplexer passthrough=true
+entity - at=84.5,1,178 mesh=ss3d_42_healing passthrough=true
+entity - at=97.5,1,178 mesh=ss3d_43 passthrough=true
+entity - at=110.5,1,178 mesh=ss3d_44_cyberaccess passthrough=true
+entity - at=123.5,1,178 mesh=ss3d_45_shrine passthrough=true
+entity - at=136.5,1,178 mesh=ss3d_46_icewall passthrough=true
+entity - at=149.5,1,178 mesh=ss3d_47_datalet passthrough=true
+entity - at=6.5,1,191 mesh=ss3d_48_cyber_decoy passthrough=true
+entity - at=19.5,1,191 mesh=ss3d_49_cyber_term passthrough=true
+entity - at=32.5,1,191 mesh=ss3d_50_energy_chrg passthrough=true
+entity - at=45.5,1,191 mesh=ss3d_51_fixup_term passthrough=true
+entity - at=58.5,1,191 mesh=ss3d_52_cybertog passthrough=true
+entity - at=71.5,1,191 mesh=ss3d_53_cybertog passthrough=true
+entity - at=84.5,1,191 mesh=ss3d_54_cybertog passthrough=true
+entity - at=97.5,1,191 mesh=ss3d_55 passthrough=true
+entity - at=110.5,1,191 mesh=ss3d_56 passthrough=true
+entity - at=123.5,1,191 mesh=ss3d_57 passthrough=true
+entity - at=136.5,1,191 mesh=ss3d_58_shodan passthrough=true
+entity - at=149.5,1,191 mesh=ss3d_59 passthrough=true
+entity - at=6.5,1,204 mesh=ss3d_60_dynamic_ice passthrough=true
+entity - at=19.5,1,204 mesh=ss3d_61 passthrough=true
+entity - at=32.5,1,204 mesh=ss3d_62 passthrough=true
+entity - at=45.5,1,204 mesh=ss3d_63 passthrough=true
+entity - at=58.5,1,204 mesh=ss3d_64_exit_portal passthrough=true
+entity - at=71.5,1,204 mesh=ss3d_65_security passthrough=true
+entity - at=84.5,1,204 mesh=ss3d_66_cyberguard passthrough=true
+entity - at=97.5,1,204 mesh=ss3d_67_data_bolt passthrough=true
+entity - at=110.5,1,204 mesh=ss3d_68_arrow passthrough=true
+entity - at=123.5,1,204 mesh=ss3d_69_cyberguard passthrough=true
+entity - at=136.5,1,204 mesh=ss3d_70 passthrough=true
+entity - at=149.5,1,204 mesh=ss3d_71_pulse passthrough=true
+entity - at=6.5,1,217 mesh=ss3d_72 passthrough=true
+entity - at=19.5,1,217 mesh=ss3d_73 passthrough=true
+entity - at=32.5,1,217 mesh=ss3d_74 passthrough=true
+entity - at=45.5,1,217 mesh=ss3d_75_tron_disc passthrough=true
+entity - at=58.5,1,217 mesh=ss3d_76_zap passthrough=true
+entity - at=71.5,1,217 mesh=ss3d_77 passthrough=true
+entity - at=84.5,1,217 mesh=ss3d_78_hunterkill passthrough=true
+entity - at=97.5,1,217 mesh=ss3d_79 passthrough=true
+

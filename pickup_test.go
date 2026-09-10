@@ -86,8 +86,39 @@ func standingPickup(position mgl32.Vec3, size mgl32.Vec2) *Pickup {
 	object := quads.NewGameObject("Pickup")
 	object.Transform().SetPosition(position)
 	object.SetComponent(sprite)
-	object.SetComponent(quads.NewPhysicsComponent(false, pickupSlab))
+	object.SetComponent(quads.NewPhysicsComponent(false, pickupPickBox(size)))
 	return &Pickup{object: object, sprite: sprite}
+}
+
+// The box a thing is picked out by is the size the thing is drawn - once, not
+// twice. Every box this engine takes off a picture is scaled by the sprite's own
+// size the moment it is measured, and the transform a ray tests it against used
+// to scale it by that size again: a kit drawn a third of a unit wide was picked
+// out, and outlined, a ninth of a unit wide.
+func TestThePickingBoxIsTheSizeThePictureIsDrawn(t *testing.T) {
+	const width, height = 0.3125, 0.10416667
+
+	pickup := standingPickup(mgl32.Vec3{0, 1, 0}, mgl32.Vec2{width, height})
+	camera := core.NewFPSCamera(mgl32.Vec3{0, 1.05, 2}, 800, 600, 1)
+	camera.SetForward2D(mgl32.Vec3{0, 0, -1})
+	origin := camera.GetPosition()
+
+	at := func(across, up float32) bool {
+		target := mgl32.Vec3{across, 1 + up, 0}
+		_, hit := voxel.IntersectRayOBB(origin, target.Sub(origin).Normalize(),
+			pickup.object.Physics().OBB(camera))
+		return hit
+	}
+
+	if !at(width*0.45, height*0.9) {
+		t.Errorf("the selection missed the far corner of a picture %v by %v", width, height)
+	}
+	if at(width*0.6, height*0.5) {
+		t.Errorf("the selection picked out a picture the crosshair is beside")
+	}
+	if at(0, height*1.3) {
+		t.Errorf("the selection picked out a picture the crosshair is above")
+	}
 }
 
 // An item's collider is not as wide as its picture. An axe is drawn wide and

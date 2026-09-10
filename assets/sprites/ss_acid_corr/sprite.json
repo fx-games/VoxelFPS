@@ -1,0 +1,35 @@
+{
+  "name": "ACID CORR",
+  "tile": {
+    "X": 32,
+    "Y": 32
+  },
+  "actor": false,
+  "scale": 0.33333334,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.4375,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.1875,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/6/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

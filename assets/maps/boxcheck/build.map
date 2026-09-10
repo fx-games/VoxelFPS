@@ -1,0 +1,16 @@
+size 20 4 16
+ambient 0.9 0.9 0.95 0.9
+ceiling 40 40 50
+floor 30 30 36
+fog 60 140
+block hall 21 22 20
+fill hall 0 0 0 19 3 15
+clear 1 1 1 18 2 14
+spawn 10.0 1 4.0 dir=0,1
+light 10 2 9 color=1,1,1 power=10 baked
+entity - at=6,1.0,9 sprite=bs_genetic_guard passthrough=true
+entity - at=7.6,1.0,9 sprite=ss_avian_mut passthrough=true
+entity - at=9.2,1.0,9 sprite=bs_crate_1 passthrough=true
+entity - at=10.8,1.0,9 sprite=ss_1st_aid_kit passthrough=true
+entity - at=12.4,1.0,9 sprite=bs_ficus_tree passthrough=true
+entity - at=14,1.0,9 sprite=ss_corpse1 passthrough=true

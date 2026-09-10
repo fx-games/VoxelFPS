@@ -1,0 +1,35 @@
+{
+  "name": "THERMOS",
+  "tile": {
+    "X": 9,
+    "Y": 21
+  },
+  "actor": false,
+  "scale": 0.21875,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "13/2/0",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

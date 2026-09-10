@@ -1,0 +1,35 @@
+{
+  "name": "DEAD MUTANT",
+  "tile": {
+    "X": 76,
+    "Y": 37
+  },
+  "actor": false,
+  "scale": 0.38541666,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.4868421,
+          0.972973,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "13/3/4",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

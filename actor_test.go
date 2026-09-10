@@ -8,8 +8,8 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 )
 
-// testActor builds a bare Actor good enough for TakeDamage/ApplyDamage/die to
-// run without a whole game behind them: a real GameObject with a sprite (both
+// testActor builds a bare Actor good enough for TakeDamage/die to run without a
+// whole game behind them: a real GameObject with a sprite (both
 // death paths play an animation on it) and a zero-value PhysicsSystem, whose
 // RemoveObject is a safe no-op for an object it never tracked.
 func testActor(t *testing.T, health int, at mgl32.Vec3) *Actor {
@@ -27,17 +27,17 @@ func testActor(t *testing.T, health int, at mgl32.Vec3) *Actor {
 	}
 }
 
-// This is the bug the user caught: radiusDamage used to call TakeDamage(true) -
-// an instant kill - for every A_Explode in earshot, real detonation or not.
+// This is the bug the user caught: radiusDamage used to deal an instant kill
+// for every A_Explode in earshot, real detonation or not.
 // GrenadeAlerter overrides FragGrenadeExplosion's Spawn state with its own,
 // much smaller A_Explode(2, 240) (see assets/weapons/bd_frag_grenade/source.txt) and
 // fires once every fuse tick while the grenade is still in flight, well
 // before it actually lands and goes off - so a bystander three and a half
 // units away died the instant a grenade was thrown, never mind whether it
-// ever hit anything. ApplyDamage takes exactly the number handed to it.
-func TestApplyDamageTakesTheAmountGivenNotAnInstantKill(t *testing.T) {
+// ever hit anything. A hit that carries its own Amount costs exactly that.
+func TestDamageWithAnAmountTakesItRatherThanKillingOutright(t *testing.T) {
 	alerterPoke := testActor(t, defaultActorHealth, mgl32.Vec3{})
-	alerterPoke.ApplyDamage(2)
+	alerterPoke.TakeDamage(Damage{Amount: 2})
 	if alerterPoke.dying {
 		t.Fatalf("GrenadeAlerter's own 2-damage poke killed a %d-health actor outright", defaultActorHealth)
 	}
@@ -46,15 +46,15 @@ func TestApplyDamageTakesTheAmountGivenNotAnInstantKill(t *testing.T) {
 	}
 
 	realBlast := testActor(t, defaultActorHealth, mgl32.Vec3{})
-	realBlast.ApplyDamage(67)
-	realBlast.ApplyDamage(53) // FragGrenadeExplosion's own falloff calls stack
+	realBlast.TakeDamage(Damage{Amount: 67})
+	realBlast.TakeDamage(Damage{Amount: 53}) // FragGrenadeExplosion's own falloff calls stack
 	if !realBlast.dying {
 		t.Errorf("120 cumulative blast damage on a %d-health actor left it alive", defaultActorHealth)
 	}
 
 	dead := testActor(t, defaultActorHealth, mgl32.Vec3{})
 	dead.dying = true
-	dead.ApplyDamage(999)
+	dead.TakeDamage(Damage{Amount: 999})
 	if dead.Health != defaultActorHealth {
 		t.Errorf("a second blast changed a corpse's health to %d, want it left at %d", dead.Health, defaultActorHealth)
 	}
@@ -84,9 +84,11 @@ func TestRadiusDamageOnlyHitsActorsInsideTheBlast(t *testing.T) {
 // the running game.
 func testGame(t *testing.T, playerAt mgl32.Vec3) *Game {
 	t.Helper()
-	player := quads.NewGameObject("Player")
-	player.Transform().SetPosition(playerAt)
-	return &Game{player: player}
+	object := quads.NewGameObject("Player")
+	object.Transform().SetPosition(playerAt)
+	game := &Game{}
+	game.player = newPlayer(game, object)
+	return game
 }
 
 // A companion has to actually stop when it has caught up. Nothing in the

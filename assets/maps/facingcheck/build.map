@@ -1,0 +1,29 @@
+# A small room with four enemies in it, close enough that the fight starts on
+# its own. It is the level to load when the thing being changed is the fighting
+# rather than the importing: the gallery has everything in it but is two
+# hundred voxels long, and walking to the enemies takes most of a minute.
+#
+# Two of each game, so a change that helps one and breaks the other shows up in
+# the same frame. They spawn inside hostileSightRange, so they notice, close and
+# attack without being led there.
+#
+#   go run ./tools/mapgen -map facingcheck
+#   go run . -map facingcheck
+
+size 48 12 64
+ambient 0.55 0.55 0.6 0.5
+ceiling 30 30 38
+floor 20 20 26
+
+block room 21 22 20
+fill room 0 0 0 47 11 63
+clear 1 1 1 46 9 62
+
+spawn 24.5 1.5 6.5 dir=0,1
+light 24.5 8 20.5 color=1,0.95,0.85 power=8 baked
+light 24.5 8 40.5 color=1,0.95,0.85 power=8 baked
+
+entity - at=14.5,1.2,24.5 sprite=ss_humanoid
+entity - at=21.5,1.2,26.5 sprite=ss_cyberbabe
+entity - at=27.5,1.2,26.5 sprite=ss_avian_mut
+entity - at=34.5,1.2,24.5 sprite=bs_star_trooper

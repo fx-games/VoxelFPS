@@ -92,7 +92,7 @@ func (g *Game) spawnPickup(weapon *Weapon, ammo bool, position mgl32.Vec3) {
 	// Gravity, like everything else in the world: an item is put down in mid
 	// air - dropped out of the player's hands, or written into a map above the
 	// floor - and it lands.
-	shape := quads.NewPhysicsComponent(true, pickupSlab)
+	shape := quads.NewPhysicsComponent(true, pickupPickBox(sprite.Size))
 	shape.SetCollisionAABB(pickupCollider(sprite.Size))
 	shape.PassThrough = true
 	object.SetComponent(shape)
@@ -131,11 +131,20 @@ func pickupSize(g *Game, box wep.PickupBox, index int) mgl32.Vec2 {
 	return size
 }
 
-// pickupSlab is the picture's own quad - bottom centred, a unit wide and a unit
-// tall before the sprite's size scales it - with the depth this engine gives
-// any box it derives from a picture. A picture is flat, and a ray along the
-// plane of a flat thing either misses it or divides by zero.
+// pickupSlab is the picture's own quad in the tile's own units - bottom centred,
+// a unit wide and a unit tall - with the depth this engine gives any box it
+// derives from a picture. A picture is flat, and a ray along the plane of a flat
+// thing either misses it or divides by zero.
 var pickupSlab = voxel.NewAABB(mgl32.Vec3{-0.5, 0, -0.05}, mgl32.Vec3{0.5, 1, 0.05})
+
+// pickupPickBox is that slab at the size the picture is actually drawn, which is
+// what a picking box has to be: every box this engine takes off a picture is in
+// world units by the time physics holds it - see quads.SpriteAABB - because the
+// transform a ray tests against carries where the thing stands and which way it
+// turns, and not how big it is.
+func pickupPickBox(size mgl32.Vec2) voxel.AABB {
+	return pickupSlab.Scaled(mgl32.Vec3{size.X(), size.Y(), 1})
+}
 
 // pickupCollider is how much room an item takes up once it is a thing that
 // falls: the picture's own size in world units, on a square footprint. The

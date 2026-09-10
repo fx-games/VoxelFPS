@@ -1,0 +1,35 @@
+{
+  "name": "SHRUB2",
+  "tile": {
+    "X": 78,
+    "Y": 91
+  },
+  "actor": false,
+  "scale": 0.9479167,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.4871795,
+          0.01098901,
+          -0.05
+        ],
+        "max": [
+          0.48717946,
+          0.989011,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/6/13",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

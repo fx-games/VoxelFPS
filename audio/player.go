@@ -40,6 +40,9 @@ type Player struct {
 	// every hitscan silenced its own gun: the pistol's fire sound was cleared
 	// by the puff's ricochet in the same tic it started.
 	channels map[channelKey]*channel
+	// sampleRate is what the speaker was opened at, and therefore the rate
+	// every buffered cue has to be in - see loadCue.
+	sampleRate beep.SampleRate
 }
 
 // channelKey names one sound channel: whose it is, and which of ZDoom's
@@ -96,7 +99,7 @@ func (c *channel) Stream(samples [][2]float64) (int, bool) {
 func (c *channel) Err() error { return nil }
 
 func NewPlayer(sampleRate int32) *Player {
-	p := &Player{channels: make(map[channelKey]*channel)}
+	p := &Player{channels: make(map[channelKey]*channel), sampleRate: beep.SampleRate(sampleRate)}
 	p.UnloadAllCues()
 	p.init(sampleRate)
 	return p
@@ -229,6 +232,11 @@ func (s endWhenSilent) Stream(samples [][2]float64) (int, bool) {
 	return n, ok && n > 0
 }
 
+// resampleQuality is how many neighbouring samples the resampler reads either
+// side. Four is beep's own "good quality" figure, and this happens once per cue
+// on the way into the buffer rather than per frame on the audio callback.
+const resampleQuality = 4
+
 func (p *Player) loadCue(fileName string, scope string, cueName string) error {
 	if p.disabled {
 		return nil
@@ -251,8 +259,20 @@ func (p *Player) loadCue(fileName string, scope string, cueName string) error {
 		return err
 	}
 
+	// Every cue is buffered at the speaker's own rate, because nothing between
+	// here and the speaker resamples: beep mixes buffers as raw samples, so a
+	// sound recorded at some other rate plays at the ratio between the two.
+	// Doom's own lumps are 11025 and 22050 against a 44100 speaker and came out
+	// two and four times too fast; a Blake Stone voice line is 7000 and came
+	// out as a chirp.
+	var source beep.Streamer = endWhenSilent{streamer}
+	if format.SampleRate != p.sampleRate && format.SampleRate > 0 {
+		source = beep.Resample(resampleQuality, format.SampleRate, p.sampleRate, source)
+		format.SampleRate = p.sampleRate
+	}
+
 	buffer := beep.NewBuffer(format)
-	buffer.Append(endWhenSilent{streamer})
+	buffer.Append(source)
 
 	closeErr := streamer.Close()
 	if closeErr != nil {

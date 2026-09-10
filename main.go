@@ -53,7 +53,12 @@ func main() {
 	stressPillars := flag.Int("stress-pillars", defaults.PillarSpacing, "stress map: one pillar every N tiles, 0 for none")
 	stressSprites := flag.Int("stress-sprites", defaults.SpriteSpacing, "stress map: one barrel every N tiles, 0 for none")
 	stressLightCount := flag.Int("stress-lights", defaults.Lights, "stress map: static spotlights on top of the flashlight")
+	showOBBs := flag.Bool("obb", false, "draw every collider, which is the F1 menu's Show OBBs from the command line")
+	shockScale := flag.Float64("ss-scale", 1, "scale every System Shock sprite by this, on top of the size its own art implies")
+	blakeScale := flag.Float64("bs-scale", 1, "scale every Blake Stone sprite by this, on top of the size its own art implies")
 	flag.Parse()
+	sourceScale["ss_"] = float32(*shockScale)
+	sourceScale["bs_"] = float32(*blakeScale)
 
 	var stressConfig *StressConfig
 	var mapLoad core.MapLoadResult
@@ -101,6 +106,7 @@ func main() {
 		game.autoAlt = *autoAlt
 		fmt.Sscanf(*autoTap, "%d,%d", &game.tapDown, &game.tapUp)
 		game.autoWalk = *autoWalk
+		game.startOBBs = *showOBBs
 		game.autoCycle = *autoCycle
 		game.mapName = loadedMap
 		game.blocks = blocks
@@ -151,14 +157,32 @@ type Game struct {
 	crossHair *quads.AnimatedSprite
 
 	uiLabel *quads.BitmapFontMesh
+	// beamAtlas is the one-column picture an energy weapon's bolt is drawn
+	// with, built the first time one is fired - see beam.go.
+	beamAtlas *glhf.TextureAtlasFixed
+
+	// actorsActive is whether the NPCs run their own minds at all. Off by
+	// default: a level of imported characters is a level of things that
+	// immediately run at you, and most of checking an import is looking at
+	// them. The F1 menu's Actors page is the switch - see actor_debug.go.
+	actorsActive bool
+
+	// cheats is the F1 menu's own page of them - see cheats.go. Only godMode
+	// has to be remembered; the rest are things that happen once.
+	cheats cheats
+
 	// hudName and hudAmmo are the two lines the HUD says about the weapon in
 	// hand, beside its icon.
 	hudName *quads.BitmapFontMesh
 	hudAmmo *quads.BitmapFontMesh
+	// hudHealth is the one line the HUD says about the player.
+	hudHealth *quads.BitmapFontMesh
 	// editorHUD is the map editor's key legend, drawn in place of the weapon
 	// HUD while the editor is on.
 	editorHUD *quads.BitmapFontMesh
-	player    *quads.GameObject
+	// player is whoever the camera is behind: the world object plus the health
+	// that makes being shot at mean something. See combat.go.
+	player *Player
 
 	relativeHitPos mgl32.Vec3
 	entityMenu     *quads.GuiList
@@ -172,13 +196,18 @@ type Game struct {
 	// itself the way a submenu's Escape does.
 	menuPreviousMouseState bool
 
-	fogStart               float32
-	fogEnd                 float32
-	skyHorizonFade         float32
-	exposure               float32
-	bloomThreshold         float32
-	bloomStrength          float32
-	emissiveStrength       float32
+	fogStart         float32
+	fogEnd           float32
+	skyHorizonFade   float32
+	exposure         float32
+	bloomThreshold   float32
+	bloomStrength    float32
+	emissiveStrength float32
+	// ambientColor and ambientStrength are the level's own flat fill light,
+	// kept here as well as pushed to the shader so the F1 menu has something to
+	// turn. A level with no lights in it is lit by this and nothing else.
+	ambientColor           mgl32.Vec3
+	ambientStrength        float32
 	emissiveCutoff         float32
 	emissiveSaturation     float32
 	shadowNormalOffset     float32
@@ -290,6 +319,11 @@ type Game struct {
 	// spawned.
 	scenery map[string]*Scenery
 
+	// spriteKinds is everything in the world that is a picture rather than a
+	// model - the guards, the mutants, the barrels - by folder name. Same shape
+	// as scenery and for the same reason; see sprite_kind.go.
+	spriteKinds map[string]*SpriteKind
+
 	// keypads and notes are the level's locked doors and the writing that gives
 	// their codes away - see keypad.go. knownCodes is every code the player has
 	// read off a note, which is what a keypad prints on its own panel when it
@@ -384,6 +418,10 @@ type Game struct {
 	// Set only by -stress, nil on a normal run.
 	stressConfig *StressConfig
 
+	// startOBBs is -obb: draw every collider from the first frame, which is the
+	// F1 menu's Show OBBs without a menu to click. A wrong picking box is only
+	// ever obvious when it is drawn.
+	startOBBs bool
 	// startEditorMode is -editor: which editor mode to boot into, empty for a
 	// normal run. It is here so a screenshot can be taken of the editor at all
 	// - see AGENTS.md, a capture takes no keystrokes.
@@ -398,6 +436,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	// Basics (Window / Camera)
 	g.editor.currentPaintGunTextureIndex = -1
 	g.GlApplication = app
+	g.ShouldDrawOBBs = g.startOBBs
 	g.keys = loadKeyBindings(keyBindingsFile)
 
 	g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
@@ -422,7 +461,17 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		panic(err)
 	}
 	g.scenery = scenery
+
+	// And so are the sprites: one folder to a kind under assets/sprites/, read
+	// here for its animations and its name, and for its picture only when
+	// something spawns one.
+	spriteKinds, err := loadSpriteKinds(spriteDir)
+	if err != nil {
+		panic(err)
+	}
+	g.spriteKinds = spriteKinds
 	g.buildPropPalette()
+	g.buildActorPalette()
 	g.editor.spriteTexture = defaultDecorationTexture
 	g.furniture = make(map[*quads.GameObject]bool)
 	g.pickupByObject = make(map[*quads.GameObject]*Pickup)
@@ -439,6 +488,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.uiLabel.SetTintColor(mgl32.Vec4{0.5, 1, 0.5, 0.8})
 	g.uiLabel.SetBackground(mgl32.Vec4{0.1, 0.1, 0.1, 0.74})
 
+	g.hudHealth = g.NewLabel()
+	g.hudHealth.SetTintColor(mgl32.Vec4{1, 0.5, 0.5, 1})
 	g.hudName = g.NewLabel()
 	g.hudName.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
 	g.hudAmmo = g.NewLabel()
@@ -503,11 +554,9 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 	g.crossHair = g.Gui.Add(g.UIAtlas, 4, int(0), int(0))
 
-	// Load Sprite Animations
-	animations := getWolfCharAnimations()
-	for i := quads.AnimIndex(0); i < quads.AnimCount; i += 1 {
-		g.Sprites.AddAnimation(animations[i])
-	}
+	// Load Sprite Animations: six a folder under assets/sprites/, in folder
+	// order. Nothing here says which kinds exist - see registerSpriteKinds.
+	g.registerSpriteKinds()
 
 	g.projectileFlyingAnim = g.Sprites.AddAnimation(quads.SpriteAnimation{
 		Frames:            [][]uint16{{179, 180, 181}},
@@ -606,6 +655,11 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 				g.loadWeaponSounds(weapon)
 			}
 		}
+		// The characters' cues go back in for the same reason and at the same
+		// moment. They have to be here rather than once at startup: the unload
+		// above clears every scope, so a guard loaded before the first map ever
+		// loaded would be a guard that never says anything.
+		g.loadSpriteKindSounds()
 	}
 
 	g.Sprites.Clear()
@@ -641,6 +695,12 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// they are mounted on stays dark.
 	g.CubeMap.SetEmissiveTextures(g.MapTextures.Emissive())
 
+	// The frustum has to reach the far corner of whatever just loaded. It is
+	// per-map because it is a fact about the map: the gallery is 288 tiles
+	// long, and against the default hundred its end wall was clipped away and
+	// the sky was visible through it.
+	g.Camera.SetFarPlaneDist(mapFarPlane(g.CubeMap.Bounds()))
+
 	/*
 	   sphere := physics.NewSphericalHull(5)
 	   bulletSDK := bullet.BulletNewPhysicsSDK()
@@ -662,6 +722,10 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.physicsSystem = quads.NewCollisionSolver(g.solidAt, g.CubeMap.ContainsVec)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
+	// Feet on the floor is the game; flying is the thing you switch on to build
+	// a level. F still turns it off - see ActionToggleGravity.
+	g.gravitationEnabled = true
+	g.physicsSystem.SetGravityEnabled(true)
 	// Bounds, not VoxelDimensions: the voxel buffer is padded up to a whole
 	// number of chunks (a 7-tall level allocates a 32-tall buffer), and every
 	// layer above the level itself is chunk padding, not carved-out air - it
@@ -692,8 +756,11 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	if hotReload {
 		g.physicsSystem.AddObject(g.player.Physics())
 	} else {
-		g.player = g.spawnPlayer(g.Camera, mapLoad.PlayerSpawn, mapLoad.PlayerDir)
+		g.player = newPlayer(g, g.spawnPlayer(g.Camera, mapLoad.PlayerSpawn, mapLoad.PlayerDir))
 	}
+	// A fresh bar every time a level loads, which is also what a hot reload
+	// wants: the level is starting again, so the player is too.
+	g.player.health = playerMaxHealth
 	// The level's own track, which is silence for a level that names none.
 	g.playMusic(mapLoad.Music)
 
@@ -724,14 +791,14 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.emissiveSaturation = quads.DefaultEmissiveSaturation
 	g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
 	if mapLoad.AmbientStrength > 0 {
-		g.SetAmbientLight(mapLoad.AmbientColor, mapLoad.AmbientStrength)
+		g.ambientColor, g.ambientStrength = mapLoad.AmbientColor, mapLoad.AmbientStrength
+		g.SetAmbientLight(g.ambientColor, g.ambientStrength)
 	}
 	g.updateFog()
 	g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
 	//scientist.Sprite().PlayAnimationLooping(int(quads.AnimWalk))
-	bounds := g.CubeMap.Bounds()
-	g.SetupMinimap(int(bounds.X), int(bounds.Z), g.colorForMinimap)
+	g.SetupMinimap(minimapRadius*2+1, minimapRadius*2+1, g.colorForMinimap)
 
 }
 
@@ -950,6 +1017,7 @@ func (g *Game) DrawGui(elapsed float64) {
 			weapon.Draw(int32(guiWidth), int32(guiHeight), bobX, bobY)
 		}
 		g.drawWeaponHUD()
+		g.drawHealthHUD()
 	}
 
 	// Only while the overlay is on. The check used to be commented out here
@@ -1093,19 +1161,15 @@ func (g *Game) updateGUI(elapsed float64) {
 	}
 }
 
+// getHoveredOBB is the box the selection outline is drawn round, which has to be
+// the same box the ray was tested against - PhysicsComponent.OBB, and nothing
+// worked out a second time here. Built separately, it was: the outline kept the
+// sprite's full draw transform after the box itself became world units, so the
+// brackets round a kit drawn a third of a unit wide closed to a ninth of one
+// while the ray that picked it out reached the whole picture.
 func (g *Game) getHoveredOBB(hoveredObj *quads.GameObject) (voxel.AABB, mgl32.Mat4) {
-	aabb := hoveredObj.Physics().AABBAt(mgl32.Vec3{})
-	// Where the thing is, which is what the box is relative to. A sprite is the
-	// exception: it turns to face the camera, and its box turns with it.
-	//
-	// This used to be a zero matrix for anything that was neither, and a zero
-	// matrix sends all four corners of the box through a divide by zero - no
-	// outline at all, and a label somewhere off the screen.
-	transform := hoveredObj.Transform().GetTransformMatrix()
-	if hoveredObj.HasComponent(quads.ComponentTypeSprite) {
-		transform = hoveredObj.Sprite().Transform(g.Camera)
-	}
-	return aabb, transform
+	obb := hoveredObj.Physics().OBB(g.Camera)
+	return obb.AABB, obb.Transform
 }
 
 type RaycastResult struct {
@@ -1162,7 +1226,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 			// A projectile in flight is not something to look at, interact with or
 			// shoot: it is skipped here rather than in hoveredObj, so the HUD frame,
 			// the label and the hitscan weapons all lose it at once.
-			if gObj.GameObject() == g.player || gObj.GameObject() == g.editor.gameObjectForSpawning ||
+			if gObj.GameObject() == g.player.GameObject || gObj.GameObject() == g.editor.gameObjectForSpawning ||
 				gObj.GameObject().HasComponent(quads.ComponentTypeProjectile) {
 				continue
 			}
@@ -1282,6 +1346,8 @@ func (g *Game) openWizardMenu() {
 		quads.NewGuiOptionSubmenu("Video", func() { g.pushConfigSubmenu(g.videoOptions()) }),
 		quads.NewGuiOptionSubmenu("Rendering", func() { g.pushConfigSubmenu(g.renderingOptions()) }),
 		quads.NewGuiOptionSubmenu("Global", func() { g.pushConfigSubmenu(g.globalOptions()) }),
+		quads.NewGuiOptionSubmenu("Actors", func() { g.pushConfigSubmenu(g.actorOptions()) }),
+		quads.NewGuiOptionSubmenu("Cheats", func() { g.pushConfigSubmenu(g.cheatOptions()) }),
 		quads.NewGuiOptionSubmenu("Music", func() { g.pushConfigSubmenu(g.musicOptions()) }),
 	})
 	guiWidth, guiHeight := g.GuiSize()
@@ -1419,6 +1485,7 @@ func (g *Game) renderingOptions() []quads.GuiOption {
 		quads.NewGuiOptionAction("Generate MipMaps for Terrain", func() {
 			g.CubeMap.GetTerrainTexture().GenerateMipMaps()
 		}),
+		quads.NewGuiOptionFloat("Ambient Strength", &g.ambientStrength).StepSize(0.05).ActivateFunc(g.updateAmbient),
 		quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
@@ -1524,6 +1591,18 @@ func (g *Game) updateToneMapping() {
 func (g *Game) updateBloom() {
 	g.SetBloom(g.bloomThreshold, g.bloomStrength)
 	g.Toast(fmt.Sprintf("Bloom: threshold %.2f, strength %.2f", g.bloomThreshold, g.bloomStrength))
+}
+
+// updateAmbient is the knob for the flat fill light every surface gets before
+// any lamp reaches it. It is the first thing to reach for in a level that is
+// too dark to see what is being looked at, which is most of a level built to
+// look at imported art in.
+func (g *Game) updateAmbient() {
+	if g.ambientStrength < 0 {
+		g.ambientStrength = 0
+	}
+	g.SetAmbientLight(g.ambientColor, g.ambientStrength)
+	g.Toast(fmt.Sprintf("Ambient strength %.2f", g.ambientStrength))
 }
 
 func (g *Game) updateEmissive() {
@@ -1661,10 +1740,22 @@ func (g *Game) watchFileChangesLoop() {
 	}
 }
 
-func (g *Game) colorForMinimap(x int, y int) [4]uint8 {
-	playerX := int(g.player.GameObject().Transform().GetPosition().X())
-	playerY := int(g.player.GameObject().Transform().GetPosition().Z())
-	playerHeight := int(g.player.GameObject().Transform().GetPosition().Y())
+// minimapRadius is how many blocks around the player the minimap shows. The
+// texture is that window, not the whole level, so it scrolls with the player.
+const minimapRadius = 20
+
+// colorForMinimap takes texture coords, not world coords: the window is centred
+// on the player, so texel (radius, radius) is wherever they are standing.
+func (g *Game) colorForMinimap(texX int, texY int) [4]uint8 {
+	playerX := int(g.player.GameObject.Transform().GetPosition().X())
+	playerY := int(g.player.GameObject.Transform().GetPosition().Z())
+	playerHeight := int(g.player.GameObject.Transform().GetPosition().Y())
+	x := playerX - minimapRadius + texX
+	y := playerY - minimapRadius + texY
+	bounds := g.CubeMap.Bounds()
+	if x < 0 || y < 0 || x >= int(bounds.X) || y >= int(bounds.Z) {
+		return [4]uint8{0, 0, 0, 0}
+	}
 	if x == playerX && y == playerY {
 		return [4]uint8{80, 255, 255, 255}
 	}
@@ -1685,116 +1776,6 @@ func (g *Game) colorForMinimap(x int, y int) [4]uint8 {
 	return [4]uint8{10, 10, uint8(10 + (len(collidersAt) * 120)), uint8(alpha)}
 }
 
-func getWolfCharAnimations() []quads.SpriteAnimation {
-	// 6 fps at 60 fps = 0.1 seconds
-	// 8 fps at 60 fps = 0.125 seconds
-	getSameDelays := func(frameCount int, delay float32) []float32 {
-		delays := make([]float32, frameCount)
-		for i := 0; i < frameCount; i += 1 {
-			delays[i] = delay
-		}
-		return delays
-	}
-	idleAnim := quads.SpriteAnimation{
-		Frames: [][]uint16{
-			{0}, // direction 0
-			{1}, // direction 1
-			{2}, // direction 2
-			{3}, // direction 3
-			{4}, // direction 4
-			{5}, // direction 5
-			{6}, // direction 6
-			{7}, // direction 7
-		},
-		ShowTimeInSeconds: getSameDelays(1, 0.2),
-	}
-	walkAnim := quads.SpriteAnimation{
-		Frames: [][]uint16{
-			{8, 16, 24, 32},  // direction 0
-			{9, 17, 25, 33},  // direction 1
-			{10, 18, 26, 34}, // direction 2
-			{11, 19, 27, 35}, // direction 3
-			{12, 20, 28, 36}, // direction 4
-			{13, 21, 29, 37}, // direction 5
-			{14, 22, 30, 38}, // direction 6
-			{15, 23, 31, 39}, // direction 7
-		},
-		ShowTimeInSeconds: getSameDelays(4, 0.2),
-	}
-
-	dyingAnim := quads.SpriteAnimation{
-		Frames:            [][]uint16{{40, 41, 42, 43, 44}},
-		ShowTimeInSeconds: getSameDelays(5, 0.2),
-	}
-	hitAnim := quads.SpriteAnimation{
-		Frames:            [][]uint16{{45}},
-		ShowTimeInSeconds: getSameDelays(1, 0.2),
-	}
-	prepareFireAnim := quads.SpriteAnimation{
-		Frames:            [][]uint16{{46, 47}},
-		ShowTimeInSeconds: getSameDelays(2, 0.22),
-	}
-	fireAnim := quads.SpriteAnimation{
-		Frames:            [][]uint16{{48, 47, 46}},
-		ShowTimeInSeconds: getSameDelays(3, 0.22),
-	}
-
-	/*
-	          // front=ft, back=bk, left=lt, right=rt
-	          // front_left=fl, front_right=fr, back_left=bl, back_right=br
-	          //
-
-	   id: idle
-	   delays: 0.2
-	   dir_ft: 0
-	   dir_fl: 1
-	   dir_lt: 2
-	   dir_bl: 3
-	   dir_bk: 4
-	   dir_br: 5
-	   dir_rt: 6
-	   dir_fr: 7
-
-	   id: walk
-	   delays: 0.2, 0.2, 0.2, 0.2
-	   dir_ft: 8, 16, 24, 32
-	   dir_fl: 9, 17, 25, 33
-	   dir_lt: 10, 18, 26, 34
-	   dir_bl: 11, 19, 27, 35
-	   dir_bk: 12, 20, 28, 36
-	   dir_br: 13, 21, 29, 37
-	   dir_rt: 14, 22, 30, 38
-	   dir_fr: 15, 23, 31, 39
-
-	     id: dying
-	        delays: 0.2, 0.2, 0.2, 0.2, 0.2
-	        dir_ft: 40, 41, 42, 43, 44
-
-	        id: hit
-	        delays: 0.2
-	        dir_ft: 45
-
-	        id: prepare_fire
-	        delays: 0.22, 0.22
-	        dir_ft: 46, 47
-
-	        id: fire
-	        delays: 0.22, 0.22, 0.22
-	        dir_ft: 48, 47, 46
-	*/
-	animations := []quads.SpriteAnimation{
-		idleAnim,        // 0
-		walkAnim,        // 1
-		dyingAnim,       // 2
-		hitAnim,         // 3
-		prepareFireAnim, // 4
-		fireAnim,        // 5
-	}
-	return animations
-}
-
-// updateAutoCycle is -cycle: the next weapon every so often, for a run that
-// walks the whole folder.
 func (g *Game) updateAutoCycle(elapsed float64) {
 	if g.autoCycle <= 0 {
 		return
@@ -1819,3 +1800,19 @@ func (g *Game) updateAutoTap(elapsed float64) {
 	}
 	g.triggerHeld = g.tapClock < float64(g.tapDown)
 }
+
+// mapFarPlane is how far the camera has to see on a given level: to the far
+// corner of it from any other corner, which is the diagonal, plus a little so
+// nothing sits exactly on the plane. Floored at the old hundred, because a
+// small level seeing further than it needs costs nothing.
+func mapFarPlane(bounds voxel.Int3) float32 {
+	x, y, z := float64(bounds.X), float64(bounds.Y), float64(bounds.Z)
+	diagonal := float32(math.Sqrt(x*x+y*y+z*z)) * 1.1
+	if diagonal < defaultFarPlane {
+		return defaultFarPlane
+	}
+	return diagonal
+}
+
+// defaultFarPlane is what core.NewPerspectiveTransform starts every camera at.
+const defaultFarPlane = 100

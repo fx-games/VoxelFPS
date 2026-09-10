@@ -1,0 +1,35 @@
+{
+  "name": "TEFLON",
+  "tile": {
+    "X": 13,
+    "Y": 8
+  },
+  "actor": false,
+  "scale": 0.083333336,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "1/0/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

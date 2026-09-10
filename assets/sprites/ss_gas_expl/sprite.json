@@ -1,0 +1,42 @@
+{
+  "name": "GAS EXPL",
+  "tile": {
+    "X": 62,
+    "Y": 54
+  },
+  "actor": false,
+  "scale": 0.5625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.48387098,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.48387098,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/10",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

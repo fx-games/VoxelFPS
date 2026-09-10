@@ -2,23 +2,11 @@ package main
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/audio"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
 	"github.com/memmaker/goray/wep"
 )
-
-// actorNames is which map entity names spawn an Actor rather than a static
-// prop. A map says "Scientist"; this is the only place that has to know what
-// that means, and it is read off actorKinds - the editor's placement table -
-// so that what can be placed and what walks are the same list.
-var actorNames = func() map[string]bool {
-	names := make(map[string]bool, len(actorKinds))
-	for _, kind := range actorKinds {
-		names[kind.Name] = true
-	}
-	return names
-}()
 
 // defaultActorHealth backs both the fall-damage pool and bodyShotsToKill: a
 // default NPC's whole health bar is sized so that two ordinary body hits (see
@@ -75,6 +63,32 @@ type Actor struct {
 	patrol      []mgl32.Vec3
 	patrolIndex int
 
+	// game is who to tell when this actor dies, because a death cry is played
+	// from the one place that knows where the player is standing. It is nil for
+	// an actor built in a test, which is why playActorCue tolerates one.
+	game *Game
+
+	// kind is the folder this actor was spawned from: its sheet, its
+	// animations, and the cues it makes a noise with. Nil for an actor placed
+	// before there were sprite kinds, which is why every read of it is guarded.
+	kind *SpriteKind
+
+	// origin is this actor's own sound channel owner. Channels belong to the
+	// thing making the sound, so one guard's death cry cannot cut off another's
+	// - see audio.CueOptions.Origin.
+	origin int
+
+	// hostile is whether this one comes after the player, off its own kind.
+	// hunting is whether it currently is - see hostile.go.
+	hostile bool
+	hunting bool
+
+	// noticed is whether this one has already called out. Both games these
+	// characters come from bark once, when they first see you, and then get on
+	// with it - so this is latched rather than checked, or a guard standing at
+	// the edge of earshot shouts every frame.
+	noticed bool
+
 	// fallOrigin is the Y the actor was at when it was last grounded, tracked
 	// while airborne so a landing can tell how far the drop was. wasGrounded is
 	// what applyFallDamage uses to notice the grounded -> airborne -> grounded
@@ -88,12 +102,18 @@ type Actor struct {
 // spawnEntity's own work already done; this only adds what makes it an actor
 // rather than a prop.
 func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsComponent, entity core.MapEntity, spawnPos mgl32.Vec3) *Actor {
-	if sprite := object.Sprite(); sprite != nil {
-		atlas := sprite.AtlasTexture
-		dyingAABB := voxel.NewAABB(
-			atlas.AABBFromOpaqueAtIndex(int(g.Sprites.GetLastFrameIndex(int(quads.AnimDying), 0))),
-		)
-		physics.SetAABBForAnimation(quads.AnimDying, dyingAABB)
+	if sprite := object.Sprite(); sprite != nil && !physics.HasAABBForAnimation(quads.AnimDying) {
+		// A corpse is a different shape from the thing that was standing there,
+		// so the box it is picked and stepped over by comes off the frame it
+		// comes to rest on - measured the same way and at the same size as the
+		// one it walked around with.
+		//
+		// Only for a kind that did not bring one. An imported folder writes a
+		// box per animation, and its death's is measured off the same last
+		// frame at import time rather than off the card at every spawn.
+		corpse := g.Sprites.GetLastFrameIndex(sprite.Global(int(quads.AnimDying)), 0)
+		physics.SetAABBForAnimation(quads.AnimDying,
+			quads.SpriteAABB(sprite.AtlasTexture, int(corpse), sprite.Size))
 	}
 
 	pather := quads.NewPathingComponent()
@@ -101,10 +121,28 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 
 	patrol := patrolRoute(entity, spawnPos)
 
+	// How tough this one is, and what it sounds like, are the folder's own -
+	// see assets/sprites. A kind that says nothing gets the default, which is
+	// what every actor had before a folder could say otherwise.
+	kind := g.spriteKinds[entity.SpriteSheetName]
+	health := defaultActorHealth
+	hostile := false
+	if kind != nil {
+		if kind.Health > 0 {
+			health = kind.Health
+		}
+		hostile = kind.Hostile
+	}
+	g.lastActorOrigin++
+
 	actor := &Actor{
 		Name:          entity.Name,
-		Health:        defaultActorHealth,
-		MaxHealth:     defaultActorHealth,
+		game:          g,
+		kind:          kind,
+		hostile:       hostile,
+		origin:        g.lastActorOrigin,
+		Health:        health,
+		MaxHealth:     health,
 		object:        object,
 		pathing:       pather,
 		physicsSystem: g.physicsSystem,
@@ -114,11 +152,66 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		wasGrounded:   true,
 	}
 	actor.Dialogue = dialogueFor(actor)
-	pather.SetDestination(patrol[1])
+	// Only if anything is going to walk it. SetDestination switches the pathing
+	// component on, and a level of actors that were told where to go before the
+	// switch was ever consulted is a level of actors all walking to the same
+	// corner.
+	if g.actorsActive {
+		pather.SetDestination(patrol[1])
+	}
 
 	g.Pathfinder.AddMovingObject(pather)
 	g.actors = append(g.actors, actor)
 	return actor
+}
+
+// The three noises an actor makes, by the name its folder keys them under.
+const (
+	actorCueAlert  = "alert"
+	actorCueAttack = "attack"
+	actorCueDeath  = "death"
+)
+
+// actorHearingRange is how far one of these carries. Past it nothing is played
+// at all, rather than played at nothing: a room of guards each barking at
+// inaudible volume is still a room of guards each holding a mixer open.
+const actorHearingRange = 32.0
+
+// actorNoticeRange is how close the player has to come before an actor calls
+// out. Shorter than earshot, so the bark is a thing that happens to you rather
+// than a wall of voices the moment a level loads.
+const actorNoticeRange = 14.0
+
+// playActorCue is an actor making a noise, at the volume and the side its
+// distance from the player earns it. There is no 3D mixer here - a cue carries
+// a volume and a pan and nothing else - so the falloff is worked out at the one
+// place a world sound is played from.
+func (g *Game) playActorCue(actor *Actor, role string) {
+	if g == nil || actor == nil || actor.kind == nil || g.audio == nil || g.player == nil {
+		return
+	}
+	cue := actor.kind.Sounds[role]
+	if cue == "" {
+		return
+	}
+	at := actor.object.Transform().GetPosition()
+	listener := g.player.Transform().GetPosition()
+	away := at.Sub(listener)
+	distance := away.Len()
+	if distance > actorHearingRange {
+		return
+	}
+	volume := 1 - float64(distance)/actorHearingRange
+	pan := 0.0
+	if distance > 0.01 {
+		view := g.Camera.GetTransform()
+		pan = float64(away.Normalize().Dot(view.GetRight()))
+	}
+	g.audio.PlayCueAt(actor.kind.ID, cue, audio.CueOptions{
+		Volume: volume,
+		Pan:    pan,
+		Origin: actor.origin,
+	})
 }
 
 // patrolRoute is the beat the map asked for: the whole route the editor's path
@@ -154,16 +247,47 @@ func (g *Game) updateActors(elapsed float64) {
 			actor.die()
 			continue
 		}
+		// Inactive actors stand where they are: no patrol, no chase, no
+		// attack. It has to switch the pathing off rather than just skip the
+		// rest of this - deciding where to walk is this function's, but the
+		// walking itself is the pathfinder's, and it will carry on to the last
+		// destination anything set for as long as the component is enabled.
+		// See actor_debug.go.
+		if !g.actorsActive {
+			actor.freeze()
+			continue
+		}
 		if actor.following {
 			g.updateCompanion(actor, elapsed)
 			continue
 		}
-		if len(actor.patrol) < 2 || !actor.pathing.HasArrived() {
+		// A hostile has a mind of its own - notice, chase, attack - and it is
+		// the one that decides when to walk its beat. Everything else just
+		// walks it.
+		if actor.hostile {
+			g.updateHostile(actor, elapsed)
 			continue
 		}
-		actor.patrolIndex = (actor.patrolIndex + 1) % len(actor.patrol)
-		actor.pathing.SetDestination(actor.patrol[actor.patrolIndex])
+		g.noticePlayer(actor)
+		g.patrol(actor)
 	}
+}
+
+// noticePlayer is an actor calling out the first time the player comes close
+// enough. It is latched on the actor rather than on the sound, because the cue
+// itself has no memory and the point is that a guard greets you once.
+func (g *Game) noticePlayer(actor *Actor) {
+	if actor.noticed || actor.kind == nil || actor.kind.Sounds[actorCueAlert] == "" {
+		return
+	}
+	if g.player == nil {
+		return
+	}
+	if flatDistance(actor.object.Transform().GetPosition(), g.player.Transform().GetPosition()) > actorNoticeRange {
+		return
+	}
+	actor.noticed = true
+	g.playActorCue(actor, actorCueAlert)
 }
 
 // actorFor finds the Actor behind a GameObject a raycast or collision handed
@@ -265,6 +389,7 @@ func (g *Game) companionAttack(actor *Actor, center, targetCenter mgl32.Vec3, el
 	muzzle := center.Add(direction.Mul(max(half.X(), half.Z()) + 0.1))
 
 	actor.object.Sprite().PlayAnimationInterrupting(int(quads.AnimFire))
+	g.playActorCue(actor, actorCueAttack)
 	g.fireHitscanWith(nil, muzzle, direction, wep.Op{Damage: companionAttackDamage, Puff: wep.PuffBullet})
 }
 
@@ -294,17 +419,28 @@ func (g *Game) followPlayer(actor *Actor, elapsed float64) {
 // across the room forever. Gravity goes back on because a halt part way up a
 // ladder is a halt on a waypoint that had switched it off.
 func (a *Actor) halt() {
-	a.pathing.Enabled = false
-	physics := a.object.Physics()
-	physics.SetVelocity(mgl32.Vec3{0, physics.Velocity().Y(), 0})
-	physics.ApplyGravity = true
+	a.freeze()
 	// Only out of the walk. A hit or a shot animation is playing over the top
 	// of this and returns to whatever it interrupted by itself; cutting it
 	// short here would mean a companion under fire never finished a frame of
 	// anything.
-	if a.object.Sprite().CurrentAnimation() == int(quads.AnimWalk) {
+	if a.object.Sprite().IsPlaying(int(quads.AnimWalk)) {
 		a.object.Sprite().PlayAnimationLooping(int(quads.AnimIdle))
 	}
+}
+
+// freeze is halt's movement half, without touching the sprite: the pathing off,
+// the velocity it last wrote cleared, gravity back on.
+//
+// It is separate because an inactive actor is frozen every frame - see
+// updateActors - and the F1 menu's actor page exists to play an animation on
+// one while it stands there. Freezing through halt would put every one of them
+// back on its idle a frame after the menu asked for a walk.
+func (a *Actor) freeze() {
+	a.pathing.Enabled = false
+	physics := a.object.Physics()
+	physics.SetVelocity(mgl32.Vec3{0, physics.Velocity().Y(), 0})
+	physics.ApplyGravity = true
 }
 
 // flatDistance is the distance between two points ignoring height: a
@@ -328,42 +464,38 @@ func (g *Game) radiusDamage(center mgl32.Vec3, radius float32, amount int) {
 			continue
 		}
 		if actor.object.Transform().GetPosition().Sub(center).Len() <= radius {
-			actor.ApplyDamage(amount)
+			actor.TakeDamage(Damage{Amount: amount})
 		}
 	}
 }
 
-// TakeDamage is a shot landing on this actor. A headshot always kills outright;
-// an ordinary body hit costs a fixed fraction of MaxHealth so that exactly
-// bodyShotsToKill of them empty the health pool regardless of the weapon's own
-// damage number - a default NPC's toughness is a design constant, not a
-// function of whatever gun is pointed at it. Once dying, further hits are
-// ignored: there is nothing left to kill twice.
-func (a *Actor) TakeDamage(headshot bool) {
+// Object and Alive are Combatant, alongside TakeDamage below.
+func (a *Actor) Object() *quads.GameObject { return a.object }
+
+func (a *Actor) Alive() bool { return a != nil && !a.dying && a.object.IsAlive() }
+
+// TakeDamage is a hit landing on this actor.
+//
+// A headshot always kills outright. A hit that carries its own number - a
+// blast, a bolt with damage in it - costs that many points. A hit with no
+// number is an ordinary body shot, and costs a fixed fraction of MaxHealth so
+// that exactly bodyShotsToKill of them empty the health pool regardless of the
+// weapon's own damage: a default NPC's toughness is a design constant, not a
+// function of whatever gun is pointed at it.
+//
+// Once dying, further hits are ignored: there is nothing left to kill twice.
+func (a *Actor) TakeDamage(hit Damage) {
 	if a.dying {
 		return
 	}
-	if headshot {
+	switch {
+	case hit.Headshot:
 		a.Health = 0
-	} else {
+	case hit.Amount > 0:
+		a.Health -= hit.Amount
+	default:
 		a.Health -= a.MaxHealth / bodyShotsToKill
 	}
-	if a.Health <= 0 {
-		a.die()
-		return
-	}
-	a.object.Sprite().PlayAnimationInterrupting(int(quads.AnimHit))
-}
-
-// ApplyDamage takes a flat amount off Health, for a source that already knows
-// its own number instead of the fixed body/headshot split TakeDamage assumes -
-// a blast radius, most likely, where a nearer call and a farther one carry
-// genuinely different damage rather than "shot" vs "aimed shot".
-func (a *Actor) ApplyDamage(amount int) {
-	if a.dying || amount <= 0 {
-		return
-	}
-	a.Health -= amount
 	if a.Health <= 0 {
 		a.die()
 		return
@@ -381,6 +513,9 @@ func (a *Actor) ApplyDamage(amount int) {
 // actor vanish outright instead of leaving a body on the ground.
 func (a *Actor) die() {
 	a.dying = true
+	if a.game != nil {
+		a.game.playActorCue(a, actorCueDeath)
+	}
 	a.pathing.Enabled = false
 	a.physicsSystem.RemoveObject(a.object.Physics())
 	a.object.Sprite().PlayAnimationFreezeLastFrame(int(quads.AnimDying))
@@ -417,7 +552,10 @@ func applyFallDamage(actor *Actor) {
 	if !actor.wasGrounded {
 		drop := actor.fallOrigin - pos.Y()
 		if drop > fallDamageMinDrop {
-			actor.Health -= int((drop - fallDamageMinDrop) * fallDamagePerVoxel)
+			// Through TakeDamage like everything else, so a landing that kills
+			// runs the same death a shot does. The floor is nobody's shot, so
+			// it carries no Source.
+			actor.TakeDamage(Damage{Amount: int((drop - fallDamageMinDrop) * fallDamagePerVoxel)})
 		}
 	}
 	actor.wasGrounded = true

@@ -26,7 +26,7 @@ optional gravity, projectiles, particles, animated sprites, paths and pathfindin
 (A*, JPS, Dijkstra, BFS, FOV in `geometry/`).
 
 **Doom asset import** — ZDoom-style weapon definitions (`zdwep/`) so Doom sprite weapons
-load and animate. 134 of them are in `assets/weapons/`; the scripts are interpreted far enough to
+load and animate. 155 of them are in `assets/weapons/`; the scripts are interpreted far enough to
 play a firing animation and spend ammo, the effect of a shot is ours (`handlers.go`).
 You start with what the mod's player class starts you with - the fists and a pistol - and
 pick the rest up: the test map has a range room with every weapon in the folder lying on
@@ -176,6 +176,9 @@ wep/        compiled weapon format, loader and stepper
 zdwep/      Doom weapon migration (offline only)
 tpack/ eassets/       texture packer, embedded assets
 audio/ events/ png_chunks/
+tools/      the offline generators: the two DOS importers, the weapon migration,
+            the level compiler, and the texture/mesh/decal makers
+re-migrate.sh           rebuilds every generated asset folder from 3rd-party/
 ```
 
 Everything the game reads at runtime is under `assets/`, resolved relative to the
@@ -186,12 +189,19 @@ assets/
   base/        the map and sprite atlases, by their tile size in the file name
   dialogue/    one conversation per speaker, named after the actor
   meshes/      one folder per model; a scenery.json in it makes it furniture
-  sheets/      per-entity sprite sheets
   skybox/      six faces to a set
   textures/    the texture library the editor picks from, dropped/ included
   weapons/     one folder per weapon, plus the shared actor and sprite stores
   maps/        one folder per level: map.json and the map.bin beside it
+  sprites/     one folder per character or flat prop: a sheet and a sprite.json
+  audio/       music, and the recordings the audio logs play
 ```
+
+`3rd-party/` is the other half of that and is deliberately not checked in: the
+games and mods everything under `assets/` was generated from, plus the source of
+the three engines that drew them originally, so an import that comes out wrong
+can be traced rather than guessed at. `3rd-party/README.md` is checked in and
+says what belongs there; `./re-migrate.sh all` is what reads it.
 
 A level is a folder under `assets/maps/`, and which levels exist is decided by
 which folders are present - the same rule the weapons and the scenery follow.
@@ -235,15 +245,27 @@ assets/weapons/
 Everything in the folder is checked at startup; a folder that does not load stops
 the game with every problem it found, listed.
 
-136 weapons are in there: 125 migrated from Final Doomer and Brutal Doom Community
-Expansion, plus ten single-weapon community mods (Axe, Reaper, a Colt45, a
+155 weapons are in there: 123 migrated from Final Doomer and Brutal Doom Community
+Expansion, ten single-weapon community mods (Axe, Reaper, a Colt45, a
 silenced pistol, a hunting rifle with its own scoped alt-fire weapon, a UAC
 sniper rifle, dual Berettas, a combat knife, and the Blacktail 51 'Connector')
 - some shipped as pk3s and some as the older, pre-pk3 way of shipping a single
 weapon: a WAD carrying its own DECORATE, SNDINFO and sprites alongside no map
-at all.
+at all - one built from a sprite sheet in this repo, and twenty-one out of two
+DOS games (see **DOS game import** below).
 
-Porting out of a ZDoom mod:
+Rebuilding the whole folder is one command. Every source lives in `3rd-party/`,
+which is not checked in; `3rd-party/README.md` says what belongs there:
+
+```
+./re-migrate.sh all             # or: brutal-doom, final-doomer, mods,
+                                # blake-stone, system-shock, small-gun
+```
+
+Running it twice writes the same bytes twice, which is what makes diffing
+`weapons.lock` mean anything.
+
+Porting out of some other ZDoom mod:
 
 ```
 go run ./tools/genweapons -source mod.pk3 -list          # what is in it
@@ -292,6 +314,35 @@ go run . -weapon fd_drum_shotgun -autofire
 
 The decisions behind all this are in [docs/adr/](docs/adr/), the vocabulary in
 [CONTEXT.md](CONTEXT.md).
+
+## DOS game import
+
+Two of the games this borrows from keep their art in containers of their own
+rather than in anything a Doom tool reads, so they get a tool each. Both write
+the same folders everything else does - a sprite kind is a sheet and a JSON, a
+weapon is a `weapon.json` - and both record in each folder's `provenance` which
+game and which of that game's own names it came out of.
+
+```
+./re-migrate.sh blake-stone     # 202 walls, 25 characters, 106 props, 5 weapons
+./re-migrate.sh system-shock    # 273 textures, 37 critters, 439 objects,
+                                # 16 weapons, 80 models
+```
+
+Blake Stone: Aliens of Gold is one `VSWAP.BS6` off the CD holding walls, sprites
+and digitised sound together. System Shock (1994) is a directory of `.RES`
+containers plus `OBJPROP.DAT`, read through `inkyblackness/hacked`; it also
+brings the game's own 3D models, which come out as glTF.
+
+Neither game's files say what anything is - the pictures are numbered and the
+numbers mean nothing alone - so both importers carry a name table lifted from
+the games' own source. Those sources, and the games, live in `3rd-party/` beside
+the mods, so a number that names the wrong thing can be looked up. See
+[3rd-party/README.md](3rd-party/README.md) and the "Importing a DOS game"
+section of [AGENTS.md](AGENTS.md).
+
+`assets/maps/imported` is the gallery the result is checked in: one of
+everything, in a hall you can walk the length of.
 
 ## Scenery
 

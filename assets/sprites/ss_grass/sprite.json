@@ -1,0 +1,35 @@
+{
+  "name": "GRASS",
+  "tile": {
+    "X": 59,
+    "Y": 25
+  },
+  "actor": false,
+  "scale": 0.26041666,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0.04000002,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/6/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

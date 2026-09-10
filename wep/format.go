@@ -559,6 +559,13 @@ type Effect struct {
 	// its own anywhere in Fire, and its whole firing sound is one SeeSound on
 	// the ball it throws.
 	SeeSound string `json:"see_sound,omitempty"`
+	// DeathSound is what it makes when it stops: the fizz a plasma ball leaves
+	// on the wall, the crack of a rocket. ZDoom plays it from P_ExplodeMissile,
+	// which is the same place the missile is sent to its Death state, and so it
+	// appears in no state either. Without it the classic plasma rifle fired
+	// silently at the far end - every bolt left the barrel with a noise and
+	// arrived with none.
+	DeathSound string `json:"death_sound,omitempty"`
 	// Views are the other seven angles of a frame this actor is drawn with,
 	// for the frames the mod ships all eight of: a rocket, a thrown axe, a
 	// tracer. Keyed by the name a step names, which is the view from behind,

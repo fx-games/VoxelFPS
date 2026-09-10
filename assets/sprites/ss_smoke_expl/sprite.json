@@ -1,0 +1,42 @@
+{
+  "name": "SMOKE EXPL",
+  "tile": {
+    "X": 53,
+    "Y": 80
+  },
+  "actor": false,
+  "scale": 0.8333333,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.3490566,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.4811321,
+          0.9875,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/7",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

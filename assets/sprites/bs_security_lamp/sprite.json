@@ -1,0 +1,38 @@
+{
+  "name": "Security Lamp",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1
+        ]
+      ],
+      "fps": 3,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.0625,
+          0.875,
+          -0.05
+        ],
+        "max": [
+          0.09375,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_SECURITY_%s",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

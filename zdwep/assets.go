@@ -172,18 +172,87 @@ func rotationOf(file string) byte {
 // as hellboundshotgun/fire, following SNDINFO to the lumps it stands for. More
 // than one means the mod asked for a random pick between them.
 func (a *AssetIndex) Sounds(name string) ([]string, bool) {
-	lumps := []string{name}
-	if mapped, ok := a.sndinfo[strings.ToLower(name)]; ok {
-		lumps = mapped
-	}
-	var files []string
-	for _, lump := range lumps {
-		base := strings.TrimSuffix(path.Base(lump), path.Ext(lump))
-		if file, ok := a.sounds[strings.ToLower(base)]; ok {
-			files = append(files, file)
+	for _, lumps := range a.lumpsFor(name) {
+		var files []string
+		for _, lump := range lumps {
+			base := strings.TrimSuffix(path.Base(lump), path.Ext(lump))
+			if file, ok := a.sounds[strings.ToLower(base)]; ok {
+				files = append(files, file)
+			}
+		}
+		if len(files) > 0 {
+			return files, true
 		}
 	}
-	return files, len(files) > 0
+	return nil, false
+}
+
+// lumpsFor is where to look for a sound, best first: what the mod's own SNDINFO
+// says, then the name as a lump, then the table the engine itself carries for
+// the game's own sounds.
+func (a *AssetIndex) lumpsFor(name string) [][]string {
+	var tries [][]string
+	if mapped, ok := a.sndinfo[strings.ToLower(name)]; ok {
+		tries = append(tries, mapped)
+	}
+	tries = append(tries, []string{name})
+	if stock, ok := stockSounds[strings.ToLower(name)]; ok {
+		tries = append(tries, stock)
+	}
+	return tries
+}
+
+// stockSounds is the part of ZDoom's own SNDINFO that matters to a weapon.
+//
+// A name like "weapons/plasmaf" is not a lump and never was. Doom's WADs hold
+// DSPLASMA; the mapping from the one to the other lives in the engine, in
+// wadsrc/static/sndinfo.txt, and no IWAD carries a SNDINFO of its own to say
+// it. So a mod that plays a stock sound - which every Purist weapon does, and
+// several Brutal ones - names something that resolves to nothing here, and the
+// sound was dropped: the classic plasma rifle fired in silence with doom2.wad
+// sitting right there in the sources.
+//
+// Only the ones a weapon reaches for, and only ones the shipping IWADs hold. A
+// list means ZDoom's $random: one of these, picked per play.
+var stockSounds = map[string][]string{
+	"weapons/pistol":  {"DSPISTOL"},
+	"weapons/chngun":  {"DSPISTOL"},
+	"weapons/shotgf":  {"DSSHOTGN"},
+	"weapons/shotgr":  {"DSSGCOCK"},
+	"weapons/sshotf":  {"DSDSHTGN"},
+	"weapons/sshoto":  {"DSDBOPN"},
+	"weapons/sshotc":  {"DSDBCLS"},
+	"weapons/sshotl":  {"DSDBLOAD"},
+	"weapons/plasmaf": {"DSPLASMA"},
+	"weapons/plasmax": {"DSFIRXPL"},
+	"weapons/bfgf":    {"DSBFG"},
+	"weapons/bfgx":    {"DSRXPLOD"},
+	"weapons/rocklf":  {"DSRLAUNC"},
+	"weapons/rocklx":  {"DSBAREXP"},
+	"weapons/sawup":   {"DSSAWUP"},
+	"weapons/sawidle": {"DSSAWIDL"},
+	"weapons/sawfull": {"DSSAWFUL"},
+	"weapons/sawhit":  {"DSSAWHIT"},
+	"weapons/punch":   {"DSPUNCH"},
+
+	"imp/pain":        {"DSPOPAIN"},
+	"imp/death":       {"DSBGDTH1", "DSBGDTH2"},
+	"imp/attack":      {"DSFIRSHT"},
+	"imp/shotx":       {"DSFIRXPL"},
+	"imp/melee":       {"DSCLAW"},
+	"skeleton/swing":  {"DSSKESWG"},
+	"skeleton/attack": {"DSSKEATK"},
+	"skeleton/melee":  {"DSSKEPCH"},
+	"skull/melee":     {"DSSKLATK"},
+	"skull/death":     {"DSFIRXPL"},
+	"shotguy/death":   {"DSPODTH1", "DSPODTH2", "DSPODTH3"},
+	"brain/spit":      {"DSBOSPIT"},
+	"brain/cube":      {"DSBOSCUB"},
+
+	"world/barrelx": {"DSBAREXP"},
+	"misc/w_pkup":   {"DSWPNUP"},
+	"misc/i_pkup":   {"DSITEMUP"},
+	"misc/p_pkup":   {"DSGETPOW"},
 }
 
 // unquote strips a pair of matching double quotes SNDINFO sometimes wraps a

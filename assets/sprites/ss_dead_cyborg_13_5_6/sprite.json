@@ -1,0 +1,35 @@
+{
+  "name": "DEAD CYBORG",
+  "tile": {
+    "X": 60,
+    "Y": 30
+  },
+  "actor": false,
+  "scale": 0.3125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "13/5/6",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

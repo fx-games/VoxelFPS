@@ -20,3 +20,17 @@ temp/
 
 # F12 writes this while playing; it is a scratch capture, not an asset.
 /screenshot00.png
+
+# Every game and mod the asset migration reads, and the source of the engines
+# that originally drew them, gathered by hand and moved here so re-migrate.sh
+# needs no paths of its own. None of it is ours to ship: two commercial games off
+# their own media, two mod releases, nine community weapons and three engine
+# checkouts.
+#
+# The contents are ignored rather than the folder, so that the two files that
+# *are* ours can stay: the README saying what belongs here and where each piece
+# came from, and the go.mod that keeps the parent module's ./... from walking
+# into gzdoom.
+/3rd-party/*
+!/3rd-party/README.md
+!/3rd-party/go.mod

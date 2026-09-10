@@ -16,6 +16,13 @@ const (
 	SpriteModeStatic SpriteMode = iota
 	SpriteModeFollowHorizontal
 	SpriteModeFollowHorizontalAndVertical
+	// SpriteModeBeam is a quad stretched between two points that turns about
+	// the line between them rather than about the camera: a bolt of light from
+	// a weapon to whatever it hit. An ordinary billboard cannot do it - one
+	// spun to face the camera would swing its length round with it - and a
+	// quad that did not turn at all would go edge on and vanish as you walked
+	// round it. See SpriteComponent.BeamTo.
+	SpriteModeBeam
 )
 
 type SpriteOrigin uint8
@@ -66,6 +73,14 @@ func NewSpriteDrawer(shader *glhf.Shader) *SpriteDrawer {
 		spritesPerTexture: make(map[glhf.TextureAtlas][]*SpriteComponent),
 	}
 }
+
+// Animations is the one list every sprite's animation number indexes into.
+// It is read to find out where the next kind's block will start - see
+// SpriteComponent.AnimBase.
+func (q *SpriteDrawer) Animations() []SpriteAnimation {
+	return q.animations
+}
+
 func (q *SpriteDrawer) AddAnimation(animation SpriteAnimation) int {
 	index := len(q.animations)
 	q.animations = append(q.animations, animation)
@@ -529,13 +544,10 @@ func (q *SpriteDrawer) DrawAABBs(lineShader *glhf.Shader, cam *core.FPSCamera) {
 				continue
 			}
 			collObj := sprite.GameObject().Physics()
-			// The box is in the space of the sprite's own quad, which is the
-			// world only while the sprite is drawn at its natural size. A
-			// pickup on a shelf is a fraction of that, and its box was drawn a
-			// whole voxel wide. The quad's own scale is what the transform
-			// applies; the third axis is not scaled there either.
+			// The box is already in world units - every one this engine takes
+			// off a picture is scaled by the sprite's own size the moment it is
+			// measured - so all it wants is moving to where the thing stands.
 			collObj.AABBAt(mgl32.Vec3{}).
-				Scaled(mgl32.Vec3{sprite.Size.X(), sprite.Size.Y(), 1}).
 				QueueDebugDraw(sprite.GameObject().Transform().GetTranslationMatrix())
 		}
 	}

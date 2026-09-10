@@ -1,0 +1,40 @@
+{
+  "name": "WALL HIT 1",
+  "tile": {
+    "X": 16,
+    "Y": 16
+  },
+  "actor": false,
+  "scale": 0.16666667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.4375,
+          0.0625,
+          -0.05
+        ],
+        "max": [
+          0.4375,
+          0.875,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/1/5",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

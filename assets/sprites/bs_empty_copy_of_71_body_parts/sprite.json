@@ -1,0 +1,35 @@
+{
+  "name": "EMPTY - Copy of 71 - Body Parts...",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.484375,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.46875,
+          0.203125,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_STAT_57",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

@@ -137,6 +137,13 @@ type MapEntity struct {
 	IsTransparent       bool
 	CreateCollider      bool
 
+	// PassThrough makes the collider one the world moves straight through:
+	// still on the physics grid, so the crosshair finds it and it can be
+	// selected and shot at, but skipped by the collision solver so nothing is
+	// stopped by it. It is what an exhibit standing in a row of five hundred
+	// wants to be, and what a note lying on the floor already is.
+	PassThrough bool `json:",omitempty"`
+
 	// PatrolTo is the far end of a walking entity's beat. It walks there, then back
 	// to where it spawned, forever. Nil means the spawner picks a default.
 	//

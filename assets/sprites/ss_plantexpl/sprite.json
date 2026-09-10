@@ -1,0 +1,39 @@
+{
+  "name": "PLANTEXPL",
+  "tile": {
+    "X": 29,
+    "Y": 27
+  },
+  "actor": false,
+  "scale": 0.28125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.46551725,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/1/4",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

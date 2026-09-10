@@ -6,6 +6,7 @@
 // with a mouse in it. This is the other door: build.map, a plain text file of
 // one command a line, next to the level it describes.
 //
+//	go run ./tools/mapgen -gallery              # write the imported gallery's script
 //	go run ./tools/mapgen -map station          # build.map -> map.bin + map.json
 //	go run ./tools/mapgen -map station -show 15 # what is solid at height 15
 //	go run ./tools/mapgen -help                 # every command, with its arguments
@@ -29,7 +30,11 @@
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
-//	entity NAME at=X,Y,Z [mesh=M] [facing=DX,DZ] [collider=false] [code=NNNN]
+//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [facing=DX,DZ] [collider=false] [passthrough=true]
+//	                               [code=NNNN]
+//	                               sprite=ID is a folder under assets/sprites -
+//	                               a character or a piece of scenery drawn as a
+//	                               picture. A NAME of "-" takes the folder's own.
 //	                               code is the four digits a keypad
 //	                               (mesh=keypad) asks for; the door it holds
 //	                               shut is whichever one is nearest to it
@@ -87,7 +92,16 @@ const (
 func main() {
 	name := flag.String("map", "", "level folder under "+mapDir)
 	show := flag.Int("show", -1, "instead of building, print what is solid at this height")
+	gallery := flag.Bool("gallery", false, "write the imported gallery's build.map from whatever is installed")
 	flag.Parse()
+
+	if *gallery {
+		if err := writeGallery(); err != nil {
+			fmt.Fprintln(os.Stderr, "mapgen:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	if *name == "" {
 		flag.Usage()
@@ -318,7 +332,24 @@ func (l *level) run(words []string, options map[string]string) error {
 			Name:           args[0],
 			MeshName:       options["mesh"],
 			CreateCollider: options["collider"] != "false",
+			PassThrough:    options["passthrough"] == "true",
 			Code:           options["code"],
+		}
+		// sprite= names a folder under assets/sprites: a character or a piece
+		// of scenery that is a picture rather than a model. The frames and the
+		// frame size are read off that folder rather than written here, so a
+		// script never repeats what the folder already says.
+		if id, given := options["sprite"]; given {
+			kind, err := readSpriteKind(id)
+			if err != nil {
+				return err
+			}
+			entity.SpriteSheetName = id
+			entity.SpriteSheetTileSize = kind.Tile
+			entity.TextureIndices = kind.idleFrames()
+			if entity.Name == "-" {
+				entity.Name = kind.Name
+			}
 		}
 		if facing, given := options["facing"]; given {
 			flat, err := vec2(facing)

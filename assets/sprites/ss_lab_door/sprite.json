@@ -1,0 +1,23 @@
+{
+  "name": "LAB DOOR",
+  "tile": {
+    "X": 6,
+    "Y": 6
+  },
+  "actor": false,
+  "scale": 0.0625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "10/0/5",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

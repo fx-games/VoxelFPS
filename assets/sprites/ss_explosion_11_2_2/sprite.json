@@ -1,0 +1,40 @@
+{
+  "name": "EXPLOSION",
+  "tile": {
+    "X": 58,
+    "Y": 39
+  },
+  "actor": false,
+  "scale": 0.40625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.4827586,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.48275864,
+          0.974359,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

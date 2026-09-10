@@ -1,0 +1,39 @@
+{
+  "name": "PLASMA HIT",
+  "tile": {
+    "X": 32,
+    "Y": 32
+  },
+  "actor": false,
+  "scale": 0.33333334,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.46875,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          0.96875,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/6",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

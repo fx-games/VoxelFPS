@@ -324,7 +324,7 @@ func (g *Game) playerFeet() mgl32.Vec3 {
 	if g.player == nil {
 		return g.Camera.GetPosition().Sub(mgl32.Vec3{0, playerEyeHeight, 0})
 	}
-	return g.player.GameObject().Transform().GetPosition()
+	return g.player.GameObject.Transform().GetPosition()
 }
 
 // playerEyeHeight is how far above its own feet the player looks out, and
@@ -713,7 +713,18 @@ func (live *WorldActor) settleOnSolid(g *Game, from mgl32.Vec3) {
 
 // hitSomething sends a missile to its Death state, which is where a script puts
 // the explosion.
+//
+// It is also where the arrival is heard. ZDoom plays a missile's DeathSound
+// from P_ExplodeMissile, the same call that sends it to Death, so like the
+// SeeSound at the other end of the flight it is on the actor and in none of its
+// states - the classic plasma rifle's whole vocabulary is those two, and with
+// only the first read every bolt left the barrel with a noise and landed
+// without one.
 func (live *WorldActor) hitSomething(g *Game, at mgl32.Vec3) {
+	if live.data.DeathSound != "" {
+		g.playSoundAt(wep.Op{Sound: live.data.DeathSound, Volume: 1, Pitch: 1, Channel: seeSoundChannel},
+			at, live.origin, live.soundScope)
+	}
 	if live.cursor.Goto("Death") {
 		return
 	}

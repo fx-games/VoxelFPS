@@ -1,0 +1,23 @@
+{
+  "name": "BR LAB FORC",
+  "tile": {
+    "X": 18,
+    "Y": 12
+  },
+  "actor": false,
+  "scale": 0.125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "10/2/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

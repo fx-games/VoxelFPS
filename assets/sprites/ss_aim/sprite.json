@@ -1,0 +1,35 @@
+{
+  "name": "AIM",
+  "tile": {
+    "X": 28,
+    "Y": 13
+  },
+  "actor": false,
+  "scale": 0.13541667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.35714287,
+          0.07692307,
+          -0.05
+        ],
+        "max": [
+          0.28571427,
+          0.7692308,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "5/0/3",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

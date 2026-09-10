@@ -1,0 +1,40 @@
+{
+  "name": "CORPSE EXPL1",
+  "tile": {
+    "X": 56,
+    "Y": 28
+  },
+  "actor": false,
+  "scale": 0.29166666,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/12",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

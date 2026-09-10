@@ -1,0 +1,35 @@
+{
+  "name": "RADIOACTIVE",
+  "tile": {
+    "X": 47,
+    "Y": 63
+  },
+  "actor": false,
+  "scale": 0.65625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "13/1/0",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

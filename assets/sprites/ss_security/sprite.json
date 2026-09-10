@@ -1,0 +1,23 @@
+{
+  "name": "SECURITY",
+  "tile": {
+    "X": 14,
+    "Y": 11
+  },
+  "actor": false,
+  "scale": 0.114583336,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "8/5/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

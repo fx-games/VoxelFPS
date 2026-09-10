@@ -1,0 +1,23 @@
+{
+  "name": "DEAD ROBOT",
+  "tile": {
+    "X": 3,
+    "Y": 3
+  },
+  "actor": false,
+  "scale": 0.03125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "13/4/11",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

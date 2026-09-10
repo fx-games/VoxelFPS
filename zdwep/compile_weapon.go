@@ -175,6 +175,7 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 	// well as naming it, and asked for afterwards the plasma rifle's whole
 	// firing sound was left behind in the mod.
 	seeSound := inner.seeSoundOf(actor.Name)
+	deathSound := inner.actorSoundOf(actor.Name, "deathsound")
 
 	shared.actorSprites = inner.sprites
 	for sound := range inner.neededSounds {
@@ -191,15 +192,16 @@ func compileActor(idx *Index, policy Policy, name string, shared *Compiler) (*we
 	}
 
 	compiled := &wep.Effect{
-		Name:      actor.Name,
-		Render:    inner.render(actor.Name, false),
-		Speed:     inner.speedOf(actor.Name),
-		States:    states,
-		NoGravity: inner.actorFloats(actor.Name),
-		Missile:   inner.actorIsMissile(actor.Name),
-		Decal:     decalOf(idx, actor.Name),
-		NoDecal:   inner.mergedFlag(actor.Name, "nodecal"),
-		SeeSound:  seeSound,
+		Name:       actor.Name,
+		Render:     inner.render(actor.Name, false),
+		Speed:      inner.speedOf(actor.Name),
+		States:     states,
+		NoGravity:  inner.actorFloats(actor.Name),
+		Missile:    inner.actorIsMissile(actor.Name),
+		Decal:      decalOf(idx, actor.Name),
+		NoDecal:    inner.mergedFlag(actor.Name, "nodecal"),
+		SeeSound:   seeSound,
+		DeathSound: deathSound,
 	}
 	inner.bounceOf(actor.Name, compiled)
 	return compiled, sortedNames(inner.neededActors), nil
@@ -430,32 +432,41 @@ var mainLoopLabels = []string{"ready", "fire", "althold", "select", "spawn",
 // shotgun chambers its shell in the firing states, and never appears here.
 // ownedByStoppedLabel marks every step that sits under one of the labels a
 // reload walk must not wander into, whichever way it is entered.
+//
+// Several of the mod's own labels can name the same step - "Ready:" and
+// "Ready3:" one under the other is all over Brutal Doom - so a region does not
+// have one name. Keeping only one of them, whichever ranging over a map handed
+// over last, made the answer depend on Go's map order: two runs of the same
+// migration disagreed about whether the pump shotgun's chambered shells were a
+// magazine, and wrote a different weapon.json each time. Any stopped name among
+// the ones opening a region stops it, which is stable and is also the
+// conservative reading - a step the sprint can be entered at is a step the
+// reload walk has no business in whatever else it is called.
 func ownedByStoppedLabel(states wep.StateMachine) []bool {
-	owner := make([]string, len(states.Steps))
-	starts := make(map[int]string, len(states.Labels))
+	opens := make([]bool, len(states.Steps))
+	stops := make([]bool, len(states.Steps))
 	for label, index := range states.Labels {
 		// An invented label names no region of its own; the region is whatever
 		// the mod's own label called it.
-		if !strings.HasPrefix(label, "@") {
-			starts[index] = label
+		if strings.HasPrefix(label, "@") || index < 0 || index >= len(states.Steps) {
+			continue
 		}
-	}
-	current := ""
-	for i := range owner {
-		if name, ok := starts[i]; ok {
-			current = name
-		}
-		owner[i] = current
-	}
-
-	stopped := make([]bool, len(states.Steps))
-	for i, name := range owner {
+		opens[index] = true
 		for _, word := range mainLoopLabels {
-			if strings.Contains(name, word) {
-				stopped[i] = true
+			if strings.Contains(label, word) {
+				stops[index] = true
 				break
 			}
 		}
+	}
+
+	stopped := make([]bool, len(states.Steps))
+	current := false
+	for i := range stopped {
+		if opens[i] {
+			current = stops[i]
+		}
+		stopped[i] = current
 	}
 	return stopped
 }
@@ -559,7 +570,17 @@ func (c *Compiler) bounceFactor(name, property string) float64 {
 // rifle's fire sound was left behind in the mod because no A_PlaySound in the
 // weapon or the ball ever mentioned it.
 func (c *Compiler) seeSoundOf(name string) string {
-	sound, ok := c.mergedProperty(name, "seesound")
+	return c.actorSoundOf(name, "seesound")
+}
+
+// actorSoundOf is one of an actor's own sound properties, inherited like every
+// other one and asked for as an asset here because no state names it: the
+// migration only copies the sounds it has seen. SeeSound and DeathSound are
+// both this - ZDoom plays them from P_SpawnMissile and P_ExplodeMissile, not
+// from any frame - and the plasma rifle was silent at both ends of a shot
+// until each was read.
+func (c *Compiler) actorSoundOf(name, property string) string {
+	sound, ok := c.mergedProperty(name, property)
 	if !ok {
 		return ""
 	}
@@ -714,6 +735,10 @@ var notPlayerWeapons = map[string]bool{
 	// its own; it has states because Weapon requires them, not because
 	// anything gives it to a player.
 	"brutalweapon": true,
+	// Final Doomer's ThermoCoat: the Whitemare set's heat suit, held in a
+	// weapon slot so the player can switch to it and turn it on. There is
+	// nothing to fire and the shotgun it belongs to already reads its state.
+	"fdwhitemarechainsaw": true,
 }
 
 // Weapons lists every actor in the mod that is a weapon, by name, sorted.
@@ -1002,6 +1027,104 @@ func rescueStillNamedSteps(machine *wep.StateMachine, remove []bool) {
 	}
 }
 
+// DropFlagsOnlyACSTakesBack removes the gives of an inventory flag a weapon
+// sets on itself, gates one of its own jumps on, and never takes back - because
+// the only thing that would ever take it back is the mod's own ACS, and nothing
+// here runs ACS. Returns the items it dropped, for the caller to record.
+//
+// Brutal Doom's railgun is what this exists for. Firing gives "Pumping", waits
+// out a recharge in its own states, and calls
+// ACS_NamedExecuteAlways("RailgunRecharge") - whose entire body is a delay of
+// exactly that recharge and TakeInventory("Pumping",1). The wait itself is in
+// the state machine either way, and the frames it spends there are
+// A_WeaponReady(WRF_NOPRIMARY), so the trigger is dead for the whole of it; the
+// flag exists only to bounce a Fire that arrives inside the window. With no
+// script to clear it the flag latched on, Fire bounced to Ready for ever, and
+// the railgun fired once a level. BDCE's stamina flag ("UsedStamina", handed
+// out by a swing and taken back by a sprint script) is the same shape and
+// latches the same way.
+//
+// The rule is deliberately narrow, because dropping a give a weapon does mean
+// is how a working weapon breaks. All four have to hold: the weapon calls a
+// script somewhere, so there is a script to have been relying on; this weapon
+// gives the item itself; no state of this weapon ever takes it back; and some
+// jump_if_inventory reads it, so the latch is load bearing rather than an
+// inventory item for its own sake. An ammo pool is never touched - that is not
+// what A_TakeInventory is for - and nor is anything Weapon.Buttons already
+// says the engine keeps in step itself.
+//
+// The jumps are left exactly as they are. An item that is never given is an
+// item a jump never fires on, and stripping the tests as well would be a
+// bigger edit for no behaviour.
+func (r *Result) DropFlagsOnlyACSTakesBack() []string {
+	machine := &r.Weapon.States
+	given, taken, gated := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	scripted := false
+	for _, step := range machine.Steps {
+		for _, op := range step.Ops {
+			switch op.Op {
+			case wep.OpRunScript:
+				scripted = true
+			case wep.OpGive:
+				given[strings.ToLower(op.Item)] = true
+			case wep.OpTake:
+				taken[strings.ToLower(op.Item)] = true
+			case wep.OpJumpIfInventory:
+				gated[strings.ToLower(op.Item)] = true
+			}
+		}
+	}
+	if !scripted {
+		return nil
+	}
+	latched := map[string]bool{}
+	for item := range given {
+		if taken[item] || !gated[item] || r.engineKeepsItem(item) {
+			continue
+		}
+		latched[item] = true
+	}
+	if len(latched) == 0 {
+		return nil
+	}
+	var dropped []string
+	seen := map[string]bool{}
+	for i := range machine.Steps {
+		kept := machine.Steps[i].Ops[:0]
+		for _, op := range machine.Steps[i].Ops {
+			if op.Op == wep.OpGive && latched[strings.ToLower(op.Item)] {
+				if !seen[op.Item] {
+					seen[op.Item] = true
+					dropped = append(dropped, op.Item)
+				}
+				continue
+			}
+			kept = append(kept, op)
+		}
+		machine.Steps[i].Ops = kept
+	}
+	sort.Strings(dropped)
+	return dropped
+}
+
+// engineKeepsItem is whether this item is one the engine already looks after,
+// and so not a latch to break: the weapon's own ammo pools, and whatever
+// Weapon.Buttons says the engine holds in step with the player's input.
+func (r *Result) engineKeepsItem(lowered string) bool {
+	weapon := r.Weapon
+	for _, ammo := range []string{weapon.Ammo.Type, weapon.Ammo.Type2, weapon.Ammo.Clip, weapon.AmmoPickup} {
+		if ammo != "" && strings.EqualFold(ammo, lowered) {
+			return true
+		}
+	}
+	for item := range weapon.Buttons {
+		if strings.EqualFold(item, lowered) {
+			return true
+		}
+	}
+	return false
+}
+
 // PruneDeadStates drops the steps that are both unreachable (reachableSteps)
 // and part of one of the five named animations (namedAnimationClosure) - the
 // intersection, not either alone: a state nothing but a kick ever reaches is
@@ -1228,6 +1351,9 @@ func (r *Result) DropSounds(missing []string) {
 	for _, actor := range r.Actors {
 		if gone[actor.SeeSound] {
 			actor.SeeSound = ""
+		}
+		if gone[actor.DeathSound] {
+			actor.DeathSound = ""
 		}
 		silence(&actor.States)
 	}

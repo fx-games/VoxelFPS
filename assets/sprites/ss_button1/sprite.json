@@ -1,0 +1,35 @@
+{
+  "name": "BUTTON1",
+  "tile": {
+    "X": 8,
+    "Y": 8
+  },
+  "actor": false,
+  "scale": 0.083333336,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "9/0/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

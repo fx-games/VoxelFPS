@@ -1,0 +1,1 @@
+{"format":1,"name":"PLOFT2","render":{"scale":[1,1],"alpha":1},"states":{"steps":[{"tics":1,"tics_max":1},{"tics":0,"ops":[{"op":"explode","damage_type":"Kick","args":[8,16]}]},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]},{"tics":2,"tics_max":2},{"sprite":"----","tics":0,"ops":[{"op":"stop"}]}],"labels":{"spawn":3}},"no_gravity":true,"missile":true}

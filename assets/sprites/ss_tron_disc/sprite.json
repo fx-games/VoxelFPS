@@ -1,0 +1,36 @@
+{
+  "name": "TRON DISC",
+  "tile": {
+    "X": 20,
+    "Y": 19
+  },
+  "actor": false,
+  "scale": 0.19791667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "fps": 6,
+      "box": {
+        "min": [
+          -0.4,
+          0.052631557,
+          -0.05
+        ],
+        "max": [
+          0.45,
+          0.94736844,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "2/1/12",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

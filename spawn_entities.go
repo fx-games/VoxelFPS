@@ -82,9 +82,16 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 
 	if len(entity.TextureIndices) > 0 {
 		atlas := g.AtlasSprites
-
-		if entity.SpriteSheetName != "" {
-			atlasFile := filepath.Join("assets", "sheets", entity.SpriteSheetName+".png") //"assets/scientist_sheet.png"
+		// A sprite sheet names a kind under assets/sprites/ - a guard, a
+		// mutant, a barrel - which brings its own picture, its own frame size
+		// and its own animations with it. A name with no folder behind it is a
+		// sheet in the older assets/sheets/ sense, kept working so a map saved
+		// before the folders existed still loads.
+		kind := g.spriteKinds[entity.SpriteSheetName]
+		if kind != nil {
+			atlas = kind.Atlas()
+		} else if entity.SpriteSheetName != "" {
+			atlasFile := filepath.Join("assets", "sheets", entity.SpriteSheetName+".png")
 			tileWidth := entity.SpriteSheetTileSize.X
 			tileHeight := entity.SpriteSheetTileSize.Y
 			atlas = quads.Disk.TextureAtlasFixed(atlasFile, tileWidth, tileHeight)
@@ -97,7 +104,38 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		}
 		sprite := quads.NewSpriteFloor(atlas, entity.TextureIndices)
 
-		aabb = voxel.NewAABB(atlas.AABBFromOpaqueAtIndex(int(entity.TextureIndices[0])))
+		if kind != nil {
+			// The kind's own six animations, and the size the art was drawn
+			// for. Everything downstream keeps saying AnimWalk; the base is
+			// what makes that this kind's walk - see SpriteComponent.AnimBase.
+			sprite.AnimBase = kind.animBase
+			sprite.Size = kind.Size()
+			// A decoration with more than one idle frame is an animation - a
+			// flickering barrel, a jet of steam - and has to be started, or it
+			// stands on frame zero forever. An actor's own idle is started by
+			// spawnActor along with everything else it does.
+			if !kind.Actor {
+				sprite.PlayAnimationLooping(int(quads.AnimIdle))
+			}
+		}
+
+		// The box comes off the picture rather than off a number: the opaque
+		// part of what it draws, at the size the quad is drawn. That is what a
+		// barrel has always been picked and bumped into by, and a guard is a
+		// barrel that walks.
+		//
+		// An imported kind brings one box per animation, measured off its sheet
+		// at import time - see SpriteKind.box. Anything else is measured here,
+		// off the card, from the one frame there is to measure.
+		if kind != nil {
+			if measured, ok := kind.box("idle"); ok {
+				aabb = measured
+			} else {
+				aabb = quads.SpriteAABB(atlas, int(entity.TextureIndices[0]), sprite.Size)
+			}
+		} else {
+			aabb = quads.SpriteAABB(atlas, int(entity.TextureIndices[0]), sprite.Size)
+		}
 
 		goFromEntity.SetComponent(sprite)
 		if entity.IsTransparent {
@@ -108,9 +146,35 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 
 	}
 	physics := quads.NewPhysicsComponent(false, aabb)
+	// A thing the world walks through, but still on the grid: the crosshair
+	// finds it, the OBB outlines it, and nothing is stopped by it. See
+	// core.MapEntity.PassThrough - it is how a hall of exhibits is a hall
+	// rather than a maze.
+	physics.PassThrough = entity.PassThrough
 	goFromEntity.SetComponent(physics)
 
-	if actorNames[entity.Name] {
+	// And the other five, so that the box follows what is being drawn: a guard
+	// mid-lunge is wider than a guard standing, and the body he falls into is
+	// a different shape again. PhysicsComponent keys them by the sprite's own
+	// animation number - see LocalAnimation - which is what makes AnimDying
+	// mean this kind's death rather than some other kind's slot.
+	if kind := g.spriteKinds[entity.SpriteSheetName]; kind != nil {
+		for anim := quads.AnimIndex(0); anim < quads.AnimCount; anim++ {
+			if measured, ok := kind.box(animOrder[anim]); ok {
+				physics.SetAABBForAnimation(anim, measured)
+			}
+		}
+		// And the box of every picture it is drawn as, for the ray rather than
+		// the solver: a bird with its wings out is twice the bird it is with
+		// them folded, and one box for both is one the crosshair picks out
+		// beside itself. See SpriteKind.pickBoxes.
+		physics.SetPickBoxes(kind.pickBoxes())
+	}
+
+	// What walks is what its own folder says walks: a map entity naming a
+	// sprite kind marked actor gets an Actor, anything else is a prop standing
+	// in the level. The name in the map file is a label, not the decision.
+	if kind := g.spriteKinds[entity.SpriteSheetName]; kind != nil && kind.Actor {
 		g.spawnActor(goFromEntity, physics, entity, spawnPos)
 	} else if len(entity.TextureIndices) > 0 && entity.MeshName == "" {
 		// A sprite decoration - a barrel, a crate, whatever the atlas holds -
@@ -201,7 +265,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	// are all pieces of scenery by the folder they live in - which is what puts
 	// them on the editor's placement palette - but every one of them is a thing
 	// to press E on, so none of them may be looked through.
-	if _, isScenery := g.scenery[entity.MeshName]; isScenery && !interactableMesh(entity.MeshName) {
+	//
+	// A piece that can be walked through is not holding anything up, so there is
+	// nothing behind it to look at: it is an exhibit, and it is selected like
+	// anything else.
+	if _, isScenery := g.scenery[entity.MeshName]; isScenery && !interactableMesh(entity.MeshName) && !entity.PassThrough {
 		g.furniture[goFromEntity] = true
 	}
 

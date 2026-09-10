@@ -1,0 +1,38 @@
+{
+  "name": "STUN HIT",
+  "tile": {
+    "X": 20,
+    "Y": 17
+  },
+  "actor": false,
+  "scale": 0.17708333,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/5",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

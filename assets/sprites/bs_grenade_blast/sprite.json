@@ -1,0 +1,41 @@
+{
+  "name": "Fission Blast",
+  "tile": {
+    "X": 64,
+    "Y": 64
+  },
+  "actor": false,
+  "scale": 1,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "fps": 12,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.421875,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.390625,
+          0.8125,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "SPR_GRENADE_EXPLODE%d",
+    "file": "VSWAP.BS6",
+    "source": "Blake Stone: Aliens of Gold"
+  }
+}

@@ -130,7 +130,11 @@ type HitscanEffect struct {
 	Weapon    *Weapon
 }
 
-func (g *Game) fireHitscanWith(weapon *Weapon, origin, direction mgl32.Vec3, shot wep.Op) {
+// fireHitscanWith is one shot going out. It gives back what the ray met, for
+// the callers that have to draw something along it - a beam has to know where
+// to stop, and asking the world twice for the same answer is one raycast the
+// shot has already paid for.
+func (g *Game) fireHitscanWith(weapon *Weapon, origin, direction mgl32.Vec3, shot wep.Op) RaycastResult {
 	hit := g.rayCast(origin, direction)
 	events.Publish(events.EventHitScanCollision, HitscanEffect{
 		Hit:       hit,
@@ -138,6 +142,7 @@ func (g *Game) fireHitscanWith(weapon *Weapon, origin, direction mgl32.Vec3, sho
 		Shot:      shot,
 		Weapon:    weapon,
 	})
+	return hit
 }
 
 func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
@@ -198,9 +203,16 @@ func (g *Game) damage(hit RaycastResult, amount int) {
 		g.companionTarget = actor
 	}
 	headshot := hit.Relative.Y() > 0.6 && hit.Relative.Y() < 0.8
-	actor.TakeDamage(headshot)
+	// No Amount: an ordinary shot costs an NPC its own fixed fraction rather
+	// than the weapon's number. See Actor.TakeDamage.
+	actor.TakeDamage(Damage{Headshot: headshot})
 }
-func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int) {
+
+// fireProjectile throws a bolt: a lit, drawn thing that flies under its own
+// velocity and settles what it does when it arrives, not when it leaves.
+// owner is what fired it, so it passes through the shooter instead of exploding
+// against it - and so the hit knows which side of the fight it came from.
+func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int, owner *quads.GameObject) {
 	offsetOrigin := origin.Add(direction.Mul(0.8))
 
 	sprite := quads.NewSprite(g.AtlasSprites, []uint16{179})
@@ -216,7 +228,7 @@ func (g *Game) fireProjectile(origin, direction mgl32.Vec3, damage int) {
 	physics := quads.NewPhysicsComponent(false, voxel.NewAABB(mgl32.Vec3{-0.1, -0.1, -0.1}, mgl32.Vec3{0.1, 0.1, 0.1}))
 	newProjectile.SetComponent(physics)
 
-	newProjectile.SetComponent(quads.NewProjectileComponent(damage))
+	newProjectile.SetComponent(quads.NewProjectileComponent(damage, owner))
 
 	g.Sprites.Add(sprite)
 	sprite.PlayAnimationLooping(g.projectileFlyingAnim)
@@ -281,30 +293,33 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 	collisionEvent := event.(quads.CollisionEvent)
 	mover := collisionEvent.ObjectA.GameObject()
 	if mover.HasComponent(quads.ComponentTypeProjectile) && mover.IsAlive() {
-		mover.Kill()
+		bolt := mover.GetComponent(quads.ComponentTypeProjectile).(*quads.ProjectileComponent)
 
-		projectileComponent := mover.GetComponent(quads.ComponentTypeProjectile).(*quads.ProjectileComponent)
-
-		// impact effects
 		var hitObject *quads.GameObject
-		var relativePosition mgl32.Vec3
-		// npc animation & world state changes
 		if collisionEvent.ObjectB != nil {
 			hitObject = collisionEvent.ObjectB.GameObject()
-			relativePosition = hitObject.Transform().GetRelativePosition(collisionEvent.WorldPos)
+		}
+		// A bolt leaving the thing that fired it is not a bolt hitting it. The
+		// muzzle is already clear of the shooter's collider, but a shooter that
+		// walks into its own shot - or fires at something inside arm's reach -
+		// would otherwise blow itself up.
+		if hitObject != nil && bolt.Owner != nil && hitObject == bolt.Owner {
+			return
 		}
 
-		_ = relativePosition
+		mover.Kill()
 		g.createImpactEffects(nil, wep.Op{Puff: wep.PuffExplosion}, hitObject, collisionEvent.WorldPos, collisionEvent.SurfaceNormal)
-		if projectileComponent.HitEffect > 0 {
-			// A direct projectile hit always kills outright, same as before -
-			// routed through TakeDamage(headshot: true) now so the corpse
-			// actually stops moving, stops colliding and stops taking further
-			// hits instead of just freezing its sprite. See actor.go's die().
-			if actor := g.actorFor(hitObject); actor != nil {
-				actor.TakeDamage(true)
-			}
+
+		// What it does is settled here, where it landed, and to whatever it
+		// landed on - the player and an NPC alike, through Combatant.
+		if bolt.Damage <= 0 {
+			return
 		}
+		target := g.combatantFor(hitObject)
+		if target == nil || !target.Alive() {
+			return
+		}
+		target.TakeDamage(Damage{Amount: bolt.Damage, Source: bolt.Owner})
 	}
 }
 

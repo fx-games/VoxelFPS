@@ -1,0 +1,35 @@
+{
+  "name": "FLOORLAMP",
+  "tile": {
+    "X": 84,
+    "Y": 15
+  },
+  "actor": false,
+  "scale": 0.15625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.48809522,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.48809522,
+          0.93333334,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/3/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

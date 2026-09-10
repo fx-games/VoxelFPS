@@ -1,6 +1,9 @@
 package audio
 
 import (
+	"encoding/binary"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -110,5 +113,69 @@ func TestDropOriginRetiresOnlyThatOriginsChannels(t *testing.T) {
 	}
 	if casing.retired {
 		t.Error("another origin's channel was retired with it")
+	}
+}
+
+// wav8 writes the smallest 8-bit mono WAV a decoder will take, at a rate of
+// this test's choosing - which is the whole point: the two DOS games this
+// engine imports from recorded at 7000 and 11111, and Doom's own lumps are
+// 11025, none of which is what the speaker runs at.
+func wav8(t *testing.T, rate int, samples int) string {
+	t.Helper()
+	body := make([]byte, samples)
+	for i := range body {
+		body[i] = byte(0x80 + i%16)
+	}
+	out := make([]byte, 44+len(body))
+	copy(out[0:], "RIFF")
+	binary.LittleEndian.PutUint32(out[4:], uint32(36+len(body)))
+	copy(out[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(out[16:], 16)
+	binary.LittleEndian.PutUint16(out[20:], 1)
+	binary.LittleEndian.PutUint16(out[22:], 1)
+	binary.LittleEndian.PutUint32(out[24:], uint32(rate))
+	binary.LittleEndian.PutUint32(out[28:], uint32(rate))
+	binary.LittleEndian.PutUint16(out[32:], 1)
+	binary.LittleEndian.PutUint16(out[34:], 8)
+	copy(out[36:], "data")
+	binary.LittleEndian.PutUint32(out[40:], uint32(len(body)))
+	copy(out[44:], body)
+
+	path := filepath.Join(t.TempDir(), "cue.wav")
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		t.Fatalf("writing the test WAV: %v", err)
+	}
+	return path
+}
+
+// Nothing between a buffered cue and the speaker resamples - beep mixes
+// buffers as raw samples - so a cue has to be buffered at the speaker's own
+// rate or it plays at the ratio between the two. Blake Stone records at 7000
+// against a 44100 speaker, which came out six times too fast and an octave and
+// a half too high: a voice line as a chirp.
+func TestACueIsBufferedAtTheSpeakersRateWhateverTheFileSays(t *testing.T) {
+	const speakerRate = 44100
+	for _, fileRate := range []int{7000, 11025, 11111, 22050, 44100} {
+		p := &Player{sampleRate: speakerRate}
+		p.UnloadAllCues()
+
+		if err := p.loadCue(wav8(t, fileRate, 2000), "test", "cue"); err != nil {
+			t.Fatalf("%d Hz: %v", fileRate, err)
+		}
+		buffers := p.loadedCues[cueKey{"test", "cue"}]
+		if len(buffers) != 1 {
+			t.Fatalf("%d Hz: %d buffers, want 1", fileRate, len(buffers))
+		}
+		if got := buffers[0].Format().SampleRate; got != speakerRate {
+			t.Errorf("a %d Hz cue buffered at %d, want the speaker's %d - it will play %.1fx too fast",
+				fileRate, got, speakerRate, float64(speakerRate)/float64(got))
+		}
+		// And the length has to move with the rate, or resampling has been
+		// declared without being done.
+		wantSamples := 2000 * speakerRate / fileRate
+		if got := buffers[0].Len(); got < wantSamples*9/10 || got > wantSamples*11/10 {
+			t.Errorf("a %d Hz cue of 2000 samples buffered as %d, want about %d",
+				fileRate, got, wantSamples)
+		}
 	}
 }

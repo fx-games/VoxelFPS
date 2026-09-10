@@ -1,0 +1,35 @@
+{
+  "name": "HEAD",
+  "tile": {
+    "X": 49,
+    "Y": 21
+  },
+  "actor": false,
+  "scale": 0.21875,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.47959185,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.4591837,
+          0.9047619,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/2/14",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

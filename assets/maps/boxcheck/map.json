@@ -1,0 +1,275 @@
+{
+  "PlayerSpawn": [
+    10,
+    1,
+    4
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 40,
+    "G": 40,
+    "B": 50,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 30,
+    "G": 30,
+    "B": 36,
+    "A": 255
+  },
+  "Entities": [
+    {
+      "Position": [
+        6,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "Genetic Guard",
+        "TextureIndices": [
+          0
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "bs_genetic_guard",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        7.6,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "AVIAN MUT",
+        "TextureIndices": [
+          0,
+          8,
+          16,
+          24,
+          32,
+          40,
+          48,
+          56
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_avian_mut",
+        "SpriteSheetTileSize": {
+          "X": 140,
+          "Y": 86
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        9.2,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "77 Crate #1",
+        "TextureIndices": [
+          0
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "bs_crate_1",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        10.8,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "1ST AID KIT",
+        "TextureIndices": [
+          0
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_1st_aid_kit",
+        "SpriteSheetTileSize": {
+          "X": 30,
+          "Y": 10
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        12.4,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "Ficus Tree",
+        "TextureIndices": [
+          0
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "bs_ficus_tree",
+        "SpriteSheetTileSize": {
+          "X": 64,
+          "Y": 64
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14,
+        1,
+        9
+      ],
+      "Entity": {
+        "Name": "CORPSE1",
+        "TextureIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "MeshName": "",
+        "SpriteSheetName": "ss_corpse1",
+        "SpriteSheetTileSize": {
+          "X": 65,
+          "Y": 25
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PassThrough": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    }
+  ],
+  "FogStart": 60,
+  "FogEnd": 140,
+  "AmbientColor": [
+    0.9,
+    0.9,
+    0.95
+  ],
+  "AmbientStrength": 0.9,
+  "Lights": [
+    {
+      "Position": [
+        10,
+        2,
+        9
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 10,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    }
+  ],
+  "SkyFullSphere": false,
+  "Station": null,
+  "Panes": null,
+  "Music": ""
+}

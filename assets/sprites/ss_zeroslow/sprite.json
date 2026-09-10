@@ -1,0 +1,38 @@
+{
+  "name": "ZEROSLOW",
+  "tile": {
+    "X": 23,
+    "Y": 21
+  },
+  "actor": false,
+  "scale": 0.21875,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.41304347,
+          0.047619045,
+          -0.05
+        ],
+        "max": [
+          0.3695652,
+          0.9047619,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "2/1/4",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

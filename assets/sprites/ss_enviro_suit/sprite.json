@@ -1,0 +1,35 @@
+{
+  "name": "ENVIRO-SUIT",
+  "tile": {
+    "X": 39,
+    "Y": 14
+  },
+  "actor": false,
+  "scale": 0.14583333,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "5/1/6",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

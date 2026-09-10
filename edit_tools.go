@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/geometry"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 )
@@ -49,21 +48,38 @@ func (m EditorMode) String() string {
 type propKind struct {
 	label   string
 	scenery string
-	torch   bool
-	sprite  bool
+	// spriteKind is a folder under assets/sprites/ that is not an actor: a
+	// barrel, a jet of steam, a corpse on the floor. It is a slot here rather
+	// than in the actor palette because it is furniture that happens to be a
+	// picture, and because the barrel the request was about has four frames and
+	// has to stay one object.
+	spriteKind string
+	torch      bool
+	sprite     bool
 }
 
-// actorKinds is what the actor tool can place, and everything a map file needs
-// to spawn one again: the sheet it animates from and how big a frame on it is.
-// actorNames is derived from it, so a name here is an actor everywhere.
-var actorKinds = []core.MapEntity{
-	{
-		Name:                "Scientist",
-		TextureIndices:      []uint16{0, 1, 2, 3, 4, 5, 6, 7},
-		SpriteSheetName:     "scientist",
-		SpriteSheetTileSize: geometry.Point{X: 64, Y: 64},
-		CreateCollider:      true,
-	},
+// buildActorPalette fills what the actor tool can place: every folder under
+// assets/sprites/ that says it is an actor, in folder order. Each slot is
+// everything a map file needs to spawn one again - the kind it animates from,
+// how big a frame on its sheet is, and the idle frames it stands on before any
+// animation starts. There is no list of actors in Go and there must not be
+// one; adding a character is adding a folder.
+func (g *Game) buildActorPalette() {
+	var palette []core.MapEntity
+	for _, id := range g.spriteKindIDs() {
+		kind := g.spriteKinds[id]
+		if !kind.Actor {
+			continue
+		}
+		palette = append(palette, core.MapEntity{
+			Name:                kind.Name,
+			TextureIndices:      kind.idleFrames(),
+			SpriteSheetName:     kind.ID,
+			SpriteSheetTileSize: kind.Tile,
+			CreateCollider:      true,
+		})
+	}
+	g.editor.actors = palette
 }
 
 // defaultDecorationTexture is the sprite the decoration ghost starts as - the
@@ -88,6 +104,11 @@ func (g *Game) buildPropPalette() {
 	}
 	for _, id := range g.sceneryIDs() {
 		palette = append(palette, propKind{label: g.scenery[id].Name, scenery: id})
+	}
+	for _, id := range g.spriteKindIDs() {
+		if kind := g.spriteKinds[id]; !kind.Actor {
+			palette = append(palette, propKind{label: kind.Name, spriteKind: id})
+		}
 	}
 	g.editor.props = palette
 }
@@ -128,9 +149,9 @@ func (g *Game) editorNumberKey(index int) {
 			g.selectProp(index)
 		}
 	case ModeActors:
-		if index < len(actorKinds) {
+		if index < len(g.editor.actors) {
 			g.editor.actorIndex = index
-			g.Toast("Place: " + actorKinds[index].Name)
+			g.Toast("Place: " + g.editor.actors[index].Name)
 		}
 	}
 }
@@ -190,8 +211,11 @@ func (g *Game) editorScroll(yoff float64) {
 	case ModeProps:
 		g.selectProp(g.editor.propIndex + step)
 	case ModeActors:
-		g.editor.actorIndex = (g.editor.actorIndex + step + len(actorKinds)) % len(actorKinds)
-		g.Toast("Place: " + actorKinds[g.editor.actorIndex].Name)
+		if len(g.editor.actors) == 0 {
+			return
+		}
+		g.editor.actorIndex = (g.editor.actorIndex + step + len(g.editor.actors)) % len(g.editor.actors)
+		g.Toast("Place: " + g.editor.actors[g.editor.actorIndex].Name)
 	}
 }
 
@@ -210,6 +234,8 @@ func (g *Game) selectProp(index int) {
 		g.startTorchPlacement()
 	case kind.sprite:
 		g.startSpritePlacement()
+	case kind.spriteKind != "":
+		g.startSpriteKindPlacement(kind.spriteKind)
 	default:
 		g.startSceneryPlacement(kind.scenery)
 	}
@@ -217,13 +243,15 @@ func (g *Game) selectProp(index int) {
 	g.Toast("Place: " + kind.label)
 }
 
-// selectPropByScenery puts a piece on the crosshair by its folder name, for the
-// menu that still lists the scenery by hand. It goes through the palette rather
-// than round it, so the piece being placed and the piece a click writes to the
-// map file are always the same one.
-func (g *Game) selectPropByScenery(id string) {
+// selectPropByID puts a piece on the crosshair by its folder name, whichever
+// folder that is - a model under assets/meshes or a picture under
+// assets/sprites. It goes through the palette rather than round it, so the piece
+// being placed and the piece a click writes to the map file are always the same
+// one.
+func (g *Game) selectPropByID(id string) {
 	for index, kind := range g.editor.props {
-		if kind.scenery == id {
+		if kind.scenery == id || kind.spriteKind == id {
+			g.setEditorMode(ModeProps)
 			g.selectProp(index)
 			return
 		}
@@ -237,6 +265,34 @@ func (g *Game) startSpritePlacement() {
 	g.clearGhost()
 	g.editor.gameObjectForSpawning = g.spawnEntity(mgl32.Vec3{}, g.decorationEntity(false))
 	g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+}
+
+// startSpriteKindPlacement puts a folder's own picture on the crosshair, half
+// faded like every other ghost.
+func (g *Game) startSpriteKindPlacement(id string) {
+	g.clearGhost()
+	g.editor.gameObjectForSpawning = g.spawnEntity(mgl32.Vec3{}, g.spriteKindEntity(id, false))
+	if g.editor.gameObjectForSpawning != nil {
+		g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+	}
+}
+
+// spriteKindEntity is a sprite-kind prop as the map format describes it: the
+// folder's own name, its idle frames, and the frame size its sheet is cut at.
+// solid is false for the ghost - something you can walk into is not a ghost.
+func (g *Game) spriteKindEntity(id string, solid bool) core.MapEntity {
+	kind := g.spriteKinds[id]
+	if kind == nil {
+		return g.decorationEntity(solid)
+	}
+	return core.MapEntity{
+		Name:                kind.Name,
+		TextureIndices:      kind.idleFrames(),
+		SpriteSheetName:     id,
+		SpriteSheetTileSize: kind.Tile,
+		CreateCollider:      solid,
+		IsTransparent:       !solid,
+	}
 }
 
 // decorationEntity is the sprite decoration as the map format describes it.
@@ -353,6 +409,8 @@ func (g *Game) propEntity() core.MapEntity {
 		return core.MapEntity{Name: "Torch", MeshName: torchMeshName, Facing: propFacing(g.editor.facing)}
 	case kind.sprite:
 		return g.decorationEntity(true)
+	case kind.spriteKind != "":
+		return g.spriteKindEntity(kind.spriteKind, true)
 	}
 	return core.MapEntity{
 		Name:           g.scenery[kind.scenery].Name,
@@ -424,7 +482,10 @@ func (g *Game) actorClick() {
 // placeActor drops an NPC where the crosshair is and selects it, so the clicks
 // straight after it lay out the beat it walks.
 func (g *Game) placeActor(at mgl32.Vec3) {
-	entity := actorKinds[g.editor.actorIndex]
+	if g.editor.actorIndex >= len(g.editor.actors) {
+		return
+	}
+	entity := g.editor.actors[g.editor.actorIndex]
 	// The palette's own slice, otherwise: spawnEntity rewrites a texture index
 	// it does not like, in place, in the entry every later placement copies.
 	entity.TextureIndices = slices.Clone(entity.TextureIndices)
@@ -592,7 +653,10 @@ func (g *Game) editorStateLine() string {
 		}
 		return line
 	case ModeActors:
-		kind := actorKinds[g.editor.actorIndex].Name
+		if g.editor.actorIndex >= len(g.editor.actors) {
+			return "no actors installed"
+		}
+		kind := g.editor.actors[g.editor.actorIndex].Name
 		if actor := g.editor.selectedActor; actor != nil && actor.object.IsAlive() {
 			return fmt.Sprintf("%s   editing %s, %d waypoints", kind, actor.Name, len(actor.patrol)-1)
 		}

@@ -1,0 +1,35 @@
+{
+  "name": "1ST AID KIT",
+  "tile": {
+    "X": 30,
+    "Y": 10
+  },
+  "actor": false,
+  "scale": 0.104166664,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/3/3",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

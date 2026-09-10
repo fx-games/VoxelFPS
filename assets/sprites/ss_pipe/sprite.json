@@ -1,0 +1,35 @@
+{
+  "name": "PIPE",
+  "tile": {
+    "X": 71,
+    "Y": 6
+  },
+  "actor": false,
+  "scale": 0.0625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.48591548,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.48591548,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "0/3/0",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

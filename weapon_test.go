@@ -284,3 +284,60 @@ func raisingStub(id string) *Weapon {
 	weapon.Atlas = &glhf.TextureAtlasPacked{} // stands in for load()
 	return weapon
 }
+
+// A pool one gun spends is often declared by another gun that only tops it up,
+// and that second gun declares it empty. First-writer-wins by folder order gave
+// the Zaiger Rifle the Hellbound magnums' zero for the bullets it fires: it
+// could not shoot, and it dry-fired for ever because it has no reload to get
+// out of that with. See Game.shareInventory.
+func TestAWeaponsOwnAmmoBeatsAnotherWeaponsEmptyReserve(t *testing.T) {
+	game := &Game{}
+	// Built first, the way the folder that sorts first is, and carrying the
+	// item only as a reserve it never starts with.
+	NewWeapon(game, &wep.Weapon{
+		ID:   "magnums",
+		Ammo: wep.Ammo{Type: "PistolRounds", Use: 1},
+		Items: map[string]wep.Item{
+			"PistolRounds": {Max: 12},
+			"Bullets":      {Max: 100},
+		},
+	}, nil, "", "")
+	rifle := NewWeapon(game, &wep.Weapon{
+		ID:    "rifle",
+		Ammo:  wep.Ammo{Type: "Bullets", Use: 1},
+		Items: map[string]wep.Item{"Bullets": {Max: 100}},
+	}, nil, "", "")
+
+	if got := rifle.AmmoLine(); got != "100/100" {
+		t.Errorf("rifle ammo = %q, want 100/100 - it inherited the magnums' empty reserve", got)
+	}
+}
+
+// The cheat that tops a weapon up must top up its ammo and nothing else. A
+// migrated weapon's Items are mostly the flags its own script signals itself
+// with, and handing it every one of them at its cap tells the weapon a dozen
+// things are happening at once: Brutal Doom's rifle fires without a trigger and
+// Final Doomer's Zaiger rifle stands in the reload it thinks it just started.
+func TestFillingAmmoLeavesAScriptsOwnFlagsAlone(t *testing.T) {
+	rifle := &wep.Weapon{
+		ID:         "rifle",
+		Ammo:       wep.Ammo{Type: "Clip2", Clip: "RifleAmmo", Type2: "RifleAmmo", Use: 1},
+		AmmoPickup: "Clip2",
+		Items: map[string]wep.Item{
+			"Clip2":        {Max: 300},
+			"RifleAmmo":    {Max: 31},
+			"Reloading":    {Max: 1},
+			"FiredPrimary": {Max: 1},
+		},
+	}
+	pools := ammoPools(rifle)
+	want := []string{"Clip2", "RifleAmmo"}
+	if len(pools) != len(want) {
+		t.Fatalf("ammo pools = %v, want %v", pools, want)
+	}
+	for i, item := range want {
+		if pools[i] != item {
+			t.Errorf("ammo pool %d = %q, want %q", i, pools[i], item)
+		}
+	}
+}

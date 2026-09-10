@@ -1,0 +1,23 @@
+{
+  "name": "EXPLO",
+  "tile": {
+    "X": 3,
+    "Y": 2
+  },
+  "actor": false,
+  "scale": 0.020833334,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "3/1/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

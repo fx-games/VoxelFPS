@@ -1,0 +1,35 @@
+{
+  "name": "CHAND",
+  "tile": {
+    "X": 60,
+    "Y": 63
+  },
+  "actor": false,
+  "scale": 0.65625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.48333332,
+          0.015873015,
+          -0.05
+        ],
+        "max": [
+          0.48333335,
+          0.984127,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/3/3",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

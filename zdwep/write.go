@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/memmaker/goray/audio"
 	"github.com/memmaker/goray/png_chunks"
 	"github.com/memmaker/goray/tpack"
 	"github.com/memmaker/goray/wep"
@@ -513,7 +515,11 @@ func convertToWAV(data []byte, sourceName string) ([]byte, error) {
 			"and ffmpeg is not installed to convert it", sourceName)
 	}
 	command := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error",
-		"-y", "-i", "pipe:0", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1")
+		// -ar is the speaker's rate: nothing between a cue and the speaker
+		// resamples, so a sound written at any other rate plays at the ratio
+		// between the two.
+		"-y", "-i", "pipe:0", "-c:a", "pcm_s16le", "-ar", strconv.Itoa(audio.SampleRate),
+		"-f", "wav", "pipe:1")
 	command.Stdin = bytes.NewReader(data)
 	var out, stderr bytes.Buffer
 	command.Stdout = &out

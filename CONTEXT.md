@@ -19,7 +19,11 @@ ammo is shared and picked up, a counter is internal to one weapon.
 
 **Migration** — the offline conversion of a ZDoom mod into weapons this engine
 can load. It is a pure function of its source: the same source always produces
-the same result. It never runs while the game runs.
+the same result, down to the bytes. It never runs while the game runs.
+
+**Source folder** — the working copy of every game and mod a migration reads,
+and of the engines that originally drew them. Not part of the repo: a checkout
+has what was generated and not what it was generated from.
 
 **Compiled weapon** — a migrated weapon as it exists on disk: behaviour,
 sprites, sounds. The engine loads it; it does not interpret ZDoom.

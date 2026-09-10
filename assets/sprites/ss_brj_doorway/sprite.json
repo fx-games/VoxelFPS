@@ -1,0 +1,23 @@
+{
+  "name": "BRJ DOORWAY",
+  "tile": {
+    "X": 18,
+    "Y": 12
+  },
+  "actor": false,
+  "scale": 0.125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "10/1/2",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

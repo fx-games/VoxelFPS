@@ -1,0 +1,41 @@
+{
+  "name": "CAM EXPL",
+  "tile": {
+    "X": 32,
+    "Y": 32
+  },
+  "actor": false,
+  "scale": 0.33333334,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.46875,
+          0.03125,
+          -0.05
+        ],
+        "max": [
+          0.46875,
+          0.9375,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/1/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

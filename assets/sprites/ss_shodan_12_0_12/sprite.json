@@ -1,0 +1,23 @@
+{
+  "name": "SHODAN",
+  "tile": {
+    "X": 10,
+    "Y": 10
+  },
+  "actor": false,
+  "scale": 0.104166664,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "12/0/12",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

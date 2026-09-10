@@ -1,0 +1,23 @@
+{
+  "name": "FRT ELEV",
+  "tile": {
+    "X": 3,
+    "Y": 1
+  },
+  "actor": false,
+  "scale": 0.010416667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "10/3/3",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

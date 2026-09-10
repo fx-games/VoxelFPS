@@ -213,6 +213,10 @@ func main() {
 		if result.UnifyReloadOnAltFire() {
 			fmt.Fprintf(os.Stderr, "%s: reload was on alt-fire, moved to the reload button\n", result.Weapon.ID)
 		}
+		if latched := result.DropFlagsOnlyACSTakesBack(); len(latched) > 0 {
+			fmt.Fprintf(os.Stderr, "%s: dropped %s, which only the mod's own ACS ever takes back\n",
+				result.Weapon.ID, strings.Join(latched, ", "))
+		}
 		if len(result.Sprites) == 0 {
 			gaps.add(name, fmt.Errorf("none of its pictures are in these sources"))
 			skipped = append(skipped, name)

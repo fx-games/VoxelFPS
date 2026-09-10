@@ -1,9 +1,10 @@
 package zdwep
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/memmaker/goray/audio"
 )
 
 // Most of a Doom mod's sounds are not files in any format a decoder knows: they
@@ -51,34 +52,8 @@ func DMXToWAV(lump []byte) ([]byte, error) {
 	if len(samples) == 0 {
 		return nil, fmt.Errorf("no samples")
 	}
-	return wavFile(samples, rate), nil
-}
-
-// wavFile wraps unsigned eight bit mono samples in the smallest WAV that
-// describes them.
-func wavFile(samples []byte, rate int) []byte {
-	var out bytes.Buffer
-	write := func(values ...any) {
-		for _, value := range values {
-			binary.Write(&out, binary.LittleEndian, value)
-		}
-	}
-	dataSize := uint32(len(samples))
-
-	out.WriteString("RIFF")
-	write(uint32(36 + dataSize))
-	out.WriteString("WAVE")
-
-	out.WriteString("fmt ")
-	write(uint32(16))           // the size of this chunk
-	write(uint16(1))            // uncompressed
-	write(uint16(1))            // one channel
-	write(uint32(rate))         // samples per second
-	write(uint32(rate))         // bytes per second, one byte per sample
-	write(uint16(1), uint16(8)) // block alignment, bits per sample
-
-	out.WriteString("data")
-	write(dataSize)
-	out.Write(samples)
-	return out.Bytes()
+	// Written at the speaker's rate rather than the lump's. Doom recorded these
+	// at 11025 and a few at 22050, and nothing between a cue and the speaker
+	// resamples - see audio.WAVFromPCM8.
+	return audio.WAVFromPCM8(samples, rate), nil
 }

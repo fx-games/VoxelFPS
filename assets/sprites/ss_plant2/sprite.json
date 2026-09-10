@@ -1,0 +1,35 @@
+{
+  "name": "PLANT2",
+  "tile": {
+    "X": 29,
+    "Y": 23
+  },
+  "actor": false,
+  "scale": 0.23958333,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/6/6",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

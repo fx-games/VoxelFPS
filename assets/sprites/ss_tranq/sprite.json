@@ -1,0 +1,35 @@
+{
+  "name": "TRANQ",
+  "tile": {
+    "X": 13,
+    "Y": 6
+  },
+  "actor": false,
+  "scale": 0.0625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.42307693,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.42307693,
+          0.8333333,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "1/1/1",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

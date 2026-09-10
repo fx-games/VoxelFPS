@@ -1,0 +1,41 @@
+{
+  "name": "MAGPULSE HIT",
+  "tile": {
+    "X": 99,
+    "Y": 39
+  },
+  "actor": false,
+  "scale": 0.40625,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/4",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

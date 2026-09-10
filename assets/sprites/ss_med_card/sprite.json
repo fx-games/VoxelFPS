@@ -1,0 +1,35 @@
+{
+  "name": "MED CARD",
+  "tile": {
+    "X": 14,
+    "Y": 7
+  },
+  "actor": false,
+  "scale": 0.072916664,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "8/4/5",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

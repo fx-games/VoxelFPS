@@ -1,0 +1,35 @@
+{
+  "name": "VINE1",
+  "tile": {
+    "X": 24,
+    "Y": 72
+  },
+  "actor": false,
+  "scale": 0.75,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "7/6/7",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

@@ -343,69 +343,85 @@ The `assets/weapons/` folder is generated. `tools/genweapons` reads a mod and wr
 it; it never runs while the game does, and `weapons.lock` records what the last
 run built from what.
 
-Every source that produced a weapon in the folder, and where it is on this
-machine. `doom2.wad` goes last in every `-source` list: the mods take the base
-game's sprites and sounds for granted, and a source list is searched in order.
+**Every source lives in `3rd-party/`, and `./re-migrate.sh` is the only command
+that reads them.** The folder is gitignored and `3rd-party/README.md` says what
+each thing is and which archive it came out of; a checkout has the generated
+`assets/` and not the games behind it. Nothing points into `~/Downloads` or a
+scratchpad any more, and nothing is under `/private/tmp` waiting for a reboot to
+take it.
+
+```bash
+./re-migrate.sh all              # every source below, then a prune and a check
+./re-migrate.sh brutal-doom      # or one at a time: blake-stone, system-shock,
+./re-migrate.sh mods             # final-doomer, mods, small-gun
+```
+
+Every source that produced a weapon in the folder. `doom2.wad` goes last in
+every `-source` list: the mods take the base game's sprites and sounds for
+granted, and a source list is searched in order.
 
 | source | weapons | prefix | where it is |
 | --- | --- | --- | --- |
-| Brutal Doom Community Expansion | 43 | `bd_` | `$OLD/bdce` — a clone of <https://github.com/BLOODWOLF333/Brutal-Doom-Community-Expansion> at `02623c7`, recorded as revision `master` |
-| Final Doomer v3.4 | 80 | `fd_` | `~/Downloads/FinalDoomer_v3.4.pk3` |
-| nine single-weapon community mods | 10 | none | `~/Downloads/*.zip`, unpacked under `$OLD/mods/<Name>/`. Ten were downloaded; one does not migrate |
+| Brutal Doom Community Expansion | 43 | `bd_` | `3rd-party/bdce` — a clone of <https://github.com/BLOODWOLF333/Brutal-Doom-Community-Expansion> at `02623c7`, recorded as revision `master` |
+| Final Doomer v3.4 | 80 | `fd_` | `3rd-party/FinalDoomer_v3.4.pk3` |
+| nine single-weapon community mods | 10 | none | `3rd-party/mods/`, the zips they came in beside them in `mods/archive/`. Ten were downloaded; one does not migrate |
 | `assets/smallgun_sheet.png` | 1 | none | in this repo; not a mod at all, see below |
-| Doom II | — | — | `~/Downloads/doom2.wad` |
+| Blake Stone: Aliens of Gold | 5 | `bs_` | `3rd-party/blake-stone/cd/` — the CD's whole `.BS6` set; only `VSWAP.BS6` is read today |
+| System Shock (1994) | 16 | `ss_` | `3rd-party/system-shock/SSHOCK/DATA` |
+| Doom II | — | — | `3rd-party/doom2.wad` |
 
-`$OLD` is `/private/tmp/claude-501/-Users-felix-Projects-go-fps/3b5b84ba-fb8f-4f32-b475-f14ef98a2c7d/scratchpad`,
-an earlier session's scratchpad. **It is under `/private/tmp` and will not
-survive a reboot.** The durable copies are the zips and the pk3 in
-`~/Downloads`; the BDCE clone is not, and has to be cloned again when it goes.
+That is 155 weapons in the folder.
 
-The ten downloaded, each a Realm667 Armory-format release carrying its own
+The ten community mods, each a Realm667 Armory-format release carrying its own
 `CREDITS` or `readme.txt` naming its author, and the weapons each produced:
 
-| zip | weapon |
+| mod | weapon |
 | --- | --- |
-| `Axe.zip` | `axe` |
-| `BTConnector.zip` | `blacktail_51_connector` |
-| `Colt45.zip` | `colt45` |
-| `CombatKnife.zip` | `combat_knife` |
-| `DualBerettas.zip` | `dual_92s` |
-| `HuntingRifle.zip` | `huntingrifle`, `huntingriflescope` |
-| `Reaper.zip` | `reaper` |
-| `SilencedPistol.zip` | `silencedpistol` |
-| `UACSniperRifle.zip` | `sniper_rifle` |
-| `MagnumRevolver.zip` | **none** — written entirely in ZScript, which is a different and far larger language than DECORATE. It ships no DECORATE lump and this migration cannot read it. |
+| `Axe.wad` | `axe` |
+| `BTConnector.pk3` | `blacktail_51_connector` |
+| `Colt45.pk3` | `colt45` |
+| `CombatKnife.pk3` | `combat_knife` |
+| `DualBerettas.pk3` | `dual_92s` |
+| `Hunting Rifle.wad` | `huntingrifle`, `huntingriflescope` |
+| `Reaper.wad` | `reaper` |
+| `SilencedPistol.pk3` | `silencedpistol` |
+| `UACSniperRifle.wad` | `sniper_rifle` |
+| `MagnumRevolver.pk3` | **none** — written entirely in ZScript, which is a different and far larger language than DECORATE. It ships no DECORATE lump and this migration cannot read it. |
 
 `small_gun` was never in a mod. `tools/gensheet` builds it out of a plain grid
 sprite sheet in this repo, and writes the same `weapon.json` the migration
-writes:
+writes. It is `./re-migrate.sh small-gun`.
 
-```bash
-go run ./tools/gensheet -sheet assets/smallgun_sheet.png -id small_gun \
-    -tag "Small Gun" -prefix SMGN -size 64x64 -frames 0,1,2,3,4 -scale 3
-```
+**The eightieth Final Doomer weapon is not in the sweep.** `-all` finds 79;
+`fd_katana_energy` is the same actor as `fd_katana` - Final Doomer's JPCP fist
+becomes an energy katana once the player has the chainsaw, and which of the two
+you are holding is an inventory flag only the mod's own scripts ever set, so a
+plain compile only ever reaches the first. `-force-item` compiles as if the flag
+were held, `-drop-unreachable` deletes everything that leaves stranded, and
+`-rename-id`/`-rename-tag` give the result a name of its own. The script has the
+line; this is what it is for, and the same three flags are how any other
+script-gated second mode would come out.
 
-The three runs that built the rest:
-
-```bash
-go run ./tools/genweapons -source "$OLD/bdce,$HOME/Downloads/doom2.wad" \
-    -all -prefix bd_ -revision master
-go run ./tools/genweapons -source "$HOME/Downloads/FinalDoomer_v3.4.pk3,$HOME/Downloads/doom2.wad" \
-    -all -prefix fd_ -revision v3.4
-go run ./tools/genweapons -source "$OLD/mods/DualBerettas/DualBerettas.pk3,$HOME/Downloads/doom2.wad" \
-    Dual92
-```
+**A migration is reproducible, and that is checked rather than hoped.** Running
+`./re-migrate.sh all` twice writes the same bytes both times, which is what makes
+diffing `weapons.lock` mean anything. Nothing in a compile may depend on Go's map
+order: `ownedByStoppedLabel` ranged over the label map and kept one name per
+step, and because Brutal Doom writes `Ready:` and `Ready3:` on the same frame all
+over the place, two runs disagreed about whether the pump shotgun's chambered
+shells were a magazine. `TestTheSameWeaponCompilesTheSameWayEveryTime` is the
+guard.
 
 `-list` names the weapons in a mod without compiling anything, which is how you
 find the actor name the third form wants.
 
 **Re-migrating is reproducible from the folder itself.** Every weapon.json
-records the source it came from, its revision and its actor name, so the runs
-that built the folder can be reconstructed from `provenance` rather than
-remembered. The two big mods were migrated with `-all`, which compiles
-leniently; the single-weapon mods were named one at a time. `-prune` afterwards
-deletes the shared actor files nothing points at any more, and deleting
-`assets/weapons/_sprites.png` makes the next run repack the shared atlas.
+records the source it came from, its revision and its actor name, so a run that
+`re-migrate.sh` has lost can be reconstructed from `provenance` rather than
+remembered - which is how the energy katana's own line was recovered. The two
+big mods are migrated with `-all`, which compiles leniently; the single-weapon
+mods are named one at a time. `-prune` runs last and deletes the shared actor
+files nothing points at any more, and deleting `assets/weapons/_sprites.png`
+makes the next run repack the shared atlas rather than add to it.
 
 **Every bd_ weapon compiles with five animations already gone.** BDCE's shared
 `BrutalWeapon` base class gives every one of its weapons a kick, a taunt, a
@@ -434,6 +450,30 @@ anywhere in its own closure - and aliases `Reload` onto the same steps, moving
 `AllowAlt` to `AllowReload` wherever the mod had granted it. A weapon with a
 real secondary fire (a scope, a charged shot) never matches and is untouched.
 Runs once, in `genweapons`, right after `PruneDeadStates`.
+
+**A flag only the mod's ACS ever takes back is dropped.** Nothing here runs a
+mod's ACS, so a weapon that gives itself a flag and hands the clearing of it to a
+script latches that flag on for good. Brutal Doom's railgun is the case:
+firing gives `Pumping`, waits out a recharge in its own states, and calls
+`ACS_NamedExecuteAlways("RailgunRecharge")`, whose entire body is a delay of
+exactly that recharge and `TakeInventory("Pumping",1)`. The wait is in the state
+machine either way and the frames it spends there are `A_WeaponReady(WRF_NOPRIMARY)`,
+so the trigger is dead for all of it; the flag is only there to bounce a Fire
+that arrives inside the window. With nothing to clear it the railgun fired once
+per level. `zdwep.Result.DropFlagsOnlyACSTakesBack` removes the gives, and is
+narrow on purpose - the weapon has to call a script somewhere, give the item
+itself, never take it back in any of its own states, and read it with a
+`jump_if_inventory`; ammo pools and anything `Weapon.Buttons` already keeps are
+never touched. It catches `Pumping` on the railgun and `UsedStamina` on thirty
+other BDCE weapons, whose sprint script would otherwise leave every one of them
+permanently tired.
+
+**A missile's DeathSound is read alongside its SeeSound.** ZDoom plays one from
+`P_SpawnMissile` and the other from `P_ExplodeMissile`, so neither appears in any
+state and the migration only copies the sounds it has seen. Reading only the
+first left the classic plasma rifle firing with a noise and landing without one.
+`actorSoundOf` reads both; `WorldActor.hitSomething` plays the second, which is
+the same call that sends a missile to its Death state.
 
 ## Adding something to the map for picking
 
@@ -512,6 +552,373 @@ system's step height. The shelves are modeled by hand instead, in
 later edits) - see "Modeling scenery in Blockbench" below for how its scale
 and texture stay exact. `TestThingsStandOnTheShelfsOwnBoards` checks the
 weapon range stands things at heights the shelf actually has a board at.
+
+## Where the characters and the flat scenery come from
+
+`assets/sprites/` is the weapons folder's shape applied to everything in the
+world that is a picture rather than a model: one folder a kind, holding a
+`sheet.png` of equal-sized frames, a `sprite.json` saying which frames make
+which animation, a `boxes.json` of what is drawn on each of those frames, and -
+for anything that makes a noise - a `sounds/` folder.
+
+```
+assets/sprites/bs_star_trooper/
+    sheet.png          a plain grid; sprite.json says how big one cell is
+    sprite.json        name, tile, actor, health, scale, animations, sounds
+    boxes.json         one box a cell, measured at import, never by the engine
+    sounds/alert.wav   cue names, loaded under a scope of the folder's own id
+    sounds/death.wav
+    sounds/death~2.wav a second take of the same cue; the player picks between
+```
+
+**Two boxes, two questions.** `sprite.json` carries one box an animation, the
+middle of its facings - what the thing *collides* by, because a solver must not
+care where the player is looking or which frame a walk is on. `boxes.json`
+carries one box a frame - what it is *picked* by, because a ray is testing the
+picture on the screen. Both are measured by the importers, off the sheet they
+have just written, and the engine only reads them.
+
+**There is no list of kinds in Go and there must not be one.** A map entity's
+`SpriteSheetName` is the folder name, the editor's two palettes are built from
+whatever `loadSpriteKinds` found on disk, and `actor: true` in the JSON is the
+only thing that decides whether a folder is placed with the actor tool and gets
+an `Actor` (health, patrol, dying) or is a decoration in the props palette.
+Adding a character is adding a folder.
+
+**Six animations, by name**: `idle`, `walk`, `dying`, `hit`, `prepare_fire`,
+`fire` - the six `quads.AnimIndex` values, which is what the engine plays. Only
+`idle` is required; a kind that has not got one of the others is registered with
+its idle in that slot, so nothing downstream has to check whether an animation
+exists. `frames` is indexed **by facing first**: eight rows for something you
+can walk round, one row for something that looks the same from everywhere,
+which is what a death or an explosion is. Every facing of one animation must
+run the same number of frames - `SpriteDrawer` times an animation off facing
+zero.
+
+**Every kind gets its own block of six animation slots**, handed out at startup
+by `registerSpriteKinds`, and a sprite carries where its block starts in
+`SpriteComponent.AnimBase`. `PlayAnimation(AnimWalk)` therefore means *this
+kind's* walk. Comparing `CurrentAnimation()` to `AnimWalk` directly is only
+right for a sprite whose base happens to be zero - use `IsPlaying(AnimWalk)`.
+
+**`scale` is how tall the art is in voxels**, because the two games do not agree
+about it: Blake Stone draws into a fixed 64-pixel tile with the figure filling
+most of it, so one number does for everything; System Shock crops every picture
+to what is in it, so a kind's scale comes off its own tile height and a med
+patch is a quarter of a voxel while a cyborg is two.
+
+**The width follows the frame's shape, and so does the box.** `SpriteKind.Size`
+is the scale for the height and the tile's own aspect for the width, because a
+non-square frame drawn on a square quad is a picture squashed - and the box it
+is picked and bumped into by is squashed with it. `quads.SpriteAABB` measures
+the opaque part of the frame the thing is standing on and scales it by that same
+size, which is the path a barrel has always been picked by; a guard is a barrel
+that walks, and a corpse is measured the same way off the frame it comes to rest
+on.
+
+**A box kept per animation is keyed by the sprite's own animation number**, not
+the slot it plays out of - `SpriteComponent.LocalAnimation`. Every kind
+registers its own six and gets its own block, so the slot for "dying" is a
+different number for a guard than for a mutant, and a corpse keyed by the slot
+finds nothing and keeps the standing body's box.
+
+**Sounds are the weapon mechanism reused.** A kind with a `sounds/` folder gets
+its own cue scope named for the folder, loaded by `loadSpriteKindSounds` with
+the same `LoadCueTree` a weapon makes. `playActorCue` works the volume and the
+pan out from where the player is standing, because a cue carries a volume and a
+pan and nothing else - there is no 3D mixer. Roles: `alert` on spawn, `attack`
+when it fires, `death` when it dies.
+
+Two tests walk the whole installed set: `TestEveryInstalledSpriteKindIndexesFramesItsSheetHas`
+checks every frame index against the picture's real size, and
+`TestEveryInstalledActorHasAllSixAnimations` says out loud which actors fell
+back to their idle instead of importing an animation.
+
+## Importing a DOS game
+
+Two of the games this engine borrows from ship their art in their own
+containers, and there is a tool a game that reads it and writes the folders
+above. Both are re-runnable: they overwrite, they never merge, and every folder
+records in its own `provenance` which game and which of its own names it came
+out of.
+
+| tool | game | source | what it reads |
+| --- | --- | --- | --- |
+| `tools/importbs` | Blake Stone: Aliens of Gold | `VSWAP.BS6` off the CD | walls, sprites and digitised sound, all in the one file |
+| `tools/importss` | System Shock (1994) | the `DATA` directory | `TEXTURE.RES`, `OBJART*.RES`, `HANDART.RES`, `DIGIFX.RES`, `CYBSTRNG.RES`, `CITMAT.RES`, `OBJ3D.RES`, `OBJPROP.DAT` |
+
+Neither has to be run by hand: `./re-migrate.sh blake-stone` and
+`./re-migrate.sh system-shock` are these two calls with the paths already in
+them. By hand, they are:
+
+```bash
+go run ./tools/importbs -vswap 3rd-party/blake-stone/cd/VSWAP.BS6 -install
+go run ./tools/importss -data 3rd-party/system-shock/SSHOCK/DATA -install
+```
+
+`-dump DIR` on either writes every picture and sound as its own file instead,
+named the way the game names it. That is the form to look at when something
+comes out wrong; `-install` is the form the game reads.
+
+**Where the data is.** Both games are unpacked under `3rd-party/`, with the
+archives they came out of beside them - see `3rd-party/README.md`. Blake Stone
+arrived as a CD image, a `.bin`/`.cue` pair in MODE1/2352, so the ISO is every
+sector's bytes 16..2064 and `hdiutil attach` mounts what comes out;
+`blake-stone/cd/` is a copy of that, the whole `.BS6` set and not only the one
+file anything reads today. System Shock arrived as a zip of a DOS install, and
+`SSHOCK/DATA` inside it is the whole of what is read.
+
+**Neither game's file says what anything is.** The pictures are numbered and the
+numbers mean nothing on their own, so both importers carry a name table taken
+from the source. Both sources are checked out under `3rd-party/`, so a number
+that turns out to name the wrong thing is looked up rather than guessed at:
+
+- `tools/importbs/names.go` and `statics.go` are bstone's own `initialize_sprites()`
+  and `statinfo` tables (`3rd-party/blake-stone/bstone`), which is where the
+  source release recorded that sprite 41 is a barrel. `palette.go` is its
+  `vgapal.cpp`: the palette was linked into the executable and is in none of the
+  data files. `sounds.go` is its `digitized_map`, because the digitised set is a
+  subset of the hundred AdLib effects and is not in the same order. The game's
+  own 1993 source is beside it in `3rd-party/blake-stone/blake-stone-source`,
+  and `3D_ACT1.C` there is where `statinfo` originally came from.
+- `tools/importss` reads the game's own tables instead - `OBJPROP.DAT` for what
+  every object is and `CYBSTRNG.RES` for what it is called - through
+  `inkyblackness/hacked`, which is the reference implementation of the container
+  format and its compression. It is a dependency of this module for that one
+  package; nothing in the game imports it.
+
+**The two games do not start their eight views in the same place.** This
+engine's facing zero is the front (`core.GetViewDirection`), and so is Blake
+Stone's; System Shock's run starts on the thing's own left and reaches the front
+six steps later. `viewRotation` in `tools/importss/critters.go` is that offset,
+read off the art - the humanoid mutant is a left profile in view 0, its back in
+view 2, a right profile in view 4 and face-on in view 6, in the walk block and
+the stand block alike. Without it everything imported out of System Shock showed
+you its side while it walked at you.
+`TestADirectionalIdleNamesADifferentFrameForEveryFacing` is what catches the
+next mistake of that shape: a wrong modulus or a clamp lands two facings on one
+picture.
+
+**The one thing System Shock does not write down is where a critter's pictures
+are.** `OBJPROP.DAT` has a per-critter array of frame counts and in the shipped
+file it is all zeroes - the engine fills it in from the art. The layout is
+derived in `tools/importss/critters.go`, and the derivation is written out
+there: five single-view postures at `1400 + 37*posture + critter`, the
+eight-facing stand from 1585, the eight-facing walk from 1880, with a critter
+that was only drawn from one side taking one resource rather than eight.
+
+**Nothing between a cue and the speaker resamples.** beep mixes buffers as raw
+samples, so a sound recorded at any other rate than the speaker's plays at the
+ratio between the two: Doom's own lumps are 11025 and 22050 against a 44100
+speaker and came out two and four times too fast, and a Blake Stone voice line
+is 7000 and came out as a chirp.
+
+**Anything this repo writes is written at `audio.SampleRate`** - both importers
+and the migration's own DMX and ffmpeg paths all go through
+`audio.WAVFromPCM8`. Doing it on the way in rather than on the way out is worth
+it where the ratio is large: resampling a 7000 Hz effect at load costs 2.5ms on
+the game thread the first time it is played, thirty times what decoding it
+costs, and a room of guards is a first shout each. At 22050 it is a tenth of a
+millisecond.
+
+`loadCue` resamples anything that still is not, which today is the 1513 oggs
+that came out of the Doom mods and are copied through the migration untouched -
+see the note on that in the migration's `soundBytes`.
+`TestACueIsBufferedAtTheSpeakersRateWhateverTheFileSays` covers both.
+
+**The oggs stay as they shipped, and are resampled at load.** They are not worth
+converting: an ffmpeg re-encode loses a generation of a lossy format for a tenth
+of a millisecond a cue, and decoding them to WAV instead would put four hundred
+megabytes in the repo. This is a decision, not an oversight - leave them alone.
+
+**A model's texture identifier is its own citmat slot.** `load_model_vtexts` in
+the source release's `rendtool.c` binds each one as `g3_set_vtext(id, resource
+0x01DB + id)`, and a textured face names the same id - there is no adjustment to
+make. Texture 0 is the exception and is not a texture: it is a placeholder the
+game always replaces with a picture off the placed object, and with nothing
+placed the import uses the game's own default for a piece of furniture that says
+nothing about itself, custom material zero at 0x0884. The pictures are not all
+64x64 either - most are 32x32 - so they are stretched into the atlas cell rather
+than dropped into a corner of it, because a face's texture coordinates run 0 to
+1 across whatever size its own picture is.
+
+**Which noise a System Shock gun makes is in the game's code, not its data.** A
+critter's properties carry a sound index; a gun's do not. `weapon_combat_fxs` in
+`GameSrc/weapons.c`, indexed by the gun's place among the sixteen and resolved
+through `Headers/sfxlist.h`, is the pairing - `tools/importss/objects.go` copies
+it out. A digitised effect is resource `201 + id`.
+
+**The camera's far plane is set per map, from the map.** `core` starts every
+camera at a hundred units and the gallery is 288 tiles long, so its end wall was
+clipped away and the sky showed through it. `mapLoad` sets it to the loaded
+map's diagonal. It is nearly free: what a depth buffer can tell apart at a given
+distance goes as that distance squared over the near plane, and the far plane
+only enters as 1/far.
+
+**System Shock's hand art carries no hotspot** - every frame's anchor box is
+zeroed - and its frames are not all the same size, so nothing in the data says
+how they line up. The game did not read it from the data either: it has a table
+per weapon and draws each bitmap's top left corner at the offset the table
+gives, hanging from a line at y=168 in a 200-tall view and clipping whatever
+falls past the bottom. `tools/importss/handart.go` is that table, out of the
+source release's `GameSrc/hand.c`. It also says which bitmap each step of an
+animation shows, which is not file order: a swing is five steps out of four
+pictures, and the rapier starts on its second.
+
+**A weapon out of either game is a grid of frames**, which is what
+`wep.WriteGridWeapon` takes - the same call `tools/gensheet` makes for a weapon
+that was never in a mod at all. Blake Stone's five and System Shock's sixteen go
+in that way, with the game's own firing sound in the folder's `sounds/` and, for
+the Fission Detonator, its own thrown grenade as a shared actor.
+`go run ./tools/firecheck` holds the trigger down on every weapon in the folder
+and says which never fired.
+
+**The check that an import worked is a level** - see "The gallery" below.
+
+## Enemies that shoot back
+
+`hostile.go` is the whole of it: a player with health, and actors that come
+after them.
+
+**Hostility is a fact about the kind, not the map.** `"hostile": true` in a
+folder's `sprite.json` is what makes an actor chase and attack; both importers
+write it for every character whose own game gave it an attack, and the scientist
+- the engine's own first character - does not have it. `"attack"` beside it is
+what that attack does: `damage`, `range`, `interval`, and whether it is a
+`projectile`. Neither importer invents those numbers - System Shock's are its
+critters' own primary-attack block, Blake Stone's reach and kind come from which
+frames the character was drawn with (`SHOOT` is a gun, `SPIT` is a thing that
+flies, `SWING` is a claw).
+
+**The mind is four states and no more**: patrol until the player comes within
+`hostileSightRange` *and* there is a clear line; chase, re-pathing on a clock
+because a path is a whole A* search; attack when inside its own reach; give up
+past `hostileGiveUpRange`. `hasLineOfSight` tests walls only - not props, not
+the guard standing next to it - which is the rule both source games use and the
+only one that does not turn a crowd into a queue.
+
+**The player has a hundred points and `hurtPlayer` is the only thing that takes
+them.** God mode is checked there rather than at every source of damage, so a
+new source is covered by being written at all. Death puts the player back at the
+level's own spawn with a full bar and drops every hunt, because a room of
+enemies still mid-chase would shoot the moment the screen came back.
+
+**An enemy's projectile settles its damage as it is thrown.** The bolt that
+flies is the engine's own (`fireProjectile`), which is drawn and lit, but the
+collision handler it would arrive in kills an actor outright - and a bolt an
+enemy threw must not do that to the enemy beside it. See the `ponytail:` note on
+`fireEnemyProjectile` for what giving `ProjectileComponent` an owner would buy.
+
+## Beams
+
+`beam.go` draws the bolt of light an energy weapon leaves between its muzzle and
+whatever it hit. It is not in any of the art: System Shock draws three straight
+turquoise lines over the view in `gamerend.c`, and the migrated railgun never
+had one at all. `OpRailAttack` spawns one, so both get it.
+
+Three things about it are not decoration and will break it if they are undone:
+
+- **The muzzle is well off the line of fire.** A beam that started on it would
+  run straight away from the eye, and a line pointing at you projects to a
+  point. System Shock has the same problem and solves it the same way, by
+  drawing from the weapon at the bottom of the view up to the impact in the
+  middle of it.
+- **Both ends are drawn at the same distance from the eye, and it is a short
+  one.** They are a barrel about a unit away and an impact twenty units away,
+  and one quad of one width stretched between those is a wedge: the 0.05 units
+  that was nineteen pixels at the muzzle was under one at the far end, so the
+  beam read as a bright blob over the gun and nothing along its length, and
+  pitched down it was all blob. `beamOnScreen` slides each end along its own
+  line of sight to `beamDrawDistance`, which leaves both on exactly the pixel
+  they were already on - every point on a ray through a pixel projects to that
+  pixel - and makes the quad a rectangle at one depth. That is a line of even
+  width at any range and any pitch, and it is also what System Shock does:
+  `gamerend.c` draws in screen space, not in the world. The beam is then in
+  front of everything, which is the same bargain those flat lines made.
+- **The three axes have to come out right handed.** `SpriteModeBeam` builds its
+  own basis - along the beam, across it, facing the camera - and the first
+  version had the last two the wrong way round. The quad wound backwards, the
+  face cull threw it away, and the beam was spawned and updated and drawn every
+  frame and never appeared once.
+
+**A beam lasts four frames.** `beamLife` is ninety milliseconds, so a screenshot
+taken on an arbitrary tick usually catches the gap between two shots rather than
+a beam. Judging a change to this by eye means a strip - `-shot-every 1
+-shot-count 12` - not a single frame.
+
+## The F1 menu's cheats
+
+`cheats.go`: Give All Weapons, Fill All Ammo, Full Health, God Mode, Kill Every
+Enemy. Giving a weapon is the same `Weapon.give()` a pickup makes, so the sounds
+load the same way; killing an enemy is the same `Actor.die()` a shot causes, so
+the bodies, the cries and the colliders all behave the way they do when it is
+earned.
+
+## The F1 menu's actors page
+
+Every NPC is inactive when a level loads: it stands where it was put and does
+nothing. `actor_debug.go` is the switch, and one button per animation beside it.
+
+That is the default because a level of imported characters is a level of things
+that immediately run at you, and most of the work of checking an import is
+looking - at a walk cycle, at which frame a death rests on, at whether a facing
+is the right way round - none of which can be done while they are closing in.
+Everything that moves an actor is below one `if` in `updateActors`, so inactive
+is not a state they are in; it is a thing that stops happening to them.
+
+## Two levels for the two things that break
+
+`assets/maps/facingcheck` is a small room with four enemies in it, two out of
+each game, spawned inside `hostileSightRange` so the fight starts on its own. It
+is the level to load when the thing being changed is the fighting: the gallery
+below has everything in it but is two hundred voxels long, and walking to the
+enemies takes most of a minute.
+
+## The gallery, and where to look when an import goes wrong
+
+`assets/maps/imported` is a hall with one of everything installed standing in
+it. It is written from the folders rather than by hand, because there are six
+hundred of them:
+
+```bash
+go run ./tools/mapgen -gallery       # write its build.map from what is installed
+go run ./tools/mapgen -map imported  # compile it like any other level
+go run . -map imported               # walk it
+```
+
+Four bays in the order you meet them: the scenery, which is walked through
+rather than round; the characters that do not fight; every hostile both games
+have; and System Shock's own 3D models. Take the cheat menu's weapons before
+going past the second bay.
+
+## System Shock's own 3D models
+
+`tools/importss` also reads `obj3d.res`, which is not a mesh file: a model is a
+little program of two-byte commands with no framing, so an interpreter has to
+know every command or it loses the stream. `tools/importss/obj3d.go` is that
+interpreter and `models.go` turns what it builds into `assets/meshes/ss3d_NN/`,
+which makes each one furniture like everything else in that folder - placeable
+from the editor's scenery menu and by `entity ... mesh=ss3d_NN`.
+
+- **Every model shares one picture.** A face is either mapped to one of the
+  sixty-four object textures in `citmat.res` or painted a single palette colour;
+  both go in one atlas, the textures in a grid and the whole palette as swatches
+  under them, so a model is one material and one draw.
+- **Sixty-three of the eighty are named after the object drawn as them.** The
+  link is the object's own MFD/Mesh ID: for an object in a panel that field says
+  which readout to open, and for one in the world it says which mesh to render.
+  The render type to look at is `TextPoly`, which reads like it is about writing
+  and is not - it is the textured-polygon one, and sixty-four of the sixty-five
+  objects with it name a mesh where `TPoly`, `FlatPoly` and `TLPoly` name none
+  at all. The rest keep their resource number, and every folder carries the
+  number anyway (`ss3d_16_couch`) so the order on disk is the order in the file.
+- **The tree is thrown away.** The nodes are a BSP for the game's own renderer,
+  which had no depth buffer; every face in every branch is collected and the
+  depth buffer does what the tree was for.
+- **Each one is lowered onto the floor** by its own lowest point, because the
+  game placed these from level data and their origins are wherever that data
+  wanted them. A piece the game hung on a wall therefore stands on the floor
+  instead, which is the one thing about them that is not faithful.
 
 ## Modeling scenery in Blockbench
 
@@ -654,12 +1061,37 @@ axes - `pickupMaxHeight` a little under the shelf's shortest gap,
 `pickupMaxWidth` half the space between its uprights - scaling the whole
 picture together, since a gun squeezed on one axis reads as a different gun.
 
-## The two references worth reading before guessing
+## The references worth reading before guessing
 
-- **GZDoom's own source** — <https://github.com/zdoom/gzdoom>. What a weapon
-  does on screen is decided in `src/rendering/hwrenderer/scene/hw_weapon.cpp`
-  (`HUDSprite::GetWeaponRect`) and `src/playsim/p_pspr.cpp` (`DPSprite`). When
-  a weapon draws wrong, read those rather than inventing a correction factor.
+**All three engines are checked out in `3rd-party/`.** An importer is a guess
+about somebody else's file format until you read the code that wrote it, so a
+wrong colour, a wrong offset or a shot at the wrong pitch is traceable to the
+line that decided it rather than something to argue about. See
+`3rd-party/README.md`.
+
+- **GZDoom** — `3rd-party/gzdoom`, <https://github.com/zdoom/gzdoom>. Where a
+  weapon lands on screen is `src/rendering/hwrenderer/scene/hw_weapon.cpp`
+  (`HUDSprite::GetWeaponRect`) and `src/playsim/p_pspr.cpp` (`DPSprite`). What
+  an action function actually does is ZScript now, under
+  `wadsrc/static/zscript/actors/inventory/` - `A_ReFire` is in
+  `stateprovider.zs` and `GetAtkState` in `weapons.zs`, and between them they
+  are why a held trigger re-enters `Hold` and a released one falls through to
+  whatever comes next. When a weapon draws or behaves wrong, read those rather
+  than inventing a correction factor.
+- **bstone** — `3rd-party/blake-stone/bstone`,
+  <https://github.com/bibendovsky/bstone>. The Blake Stone source port, and
+  where `tools/importbs`'s name, static and sound tables and its palette came
+  from. Blake Stone's own 1993 source is beside it in
+  `3rd-party/blake-stone/blake-stone-source`
+  (<https://github.com/johndrinkwater/blake-stone>) - `3D_ACT1.C` holds the real
+  `statinfo`, and it is the tiebreaker when bstone and the data disagree.
+- **The System Shock source release** — `3rd-party/system-shock/shockmac`,
+  <https://github.com/NightDive-Studio/shockmac>. `Game Src/WEAPONS.C`,
+  `RENDTOOL.C` and `GAMEREND.C` are the three `tools/importss` was written
+  against. **Its files have classic Mac line endings**, so `grep` calls them
+  binary and prints nothing at all rather than saying it found nothing - a
+  silent wrong answer. Use `grep -ra`, or `tr '\r' '\n' < FILE | grep -n` when
+  you want line numbers.
 - **The DECORATE reference** — <https://zdoom.org/wiki/DECORATE>. It is the
   language `zdwep` compiles, and the wiki page for an action function says what
   its arguments mean, which is what `zdwep/policy.go` has to agree with.
@@ -962,6 +1394,125 @@ weapon sprite and must not be placed like one** - `GetSourceAndDestRects`
 places a frame by its own canvas and hotspot, correct for GZDoom's 320x200
 weapon space and wrong in a panel; `DrawIconInBox` centers and scales the
 picture to fit instead.
+
+## An imported sprite is the size its own game drew it
+
+Both importers work a kind's height out from the source game rather than from
+taste, and both traces are worth keeping:
+
+- **Blake Stone**: the Wolfenstein engine draws a sprite exactly as tall as a
+  wall, and both are its 64-unit tile. A wall here is one voxel, so
+  `spriteScale` is **1**. A guard fills about 56 of those 64 - 0.875 - which is
+  this engine's player exactly, because the player is Doom's 56 units of
+  `worldUnitsPerDoomUnit`.
+- **System Shock**: `g3_set_bitmap_scale` is left at `fix_make(0, 2048/3)` =
+  1/96 for every object in the world, and 96 is `PHYSICS_RADIUS_UNIT`, "radius
+  units per square". One pixel of art is a ninety-sixth of a map square, and a
+  map square is a voxel: `pixelsPerVoxel` is **96**.
+
+`-ss-scale` and `-bs-scale` multiply every sprite from one import at once (see
+`sourceScale` in `sprite_kind.go`). They are taste knobs on top of those two
+numbers, not a replacement for them; both default to one.
+
+A voxel is about two metres of room. The station runs its corridors two voxels
+floor to ceiling; a hall built fourteen voxels tall is a cathedral.
+
+**And the box it is bumped into by is the middle of its eight facings, not the
+widest.** Each animation's box is measured off the sheet at import time
+(`measureBoxes`, and `geometry.BoxAcrossDirections` under it), and the frames of
+one facing are unioned into that facing's box before the facings are reduced to
+the one box a billboard can have. Unioning the facings together instead - which
+is what it used to do - gives the widest silhouette the thing ever has from any
+angle, and for art cropped to its own content that is the whole tile: System
+Shock's avian mutant is 140 pixels across with its wings out sideways and about
+70 face on, so its box was twice as wide as the bird in front of you and you
+walked into it a body's width early. A kind drawn from one angle only - an
+explosion, a medkit on the floor - has a single facing, so its box is still the
+union of its own frames and a growing blast still gets a growing box. `-obb` on
+the command line draws every collider, and `assets/maps/boxcheck` is six things
+in a row to draw them around.
+
+## Extra frames are not always an animation
+
+System Shock's `Bitmap3D` carries an animation bit, and only eight of the
+eighty-three multi-frame objects have it. The rest use the frame count for
+something that is not time: a lever up or down, a panel intact or smashed, and
+- for every corpse in the station - **eight views of the same body**, which is
+  exactly this engine's eight facings. `idleFrom` in `tools/importss/objects.go`
+sorts them: animated stays an animation, exactly eight stills become the
+facings, anything else stands on frame zero.
+
+The exception is class 11, `CLASS_ANIMATING` - the explosions and fires. None
+of them carries the bit, because the game animates them out of `effect.c`
+rather than off the animation list.
+
+## Rate of fire comes out of the game, not out of feel
+
+- **Blake Stone**: `attackinfo` in bstone's `3d_agent.cpp` is tics per attack
+  frame, and `T_Attack` decides how much of it a held trigger walks - the
+  pistol runs all four frames and starts again (24 tics), while the rifle, the
+  cannon and the launcher jump back two from the third, so their held cycle is
+  the middle pair (11, 9, 12). Blake Stone counts at 70 tics a second and this
+  engine at Doom's 35, so halve it.
+- **System Shock**: `GunProps[..].fire_rate`, the first byte of the gun class's
+  generic properties. Everything that is not automatic waits `fire_rate * 10`
+  ticks; an automatic weapon accumulates `elapsed * fire_rate` and spends
+  `AUTOFIRE_SPEED` (1500) a shot, so its rate goes *up* with `fire_rate` where
+  every other weapon's goes down. `CIT_CYCLE` is 280 ticks a second.
+
+## Four System Shock guns throw something
+
+`player_fire_weapon`'s switch is the whole of it: `GUN_SUBCLASS_SPECIAL` (the
+magpulse and the rail gun) and `GUN_SUBCLASS_BEAMPROJ` (the stungun and the
+plasma rifle) call `player_fire_slow_projectile`. Each names what it throws as
+a `MAKETRIP` in its own subclass-specific block, after the eight packed bytes
+of `COMBAT_DATA_FIELDS` - see `projectileTriple`. The other twelve are hitscans,
+beams or swings.
+
+**The rail gun is one of the four, and that is not a bug.** It looks like a
+projectile thrower because it is one: its record is `GUN_SUBCLASS_SPECIAL` and it
+names a thing that flies. All four fly at the same speed, too - the byte before
+`proj_triple` reads 6 in every one of the four records. What tells the rail gun
+apart from the other three is only that its slug is metal, so it is the one
+whose flying frames are not drawn bright (`slowProjectile`'s `bright`
+argument).
+
+## An object's inventory picture is the first block of its run
+
+`objload.c` walks each object as: the 2D bitmap (the inventory and floor
+picture), then its in-world frames, then the editor's icon. The importer took
+the world frames and skipped the first block, which is why the guns had no
+pickup art and the HUD drew a first-person barrel at icon size.
+
+## A model's texture coordinates are already 0 to 1
+
+None of the eighty models tiles a texture. What runs outside the unit square is
+a few thousandths of overshoot on a face whose corners were meant to be the
+corners of the picture, so `insetInCell` **clamps**, half a texel clear of the
+cell edge. It used to wrap with `fmod`, which turned the far edge of a face -
+at exactly 1 - into 0, and every face mapped to the whole of its texture was
+drawn as a smear of its first column.
+
+## Fill-all-ammo fills ammo
+
+A migrated weapon's `Items` are mostly not ammo: they are the flags its own
+script signals itself with. Brutal Doom's assault rifle declares a hundred of
+them (`FiredPrimary`, `Reloading`, `Kicking`) and Final Doomer's Zaiger rifle
+has an `FDLevelBeginAnimation` its ready state checks to play one reload at
+spawn. The cheat used to fill every one of them to its cap: the rifle fired
+without a trigger and the Zaiger stood in a reload it was told it had just
+started, for ever. `ammoPools` is what a weapon actually spends - `Ammo.Type`,
+`Ammo.Type2`, `Ammo.Clip`, `AmmoPickup` - and nothing else.
+
+## Walk through it and still be able to select it
+
+`core.MapEntity.PassThrough` puts an entity on the physics grid without making
+it solid: the crosshair finds it, its OBB outlines it, the collision solver
+skips it. `collider=false` in a map script leaves it off the grid altogether,
+which means it cannot be selected at all - that is what made the gallery's five
+hundred exhibits invisible to the crosshair. A pass-through piece of scenery is
+also not `furniture`, because there is nothing standing on it to look through
+it at.
 
 ## Keep the unused packages
 

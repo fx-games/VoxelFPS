@@ -1,0 +1,36 @@
+{
+  "name": "DATA BOLT",
+  "tile": {
+    "X": 20,
+    "Y": 19
+  },
+  "actor": false,
+  "scale": 0.19791667,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "fps": 6,
+      "box": {
+        "min": [
+          -0.25,
+          0.10526317,
+          -0.05
+        ],
+        "max": [
+          0.25,
+          0.8947368,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "2/1/9",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

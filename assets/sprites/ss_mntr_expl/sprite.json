@@ -1,0 +1,43 @@
+{
+  "name": "MNTR EXPL",
+  "tile": {
+    "X": 60,
+    "Y": 51
+  },
+  "actor": false,
+  "scale": 0.53125,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      ],
+      "fps": 6,
+      "loop": true,
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.48333335,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "11/2/9",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

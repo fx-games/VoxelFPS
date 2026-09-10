@@ -1,0 +1,23 @@
+{
+  "name": "HOSP DOOR",
+  "tile": {
+    "X": 7,
+    "Y": 7
+  },
+  "actor": false,
+  "scale": 0.072916664,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ]
+    }
+  },
+  "provenance": {
+    "actor": "10/0/4",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

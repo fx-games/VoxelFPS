@@ -1,0 +1,35 @@
+{
+  "name": "STATUS",
+  "tile": {
+    "X": 6,
+    "Y": 5
+  },
+  "actor": false,
+  "scale": 0.052083332,
+  "animations": {
+    "idle": {
+      "frames": [
+        [
+          0
+        ]
+      ],
+      "box": {
+        "min": [
+          -0.5,
+          0,
+          -0.05
+        ],
+        "max": [
+          0.5,
+          1,
+          0.05
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "actor": "5/1/9",
+    "file": "OBJART.RES",
+    "source": "System Shock (1994)"
+  }
+}

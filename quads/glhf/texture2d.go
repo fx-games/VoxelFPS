@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/geometry"
 )
 
 // Texture is an OpenGL texture.
@@ -357,43 +358,13 @@ func (t *Texture) GenerateMipMaps() {
 	t.End()
 }
 
+// aabbFromOpaquePixels is the box a frame read back off the card deserves. The
+// scan is geometry.OpaqueBoxOfPixels, and it is there rather than here because
+// the asset importers measure the same frames off the PNG before it is ever
+// uploaded, and the two answers have to be the same answer.
 func aabbFromOpaquePixels(pixels []uint8, textureWidth, textureHeight int) (mgl32.Vec3, mgl32.Vec3) {
-	minX, minY, maxX, _ := detectOpaqueEdges(pixels, textureWidth, textureHeight)
-
-	normalizedMinX := (float32(minX) / float32(textureWidth)) - 0.5
-	normalizedMaxX := (float32(maxX) / float32(textureWidth)) - 0.5
-	normalizedMaxY := 1 - (float32(minY) / float32(textureHeight))
-
-	return mgl32.Vec3{normalizedMinX, 0, -0.05}, mgl32.Vec3{normalizedMaxX, normalizedMaxY, 0.05}
-}
-
-func detectOpaqueEdges(pixels []uint8, textureWidth int, textureHeight int) (int, int, int, int) {
-	// find the first non-transparent pixel on each side
-	minX := textureWidth
-	minY := textureHeight
-
-	maxX := 0
-	maxY := 0
-
-	for y := 0; y < textureHeight; y++ {
-		for x := 0; x < textureWidth; x++ {
-			if pixels[(y*textureWidth+x)*4+3] > 0 {
-				if x < minX {
-					minX = x
-				}
-				if x > maxX {
-					maxX = x
-				}
-				if y < minY {
-					minY = y
-				}
-				if y > maxY {
-					maxY = y
-				}
-			}
-		}
-	}
-	return minX, minY, maxX, maxY
+	box := geometry.OpaqueBoxOfPixels(pixels, textureWidth, textureHeight)
+	return box.Min, box.Max
 }
 
 func SetPixel(pixels []uint8, x, y, width int, color [4]uint8) {
