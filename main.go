@@ -551,8 +551,10 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		// Set outright rather than as a mouse movement: ChangeAngles drops a
 		// delta over 200, and at the mouse sensitivity that is any pitch past
 		// twenty degrees - which is every capture of something on the floor.
+		// The angle only - the camera hangs off the player and stays there;
+		// see SetAngles for what handing it a position used to do.
 		yaw, _ := g.Camera.GetRotation()
-		g.Camera.Reposition(g.Camera.GetPosition(), yaw, float32(-g.shot.pitch))
+		g.Camera.SetAngles(yaw, float32(-g.shot.pitch))
 	}
 
 	if g.startEditorMode != "" {

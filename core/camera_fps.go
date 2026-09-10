@@ -179,8 +179,17 @@ func (c *FPSCamera) GetRotation() (float32, float32) {
 	return c.rotatex, c.rotatey
 }
 
-func (c *FPSCamera) Reposition(pos mgl32.Vec3, rotX float32, rotY float32) {
-	c.SetPosition(pos)
+// SetAngles points the camera without moving it: ChangeAngles' sibling, for
+// somewhere that knows the angle it wants rather than a mouse delta.
+//
+// It takes no position on purpose. What stood here took one, and a camera
+// parented to something - which this one is, to the player - has no single
+// position to hand it: GetPosition returns where the camera is in the *world*,
+// through its parent's matrix, while SetPosition writes where it is *relative*
+// to that parent. Reading one and writing it back therefore moved the camera by
+// the whole of the player's own position, which put a capture asked for a
+// downward pitch outside the level looking at the sky.
+func (c *FPSCamera) SetAngles(rotX float32, rotY float32) {
 	c.rotatex = rotX
 	c.rotatey = rotY
 	c.updateTransform()
