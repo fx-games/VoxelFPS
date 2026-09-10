@@ -2,6 +2,7 @@ package quads
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -95,5 +96,20 @@ func (b *Benchmark) Report(label, scene string) string {
 		sorted[0]*1000, sorted[len(sorted)-1]*1000)
 	// Quoted off the median rather than the mean, so one stalled frame does not move it.
 	fmt.Fprintf(&out, "fps at median %.1f\n", 1.0/median)
+
+	// A percentile table says how bad the tail is, never whether the slow frames
+	// arrive on a cadence. FPSBENCH_DUMP writes the frames in the order they were
+	// drawn so that question can be answered outside the process.
+	if path := os.Getenv("FPSBENCH_DUMP"); path != "" {
+		var dump strings.Builder
+		for i, frameTime := range b.frameTimes {
+			fmt.Fprintf(&dump, "%d,%.6f\n", i, frameTime*1000)
+		}
+		if err := os.WriteFile(path, []byte(dump.String()), 0o644); err != nil {
+			fmt.Fprintf(&out, "frame dump failed: %v\n", err)
+		} else {
+			fmt.Fprintf(&out, "frame times written to %s\n", path)
+		}
+	}
 	return out.String()
 }

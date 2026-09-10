@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -30,23 +31,23 @@ type GlApplication struct {
 	ResizeHandler      func(width int, height int)
 	DropHandler        func(names []string, x, y float64)
 	Ticks              uint64
-	FramesPerSecond    float64
-	FPSRunningAvg      float64
-	FPSMin             float64
-	FPSMax             float64
 	TimeFactor         float64
 	CeilingColor       mgl32.Vec4
 
 	CubeMap *voxel.Map
 
-	ShouldDrawAABBs        bool
-	ShouldDrawChunkAABBs   bool
-	ShouldDrawOBBs         bool
-	ShouldDrawPaths        bool
-	ShouldDrawMeshes       bool
-	ShouldDrawSprites      bool
-	ShouldDrawParticles    bool
-	ShouldDrawDebugInfo    bool
+	ShouldDrawAABBs      bool
+	ShouldDrawChunkAABBs bool
+	ShouldDrawOBBs       bool
+	ShouldDrawPaths      bool
+	ShouldDrawMeshes     bool
+	ShouldDrawSprites    bool
+	ShouldDrawParticles  bool
+	ShouldDrawDebugInfo  bool
+	// ShouldShowPerformance gates the frame cost measurement and the title that
+	// reports it. Off means the work is not done at all, not merely hidden: the
+	// clock read, the ring write and the sort behind the title all stop.
+	ShouldShowPerformance  bool
 	ShouldRenderFullscreen bool
 
 	// ConstrainToWorkArea keeps a borderless window inside the desktop's work area,
@@ -129,6 +130,12 @@ type GlApplication struct {
 	benchmark                           *Benchmark
 	benchmarkLabel                      string
 
+	// The last workTimeWindow work times in wrap-around order, plus a scratch
+	// slice to sort a copy of them in - see WorkTimePercentiles.
+	workTimes     [workTimeWindow]float64
+	workTimeCount int
+	workTimeSort  []float64
+
 	// A capture run: the frames to grab, where to write them, and the frame
 	// time to pretend every frame took. See Screenshots and FixedStep.
 	shotPath             string
@@ -185,7 +192,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 	glAppUntyped := glhf.CallVal(func() any {
 		mouseSensitivity := float32(0.1)
 
-		window, terminateFunc := InitOpenGLWindow("fps", screenW, screenH, false)
+		window, terminateFunc := InitOpenGLWindow(windowTitle, screenW, screenH, false)
 
 		// No monitor at all is not an error worth crashing on: GLFW answers
 		// nil when the display is asleep or the session has none, and a
@@ -309,7 +316,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 			AtlasSprites:      atlasSprites,
 
 			ShouldDrawSprites: true, ShouldDrawMeshes: true, ShouldDrawParticles: true, ShouldUseVsync: true,
-			ShouldDrawDebugInfo: true,
+			ShouldDrawDebugInfo: true, ShouldShowPerformance: true,
 		}
 
 		// Baseline for the fullscreen toggle, in case the first thing that happens
@@ -552,7 +559,7 @@ func (a *GlApplication) StartEventLoop() {
 				a.postFrameBuffer.Texture().End()
 
 				a.postShader.End()
-				gl.ActiveTexture(gl.TEXTURE0)
+				glhf.ActiveTexture(gl.TEXTURE0)
 			} // End bloom, tone mapping and the scene to the screen
 
 			// DRAW UI ON TOP OF POSTPROCESSING
@@ -592,21 +599,20 @@ func (a *GlApplication) StartEventLoop() {
 				gl.Disable(gl.BLEND)
 			} // End Draw 2D Scene
 
-			a.FramesPerSecond = 1.0 / elapsed
-			if a.Ticks%60 == 0 {
-				sixtyTicksAverage := a.FPSRunningAvg
-				a.Window.SetTitle(fmt.Sprintf("FPS: %.0f (Avg: %.0f, Min: %.0f, Max: %.0f) / Elapsed: %.3f", a.FramesPerSecond, sixtyTicksAverage, a.FPSMin, a.FPSMax, elapsed*1000))
-				a.FPSRunningAvg = 0 + a.FramesPerSecond*(1.0/60.0)
-				a.FPSMin = math.MaxFloat64
-				a.FPSMax = 0
-			} else {
-				a.FPSRunningAvg = a.FPSRunningAvg + a.FramesPerSecond*(1.0/60.0)
-				if a.FramesPerSecond < a.FPSMin {
-					a.FPSMin = a.FramesPerSecond
+			if a.ShouldShowPerformance {
+				// Everything left in the frame is waiting for the compositor, so the
+				// work is measured here rather than at the swap - see WorkTimePercentiles.
+				a.recordWorkTime(glfw.GetTime() - time)
+				if a.Ticks%titleUpdateTicks == 0 {
+					a.Window.SetTitle(a.workTimeTitle())
 				}
-				if a.FramesPerSecond > a.FPSMax {
-					a.FPSMax = a.FramesPerSecond
-				}
+			} else if a.workTimeCount > 0 {
+				// Switched off: drop the window rather than keep it, so turning the
+				// readout back on measures the scene it is turned on in, and take the
+				// last numbers out of the title rather than leave them there to be
+				// read as current.
+				a.workTimeCount = 0
+				a.Window.SetTitle(windowTitle)
 			}
 
 			glhf.CheckGLError("end of frame") // no-op unless built with -tags debugGL
@@ -630,6 +636,102 @@ func (a *GlApplication) StartEventLoop() {
 			}
 		})
 	}
+}
+
+// workTimeWindow is how many frames the title's numbers are taken over, and
+// titleUpdateTicks is how often they are recomputed. Two seconds of window at 60
+// Hz is long enough that one hitch cannot move the middle of it, and short enough
+// to notice walking into a room that costs more to draw. The window is a count of
+// frames rather than a span of seconds so that sorting it is a fixed cost.
+const (
+	workTimeWindow   = 120
+	titleUpdateTicks = 30
+)
+
+// windowTitle is what the window is called when it is not reporting frame cost.
+const windowTitle = "fps"
+
+// recordWorkTime keeps the last workTimeWindow work times, oldest overwritten
+// first.
+func (a *GlApplication) recordWorkTime(worked float64) {
+	a.workTimes[a.workTimeCount%workTimeWindow] = worked
+	a.workTimeCount++
+}
+
+// WorkTimePercentiles is the middle and the slow tail of the window, in seconds.
+//
+// Work time is everything this frame did before handing the finished picture over:
+// the update, the shadow passes, the scene, the post pass and the GUI. It stops
+// short of SwapBuffers on purpose. What SwapBuffers spends is a wait for the
+// compositor to take the surface at the next refresh, which is time nothing could
+// have used, and measuring it made the readout say more about the window server
+// than about the renderer. A whole frame time cannot say whether there is room to
+// draw more. This can: it is the part of the refresh interval that is actually
+// yours, and the interval it has to fit inside is in the title next to it.
+func (a *GlApplication) WorkTimePercentiles() (median, p95 float64) {
+	filled := a.filledWorkTimes()
+	if filled == 0 {
+		return 0, 0
+	}
+	a.workTimeSort = append(a.workTimeSort[:0], a.workTimes[:filled]...)
+	sort.Float64s(a.workTimeSort)
+	return percentile(a.workTimeSort, 0.5), percentile(a.workTimeSort, 0.95)
+}
+
+// WorkFramesOverBudget is how many frames in the window cost more than one refresh
+// interval, out of how many the window holds so far.
+//
+// The percentiles say there is room left; this says whether it was ever used up.
+// They are not the same question, because a median of 1 ms and a screen missing
+// every fourth refresh can be true at once - the p95 only reaches the worst one
+// frame in twenty, and a stutter people notice is rarer than that. Zero over
+// budget is what a frame rate pinned to the display looks like from the inside.
+func (a *GlApplication) WorkFramesOverBudget(budget float64) (over, of int) {
+	filled := a.filledWorkTimes()
+	if budget <= 0 {
+		return 0, filled
+	}
+	for _, worked := range a.workTimes[:filled] {
+		if worked > budget {
+			over++
+		}
+	}
+	return over, filled
+}
+
+// filledWorkTimes is how much of the ring has been written, which is short of the
+// whole window only for the first workTimeWindow frames of a run.
+func (a *GlApplication) filledWorkTimes() int {
+	if a.workTimeCount > workTimeWindow {
+		return workTimeWindow
+	}
+	return a.workTimeCount
+}
+
+// workTimeTitle is the window title: what a frame costs, against what there is to
+// spend. The budget is left out when GLFW has no monitor to ask for a refresh
+// rate, which is a display asleep or a session with none.
+func (a *GlApplication) workTimeTitle() string {
+	median, p95 := a.WorkTimePercentiles()
+	title := fmt.Sprintf("draw ms median %.2f p95 %.2f", median*1000, p95*1000)
+	if budget := refreshInterval(); budget > 0 {
+		over, of := a.WorkFramesOverBudget(budget)
+		title += fmt.Sprintf(" of %.2f, %d of %d over", budget*1000, over, of)
+	}
+	return title
+}
+
+// refreshInterval is how long one refresh of the primary monitor lasts, and 0 when
+// there is no monitor to ask.
+func refreshInterval() float64 {
+	monitor := glfw.GetPrimaryMonitor()
+	if monitor == nil {
+		return 0
+	}
+	if rate := monitor.GetVideoMode().RefreshRate; rate > 0 {
+		return 1.0 / float64(rate)
+	}
+	return 0
 }
 
 // gatherCasterPositions collects every caster's world position once per frame,
@@ -1498,7 +1600,7 @@ func (a *GlApplication) SaveScreenshot(filename string) error {
 	width, height := a.FramebufferWidth, a.FramebufferHeight
 	pixels := make([]uint8, width*height*4)
 
-	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+	glhf.BindDefaultFramebuffer()
 	gl.ReadBuffer(gl.BACK)
 	gl.ReadPixels(0, 0, int32(width), int32(height), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
 

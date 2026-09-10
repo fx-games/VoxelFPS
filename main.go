@@ -1373,6 +1373,7 @@ func (g *Game) switchToMap(name string) {
 func (g *Game) showHideOptions() []quads.GuiOption {
 	options := []quads.GuiOption{
 		quads.NewGuiOptionBool("Show Debug Info", &g.ShouldDrawDebugInfo),
+		quads.NewGuiOptionBool("Show Performance", &g.ShouldShowPerformance),
 		quads.NewGuiOptionBool("Show Chunk AABBs", &g.ShouldDrawChunkAABBs),
 		quads.NewGuiOptionBool("Show AABBs", &g.ShouldDrawAABBs),
 		quads.NewGuiOptionBool("Show OBBs", &g.ShouldDrawOBBs),
