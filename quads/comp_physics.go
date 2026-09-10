@@ -20,7 +20,14 @@ type PhysicsComponent struct {
 	PassThrough bool
 	aabb        voxel.AABB
 	aabbPerAnim map[AnimIndex]voxel.AABB
-	isGrounded  bool
+	// collisionAABB is the box the solver moves, for a thing whose collider is
+	// not the box a ray picks it out by. A sprite's box is written in the
+	// picture's own units: OBB hands it to the sprite's own transform, and that
+	// transform carries the Size that turns those units into world ones. So a
+	// picture drawn a third of a unit tall still collides as a whole unit
+	// unless it says here how big it really is.
+	collisionAABB *voxel.AABB
+	isGrounded    bool
 }
 
 // IsGrounded reports whether the last move ended on top of something. Jumping
@@ -85,9 +92,24 @@ func (g *PhysicsComponent) AABBAt(pos mgl32.Vec3) voxel.AABB {
 	return g.aabb.Add(pos)
 }
 
+// SetCollisionAABB gives this thing a collider in world units, for when the
+// box a ray picks it out by is written in some other units. See collisionAABB.
+func (g *PhysicsComponent) SetCollisionAABB(aabb voxel.AABB) {
+	g.collisionAABB = &aabb
+}
+
+// CollisionAABBAt is the box the collision solver moves and stops. It is the
+// picking box unless the thing has been given a collider of its own.
+func (g *PhysicsComponent) CollisionAABBAt(pos mgl32.Vec3) voxel.AABB {
+	if g.collisionAABB != nil {
+		return g.collisionAABB.Add(pos)
+	}
+	return g.AABBAt(pos)
+}
+
 func (g *PhysicsComponent) AABB() voxel.AABB {
 	transform := g.resolver.Transform()
-	return g.AABBAt(transform.GetPosition())
+	return g.CollisionAABBAt(transform.GetPosition())
 }
 
 func (g *PhysicsComponent) AffectedByGravity() bool {

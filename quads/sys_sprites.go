@@ -498,6 +498,14 @@ func (q *SpriteDrawer) Remove(sprite *SpriteComponent) {
 			return
 		}
 	}
+	// Add sorts a sprite by its own alpha, so a half transparent one is not in
+	// the per atlas lists at all and only this second scan finds it.
+	for i, candidate := range q.transparentSprites {
+		if candidate == sprite {
+			q.transparentSprites = swapRemove(q.transparentSprites, i)
+			return
+		}
+	}
 }
 
 // swapRemove drops index i by moving the last element into its place. The draw

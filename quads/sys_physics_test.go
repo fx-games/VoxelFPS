@@ -422,3 +422,28 @@ func TestPassThroughCollidersAreWalkedThrough(t *testing.T) {
 		t.Errorf("stopped at %v, and a pass-through collider is not something to bump into", through)
 	}
 }
+
+// An item lying on the floor is walked through, not shoved. PassThrough keeps
+// it out of the player's way; this is the other half of it, and without it the
+// item is the one resolving the overlap - out of a box it is already deep
+// inside, which sends it down through the floor and out of the map.
+func TestAThingWalkedThroughIsNotShovedByTheWalker(t *testing.T) {
+	item := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+	item.PassThrough = true
+
+	walker := mover(t, mgl32.Vec3{0.5, 0.9, 0.5})
+	walker.ApplyGravity = true
+	walkerInEveryCell := func(x, y, z int32) []LinkedAABB {
+		return []LinkedAABB{{AABB: walker.AABB(), GameObject: walker}}
+	}
+
+	falling := mgl32.Vec3{0.5, 0.4, 0.5}
+	corrected, _, hitNormals := CheckForCollisions(item, falling, walkerInEveryCell)
+
+	if len(hitNormals) > 0 {
+		t.Errorf("the item was pushed by the player walking into it: %v", hitNormals)
+	}
+	if corrected != falling {
+		t.Errorf("the item ended at %v, and nothing should have moved it off %v", corrected, falling)
+	}
+}

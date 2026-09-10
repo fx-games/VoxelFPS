@@ -89,7 +89,11 @@ func (g *Game) spawnPickup(weapon *Weapon, ammo bool, position mgl32.Vec3) {
 	// PassThrough is what keeps it out of the way: the selection ray finds it,
 	// the collision solver walks straight through it. Doom's items are things
 	// you walk over, not things you bump into.
-	shape := quads.NewPhysicsComponent(false, pickupSlab)
+	// Gravity, like everything else in the world: an item is put down in mid
+	// air - dropped out of the player's hands, or written into a map above the
+	// floor - and it lands.
+	shape := quads.NewPhysicsComponent(true, pickupSlab)
+	shape.SetCollisionAABB(pickupCollider(sprite.Size))
 	shape.PassThrough = true
 	object.SetComponent(shape)
 	g.physicsSystem.AddObject(shape)
@@ -133,6 +137,26 @@ func pickupSize(g *Game, box wep.PickupBox, index int) mgl32.Vec2 {
 // plane of a flat thing either misses it or divides by zero.
 var pickupSlab = voxel.NewAABB(mgl32.Vec3{-0.5, 0, -0.05}, mgl32.Vec3{0.5, 1, 0.05})
 
+// pickupCollider is how much room an item takes up once it is a thing that
+// falls: the picture's own size in world units, on a square footprint. The
+// picking box cannot be this box - see pickupSlab, which is in the picture's
+// units and is scaled by the same Size when a ray is tested against it - and a
+// gun standing on a shelf inside a collider three times its height ends up
+// wedged in the board above it and squeezed out through the floor.
+func pickupCollider(size mgl32.Vec2) voxel.AABB {
+	half := min(pickupFootprint, size.X()/2)
+	return voxel.NewAABB(mgl32.Vec3{-half, 0, -half}, mgl32.Vec3{half, size.Y(), half})
+}
+
+// pickupFootprint is half of how much floor an item stands on, which is not
+// half of how wide its picture is: an axe is drawn wide and flat, and a
+// collider as wide as that picture reaches into the shelf's uprights the
+// moment the item is a thing that falls - it is pushed out of them, and on the
+// way out it slips off the board. Doom gives every item one radius of its own
+// for the same reason. Well inside the half tile between an item and the
+// upright beside it.
+const pickupFootprint = 0.15
+
 // pickupName is what the outline says about it, and so what the object is
 // called: the selection names whatever it has picked out, and this is a thing
 // in the world like the barrel beside it.
@@ -158,6 +182,12 @@ func (g *Game) updatePickups() {
 	feet := g.playerFeet()
 	kept := g.pickups[:0]
 	for _, pickup := range g.pickups {
+		// The item in the player's own hands is inside the radius by
+		// definition, and taking it would be picking up what is already held.
+		if pickup.object == g.heldItem {
+			kept = append(kept, pickup)
+			continue
+		}
 		// Across the floor only. Doom's own check is a radius and a height
 		// span, and the span adds nothing here: a rack is shorter than the
 		// player, so both its boards are inside the player's own height

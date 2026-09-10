@@ -29,7 +29,18 @@
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
-//	entity NAME at=X,Y,Z [mesh=M] [facing=DX,DZ] [collider=false]
+//	entity NAME at=X,Y,Z [mesh=M] [facing=DX,DZ] [collider=false] [code=NNNN]
+//	                               code is the four digits a keypad
+//	                               (mesh=keypad) asks for; the door it holds
+//	                               shut is whichever one is nearest to it
+//	note X Y Z THE WRITING         a sheet of paper on the floor. Everything
+//	                               after the three coordinates is what it says,
+//	                               spaces and all, and any four digits in it is
+//	                               a code the player learns by reading it
+//	log X Y Z CUE THE LABEL        an audio log on the floor: a cartridge with a
+//	                               recording on it. CUE names the file under
+//	                               assets/audio/logs without its extension, and
+//	                               the rest of the line is the label on its lid
 //	light X Y Z [color=R,G,B] [power=N] [baked] [yaw=N] [pitch=N]
 //	                               [angle=N] [reach=N]
 //	sky full                       no horizon: the cubemap covers the sphere
@@ -303,7 +314,12 @@ func (l *level) run(words []string, options map[string]string) error {
 		if err != nil {
 			return err
 		}
-		entity := core.MapEntity{Name: args[0], MeshName: options["mesh"], CreateCollider: options["collider"] != "false"}
+		entity := core.MapEntity{
+			Name:           args[0],
+			MeshName:       options["mesh"],
+			CreateCollider: options["collider"] != "false",
+			Code:           options["code"],
+		}
 		if facing, given := options["facing"]; given {
 			flat, err := vec2(facing)
 			if err != nil {
@@ -312,6 +328,45 @@ func (l *level) run(words []string, options map[string]string) error {
 			entity.Facing = mgl32.Vec3{flat.X(), 0, flat.Y()}
 		}
 		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: entity})
+
+	case "note":
+		// The one command whose argument is prose, which is why it is a command
+		// of its own rather than a `text=` on `entity`: a key=value option may
+		// not hold a space, and a note that could not hold a space would be a
+		// note that cannot say anything.
+		if len(args) < 4 {
+			return fmt.Errorf("want X Y Z and something for it to say")
+		}
+		pos, err := floats3(args, 0)
+		if err != nil {
+			return err
+		}
+		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: core.MapEntity{
+			Name:           "Note",
+			MeshName:       "note",
+			CreateCollider: true,
+			Text:           strings.Join(args[3:], " "),
+		}})
+
+	case "log":
+		// The note's twin, and its argument is prose for the same reason - see
+		// there. The cue comes first because it is one word and the label is
+		// not: a name with no spaces in it can be told from the rest of a line
+		// only if it is at a known end of it.
+		if len(args) < 5 {
+			return fmt.Errorf("want X Y Z CUE and a label")
+		}
+		pos, err := floats3(args, 0)
+		if err != nil {
+			return err
+		}
+		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: core.MapEntity{
+			Name:           "AudioLog",
+			MeshName:       "audiolog",
+			CreateCollider: true,
+			Sound:          args[3],
+			Text:           strings.Join(args[4:], " "),
+		}})
 
 	case "light":
 		pos, err := floats3(args, 0)

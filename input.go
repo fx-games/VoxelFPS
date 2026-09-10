@@ -252,6 +252,19 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	if key == g.key(ActionInteract) && !g.takeHoveredPickup() && g.isHoveringObject() {
 		events.Publish(events.EventPlayerInteractWith, g.hoveredObj())
 	}
+	// One key for "put that exactly there": it takes what is being looked at
+	// into the player's hands and puts down what is already in them. See
+	// carry.go.
+	if key == g.key(ActionCarryItem) {
+		g.toggleCarry()
+	}
+	// Quickplay: the audio log picked up most recently starts talking, and the
+	// player keeps walking. Only while the game has the mouse, the same
+	// condition Reload is under - the key it shares with the entity menu's own
+	// cursor is only ever the entity menu's while the cursor is free.
+	if key == g.key(ActionQuickplayLog) && g.isMouseCursorCaptured {
+		g.quickplayLog()
+	}
 	if key == g.key(ActionSpawnGameObject) {
 		g.placeProp()
 	}

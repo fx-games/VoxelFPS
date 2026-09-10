@@ -30,6 +30,8 @@ const (
 	ActionPreviousWeapon = "PreviousWeapon"
 	ActionNextWeapon     = "NextWeapon"
 	ActionInteract       = "Interact"
+	ActionCarryItem      = "CarryItem"
+	ActionQuickplayLog   = "QuickplayLog"
 
 	ActionOpenInventory      = "OpenInventory"
 	ActionOpenEscapeMenu     = "OpenEscapeMenu"
@@ -72,6 +74,8 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionPreviousWeapon: glfw.KeyComma,
 	ActionNextWeapon:     glfw.KeyPeriod,
 	ActionInteract:       glfw.KeyE,
+	ActionCarryItem:      glfw.KeyY,
+	ActionQuickplayLog:   glfw.KeyL,
 
 	ActionOpenInventory:      glfw.KeyI,
 	ActionOpenEscapeMenu:     glfw.KeyEscape,

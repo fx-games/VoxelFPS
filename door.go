@@ -59,6 +59,12 @@ type Door struct {
 	// zero sends it back to target 0. A swing door ignores this entirely -
 	// "stays open until the next interaction" per its own spec.
 	holdTimer float32
+
+	// locked is a door a keypad is holding shut: Interact does nothing to it
+	// until the four digits on the panel beside it have been typed in. The door
+	// itself knows nothing about the code - which keypad holds which door is
+	// worked out from where they stand, see Game.bindKeypads.
+	locked bool
 }
 
 // spawnDoor turns a plain entity GameObject into a Door: spawnEntity has
@@ -93,6 +99,9 @@ func (g *Game) doorFor(object *quads.GameObject) *Door {
 // obvious thing for a re-press to do. A swing door has no timer: this simply
 // toggles which way it is headed, open or shut, same as a real door handle.
 func (d *Door) Interact() {
+	if d.locked {
+		return
+	}
 	switch d.kind {
 	case doorSlide:
 		d.target = 1

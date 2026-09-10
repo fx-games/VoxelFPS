@@ -89,3 +89,24 @@ func standingPickup(position mgl32.Vec3, size mgl32.Vec2) *Pickup {
 	object.SetComponent(quads.NewPhysicsComponent(false, pickupSlab))
 	return &Pickup{object: object, sprite: sprite}
 }
+
+// An item's collider is not as wide as its picture. An axe is drawn wide and
+// flat, and a collider that wide reaches into the uprights of the shelf it
+// stands on - the solver pushes it out of them, and on the way out it slips off
+// the board and falls through the floor. Half a tile is what an item has to
+// itself; see the shelf's own colliders in assets/meshes/shelves/scenery.json.
+func TestAnItemsColliderFitsOnTheShelfItStandsOn(t *testing.T) {
+	axe := pickupCollider(mgl32.Vec2{pickupMaxWidth, 0.1})
+	if width := axe.Max().X() - axe.Min().X(); width > 0.5 {
+		t.Errorf("a wide picture got a %v wide collider, and its half of a board is 0.5", width)
+	}
+	if height := axe.Max().Y() - axe.Min().Y(); height != 0.1 {
+		t.Errorf("the collider is %v tall and the picture is 0.1", height)
+	}
+	// A picture smaller than the footprint is not given a box bigger than
+	// itself: a single shell standing next to a rifle is a small thing.
+	shell := pickupCollider(mgl32.Vec2{0.08, 0.08})
+	if width := shell.Max().X() - shell.Min().X(); width > 0.08 {
+		t.Errorf("a small picture got a %v wide collider", width)
+	}
+}

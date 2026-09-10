@@ -1,0 +1,642 @@
+{
+  "PlayerSpawn": [
+    15.5,
+    1,
+    21.5
+  ],
+  "PlayerDir": [
+    0,
+    -1
+  ],
+  "CeilingColor": {
+    "R": 26,
+    "G": 28,
+    "B": 34,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 18,
+    "G": 18,
+    "B": 22,
+    "A": 255
+  },
+  "Entities": [
+    {
+      "Position": [
+        15.5,
+        1,
+        13.5
+      ],
+      "Entity": {
+        "Name": "SlideDoor",
+        "TextureIndices": null,
+        "MeshName": "door_slide",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.5,
+        1,
+        25.5
+      ],
+      "Entity": {
+        "Name": "DoorFrame",
+        "TextureIndices": null,
+        "MeshName": "door_swing_frame",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.125,
+        1,
+        25.5
+      ],
+      "Entity": {
+        "Name": "DoorLeaf",
+        "TextureIndices": null,
+        "MeshName": "door_swing_leaf",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        16.6,
+        1,
+        14.04
+      ],
+      "Entity": {
+        "Name": "Keypad",
+        "TextureIndices": null,
+        "MeshName": "keypad",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          1
+        ],
+        "ClimbTo": null,
+        "Code": "7412",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        17.6,
+        1,
+        24.96
+      ],
+      "Entity": {
+        "Name": "Keypad",
+        "TextureIndices": null,
+        "MeshName": "keypad",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "2580",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.2,
+        1,
+        20.2
+      ],
+      "Entity": {
+        "Name": "Note",
+        "TextureIndices": null,
+        "MeshName": "note",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "MAINTENANCE LOG: the vault panel is still on its factory code, 7412. Third time I have asked for that to be changed.",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        15.5,
+        1,
+        15.2
+      ],
+      "Entity": {
+        "Name": "Note",
+        "TextureIndices": null,
+        "MeshName": "note",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "Shift notice: do not prop the doors open. The slide door resets itself and the swing door does not, which is not a licence to leave it swinging.",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        15.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "Note",
+        "TextureIndices": null,
+        "MeshName": "note",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "From ops: the archive went behind the office door when the vault filled up. It is on 2580. Burn this once you have read it.",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        17,
+        1,
+        21
+      ],
+      "Entity": {
+        "Name": "AudioLog",
+        "TextureIndices": null,
+        "MeshName": "audiolog",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "Code": "",
+        "Text": "Maintenance log, day 41",
+        "Sound": "vance-41",
+        "StepTo": null
+      }
+    }
+  ],
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0.14,
+    0.16,
+    0.2
+  ],
+  "AmbientStrength": 0.55,
+  "Lights": [
+    {
+      "Position": [
+        12.5,
+        3.5,
+        17.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        18.5,
+        3.5,
+        17.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        12.5,
+        3.5,
+        21.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        18.5,
+        3.5,
+        21.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        15.5,
+        3.5,
+        15.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        15.5,
+        3.5,
+        23.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        15.5,
+        3.5,
+        9.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        15.5,
+        3.5,
+        29.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        1,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    },
+    {
+      "Position": [
+        12.5,
+        3.8,
+        17.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.94,
+        0.82
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        18.5,
+        3.8,
+        17.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.94,
+        0.82
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        12.5,
+        3.8,
+        21.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.94,
+        0.82
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        18.5,
+        3.8,
+        21.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.94,
+        0.82
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        15.5,
+        3.8,
+        9.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        0.72,
+        0.86,
+        1
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        15.5,
+        3.8,
+        29.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.86,
+        0.7
+      ],
+      "Intensity": 6,
+      "Angle": 120,
+      "Reach": 9,
+      "Baked": false
+    },
+    {
+      "Position": [
+        15.5,
+        3.8,
+        15
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        0.8,
+        0.88,
+        1
+      ],
+      "Intensity": 5,
+      "Angle": 110,
+      "Reach": 8,
+      "Baked": false
+    },
+    {
+      "Position": [
+        16.5,
+        3.8,
+        24
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.9,
+        0.78
+      ],
+      "Intensity": 5,
+      "Angle": 110,
+      "Reach": 8,
+      "Baked": false
+    },
+    {
+      "Position": [
+        15.5,
+        1.9,
+        15.8
+      ],
+      "Yaw": 0,
+      "Pitch": 15,
+      "Color": [
+        0.8,
+        0.88,
+        1
+      ],
+      "Intensity": 2,
+      "Angle": 70,
+      "Reach": 4,
+      "Baked": false
+    },
+    {
+      "Position": [
+        16.5,
+        1.9,
+        23.2
+      ],
+      "Yaw": 180,
+      "Pitch": 15,
+      "Color": [
+        1,
+        0.9,
+        0.78
+      ],
+      "Intensity": 2,
+      "Angle": 70,
+      "Reach": 4,
+      "Baked": false
+    }
+  ],
+  "SkyFullSphere": false,
+  "Station": null,
+  "Panes": null,
+  "Music": "maintenance"
+}

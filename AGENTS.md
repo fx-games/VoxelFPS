@@ -147,6 +147,120 @@ door rather than about the level:
   two tall for headroom and then `fill` the voxel directly above each door: the
   shut door is a shut doorway, and the open one has slid up inside the lintel.
 
+## A locked door, and the note that tells you the number
+
+A door knows nothing about codes. A **keypad** stands beside it with four digits
+on it and holds shut whichever door is nearest to it - within `keypadReach`,
+which is about a doorway's width - and that is the whole of the wiring. Nothing
+in a level says which keypad belongs to which door; where they stand says it.
+`Game.bindKeypads` works it out once the level is standing, and again on every
+editor placement or deletion, because "the nearest door" is a fact a single
+click can change.
+
+A **note** is a sheet of paper lying in the level with a line of writing on it.
+Reading one takes it - it leaves the floor and turns up in the inventory - and
+learns every four-digit number in that writing. A keypad prints its own number
+on its panel once that number has been read somewhere, which is Prey's rule and
+the reason notes exist at all. A note carries writing, not a code field: the
+number in the writing *is* the number, so a level cannot say one thing on the
+paper and another in its data.
+
+Three ways to put them in a level, all of them the same two `core.MapEntity`
+fields (`Code` and `Text`):
+
+- **In the editor**, PROPS mode. `keypad`, `note`, `door_slide` and
+  `door_swing_leaf` are folders under `assets/meshes/` with a `scenery.json`, so
+  they are palette slots like a table. Place one, then press **E on it** - the
+  key that uses a thing in the game gives it what it says while building one.
+  The editor's own line in the corner prints a keypad's code and whether it has
+  a door in reach. E on a door still opens it.
+- **In `build.map`**: `entity Keypad mesh=keypad at=X,Y,Z code=7412` and
+  `note X Y Z the writing`. `note` is its own command rather than a `text=`
+  option because a `key=value` may not hold a space.
+- **`assets/maps/keypads`** is the level that exercises all of it: a hall with a
+  slide door into a vault and a swing door into an office, a keypad on each, and
+  three notes that chain one code to the next.
+
+The models are generated - `go run ./tools/genpanels` - because each is one box
+with a picture on one face. The keypad's picture faces **-Z**, which is what "as
+modelled" means for a prop nobody has turned, so a keypad on a wall whose open
+side faces +Z wants `facing=0,1`. Mount it *proud of* the wall: a panel spawned
+on the wall's own voxel is a panel inside the wall, and invisible.
+
+## An audio log, and the key that plays it without stopping you
+
+An **audio log** is a note that talks: a data cartridge lying in the level with
+a recording on it. It is deliberately the note's twin - the same E key takes it,
+it leaves the floor the same way, it turns up in the inventory the same way -
+and it differs in the one way that matters. A note stops you to read it. A
+recording comes with you.
+
+That difference is the whole of what the code adds (`audiolog.go`):
+
+- **Picking one up plays nothing.** It says what it is and which key plays it -
+  `Audio log: Maintenance log, day 41   [L] to play` - and the key it names is
+  whatever `QuickplayLog` is bound to today, through `Game.keyLabel`.
+- **Quickplay (`L`) starts the log found most recently** and leaves the player
+  walking. It is under `g.isMouseCursorCaptured`, the same condition Reload is
+  under, because `L` is also the entity menu's cursor and that menu only exists
+  while the cursor is free.
+- **A log plays on a sound origin of its own**, taken from `lastActorOrigin`
+  like everything else in the world that makes a noise. It must not be the
+  player's: `Weapon.Unequip` stops every channel of the player's origin, and a
+  log silenced by a weapon switch is not playing in the background. All logs
+  share one channel, so a second one stops the first rather than talking over
+  it.
+- **The recordings load the first time one is played**, not at startup, because
+  `mapLoad` unloads every cue there is - so a level with no logs pays nothing
+  and a level with them reloads them when it is loaded again.
+
+The recordings are `assets/audio/logs/<name>.ogg` (or `.wav`), one file per log,
+and nothing in Go lists them: a log names its own file, the same way a level
+names its own music track. `assets/audio/logs/vance-41.ogg` is the sample one,
+and it was made on this machine out of macOS's own speech synthesiser rather
+than recorded:
+
+```bash
+say -v Daniel -r 168 -o /tmp/log.wav --data-format=LEI16@44100 -f assets/audio/logs/vance-41.txt
+ffmpeg -i /tmp/log.wav \
+    -af "highpass=f=280,lowpass=f=3600,acompressor=threshold=-18dB:ratio=4,volume=3dB" \
+    -ac 2 -ar 44100 -c:a vorbis -strict -2 -q:a 2 assets/audio/logs/vance-41.ogg
+```
+
+The words are in `vance-41.txt` beside it, which is what makes the recording
+reproducible - the cue loader reads only `.ogg` and `.wav`, so a script sitting
+in the same folder is not a cue.
+
+The filter chain is what makes it sound like a recording rather than like a Mac:
+a voice band and a compressor. **Stereo and 44100 are not optional** - ffmpeg's
+own Vorbis encoder refuses mono, and a file at any other rate plays at the wrong
+speed, since nothing here resamples a cue to the speaker's rate.
+
+Two ways to put one in a level:
+
+- **In `build.map`**: `log X Y Z CUE THE LABEL` - the cue is one word, naming
+  the file without its extension, and the rest of the line is the label on the
+  lid. Same shape as `note`, and for the same reason. `assets/maps/keypads` has
+  one lying a couple of steps from where the player starts, saying out loud what
+  its notes say in writing.
+- **In the editor**, PROPS mode, as the `audiolog` palette slot. It has no `E`
+  authoring page the way a keypad and a note do, so one placed there is a
+  cartridge with no recording and no label until `build.map` gives it one. It
+  says so when played rather than playing silence.
+
+**The inventory has tabs now** (`quads.GuiInventory`), because a recording is
+not a thing you read down a list with the guns. Each `InventoryItem` names its
+own `Tab` and the tabs are whatever the items name, in that order - so a new
+kind of carried thing brings its own page without a list of pages anywhere. Two
+consequences worth knowing:
+
+- **`Tab` closes the inventory no longer** - it is the tab key now, along with
+  left/right and A/D. `Escape` and `I` close it.
+- **A row's index stopped being a name for it**, since a tab shows only some of
+  what is carried. `InventoryItem.Use` is a closure on the item instead, which
+  is what `E` on a row runs: hold that weapon, play that recording, nothing at
+  all for a note.
+
 ## Glass, and why it is not a block
 
 A window is a hole in the wall with a `glass` ring hanging in it. The glass is

@@ -334,6 +334,11 @@ func (g *Game) placeProp() {
 		g.dropTorch(at)
 	}
 	g.recordPlaced(placed, entity, at)
+	// A door or a keypad changes which door is nearest which panel, so the
+	// pairing is worked out again the moment either one lands.
+	if interactableMesh(entity.MeshName) {
+		g.bindKeypads()
+	}
 	// A fresh ghost, because the one that was on the crosshair is now the
 	// piece standing on the floor... except for scenery, which spawned a
 	// separate solid copy - either way the crosshair gets a new one.
@@ -374,6 +379,9 @@ func (g *Game) deleteHovered() {
 	if actor := g.actorFor(object); actor != nil && actor == g.editor.selectedActor {
 		g.editor.selectedActor = nil
 	}
+	// Same as placing one: removing a keypad has to give its door back, and
+	// removing a door has to leave its keypad holding nothing.
+	g.bindKeypads()
 	g.Toast("Removed " + object.DisplayName)
 }
 
@@ -575,7 +583,14 @@ func (g *Game) editorStateLine() string {
 		if len(g.editor.props) > 0 {
 			label = g.editor.props[g.editor.propIndex].label
 		}
-		return fmt.Sprintf("%s   %s   facing %s", label, placement, facingNames[g.editor.facing])
+		line := fmt.Sprintf("%s   %s   facing %s", label, placement, facingNames[g.editor.facing])
+		// What the crosshair is on, when it is one of the things that carries
+		// writing of its own - so a keypad's code is readable while building
+		// rather than only once a panel has been opened on it.
+		if status := g.keypadStatus(g.editorHoveredObject()); status != "" {
+			line += "   |   " + status
+		}
+		return line
 	case ModeActors:
 		kind := actorKinds[g.editor.actorIndex].Name
 		if actor := g.editor.selectedActor; actor != nil && actor.object.IsAlive() {

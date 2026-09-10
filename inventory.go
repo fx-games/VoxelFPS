@@ -19,12 +19,6 @@ func (g *Game) openInventory() {
 	previousMouseState := g.setupModal()
 	inventory := quads.NewGuiInventory(g.UiContext(), g.sharedAtlas)
 	inventory.SetItems(g.carriedItems())
-	inventory.SetOnSelect(func(index int) {
-		carried := g.carried()
-		if index < len(carried) {
-			g.selectWeapon(carried[index])
-		}
-	})
 	inventory.SetOnClose(func() {
 		g.captureMouse(previousMouseState)
 		g.popFromWidgetStack()
@@ -56,9 +50,16 @@ func (g *Game) carriedItems() []quads.InventoryItem {
 			Name:   weapon.DisplayName(),
 			Detail: g.weaponDetail(weapon),
 			Icon:   g.iconIndex(weapon),
+			Tab:    inventoryItemsTab,
+			Use:    func() { g.selectWeapon(index) },
 		})
 	}
-	return items
+	// The notes go after the weapons on the same page, which is where they have
+	// always been - picking one only turns to its writing, which is the whole of
+	// what reading a note again is. The recordings get a page of their own,
+	// because what is done with one of those is listen to it.
+	items = append(items, g.noteItems()...)
+	return append(items, g.audioLogItems()...)
 }
 
 // weaponDetail is the right hand page: what this weapon is, what it spends and

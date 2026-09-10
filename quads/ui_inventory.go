@@ -1,6 +1,9 @@
 package quads
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/quads/glhf"
@@ -23,14 +26,20 @@ type GuiInventory struct {
 	border *GuiBorder
 	detail *BitmapFontMesh
 	title  *BitmapFontMesh
+	tabBar *BitmapFontMesh
 
+	// items is everything carried and shown is the page of it the open tab
+	// holds. The list only ever knows about shown, so every index it hands back
+	// is an index into that.
 	items       []InventoryItem
+	shown       []InventoryItem
+	tabs        []string
+	tab         int
 	screen      mgl32.Vec2
 	iconAt      mgl32.Vec2
 	iconBox     float32
 	shouldClose bool
 	onClose     func()
-	onSelect    func(index int)
 }
 
 // InventoryItem is one row in the list and the page behind it.
@@ -39,6 +48,16 @@ type InventoryItem struct {
 	Detail []string
 	// Icon is where the picture is in the atlas, or -1 for an item with none.
 	Icon int
+	// Tab is which page of the inventory this item is on. The pages are in the
+	// order the items first name them, so what tabs there are is decided by
+	// what is being carried rather than by a list here that would go stale the
+	// moment there was a new kind of thing to carry.
+	Tab string
+	// Use is what E on this row does - hold a weapon, play a recording - or nil
+	// for something that is only there to be looked at. It is a closure on the
+	// item rather than an index handed back to the caller because a tab shows
+	// some of what is carried, so a row's position is no longer a name for it.
+	Use func()
 }
 
 // How the overlay is laid out, as fractions of the screen: it covers the
@@ -57,32 +76,82 @@ func NewGuiInventory(uiContext UIContext, icons glhf.TextureAtlas) *GuiInventory
 		list:      NewGuiList(uiContext),
 		detail:    NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
 		title:     NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
+		tabBar:    NewBitmapFontMesh(uiContext.Shader, uiContext.Font, uiContext.ColorBatch),
 	}
 	inventory.detail.SetTintColor(mgl32.Vec4{0.3, 1, 0.3, 1})
 	inventory.title.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
+	inventory.tabBar.SetTintColor(mgl32.Vec4{0.6, 1, 0.6, 1})
 	return inventory
 }
 
-// SetItems replaces what is carried. The selection is kept where it can be,
-// so picking something up while the inventory is open does not move the
-// highlight out from under the player.
+// SetItems replaces what is carried, and works out what tabs that makes: one
+// per distinct Tab, in the order the items name them. An open tab that is still
+// there stays open.
 func (v *GuiInventory) SetItems(items []InventoryItem) {
-	selected := v.list.GetSelectedIndex()
 	v.items = items
-	names := make([]string, len(items))
-	for i, item := range items {
+	open := ""
+	if v.tab < len(v.tabs) {
+		open = v.tabs[v.tab]
+	}
+	v.tabs = nil
+	for _, item := range items {
+		if !slices.Contains(v.tabs, item.Tab) {
+			v.tabs = append(v.tabs, item.Tab)
+		}
+	}
+	v.tab = max(slices.Index(v.tabs, open), 0)
+	v.showTab()
+}
+
+// showTab puts the open tab's items in the list. The selection is kept where it
+// can be, so picking something up while the inventory is open does not move the
+// highlight out from under the player.
+func (v *GuiInventory) showTab() {
+	selected := v.list.GetSelectedIndex()
+	v.shown = nil
+	for _, item := range v.items {
+		if v.tab < len(v.tabs) && item.Tab != v.tabs[v.tab] {
+			continue
+		}
+		v.shown = append(v.shown, item)
+	}
+	names := make([]string, len(v.shown))
+	for i, item := range v.shown {
 		names[i] = item.Name
 	}
 	v.list.SetItems(names)
-	if selected >= len(items) {
-		selected = len(items) - 1
+	if selected >= len(v.shown) {
+		selected = len(v.shown) - 1
 	}
 	v.list.SetSelectedIndex(max(selected, 0))
 }
 
-func (v *GuiInventory) SetOnSelect(callback func(index int)) { v.onSelect = callback }
-func (v *GuiInventory) SetOnClose(callback func())           { v.onClose = callback }
-func (v *GuiInventory) ShouldClose() bool                    { return v.shouldClose }
+// selectTab opens the tab one along, wrapping. The highlight starts again at
+// the top, since a row number means something different on every page.
+func (v *GuiInventory) selectTab(step int) {
+	if len(v.tabs) < 2 {
+		return
+	}
+	v.tab = (v.tab + step + len(v.tabs)) % len(v.tabs)
+	v.list.SetSelectedIndex(0)
+	v.showTab()
+}
+
+// tabLine is the strip above the list: every tab, the open one in brackets.
+func (v *GuiInventory) tabLine() string {
+	var parts []string
+	for index, name := range v.tabs {
+		if index == v.tab {
+			parts = append(parts, "["+name+"]")
+			continue
+		}
+		parts = append(parts, " "+name+" ")
+	}
+	return strings.Join(parts, " ")
+}
+
+func (v *GuiInventory) SetOnClose(callback func()) { v.onClose = callback }
+func (v *GuiInventory) ShouldClose() bool          { return v.shouldClose }
 
 func (v *GuiInventory) Close() {
 	v.shouldClose = true
@@ -109,6 +178,14 @@ func (v *GuiInventory) HandleResize(screenWidth, screenHeight int, screenCoordSc
 
 	v.title.SetPosition(mgl32.Vec2{detailLeft, topLeft.Y()})
 	_, lineHeight := v.title.Size()
+	// The tabs sit above both panes, which is the only place they can: the list
+	// is a scrolling box of its own and the detail pane belongs to one row. The
+	// strip has to be written before it can be measured - a font mesh measures
+	// the text it was last given, and one that has never been given any is no
+	// height at all, which puts the tabs straight through the list's top edge.
+	v.tabBar.SetText(v.tabLine())
+	_, tabHeight := v.tabBar.Size()
+	v.tabBar.SetPosition(mgl32.Vec2{topLeft.X(), topLeft.Y() - float32(tabHeight) - inventoryPadding})
 	// The picture sits under the name and the text under the picture, which is
 	// the Fallout arrangement and the only one that works when the pictures are
 	// all different shapes.
@@ -122,8 +199,12 @@ func (v *GuiInventory) HandleKeyEvents(key glfw.Key, scancode int, action glfw.A
 		return false
 	}
 	switch key {
-	case glfw.KeyEscape, glfw.KeyI, glfw.KeyTab:
+	case glfw.KeyEscape, glfw.KeyI:
 		v.Close()
+	case glfw.KeyTab, glfw.KeyRight, glfw.KeyD:
+		v.selectTab(1)
+	case glfw.KeyLeft, glfw.KeyA:
+		v.selectTab(-1)
 	case glfw.KeyDown, glfw.KeyS:
 		v.list.SelectNext()
 	case glfw.KeyUp, glfw.KeyW:
@@ -136,9 +217,15 @@ func (v *GuiInventory) HandleKeyEvents(key glfw.Key, scancode int, action glfw.A
 	return true
 }
 
+// selected does whatever the highlighted row is for, which is the row's own
+// business and may be nothing at all - a note is read in the pane beside it.
 func (v *GuiInventory) selected() {
-	if v.onSelect != nil && len(v.items) > 0 {
-		v.onSelect(v.list.GetSelectedIndex())
+	index := v.list.GetSelectedIndex()
+	if index < 0 || index >= len(v.shown) {
+		return
+	}
+	if use := v.shown[index].Use; use != nil {
+		use()
 	}
 }
 
@@ -169,14 +256,18 @@ func (v *GuiInventory) Draw() {
 	}
 	v.list.Draw()
 	v.border.Draw()
+	if len(v.tabs) > 1 {
+		v.tabBar.SetText(v.tabLine())
+		v.tabBar.Draw()
+	}
 
 	selected := v.list.GetSelectedIndex()
-	if selected < 0 || selected >= len(v.items) {
+	if selected < 0 || selected >= len(v.shown) {
 		v.title.SetText("nothing carried")
 		v.title.Draw()
 		return
 	}
-	item := v.items[selected]
+	item := v.shown[selected]
 	v.title.SetText(item.Name)
 	v.title.Draw()
 	v.drawIcon(item.Icon)

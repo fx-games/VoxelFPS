@@ -806,6 +806,12 @@ func (a *GlApplication) SetupSkybox(cubemap *glhf.Cubemap) {
 }
 
 func (a *GlApplication) Toast(labelText string) *GuiToast {
+	// No application is no window, and a game with no window has nowhere to put
+	// a toast - which is what a test that drives the game's own logic without
+	// opening one is. Saying something to nobody is not an error.
+	if a == nil {
+		return nil
+	}
 	label := a.NewLabel()
 	label.SetPosition(mgl32.Vec2{10, 180})
 	label.SetText(labelText)

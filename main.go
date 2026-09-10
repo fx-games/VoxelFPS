@@ -272,6 +272,10 @@ type Game struct {
 	pickupModeIndex int
 	pickupByObject  map[*quads.GameObject]*Pickup
 
+	// heldItem is the item the player has taken into their hands and is aiming
+	// at where it should stand - see carry.go. nil when their hands are empty.
+	heldItem *quads.GameObject
+
 	// furniture is every piece of scenery standing in the world. The selection
 	// looks straight through it: a shelf is somewhere to put things, not
 	// something to pick out, and it used to offer to remove itself instead.
@@ -285,6 +289,25 @@ type Game struct {
 	// Only the descriptions are here; a model is loaded the first time one is
 	// spawned.
 	scenery map[string]*Scenery
+
+	// keypads and notes are the level's locked doors and the writing that gives
+	// their codes away - see keypad.go. knownCodes is every code the player has
+	// read off a note, which is what a keypad prints on its own panel when it
+	// recognises its own number there.
+	keypads    []*Keypad
+	notes      []*Note
+	knownCodes map[string]bool
+
+	// audioLogs is the same for the level's recordings - see audiolog.go.
+	// lastAudioLog is the one the quickplay key means, which is whichever was
+	// picked up most recently. logCuesLoaded and logOrigin are the audio
+	// player's half of it: the recordings are loaded the first time one is
+	// played and dropped by the next map load, and they play on a sound origin
+	// of their own so that putting a weapon away does not silence them.
+	audioLogs     []*AudioLog
+	lastAudioLog  *AudioLog
+	logCuesLoaded bool
+	logOrigin     int
 
 	// climbVolumes are the world-space boxes a ladder's Climbable boxes turned
 	// into: standing inside one lets pollInput move the player straight up or
@@ -587,10 +610,19 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.Meshes.Clear()
 	// Their sprites went with Sprites.Clear, and the map puts the range back.
 	g.pickups = nil
+	g.heldItem = nil
 	g.climbVolumes = nil
 	g.actors = nil
 	g.companionTarget = nil
 	g.doors = nil
+	g.keypads = nil
+	g.notes = nil
+	g.knownCodes = map[string]bool{}
+	// UnloadAllCues just above took the recordings with everything else, so the
+	// next log played loads them again.
+	g.audioLogs = nil
+	g.lastAudioLog = nil
+	g.logCuesLoaded = false
 
 	// Load Map. The blocks came off disk or out of a generator before there was
 	// a window; this is where they become the scene's.
@@ -652,6 +684,9 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 		}
 		g.recordPlaced(object, entity, spawnPos)
 	}
+	// Which door each keypad holds shut is worked out once the whole level is
+	// standing, because a keypad is perfectly free to load before its door.
+	g.bindKeypads()
 	if hotReload {
 		g.physicsSystem.AddObject(g.player.Physics())
 	} else {
@@ -880,7 +915,12 @@ func (g *Game) bringToFront(widget InputReceiver) {
 }
 
 func (g *Game) DrawGui(elapsed float64) {
-	if pickup := g.hoveredPickup(); pickup != nil {
+	if g.heldItem != nil {
+		// What is in hand is outlined rather than what is being looked at:
+		// there is one thing the carry key acts on and this is it.
+		topLeft := g.drawSelectionOutline(g.getHoveredOBB(g.heldItem))
+		g.drawSelectionLabel(topLeft, g.heldItem.DisplayName+"  ["+g.keyLabel(ActionCarryItem)+" place]")
+	} else if pickup := g.hoveredPickup(); pickup != nil {
 		// An item the selection is on, in intentional mode: outlined by its own
 		// collider like anything else, named, and waiting for the key that
 		// takes it.
@@ -1006,6 +1046,12 @@ func (g *Game) updateGUI(elapsed float64) {
 
 	g.lastHitResult = &result
 
+	// The item in hand rides the aim, a block out or on whatever solid thing is
+	// nearer than that.
+	if g.heldItem != nil {
+		g.heldItem.Transform().SetPosition(carryPosition(origin, direction, result))
+	}
+
 	if g.editor.active {
 		g.updateEditorPreview()
 	}
@@ -1015,6 +1061,13 @@ func (g *Game) updateGUI(elapsed float64) {
 		if hitGround {
 			g.editor.gameObjectForSpawning.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid))
 		}
+	}
+
+	if g.heldItem != nil {
+		// While something is in hand it is the one thing outlined, and the
+		// label above it is its own.
+		g.uiLabel.Show()
+		return
 	}
 
 	if g.hoveredPickup() != nil {

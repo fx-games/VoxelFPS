@@ -157,6 +157,23 @@ type MapEntity struct {
 	// Nil means this entity is not a ladder. See Scenery.Climbable.
 	ClimbTo *mgl32.Vec3
 
+	// Code is the four digits a keypad asks for, on the keypad that asks for
+	// them. It is on the entity rather than on the door because the keypad is
+	// what the level author places and gives a number to; which door it
+	// secures is the nearest one to it - see Game.bindKeypads.
+	Code string
+
+	// Text is what a note says. A note is a sheet of paper lying in the level
+	// with a line of writing on it, and this is the writing: reading one puts
+	// it in the player's inventory and learns any four-digit code in it.
+	Text string
+
+	// Sound is the recording an audio log carries, by its file name under
+	// assets/audio/logs without the extension. It is a name rather than the
+	// writing itself because a log says what it plays, and Text is only the
+	// label on its lid - see AudioLog.
+	Sound string
+
 	// StepTo is the far side of a physically-bridged elevation change this
 	// entity provides - a staircase's platform, say. Pathfinding otherwise
 	// requires two neighbouring tiles to have exactly the same floor height:

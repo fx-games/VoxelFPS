@@ -4,7 +4,12 @@ bs1_audio/
 bs1_gfx/
 bs2_audio/
 bs2_gfx/
-assets/audio/
+# The soundtrack is MIDI beside a SoundFont, and the SoundFont is a big binary
+# that need not be in a checkout. The audio logs are not that: they are level
+# content, a couple of hundred kilobytes each, and a level that names one has
+# nothing to play without it.
+assets/audio/*
+!assets/audio/logs/
 doom_likes/
 blake_stone/
 *.exe

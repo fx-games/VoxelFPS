@@ -16,6 +16,8 @@ R => Reload
 Comma => PreviousWeapon
 Period => NextWeapon
 E => Interact
+Y => CarryItem
+L => QuickplayLog
 
 I => OpenInventory
 Escape => OpenEscapeMenu

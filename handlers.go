@@ -246,7 +246,30 @@ func (g *Game) playerInteractWith(id events.EventID, event events.Event) {
 	if hoveredObj == nil {
 		return
 	}
+	// While the editor is on, the same key gives a thing what it says instead of
+	// using it: a keypad its four digits, a note its writing. Authoring either
+	// one anywhere but where it stands is guessing, since what a keypad means is
+	// which door it happens to be beside.
+	if g.editor.active && g.editEntityUnderCrosshair(hoveredObj) {
+		return
+	}
+	if pad := g.keypadFor(hoveredObj); pad != nil {
+		g.openKeypad(pad)
+		return
+	}
+	if note := g.noteFor(hoveredObj); note != nil {
+		g.readNote(note)
+		return
+	}
+	if entry := g.audioLogFor(hoveredObj); entry != nil {
+		g.takeAudioLog(entry)
+		return
+	}
 	if door := g.doorFor(hoveredObj); door != nil {
+		if door.locked {
+			g.Toast("Locked - the keypad beside it wants four digits")
+			return
+		}
 		door.Interact()
 		return
 	}

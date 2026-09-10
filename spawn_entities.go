@@ -112,13 +112,56 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 
 	if actorNames[entity.Name] {
 		g.spawnActor(goFromEntity, physics, entity, spawnPos)
+	} else if len(entity.TextureIndices) > 0 && entity.MeshName == "" {
+		// A sprite decoration - a barrel, a crate, whatever the atlas holds -
+		// is a thing standing in the level rather than part of it, and it falls
+		// like the rest of them. It stays solid, so the player is stopped at
+		// its surface instead of ending up inside it.
+		physics.ApplyGravity = true
 	}
 
+	// The ghost that follows the editor's crosshair comes through here too, and
+	// it is the one entity with no collider - so that is what tells a thing
+	// standing in the level from a preview of one. A ghost door registered as a
+	// Door would animate, and a ghost keypad would hold a door shut.
 	switch entity.MeshName {
 	case doorSlideMeshName:
-		g.spawnDoor(goFromEntity, doorSlide, spawnPos)
+		if entity.CreateCollider {
+			g.spawnDoor(goFromEntity, doorSlide, spawnPos)
+		}
 	case doorSwingLeafMeshName:
-		g.spawnDoor(goFromEntity, doorSwing, spawnPos)
+		if entity.CreateCollider {
+			g.spawnDoor(goFromEntity, doorSwing, spawnPos)
+		}
+	case keypadMeshName:
+		// The panel's display is the only bright, saturated thing on it, and
+		// the emissive pass picks texels out by exactly that - so this lights
+		// the readout and leaves the casing round it dark.
+		goFromEntity.Mesh().EmissiveStrength = keypadEmissiveStrength
+		if entity.CreateCollider {
+			g.spawnKeypad(goFromEntity, entity.Code)
+		}
+	case noteMeshName:
+		// A note is walked over rather than bumped into, the way a pickup is:
+		// on the physics grid so the selection beam finds it, skipped by the
+		// collision solver so nothing trips over a piece of paper.
+		physics.PassThrough = true
+		// A note is an item, and an item falls - see spawnPickup.
+		physics.ApplyGravity = true
+		if entity.CreateCollider {
+			g.spawnNote(goFromEntity, entity.Text)
+		}
+	case audioLogMeshName:
+		// A cartridge is picked up the way a note is: on the grid for the
+		// selection beam, walked through by the solver, and it falls.
+		physics.PassThrough = true
+		physics.ApplyGravity = true
+		// Its running light, and only its running light - see the keypad above
+		// for the same trick and why the shell around it stays dark.
+		goFromEntity.Mesh().EmissiveStrength = audioLogEmissiveStrength
+		if entity.CreateCollider {
+			g.spawnAudioLog(goFromEntity, entity.Sound, entity.Text)
+		}
 	case torchMeshName:
 		// A torch head is bright on screen wherever the torch came from, the
 		// map or the ghost on the editor's crosshair. Its light *in the map* is
@@ -154,7 +197,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 			g.physicsSystem.AddObject(physics)
 		}
 	}
-	if _, isScenery := g.scenery[entity.MeshName]; isScenery {
+	// Furniture is what the selection looks through. A door, a keypad and a note
+	// are all pieces of scenery by the folder they live in - which is what puts
+	// them on the editor's placement palette - but every one of them is a thing
+	// to press E on, so none of them may be looked through.
+	if _, isScenery := g.scenery[entity.MeshName]; isScenery && !interactableMesh(entity.MeshName) {
 		g.furniture[goFromEntity] = true
 	}
 
@@ -165,3 +212,13 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 // out from. The map decides where the range is; the engine decides what goes
 // in it, which is every weapon the folder holds.
 const weaponRangeEntity = "WeaponRange"
+
+// interactableMesh is the scenery the E key means something to: it is placed
+// out of the same palette as a table, and unlike a table it is used.
+func interactableMesh(meshName string) bool {
+	switch meshName {
+	case doorSlideMeshName, doorSwingLeafMeshName, keypadMeshName, noteMeshName, audioLogMeshName:
+		return true
+	}
+	return false
+}

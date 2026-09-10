@@ -1,0 +1,114 @@
+# The keypad test level: a hall with a locked room off each end of it, one shut
+# by a slide door and one by a swing door, and three notes lying about the hall
+# and the vault with the numbers written on them.
+#
+# Built by `go run ./tools/mapgen -map keypads`; this file is the level, map.bin
+# and map.json are what it compiles to. Nothing here says which keypad holds
+# which door - a keypad holds the nearest door to it, which is the one it is
+# mounted beside. See Game.bindKeypads.
+#
+# The intended run: read the note on the hall floor for the vault's number, open
+# the vault, read what is in there for the office's number, open the office. The
+# audio log lying beside the start says the same thing out loud, and is what a
+# recording is here for - it comes with you while you go and use it.
+
+size 40 12 40
+
+ceiling 26 28 34
+floor 18 18 22
+ambient 0.14 0.16 0.20 0.55
+music maintenance
+
+# ------------------------------------------------------------- materials ---
+block rock 21 22 20
+block vault 39 39 39
+block office 20 22 20
+
+# ----------------------------------------------------------------- rooms ---
+# Solid rock first; every room and doorway below is cut out of it, which is
+# what guarantees there is a wall wherever one was not asked for.
+fill rock 4 0 4 34 5 34
+
+# The hall, three voxels of headroom, and the two rooms off it.
+clear 8 1 14 22 3 24
+fill vault 12 0 7 18 0 12
+clear 12 1 7 18 3 12
+fill office 12 0 26 20 0 32
+clear 12 1 26 20 3 32
+
+# The slide door into the vault, north. The passage is bored two voxels tall
+# for headroom and the voxel directly above the door filled back in, so a shut
+# door is a shut doorway rather than one with a slot over it, and an open one
+# has slid up inside the lintel. See AGENTS.md.
+clear 15 1 13 15 2 13
+fill rock 15 2 13 15 2 13
+entity SlideDoor mesh=door_slide at=15.5,1,13.5
+
+# The swing door into the office, south: a static frame with the moving leaf
+# hinged inside it, both of them turned the way the wall runs. Its own lintel
+# caps the opening, so only the voxel above it has to go back.
+clear 16 1 25 16 2 25
+fill rock 16 2 25 16 2 25
+entity DoorFrame mesh=door_swing_frame at=16.5,1,25.5
+entity DoorLeaf mesh=door_swing_leaf at=16.125,1,25.5
+
+# --------------------------------------------------------------- keypads ---
+# One beside each door, on the hall's side of it and turned to face into the
+# hall. A keypad's picture is on the face that looks along -Z as modelled, so
+# the one on the north wall is turned right round and the one on the south wall
+# is left as it is.
+entity Keypad mesh=keypad at=16.6,1,14.04 code=7412 facing=0,1
+entity Keypad mesh=keypad at=17.6,1,24.96 code=2580
+
+# ----------------------------------------------------------------- intel ---
+# Everything after the three coordinates is what the note says, and any four
+# digits in it is a code the player learns by reading it.
+note 14.2 1 20.2 MAINTENANCE LOG: the vault panel is still on its factory code, 7412. Third time I have asked for that to be changed.
+note 15.5 1 15.2 Shift notice: do not prop the doors open. The slide door resets itself and the swing door does not, which is not a licence to leave it swinging.
+note 15.5 1 10.5 From ops: the archive went behind the office door when the vault filled up. It is on 2580. Burn this once you have read it.
+
+# The same intel with a voice on it: a cartridge on the hall floor, a few steps
+# to the right of where the player starts. `vance-41` is the recording, by its
+# file name under assets/audio/logs; the rest of the line is the label on its
+# lid. Picking it up says which key plays it, and it keeps playing while you
+# walk off to find the numbers it is talking about.
+log 17.0 1 21.0 vance-41 Maintenance log, day 41
+
+# ---------------------------------------------------------------- lights ---
+# Baked first. A baked light is a position and nothing else - it seeds the
+# level's own voxel light, which takes the flood fill's colour rather than the
+# light's, so `color` and `power` on one of these are ignored. That is what
+# stops any corner being pitch black; it is not what lights the place.
+light 12.5 3.5 17.5 color=1,1,1 baked
+light 18.5 3.5 17.5 color=1,1,1 baked
+light 12.5 3.5 21.5 color=1,1,1 baked
+light 18.5 3.5 21.5 color=1,1,1 baked
+light 15.5 3.5 15.5 color=1,1,1 baked
+light 15.5 3.5 23.5 color=1,1,1 baked
+light 15.5 3.5 9.5 color=1,1,1 baked
+light 15.5 3.5 29.5 color=1,1,1 baked
+
+# The lamps that do light it: four over the hall and one in each locked room.
+# The floor is what matters here, because what is lying on it is what the level
+# is asking to be found.
+light 12.5 3.8 17.5 color=1,0.94,0.82 power=6 pitch=90 angle=120 reach=9
+light 18.5 3.8 17.5 color=1,0.94,0.82 power=6 pitch=90 angle=120 reach=9
+light 12.5 3.8 21.5 color=1,0.94,0.82 power=6 pitch=90 angle=120 reach=9
+light 18.5 3.8 21.5 color=1,0.94,0.82 power=6 pitch=90 angle=120 reach=9
+light 15.5 3.8 9.5 color=0.72,0.86,1 power=6 pitch=90 angle=120 reach=9
+light 15.5 3.8 29.5 color=1,0.86,0.70 power=6 pitch=90 angle=120 reach=9
+
+# One over each door, so a locked door reads as a threshold rather than as a
+# wall with a panel next to it.
+light 15.5 3.8 15.0 color=0.80,0.88,1 power=5 pitch=90 angle=110 reach=8
+light 16.5 3.8 24.0 color=1,0.90,0.78 power=5 pitch=90 angle=110 reach=8
+
+# And one shining at each door face rather than down past it. A door leaf is a
+# vertical surface recessed inside its own doorway, so a lamp in the ceiling
+# washes the floor in front of it and leaves the leaf itself black.
+light 15.5 1.9 15.8 color=0.80,0.88,1 power=2 yaw=0 pitch=15 angle=70 reach=4
+light 16.5 1.9 23.2 color=1,0.90,0.78 power=2 yaw=180 pitch=15 angle=70 reach=4
+
+# ----------------------------------------------------------------- start ---
+# In the middle of the hall, looking at the vault door.
+spawn 15.5 1 21.5 dir=0,-1

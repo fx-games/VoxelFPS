@@ -833,7 +833,7 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
 	var hitNormals []mgl32.Vec3
 	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
 	prevPos := movingEntity.Position()
-	boxFromPos := movingEntity.AABBAt
+	boxFromPos := movingEntity.CollisionAABBAt
 
 	// Each pass slides the rest of the movement along the surface that was hit.
 	// A corner can keep producing new surfaces, so the passes are capped
@@ -872,6 +872,22 @@ func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, colli
 
 					for _, collider := range collidersHere {
 						if movingEntity == collider.GameObject {
+							continue
+						}
+						// A thing that is walked through is not a thing that
+						// gets shoved. PassThrough already takes an item out of
+						// everybody else's way; this is the other half of the
+						// same contract, and without it walking into an item
+						// leaves the *item* resolving a collision against the
+						// player - out of a box it is already deep inside, so
+						// it goes the shortest way, which is downwards through
+						// the floor and out of the map.
+						//
+						// Only against things that move under their own steam:
+						// the level and its furniture are what an item rests
+						// on, and it has to keep colliding with those.
+						if movingEntity.PassThrough && collider.GameObject != nil &&
+							collider.GameObject.AffectedByGravity() {
 							continue
 						}
 						var c voxel.CollisionInfo
