@@ -92,7 +92,7 @@ func (t *TextureBuffer) SetPixels(offset int, pixels []uint16) {
 }
 
 func (t *TextureBuffer) BeginOnUnit(unit uint32) {
-	gl.ActiveTexture(unit)
+	ActiveTexture(unit)
 	t.Begin()
 }
 

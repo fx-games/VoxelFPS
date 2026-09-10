@@ -110,6 +110,8 @@ func BindUniformBlockTo(shaderID uint32, blockName string, bindingIndex uint32) 
 // BindUBOTo binds the UBO to the given binding index.
 func (u *UniformBufferObject) BindUBOTo(bindingIndex uint32) {
 	gl.BindBufferBase(gl.UNIFORM_BUFFER, bindingIndex, u.ubo.obj)
+	// Binding to an indexed point also sets the generic UNIFORM_BUFFER binding.
+	recordBind(gl.UNIFORM_BUFFER_BINDING, u.ubo.obj)
 
 	glErr := gl.GetError()
 	if glErr != gl.NO_ERROR {

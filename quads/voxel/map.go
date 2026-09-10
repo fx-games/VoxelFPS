@@ -353,7 +353,7 @@ func (m *Map) DrawWithShader(frustum core.Culler, chunkShader *glhf.Shader) {
 
 	chunkShader.End()
 
-	gl.ActiveTexture(gl.TEXTURE0)
+	glhf.ActiveTexture(gl.TEXTURE0)
 }
 
 // MeshGeneration counts chunk mesh uploads. It only has to change when the world

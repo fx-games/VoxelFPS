@@ -129,7 +129,7 @@ func (t *Texture3D) Smooth() bool {
 }
 
 func (t *Texture3D) BeginOnUnit(unit uint32) {
-	gl.ActiveTexture(unit)
+	ActiveTexture(unit)
 	t.Begin()
 }
 
