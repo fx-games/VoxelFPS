@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"strings"
 
@@ -41,7 +40,6 @@ func (t EditorTool) String() string {
 // setEditorTool picks the tool a left click uses, and says so.
 func (g *Game) setEditorTool(tool EditorTool) {
 	g.editor.tool = tool
-	g.Toast(fmt.Sprintf("editor tool: %s", tool))
 }
 
 // applyEditorTool does what the picked tool does where the player is looking.

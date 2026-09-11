@@ -111,7 +111,6 @@ func (g *Game) openBlockPicker() {
 		closePicker()
 		g.editor.voxelBlock = g.editor.blocks[index].block()
 		g.editor.tool = EditorToolNone // a block picked is a block to build with
-		g.Toast(names[index] + " in the brush")
 	})
 	picker.SetOnIndexRightClicked(func(index int) {
 		if index >= len(g.editor.blocks) {

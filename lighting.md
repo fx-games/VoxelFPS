@@ -7,6 +7,7 @@ Four things light a surface, and they are deliberately different in cost:
 | source | count affordable | cost per frame | shadows |
 |---|---|---|---|
 | Ambient | 1 | nothing | no |
+| Editor sun | 1, editor only | one dot product | no |
 | Baked voxel light | dozens of emitters | nothing (a texel already fetched) | occlusion is baked in |
 | Emissive texels | any | nothing | n/a, it is not a light |
 | Dynamic lights | ~3 today, 32 hard cap | one shader loop iteration per lit fragment | only the ones holding a shadow layer |
@@ -21,7 +22,7 @@ Everything below meets in one function, [`finalColor`](quads/shader_header.go), 
 every scene shader calls:
 
 ```glsl
-vec3 litColor = (ambientLightColor + baked + spotLightColor) * surfaceColor.rgb + emissive;
+vec3 litColor = (ambientLightColor + sunLightAt(fragWorldNormal) + baked + spotLightColor) * surfaceColor.rgb + emissive;
 ```
 
 Three terms multiply the surface, one is added after. That split is the whole model:

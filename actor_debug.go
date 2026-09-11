@@ -50,7 +50,6 @@ func (g *Game) actorOptions() []quads.GuiOption {
 // writes their velocity and it is about to stop being called for them.
 func (g *Game) applyActorsActive() {
 	if g.actorsActive {
-		g.Toast("Actors active")
 		return
 	}
 	for _, actor := range g.actors {
@@ -60,7 +59,6 @@ func (g *Game) applyActorsActive() {
 		actor.halt()
 		actor.hunting = false
 	}
-	g.Toast("Actors inactive")
 }
 
 // playActorAnimation puts every actor still standing on the same animation, so

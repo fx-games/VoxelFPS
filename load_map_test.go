@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/quads"
 )
 
 // The shipped map's two lights used to be Go literals in the GlApplication
@@ -109,8 +110,8 @@ func TestMapNamesListsEveryShippedLevel(t *testing.T) {
 	}
 }
 
-// A new map is a level that loads: its folder, a floor with the player standing
-// on it, and the look of the map it was made from without that map's contents.
+// A new map is a level that loads: its folder, not one block in it, and the look
+// of the map it was made from without that map's contents.
 // A name already taken, or one that is not a folder name, is refused.
 func TestNewMapIsALevelThatLoads(t *testing.T) {
 	workingDir, err := os.Getwd()
@@ -136,13 +137,32 @@ func TestNewMapIsALevelThatLoads(t *testing.T) {
 	if loaded.FogEnd != 40 || len(loaded.Entities) != 0 {
 		t.Errorf("fog %v and %d entities, want the look and none of the contents", loaded.FogEnd, len(loaded.Entities))
 	}
-	spawn := loaded.PlayerSpawn
-	if !blocks.IsSolidBlockAt(int32(spawn.X()), int32(spawn.Y())-1, int32(spawn.Z())) {
-		t.Errorf("no floor under the spawn at %v", spawn)
+	if used := blocks.UsedTextureIndices(); len(used) != 0 {
+		t.Errorf("the new level has blocks in it, drawing %v", used)
 	}
 	for _, name := range []string{"fresh", "", "../out", "a b"} {
 		if createMap(name, look) == nil {
 			t.Errorf("created a map called %q", name)
 		}
+	}
+}
+
+// A level that names no fill light is lit white at the default strength, not
+// black: the knob scales the colour, and scaling black was a knob that only
+// ever made a level darker. What the knob is left at is what a save writes.
+func TestAmbientLightDefaultsToWhiteAndIsSaved(t *testing.T) {
+	colour, strength := levelAmbient(core.MapLoadResult{})
+	if colour != (mgl32.Vec3{1, 1, 1}) || strength != quads.DefaultAmbientStrength {
+		t.Errorf("unset ambient is %v at %v, want white at the default", colour, strength)
+	}
+	blue := mgl32.Vec3{0.1, 0.2, 0.6}
+	if colour, strength := levelAmbient(core.MapLoadResult{AmbientColor: blue, AmbientStrength: 0.7}); colour != blue || strength != 0.7 {
+		t.Errorf("a level's own ambient came back as %v at %v", colour, strength)
+	}
+
+	game := &Game{ambientColor: blue, ambientStrength: 0.45}
+	saved := game.mapWithPlacedEntities()
+	if saved.AmbientColor != blue || saved.AmbientStrength != 0.45 {
+		t.Errorf("save writes %v at %v, want the knob's %v at 0.45", saved.AmbientColor, saved.AmbientStrength, blue)
 	}
 }

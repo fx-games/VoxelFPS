@@ -32,6 +32,7 @@ const (
 	UboCamProjectionView
 	UboToneMapParams
 	UboShadowParams
+	UboSunLight
 )
 
 func mainUBO() *glhf.UniformBufferObject {
@@ -45,6 +46,7 @@ func mainUBO() *glhf.UniformBufferObject {
 		{Name: "camProjectionView", Type: glhf.Mat4},
 		{Name: "toneMapParams", Type: glhf.Vec2}, // x: exposure, y: gamma
 		{Name: "shadowParams", Type: glhf.Vec2},  // x: normal offset scale, y: depth bias
+		{Name: "sunLight", Type: glhf.Vec4},      // xyz: unit vector towards the sun, w: strength, 0 is off
 	})
 }
 
@@ -54,6 +56,10 @@ const (
 	DefaultExposure = float32(1.0)
 	DefaultGamma    = float32(1.2)
 )
+
+// DefaultAmbientStrength is the fill light a level gets when it names none: white,
+// at this strength - the flat grey the engine always started with.
+const DefaultAmbientStrength = float32(0.2)
 
 // DefaultShadowNormalOffset and DefaultShadowDepthBias are the two knobs of the
 // normal-offset shadow bias. The offset is counted in shadow texels as they measure
@@ -209,6 +215,23 @@ vec3 calculateAmbientLight() {
     return ambient;
 }
 
+// sunLightAt is one directional light from a fixed side of the sky, so the faces of
+// a block come out six different shades and the shape reads - flat ambient alone
+// paints every face the same and the level looks like a drawing of itself.
+//
+// ponytail: wrapped (half) Lambert and unshadowed. Plain Lambert leaves the three
+// faces turned away from the sun at the same ambient-only shade, which is exactly
+// the flatness this is here to remove. Shadowing it needs its own orthographic
+// shadow map - add that if the sun is ever meant to be seen in play, not only
+// to build by.
+vec3 sunLightAt(vec3 fragWorldNormal) {
+    if (sunLight.w <= 0.0) {
+        return vec3(0.0);
+    }
+    float wrapped = 0.5 + 0.5 * dot(normalize(fragWorldNormal), sunLight.xyz);
+    return vec3(sunLight.w * wrapped * wrapped);
+}
+
 // Reach, cone and intensity come from the light itself, packed into the spare
 // components of its vec4s (see LightInfo.packed). They used to be the same three
 // constants for every light in the world, with reach borrowed from fogRange - so
@@ -354,7 +377,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
     //vec3 spotLightColor = calculateSpotLight(fragWorldNormal, fragWorldPos, camPosition, light_color, camDirection, 0.98,  0.96);
     //vec3 litColor = (ambientLightColor + pointLightColor + spotLightColor) * surfaceColor.rgb;
 
-    vec3 litColor = (ambientLightColor + baked + spotLightColor) * surfaceColor.rgb + emissive;
+    vec3 litColor = (ambientLightColor + sunLightAt(fragWorldNormal) + baked + spotLightColor) * surfaceColor.rgb + emissive;
 
     // No tone mapping here any more. Anything the flashlight hits head-on still runs
     // past 1.0, but it now stays past 1.0 all the way into the post pass, where it is

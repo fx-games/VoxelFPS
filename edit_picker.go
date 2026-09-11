@@ -52,7 +52,6 @@ func (g *Game) openModePickerAt(startDir string) {
 		}
 		g.pickTexture(g.MapTextures, func(selectedIndex int) {
 			g.editor.currentPaintGunTextureIndex = selectedIndex
-			g.Toast("Paint texture set")
 		})
 	case ModeProps3D:
 		g.openAssetPicker(startDir, meshDir, hasScenery, g.meshTile, g.selectPropByID)

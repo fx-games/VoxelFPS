@@ -242,14 +242,12 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 	}
 
 	if key == g.key(ActionToggleGravity) {
-		g.gravitationEnabled = !g.gravitationEnabled
-		g.physicsSystem.SetGravityEnabled(g.gravitationEnabled)
-		g.Toast(fmt.Sprintf("Gravity %s", map[bool]string{true: "on", false: "off"}[g.gravitationEnabled]))
+		g.setGravity(!g.gravitationEnabled)
 	}
 	if key == g.key(ActionCyclePlayerLight) {
 		// One key, one slot: off -> flashlight -> torch -> off. The player carries a
 		// single light, so picking one puts the other away.
-		g.Toast(fmt.Sprintf("Player light: %s", g.CyclePlayerLight()))
+		g.CyclePlayerLight()
 	}
 	// One key for "do the thing I am looking at": an item the selection beam
 	// has picked out is taken, and anything else is interacted with. The item

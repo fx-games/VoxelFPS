@@ -64,9 +64,12 @@ func (a *GlApplication) MeshThumbnail(meshFile string) *image.RGBA {
 	// fog reaches, and where the camera is.
 	unmute := a.lightsUbo.MuteLights()
 	a.SetAmbientLight(mgl32.Vec3{1, 1, 1}, 1)
+	sun := a.sun
+	a.SetSunLight(sun.Vec3(), 0)
 	defer func() {
 		unmute()
 		a.SetAmbientLight(a.ambient.Vec3(), a.ambient.W())
+		a.SetSunLight(sun.Vec3(), sun.W())
 		a.updateMainUBO()
 	}()
 

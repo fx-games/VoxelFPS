@@ -60,7 +60,6 @@ var pickupModeNames = []string{"Collision Based", "Intentional"}
 // setPickupMode is the F1 menu's half of it.
 func (g *Game) setPickupMode(index int) {
 	g.pickupModeIndex = index
-	g.Toast("Item pickup: " + pickupModeNames[index])
 }
 
 // newPickupObject builds one item standing at a position: the weapon's own

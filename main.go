@@ -139,6 +139,7 @@ func NewGame(stress *StressConfig) *Game {
 		stressConfig:           stress,
 		currentGuiScaleIndex:   defaultGuiScaleIndex,
 		currentTimeFactorIndex: defaultTimeFactorIndex,
+		editorSunStrength:      defaultEditorSunStrength,
 	}
 }
 
@@ -208,8 +209,10 @@ type Game struct {
 	// ambientColor and ambientStrength are the level's own flat fill light,
 	// kept here as well as pushed to the shader so the F1 menu has something to
 	// turn. A level with no lights in it is lit by this and nothing else.
-	ambientColor           mgl32.Vec3
-	ambientStrength        float32
+	ambientColor    mgl32.Vec3
+	ambientStrength float32
+	// editorSunStrength is the sun the editor builds under, see updateEditorSun.
+	editorSunStrength      float32
 	emissiveCutoff         float32
 	emissiveSaturation     float32
 	shadowNormalOffset     float32
@@ -743,10 +746,9 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.physicsSystem = quads.NewCollisionSolver(g.solidAt)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
-	// Feet on the floor is the game; flying is the thing you switch on to build
-	// a level. F still turns it off - see ActionToggleGravity.
-	g.gravitationEnabled = true
-	g.physicsSystem.SetGravityEnabled(true)
+	// Feet on the floor is the game, flying is building - a level loaded from
+	// inside the editor, a new one above all, is loaded flying. F switches.
+	g.setGravity(!g.editor.active)
 	// Bounds, not VoxelDimensions: the voxel buffer is padded up to a whole
 	// number of chunks (a 7-tall level allocates a 32-tall buffer), and every
 	// layer above the level itself is chunk padding, not carved-out air - it
@@ -790,7 +792,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// A map that says nothing about how far it can be seen through gets the
 	// engine's own numbers; one that does - the shadow rig, whose fog would
 	// otherwise be the same shade of brown as the light pool - gets its own.
-	g.fogStart, g.fogEnd = 4, 22
+	g.fogStart, g.fogEnd = 190, 250
 	if mapLoad.FogEnd > 0 {
 		g.fogStart, g.fogEnd = mapLoad.FogStart, mapLoad.FogEnd
 	}
@@ -811,10 +813,10 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.emissiveCutoff = quads.DefaultEmissiveCutoff
 	g.emissiveSaturation = quads.DefaultEmissiveSaturation
 	g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
-	if mapLoad.AmbientStrength > 0 {
-		g.ambientColor, g.ambientStrength = mapLoad.AmbientColor, mapLoad.AmbientStrength
-		g.SetAmbientLight(g.ambientColor, g.ambientStrength)
-	}
+	// Every load, not only a level that names one: otherwise the last level's
+	// fill light stays on in the next.
+	g.ambientColor, g.ambientStrength = levelAmbient(mapLoad)
+	g.SetAmbientLight(g.ambientColor, g.ambientStrength)
 	g.updateFog()
 	g.SetLight(mgl32.Vec3{2, 2, 4}, mgl32.Vec3{1, float32(214) / float32(255), float32(110) / float32(255)})
 
@@ -1536,6 +1538,7 @@ func (g *Game) renderingOptions() []quads.GuiOption {
 			g.CubeMap.GetTerrainTexture().GenerateMipMaps()
 		}),
 		quads.NewGuiOptionFloat("Ambient Strength", &g.ambientStrength).StepSize(0.05).ActivateFunc(g.updateAmbient),
+		quads.NewGuiOptionFloat("Editor Sun", &g.editorSunStrength).StepSize(0.1).ActivateFunc(g.updateEditorSun),
 		quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
@@ -1589,7 +1592,6 @@ const defaultGuiScaleIndex = 2
 
 func (g *Game) setGuiScale(index int) {
 	g.SetGuiScale(guiScaleSteps[index])
-	g.Toast(fmt.Sprintf("GUI scale: %s", guiScaleLabels[index]))
 }
 
 // timeFactorSteps are the time factors the menu offers. 1.0 is real time; below it
@@ -1621,12 +1623,10 @@ func nearestTimeFactorIndex(factor float64) int {
 
 func (g *Game) setTimeFactor(index int) {
 	g.TimeFactor = timeFactorSteps[index]
-	g.Toast(fmt.Sprintf("Time factor: %s", timeFactorLabels[index]))
 }
 
 func (g *Game) setWindowMode(index int) {
 	g.SetWindowMode(quads.WindowMode(index))
-	g.Toast(fmt.Sprintf("Window mode: %s", quads.WindowModeNames[index]))
 }
 
 func (g *Game) setWindowResolution(index int) {
@@ -1635,12 +1635,25 @@ func (g *Game) setWindowResolution(index int) {
 }
 func (g *Game) updateToneMapping() {
 	g.SetExposure(g.exposure)
-	g.Toast(fmt.Sprintf("Exposure: %.2f", g.exposure))
 }
 
 func (g *Game) updateBloom() {
 	g.SetBloom(g.bloomThreshold, g.bloomStrength)
-	g.Toast(fmt.Sprintf("Bloom: threshold %.2f, strength %.2f", g.bloomThreshold, g.bloomStrength))
+}
+
+// levelAmbient is the fill light a level is lit with. Most levels name none -
+// a black colour at strength zero, which is what an unset field reads as - and
+// get white at the default strength. A black colour is always unset: kept, it
+// made the strength knob a knob on black, turning a dim level dark.
+func levelAmbient(m core.MapLoadResult) (mgl32.Vec3, float32) {
+	colour, strength := m.AmbientColor, m.AmbientStrength
+	if colour == (mgl32.Vec3{}) {
+		colour = mgl32.Vec3{1, 1, 1}
+	}
+	if strength <= 0 {
+		strength = quads.DefaultAmbientStrength
+	}
+	return colour, strength
 }
 
 // updateAmbient is the knob for the flat fill light every surface gets before
@@ -1652,14 +1665,32 @@ func (g *Game) updateAmbient() {
 		g.ambientStrength = 0
 	}
 	g.SetAmbientLight(g.ambientColor, g.ambientStrength)
-	g.Toast(fmt.Sprintf("Ambient strength %.2f", g.ambientStrength))
+}
+
+// editorSunDirection is where the editor's sun stands: high, and off every axis
+// by a different amount, so no two faces of a block get the same share of it.
+var editorSunDirection = mgl32.Vec3{0.5, 1, 0.3}.Normalize()
+
+const defaultEditorSunStrength = float32(0.8)
+
+// updateEditorSun lights the level from the sky while it is being built and
+// never while it is played: a station is lit by its own lamps, and a sun that
+// shines through every wall would hide what they do.
+func (g *Game) updateEditorSun() {
+	if g.editorSunStrength < 0 {
+		g.editorSunStrength = 0
+	}
+	strength := g.editorSunStrength
+	if !g.editor.active {
+		strength = 0
+	}
+	g.SetSunLight(editorSunDirection, strength)
 }
 
 func (g *Game) updateEmissive() {
 	g.SetEmissiveStrength(g.emissiveStrength)
 	g.SetEmissiveCutoff(g.emissiveCutoff)
 	g.SetEmissiveSaturation(g.emissiveSaturation)
-	g.Toast(fmt.Sprintf("Emissive: strength %.1f, cutoff %.2f, sat %.2f", g.emissiveStrength, g.emissiveCutoff, g.emissiveSaturation))
 }
 
 // updateShadowBias is the knob for a normal offset that depends
@@ -1688,12 +1719,9 @@ func (g *Game) dropLightHere() {
 
 func (g *Game) updateShadowBias() {
 	g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
-	g.Toast(fmt.Sprintf("Shadow: normal offset %.2f texels, depth bias %.4f", g.shadowNormalOffset, g.shadowDepthBias))
 }
 
 func (g *Game) updateFog() {
-	toastMessage := fmt.Sprintf("Fog: %.0f - %.0f, horizon %.0f deg", g.fogStart, g.fogEnd, g.skyHorizonFade)
-	g.Toast(toastMessage)
 	g.SetFog(g.CeilingColor.Vec3(), g.fogStart, g.fogEnd)
 	g.SetSkyFog(g.skyHorizonFade)
 }
@@ -1701,7 +1729,6 @@ func (g *Game) updateFog() {
 func (g *Game) toggleVsync() {
 	g.ShouldUseVsync = !g.ShouldUseVsync
 	g.SetVSync(g.ShouldUseVsync)
-	g.Toast(fmt.Sprintf("VSync: %t", g.ShouldUseVsync))
 }
 
 func (g *Game) toggleMouseCapture() {

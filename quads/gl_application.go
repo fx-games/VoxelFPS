@@ -109,7 +109,9 @@ type GlApplication struct {
 	thumbBuffer *glhf.Frame
 	// ambient is what SetAmbientLight was last given, so a pass that has to
 	// change it - a preview, which is lit flat - can put the level's own back.
-	ambient            mgl32.Vec4
+	ambient mgl32.Vec4
+	// sun is what SetSunLight was last given, kept for the same reason.
+	sun                mgl32.Vec4
 	bloomBuffers       [2]*glhf.Frame
 	bloomShader        *glhf.Shader
 	bloomQuad          *glhf.VertexArray[glhf.GlFloat]
@@ -400,10 +402,11 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 		mainUbo.BindUBOTo(0)
 
 		//ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
-		glApp.ambient = mgl32.Vec4{0.2, 0.2, 0.2, 1}
+		glApp.ambient = mgl32.Vec4{1, 1, 1, DefaultAmbientStrength}
 		mainUbo.SetAttribute(UboGlobalLightColor, glApp.ambient)
 		mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{DefaultExposure, DefaultGamma})
 		mainUbo.SetAttribute(UboShadowParams, mgl32.Vec2{DefaultShadowNormalOffset, DefaultShadowDepthBias})
+		mainUbo.SetAttribute(UboSunLight, mgl32.Vec4{}) // BufferData left it undefined
 		mainUbo.End()
 
 		glApp.mainUbo = mainUbo
@@ -1369,6 +1372,15 @@ func (a *GlApplication) SetAmbientLight(colour mgl32.Vec3, strength float32) {
 	a.ambient = colour.Vec4(strength)
 	a.mainUbo.Begin()
 	a.mainUbo.SetAttribute(UboGlobalLightColor, a.ambient)
+	a.mainUbo.End()
+}
+
+// SetSunLight is the directional light from the sky: towards is the unit vector
+// pointing at the sun from the ground, and a strength of 0 switches it off.
+func (a *GlApplication) SetSunLight(towards mgl32.Vec3, strength float32) {
+	a.sun = towards.Vec4(strength)
+	a.mainUbo.Begin()
+	a.mainUbo.SetAttribute(UboSunLight, a.sun)
 	a.mainUbo.End()
 }
 

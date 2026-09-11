@@ -111,7 +111,6 @@ func (g *Game) openVoxelEditMenu() {
 		}),
 		quads.NewGuiOptionAction("Clear Map", func() {
 			g.CubeMap.ClearAllChunks()
-			g.CubeMap.SetFloorAtHeight(0, g.editor.voxelBlock)
 			g.popFromWidgetStack()
 		}),
 	}
@@ -193,11 +192,12 @@ func (g *Game) openNewMapPanel() {
 // nothing that could climb out of assets/maps or trip up a filesystem.
 var mapNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
-// createMap starts a level called name on disk: its folder, a floor across it
-// with the player standing in the middle, and the look of the level it was made
-// from - sky, fog, ambient light - without anything that stood in that one. It
-// refuses a name already taken, so a slip on the keyboard never writes over a
-// level. The atlas is not made here: loading the level gives it one.
+// createMap starts a level called name on disk: its folder and a map file with
+// the player in the middle of the empty level, and the look of the level it was
+// made from - sky, fog, ambient light - without anything that stood in that
+// one. There are no blocks to write: a level without a voxel file is an empty
+// one, see loadVoxelFile, and the atlas comes with the first load. It refuses a
+// name already taken, so a slip on the keyboard never writes over a level.
 func createMap(name string, look core.MapLoadResult) error {
 	if !mapNamePattern.MatchString(name) {
 		return fmt.Errorf("%q will not do: letters, digits, - and _ only", name)
@@ -206,11 +206,6 @@ func createMap(name string, look core.MapLoadResult) error {
 		return fmt.Errorf("there is already a map called %s", name)
 	}
 	if err := os.MkdirAll(filepath.Join(mapDir, name), 0o755); err != nil {
-		return err
-	}
-	blocks := newLevel(defaultLevelSize)
-	blocks.SetFloorAtHeight(0, voxel.NewBlock(2)) // the default brush, see switchToMap
-	if err := blocks.SaveToDisk(voxelPathFor(name)); err != nil {
 		return err
 	}
 	look.PlayerSpawn = mgl32.Vec3{float32(defaultLevelSize.X) / 2, 1, float32(defaultLevelSize.Z) / 2}
@@ -410,7 +405,9 @@ func (g *Game) toggleEditorMode() {
 		// The legend in the corner says which one that is, so coming back into
 		// the editor is never a guess.
 		g.setEditorMode(g.editor.mode)
-		g.Toast("Map Editor: ON")
+		// Building starts flying: most of what is built is out of reach of the
+		// floor, and a new level has no floor at all. F lands.
+		g.setGravity(false)
 	} else {
 		// Nothing of the editor survives leaving it: no ghost on the crosshair,
 		// no paint gun where a weapon should be.
@@ -419,10 +416,16 @@ func (g *Game) toggleEditorMode() {
 		g.editor.selectedActor = nil
 		// Editor mode is the only place flying makes sense; leaving it always
 		// puts the player's feet back on the ground.
-		g.gravitationEnabled = true
-		g.physicsSystem.SetGravityEnabled(true)
-		g.Toast("Map Editor: OFF")
+		g.setGravity(true)
 	}
+	g.updateEditorSun()
+}
+
+// setGravity is F's switch, set rather than flipped: the player and the
+// physics have to agree on it.
+func (g *Game) setGravity(on bool) {
+	g.gravitationEnabled = on
+	g.physicsSystem.SetGravityEnabled(on)
 }
 
 // EditShape is what the number keys pick in editor mode: the geometry the next

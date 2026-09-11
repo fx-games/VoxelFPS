@@ -198,10 +198,7 @@ func (g *Game) setEditorMode(mode EditorMode) {
 	g.editor.mode = mode
 	if mode.placesProps() {
 		g.selectProp(g.paletteIndex())
-		g.Toast(mode.String())
-		return
 	}
-	g.Toast(mode.String())
 }
 
 // editorNumberKey is the number row, which every mode uses for its own slots:
@@ -223,7 +220,6 @@ func (g *Game) editorNumberKey(index int) {
 	case ModeActors:
 		if index < len(g.editor.actors) {
 			g.editor.actorIndex = index
-			g.Toast("Place: " + g.editor.actors[index].Name)
 		}
 	}
 }
@@ -238,7 +234,6 @@ func (g *Game) selectBlockSlot(index int) {
 		g.editor.shapeMethod = editShapes[index]
 		g.cancelEditorSelection()
 		g.editor.tool = EditorToolNone
-		g.Toast(g.editor.shapeMethod.String())
 		return
 	}
 	tools := []EditorTool{EditorToolDig, EditorToolPaint, EditorToolFill}
@@ -249,7 +244,6 @@ func (g *Game) selectBlockSlot(index int) {
 	// 9 is not a shape but where every shape aims, so it flips rather than picks.
 	g.editor.aimInFront = !g.editor.aimInFront
 	g.cancelEditorSelection()
-	g.Toast(map[bool]string{true: "aim: in front of you", false: "aim: crosshair"}[g.editor.aimInFront])
 }
 
 // editShapes is the number row's half of EditShape, in the order the keys are
@@ -270,17 +264,14 @@ func (g *Game) editorTabAction() {
 	}
 	if g.editor.mode.placesProps() {
 		g.editor.snapToGrid = !g.editor.snapToGrid
-		g.Toast(map[bool]string{true: "snap to grid", false: "free placement"}[g.editor.snapToGrid])
 		return
 	}
 	switch g.editor.mode {
 	case ModeBlocks:
 		g.editor.addMode = !g.editor.addMode
 		g.cancelEditorSelection()
-		g.Toast(map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode])
 	case ModeActors:
 		g.editor.selectedActor = nil
-		g.Toast("Nothing selected - a click on the floor places an actor")
 	}
 }
 
@@ -304,7 +295,6 @@ func (g *Game) editorScroll(yoff float64) {
 			return
 		}
 		g.editor.actorIndex = (g.editor.actorIndex + step + len(g.editor.actors)) % len(g.editor.actors)
-		g.Toast("Place: " + g.editor.actors[g.editor.actorIndex].Name)
 	}
 }
 
@@ -334,7 +324,6 @@ func (g *Game) selectProp(index int) {
 		g.startSceneryPlacement(kind.scenery)
 	}
 	g.applyGhostFacing()
-	g.Toast("Place: " + kind.label)
 }
 
 // selectPropByID puts a piece on the crosshair by its folder name, whichever
@@ -375,7 +364,6 @@ func (g *Game) selectActorByID(id string) {
 		if entity.SpriteSheetName == id {
 			g.setEditorMode(ModeActors)
 			g.editor.actorIndex = index
-			g.Toast("Place: " + entity.Name)
 			return
 		}
 	}
@@ -462,7 +450,6 @@ func (g *Game) clearGhost() {
 func (g *Game) rotateProp() {
 	g.editor.facing = (g.editor.facing + 1) % 4
 	g.applyGhostFacing()
-	g.Toast("Facing " + facingNames[g.editor.facing])
 }
 
 var facingNames = [4]string{"as modelled", "east", "south", "west"}
@@ -606,7 +593,6 @@ func (g *Game) editorHoveredObject() *quads.GameObject {
 func (g *Game) actorClick() {
 	if actor := g.actorFor(g.editorHoveredObject()); actor != nil {
 		g.editor.selectedActor = actor
-		g.Toast(fmt.Sprintf("%s selected - click the floor to add a waypoint", actor.Name))
 		return
 	}
 	if g.lastHitResult == nil {
@@ -720,6 +706,8 @@ func (g *Game) placedRecord(object *quads.GameObject) *placedEntity {
 // simply where the thing stands.
 func (g *Game) mapWithPlacedEntities() core.MapLoadResult {
 	result := g.mapSource
+	// The fill light as the knob left it, so a level keeps what it was lit with.
+	result.AmbientColor, result.AmbientStrength = g.ambientColor, g.ambientStrength
 	result.Entities = nil
 	for _, placed := range g.placed {
 		if placed.object != nil && !placed.object.IsAlive() {
