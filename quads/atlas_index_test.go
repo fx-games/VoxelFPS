@@ -89,6 +89,31 @@ func TestBakingKeepsEveryBlockOnItsOwnTexture(t *testing.T) {
 	}
 }
 
+// A texture picked into the atlas is saved with it on the spot, because the block
+// list pointing at it is too: a list whose slots run past the end of the atlas file
+// draws those faces empty on the next load. So the sheet written has to reach the
+// last slot handed out - and stop at the end of its row.
+func TestSavedSheetReachesTheLastSlot(t *testing.T) {
+	const columns, tile = 4, 2
+	sheet := image.NewRGBA(image.Rect(0, 0, columns*tile, 4*tile))
+	for slot := 0; slot < 16; slot++ {
+		fillTile(sheet, tileRect(slot, columns, tile, tile), uint8(10+slot*5))
+	}
+	file := filepath.Join(t.TempDir(), "map_2x2.png")
+	if err := writePNG(file, trimmedSheet(sheet, 5, columns, tile, tile), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	saved := ImageFromOSPath(file)
+	if got, want := saved.Bounds().Size(), image.Pt(columns*tile, 2*tile); got != want {
+		t.Errorf("saved sheet is %v, want %v: two rows for five slots", got, want)
+	}
+	lastSlot := tileRect(4, columns, tile, tile).Min
+	if r, _, _, _ := saved.At(lastSlot.X, lastSlot.Y).RGBA(); uint8(r>>8) != 30 {
+		t.Errorf("slot 4 saved as shade %d, want 30", r>>8)
+	}
+}
+
 func fillTile(img *image.RGBA, rect image.Rectangle, shade uint8) {
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		for x := rect.Min.X; x < rect.Max.X; x++ {

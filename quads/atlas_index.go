@@ -147,6 +147,13 @@ func (a *AtlasIndex) Import(libPath string) (int, error) {
 
 	a.paths = append(a.paths, libPath)
 	a.byPath[libPath] = slot
+	// On disk straight away, not at the next bake: the block list is saved the
+	// moment a block is added, and a list pointing past the end of the atlas file
+	// draws those faces empty once the level is loaded again. Import only ever
+	// appends, so no slot the saved map already uses moves.
+	if err := a.save(); err != nil {
+		return slot, fmt.Errorf("texture in slot %d, but the atlas was not saved: %w", slot, err)
+	}
 	return slot, nil
 }
 
@@ -193,16 +200,25 @@ func (a *AtlasIndex) Bake(used []uint16) (map[uint16]uint16, error) {
 	for slot := range used {
 		a.uploadTile(slot)
 	}
+	return remap, a.save()
+}
 
-	rows := (len(used) + columns - 1) / columns
-	if rows == 0 {
-		rows = 1
+// save writes the working sheet and its paths record over the atlas's files,
+// cut down to the rows the handed-out slots reach.
+func (a *AtlasIndex) save() error {
+	tileW, tileH := a.Atlas.GetAtlasItemSize()
+	sheet := trimmedSheet(a.sheet, len(a.paths), a.Atlas.GridWidth(), tileW, tileH)
+	if err := writePNG(a.Atlas.SourceFile(), sheet, a.Emissive()); err != nil {
+		return err
 	}
-	baked := a.sheet.SubImage(image.Rect(0, 0, columns*tileW, rows*tileH))
-	if err := writePNG(a.Atlas.SourceFile(), baked, a.Emissive()); err != nil {
-		return nil, err
-	}
-	return remap, a.savePaths()
+	return a.savePaths()
+}
+
+// trimmedSheet is the part of a sheet holding its first count slots: whole rows,
+// and at least one, so an atlas with nothing in it is still an image.
+func trimmedSheet(sheet *image.RGBA, count, columns, tileW, tileH int) image.Image {
+	rows := max(1, (count+columns-1)/columns)
+	return sheet.SubImage(image.Rect(0, 0, columns*tileW, rows*tileH))
 }
 
 // growTo makes room for a slot, expanding the atlas as often as it takes. The CPU
