@@ -20,7 +20,7 @@ import (
 )
 
 // maxAtlasSlots is what a texture index can address: the voxel lookup buffer packs
-// it into 11 bits alongside the emissive flag and the baked light level (see
+// it into 10 bits alongside the emissive flag, the baked light and the solid bit (see
 // voxel.EmissiveTextureMask). A map cannot hold more distinct textures than this,
 // whatever the library has in it.
 const maxAtlasSlots = int(voxel.EmissiveTextureMask) + 1

@@ -22,12 +22,18 @@ Everything below meets in one function, [`finalColor`](quads/shader_header.go), 
 every scene shader calls:
 
 ```glsl
-vec3 litColor = (ambientLightColor + sunLightAt(fragWorldNormal) + baked + spotLightColor) * surfaceColor.rgb + emissive;
+vec3 litColor = ((ambientLightColor + sunLightAt(fragWorldNormal) + baked) * occlusion + spotLightColor) * surfaceColor.rgb + emissive;
 ```
 
-Three terms multiply the surface, one is added after. That split is the whole model:
+The light terms multiply the surface, one is added after. That split is the whole model:
 `emissive` is a surface that *emits*, so no amount of shadow or distance can darken it,
-while the other three are light *arriving*, so they scale what the texture reflects.
+while the others are light *arriving*, so they scale what the texture reflects.
+
+`occlusion` is voxel ambient occlusion, 1 everywhere but on block faces: the cube shader
+reads the eight cells around the one a face looks into (the solid bit of the lookup
+entry) and darkens the corners other blocks close in on. It scales only the light that
+comes from everywhere; spotlights answer the same question with their shadow maps.
+Toggled with "Ambient Occlusion" in the rendering menu.
 
 ---
 

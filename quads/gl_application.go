@@ -1433,6 +1433,21 @@ func (a *GlApplication) SetEmissiveSaturation(saturation float32) {
 // setShaderFloat is the Begin/set/End every one of these needs. The thresholds live
 // in the shared fragment header but a uniform is per program, so each shader that
 // masks emissive texels has to be handed the same number.
+// AmbientOcclusionStrength is how dark a corner enclosed on both sides gets when
+// ambient occlusion is on: the light from everywhere drops to 1 minus this.
+const AmbientOcclusionStrength = float32(0.6)
+
+// SetAmbientOcclusion switches the block faces' ambient occlusion on or off. Off
+// skips the neighbour reads altogether, so the switch is also the way to measure
+// what they cost.
+func (a *GlApplication) SetAmbientOcclusion(on bool) {
+	strength := float32(0)
+	if on {
+		strength = AmbientOcclusionStrength
+	}
+	setShaderFloat(a.cubeShader, CubeShaderAmbientOcclusion, strength)
+}
+
 func setShaderFloat(shader *glhf.Shader, uniform int, value float32) {
 	shader.Begin()
 	shader.SetUniformAttr(uniform, value)

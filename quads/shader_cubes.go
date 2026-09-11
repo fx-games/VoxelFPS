@@ -13,6 +13,7 @@ const (
 	CubeShaderEmissiveStrength
 	CubeShaderEmissiveCutoff
 	CubeShaderEmissiveSaturation
+	CubeShaderAmbientOcclusion
 )
 
 // Marking a texture emissive does not light the whole tile: it lights the texels that
@@ -57,6 +58,8 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
 			// ...and how colourful it also has to be, which is what separates a lit
 			// fitting from bright bare metal.
 			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 5
+			// How dark a fully enclosed corner gets, 0 for no ambient occlusion.
+			glhf.Attr{Name: "ambientOcclusion", Type: glhf.Float}, // 6
 		}
 		shader *glhf.Shader
 	)
@@ -235,15 +238,69 @@ uniform ivec4 mapSize;
 uniform sampler2D tex;
 uniform usamplerBuffer voxelLookup;
 uniform float emissiveStrength;
+uniform float ambientOcclusion;
 
 // One lookup entry describes one face: the top bit marks it emissive, the next four
-// carry its baked torch light, the rest is the texture index. See Map.packFaceLookup.
-// All three ride the one texel this shader already fetches - no second buffer, and
-// nothing per face in the vertices, which is what lets greedy meshing merge freely.
+// carry its baked torch light, then a bit saying a block is there at all, the rest is
+// the texture index. See Map.packFaceLookup. All of it rides the one texel this shader
+// already fetches - no second buffer, and nothing per face in the vertices, which is
+// what lets greedy meshing merge freely.
 #define EMISSIVE_TEXTURE_BIT uint(0x8000)
 #define TORCH_LIGHT_MASK uint(0x7800)
 #define TORCH_LIGHT_SHIFT uint(11)
-#define EMISSIVE_TEXTURE_MASK uint(0x07FF)
+#define SOLID_BLOCK_BIT uint(0x0400)
+#define EMISSIVE_TEXTURE_MASK uint(0x03FF)
+
+// solidAt is 1 where a block stands and 0 for air. Outside the map is air, the same
+// answer GetGlobalBlock gives.
+float solidAt(ivec3 cell) {
+    if (any(lessThan(cell, ivec3(0))) || any(greaterThanEqual(cell, mapSize.xyz))) {
+        return 0.0;
+    }
+    int entry = (cell.x + cell.y * mapSize.x + cell.z * mapSize.x * mapSize.y) * 6;
+    return float((texelFetch(voxelLookup, entry).r & SOLID_BLOCK_BIT) != uint(0));
+}
+
+// cornerOcclusion is how buried one corner of a face is, 0 open to 3 enclosed. Two
+// sides closing in hide the corner whatever stands on the diagonal between them.
+float cornerOcclusion(float sideA, float sideB, float diagonal) {
+    return sideA * sideB > 0.0 ? 3.0 : sideA + sideB + diagonal;
+}
+
+// occlusionAt darkens a face where other blocks close in on it: the eight cells
+// around the one it looks into give each corner of the face an occlusion, blended by
+// where on the face this fragment is. 1 is unoccluded.
+//
+// Per fragment rather than per vertex. A vertex value would have to be part of the
+// greedy merge test and split every quad it varies across - which is what baked light
+// did before it moved into the lookup buffer - and a blend done here has no triangle
+// diagonal to skew the gradient, so no quad ever needs flipping.
+float occlusionAt(vec3 worldPos, vec3 normal) {
+    if (ambientOcclusion <= 0.0) {
+        return 1.0;
+    }
+    // The cell the face looks into. Half a step along the normal, so a position that
+    // lands a hair short of the face plane still picks the right layer.
+    ivec3 front = ivec3(floor(worldPos + normal * 0.5));
+    // The two axes across the face.
+    ivec3 n = ivec3(abs(normal));
+    ivec3 t = n.yzx;
+    ivec3 b = n.zxy;
+
+    float tMinus = solidAt(front - t);
+    float tPlus  = solidAt(front + t);
+    float bMinus = solidAt(front - b);
+    float bPlus  = solidAt(front + b);
+    float c00 = cornerOcclusion(tMinus, bMinus, solidAt(front - t - b));
+    float c10 = cornerOcclusion(tPlus,  bMinus, solidAt(front + t - b));
+    float c01 = cornerOcclusion(tMinus, bPlus,  solidAt(front - t + b));
+    float c11 = cornerOcclusion(tPlus,  bPlus,  solidAt(front + t + b));
+
+    float u = fract(dot(worldPos, vec3(t)));
+    float v = fract(dot(worldPos, vec3(b)));
+    float occluded = mix(mix(c00, c10, u), mix(c01, c11, u), v) / 3.0;
+    return 1.0 - ambientOcclusion * occluded;
+}
 
 layout (location = 0) out vec4 fragmentColor;
 
@@ -314,5 +371,6 @@ void main() {
     // the shared header, so this face agrees with a torch head and a plasma bolt.
     vec3 emissive = surfaceColor.rgb * isEmissive * emissiveMask(surfaceColor.rgb) * emissiveStrength;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(torchLight));
+    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, bakedLight(torchLight),
+                               occlusionAt(fragWorldPos, VertNormal));
 }`

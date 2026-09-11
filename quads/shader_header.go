@@ -349,15 +349,22 @@ float emissiveMask(vec3 color) {
 // else. Values above 1.0 are the point - that is what the bloom threshold picks up.
 //
 // baked is the flood-filled voxel light at this fragment, and it multiplies the surface
-// like any other light does. Overloaded rather than given a fifth argument everywhere:
-// only the voxel shader has a light level to pass.
-vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked);
+// like any other light does. occlusion is how much of the light that comes from
+// everywhere - ambient, sun, baked - reaches this fragment past the blocks around it;
+// a spotlight's shadow map already answers that for its own light, and emissive is
+// not light arriving at all. Overloaded rather than given the extra arguments
+// everywhere: meshes have neither, sprites have a light level but no neighbours.
+vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked, float occlusion);
 
 vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive) {
-    return finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, vec3(0.0));
+    return finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, vec3(0.0), 1.0);
 }
 
 vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked) {
+    return finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive, baked, 1.0);
+}
+
+vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3 emissive, vec3 baked, float occlusion) {
 
     vec3 ambientLightColor = calculateAmbientLight();
 
@@ -377,7 +384,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
     //vec3 spotLightColor = calculateSpotLight(fragWorldNormal, fragWorldPos, camPosition, light_color, camDirection, 0.98,  0.96);
     //vec3 litColor = (ambientLightColor + pointLightColor + spotLightColor) * surfaceColor.rgb;
 
-    vec3 litColor = (ambientLightColor + sunLightAt(fragWorldNormal) + baked + spotLightColor) * surfaceColor.rgb + emissive;
+    vec3 litColor = ((ambientLightColor + sunLightAt(fragWorldNormal) + baked) * occlusion + spotLightColor) * surfaceColor.rgb + emissive;
 
     // No tone mapping here any more. Anything the flashlight hits head-on still runs
     // past 1.0, but it now stays past 1.0 all the way into the post pass, where it is

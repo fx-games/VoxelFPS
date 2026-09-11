@@ -214,15 +214,19 @@ func (m *Map) bake3dTextureIndices() {
 //
 //	bit 15     emissive
 //	bits 14-11 baked torch light, 0..15
-//	bits 10-0  texture index
+//	bit 10     solid: set on every face of a block, so an air cell is the one
+//	           whose entries are all zero even when a block's texture is 0
+//	bits 9-0   texture index
 //
-// Blocks carry a byte texture id (see NewBlock), so 11 bits is 8 times the range
-// the data model can produce.
+// Blocks carry a byte texture id (see NewBlock), so 10 bits is 4 times the range
+// the data model can produce. The solid bit is what the cube shader's ambient
+// occlusion reads to know which neighbours are blocks.
 const (
 	EmissiveTextureBit  = uint16(0x8000)
 	TorchLightMask      = uint16(0x7800)
 	TorchLightShift     = 11
-	EmissiveTextureMask = uint16(0x07FF)
+	SolidBlockBit       = uint16(0x0400)
+	EmissiveTextureMask = uint16(0x03FF)
 )
 
 // packFaceLookup builds the lookup entry for one face of the solid block at
@@ -235,7 +239,7 @@ const (
 // quad the gradient crosses; a lookup entry costs nothing, because the fragment is
 // already reading this exact texel for its texture index.
 func (m *Map) packFaceLookup(textureIndex uint16, blockPos Int3, face int) uint16 {
-	entry := textureIndex & EmissiveTextureMask
+	entry := textureIndex&EmissiveTextureMask | SolidBlockBit
 	if m.emissiveTextures[textureIndex] {
 		entry |= EmissiveTextureBit
 	}
@@ -1134,7 +1138,7 @@ func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index uint16) {
 	}
 	block.Textures[side] = uint16(index)
 	blockIndex := (m.getBlockIndex(blockPos.X, blockPos.Y, blockPos.Z) * 6) + int32(side)
-	m.lookupVoxels.SetPixels(int(blockIndex), []uint16{uint16(index)})
+	m.lookupVoxels.SetPixels(int(blockIndex), []uint16{m.packFaceLookup(index, blockPos, int(side))})
 }
 
 func (m *Map) getBlockIndex(x, y, z int32) int32 {

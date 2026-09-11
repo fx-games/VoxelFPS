@@ -140,6 +140,7 @@ func NewGame(stress *StressConfig) *Game {
 		currentGuiScaleIndex:   defaultGuiScaleIndex,
 		currentTimeFactorIndex: defaultTimeFactorIndex,
 		editorSunStrength:      defaultEditorSunStrength,
+		ambientOcclusion:       true,
 	}
 }
 
@@ -212,7 +213,9 @@ type Game struct {
 	ambientColor    mgl32.Vec3
 	ambientStrength float32
 	// editorSunStrength is the sun the editor builds under, see updateEditorSun.
-	editorSunStrength      float32
+	editorSunStrength float32
+	// ambientOcclusion is the rendering menu's switch for the block faces' AO.
+	ambientOcclusion       bool
 	emissiveCutoff         float32
 	emissiveSaturation     float32
 	shadowNormalOffset     float32
@@ -813,6 +816,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.emissiveCutoff = quads.DefaultEmissiveCutoff
 	g.emissiveSaturation = quads.DefaultEmissiveSaturation
 	g.SetShadowBias(g.shadowNormalOffset, g.shadowDepthBias)
+	g.updateAmbientOcclusion()
 	// Every load, not only a level that names one: otherwise the last level's
 	// fill light stays on in the next.
 	g.ambientColor, g.ambientStrength = levelAmbient(mapLoad)
@@ -1539,6 +1543,7 @@ func (g *Game) renderingOptions() []quads.GuiOption {
 		}),
 		quads.NewGuiOptionFloat("Ambient Strength", &g.ambientStrength).StepSize(0.05).ActivateFunc(g.updateAmbient),
 		quads.NewGuiOptionFloat("Editor Sun", &g.editorSunStrength).StepSize(0.1).ActivateFunc(g.updateEditorSun),
+		quads.NewGuiOptionBool("Ambient Occlusion", &g.ambientOcclusion).ActivateFunc(g.updateAmbientOcclusion),
 		quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
@@ -1685,6 +1690,10 @@ func (g *Game) updateEditorSun() {
 		strength = 0
 	}
 	g.SetSunLight(editorSunDirection, strength)
+}
+
+func (g *Game) updateAmbientOcclusion() {
+	g.SetAmbientOcclusion(g.ambientOcclusion)
 }
 
 func (g *Game) updateEmissive() {

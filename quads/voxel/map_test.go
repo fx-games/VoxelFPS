@@ -59,14 +59,17 @@ func TestEmissiveBitLeavesTextureIndexRecoverable(t *testing.T) {
 // The mask has to cover every texture index the atlas can produce, or a high index
 // would collide with the flag.
 func TestEmissiveMaskCoversAtlasIndices(t *testing.T) {
-	if EmissiveTextureBit|TorchLightMask|EmissiveTextureMask != 0xFFFF {
-		t.Errorf("the three fields do not partition the uint16: %#x | %#x | %#x",
-			EmissiveTextureBit, TorchLightMask, EmissiveTextureMask)
+	if EmissiveTextureBit|TorchLightMask|SolidBlockBit|EmissiveTextureMask != 0xFFFF {
+		t.Errorf("the four fields do not partition the uint16: %#x | %#x | %#x | %#x",
+			EmissiveTextureBit, TorchLightMask, SolidBlockBit, EmissiveTextureMask)
 	}
 	for _, pair := range [][2]uint16{
 		{EmissiveTextureBit, TorchLightMask},
+		{EmissiveTextureBit, SolidBlockBit},
 		{EmissiveTextureBit, EmissiveTextureMask},
+		{TorchLightMask, SolidBlockBit},
 		{TorchLightMask, EmissiveTextureMask},
+		{SolidBlockBit, EmissiveTextureMask},
 	} {
 		if pair[0]&pair[1] != 0 {
 			t.Errorf("fields overlap: %#x & %#x", pair[0], pair[1])
@@ -168,6 +171,11 @@ func TestFaceLookupPacksLightEmissiveAndTexture(t *testing.T) {
 
 	if got := entry & EmissiveTextureMask; got != litTexture {
 		t.Errorf("texture index: got %d want %d", got, litTexture)
+	}
+	// Texture 0 included: the solid bit is what tells a block from air for the
+	// shader's ambient occlusion, and an all-zero entry is air.
+	if m.packFaceLookup(0, Int3{0, 0, 0}, 0)&SolidBlockBit == 0 {
+		t.Errorf("a block's face is packed without the solid bit")
 	}
 	if entry&EmissiveTextureBit == 0 {
 		t.Errorf("emissive bit not set in %#x", entry)
