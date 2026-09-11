@@ -186,15 +186,14 @@ uniform mat4 modelTransform;
 
 void decompressVertex(uint compressedValue, out vec3 position, out uint normalDir)
 {
+    // Six bits an axis, because a chunk's far corner is 32 on every one of them.
     uint positionX = compressedValue & uint(0x3F);// 0x3F = 0b111111
-    uint yPart = compressedValue >> uint(6);
-    uint positionY = yPart & uint(0x1F); // 6 bits => 0x3F = 0b111111, 5 bits => 0x1F = 0b11111, 4 bits => 0xF = 0b1111
-    uint zPart = compressedValue >> uint(11);
-    uint positionZ = zPart & uint(0x3F);
+    uint positionY = (compressedValue >> uint(6)) & uint(0x3F);
+    uint positionZ = (compressedValue >> uint(12)) & uint(0x3F);
     position = vec3(float(positionX), float(positionY), float(positionZ));
 
-    normalDir = (compressedValue >> uint(17)) & uint(0x7);// 0x7 = 0b111
-    // Bits 20 and up are unused. The texture index, the emissive flag and the baked
+    normalDir = (compressedValue >> uint(18)) & uint(0x7);// 0x7 = 0b111
+    // Bits 21 and up are unused. The texture index, the emissive flag and the baked
     // light are per face, not per vertex, and live in the voxel lookup buffer.
 }
 

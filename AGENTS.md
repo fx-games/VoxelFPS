@@ -114,6 +114,7 @@ level can also be a `build.map` beside them, one command a line.
 ```bash
 go run ./tools/mapgen -map station            # build.map -> map.bin + map.json
 go run ./tools/mapgen -map station -show 12   # what is solid at height 12
+go run ./tools/mapgen -map ark -side 56       # what is solid in the x-y plane at z=56
 go run ./tools/mapgen -help                   # every command and its arguments
 ```
 
@@ -121,11 +122,14 @@ go run ./tools/mapgen -help                   # every command and its arguments
 prints one character a voxel at one height, with a ruler, so a coordinate read
 off it is a coordinate to write back into the script. It reads `map.bin`, so it
 works on a level that was never scripted - `-map doors -show 1` prints the
-doors map's floor plan.
+doors map's floor plan. `-side` is the same standing up, for a level that is
+tall rather than wide: it is the one view that shows every floor at once.
 
 The commands are in the package comment at the top of `tools/mapgen/main.go`,
-which is the only list of them. The shapes are `fill`, `clear`, `cyl` and
-`tube`; the rest of a level - where the player starts, what stands in it, its
+which is the only list of them. The shapes are `fill`, `clear`, `cyl`,
+`tube`, `cone`, `ball` and `beam` - any of them carves when its block is `air` -
+and `blast` is battle damage: a ragged, seeded hole with a scorched rim; the
+rest of a level - where the player starts, what stands in it, its
 lights, fog and music - is the same file. Positional arguments come first and
 `key=value` options after, and a bare word among the options is a flag
 (`baked`).
@@ -140,7 +144,9 @@ door rather than about the level:
 - **Nine atlas slots glow** (19, 26, 27, 29, 30, 45, 46, 47, 49 - the atlas's
   own `emIS` chunk, see `AtlasIndex.EmissiveChunkKey`). Building a room out of
   one of those is building a room out of light, which reads as a blown-out
-  white space rather than a lit one. Read the chunk before picking textures.
+  white space rather than a lit one. Read the chunk before picking textures -
+  or name the level's textures yourself with `tex`, which writes the level its
+  own atlas and says which ones glow (`assets/maps/ark` does).
 - **A slide door needs two voxels of passage and the second one filled back
   in.** The leaf is one voxel and opens by rising one (`doorSlideRise`), so a
   one-voxel passage slides it into the wall, and a passage left two voxels tall

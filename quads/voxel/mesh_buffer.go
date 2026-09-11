@@ -194,13 +194,17 @@ func (m *MeshBuffer) Compress(position Int3, normalDirection CubeSide) uint32 {
 	// 6 bits for the x y z axis
 	// max value for each axis is 2^6 - 1 = 63
 	// we want to pack these into one 32 bit integer
+	// y was five bits once, which holds 0..31 - and a chunk is 32 tall, so the
+	// top edge of every face touching a chunk's top layer is at 32. It wrapped to
+	// 0 and carried into z, and those faces were drawn folded or not at all: a
+	// level under 32 voxels tall never has one, a tall level has a thousand.
 	maxX := uint32(63)
-	maxY := uint32(31)
+	maxY := uint32(63)
 	maxZ := uint32(63)
 
 	xAxis := uint32(position.X)       // 6 bits
-	yAxis := uint32(position.Y) << 6  // 5 bits
-	zAxis := uint32(position.Z) << 11 // 6 bits
+	yAxis := uint32(position.Y) << 6  // 6 bits
+	zAxis := uint32(position.Z) << 12 // 6 bits
 
 	if position.X < 0 || uint32(position.X) > maxX {
 		println("x axis out of bounds: ", position.X)
@@ -214,12 +218,12 @@ func (m *MeshBuffer) Compress(position Int3, normalDirection CubeSide) uint32 {
 	compressedPosition := xAxis | yAxis | zAxis
 
 	// 3 bits for the normal direction (0..5)
-	attributes := uint32(normalDirection) << 17
-	// Bits 20 and up are free. Everything that varies per face - texture index,
+	attributes := uint32(normalDirection) << 18
+	// Bits 21 and up are free. Everything that varies per face - texture index,
 	// emissive, baked light - is in the voxel lookup buffer instead, which is what
 	// lets greedy meshing merge across all of it.
 	compressedVertex := compressedPosition | attributes
-	// total: 24 bits
+	// total: 21 bits
 	return compressedVertex
 }
 

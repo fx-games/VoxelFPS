@@ -234,6 +234,9 @@ type Station struct {
 	CenterX, CenterZ float32
 	Radius           float32
 	MinY, MaxY       float32
+	// TopRadius is the radius at MaxY, for a hull that tapers: Radius holds at
+	// MinY and the wall runs straight between the two. Zero is a cylinder.
+	TopRadius float32
 }
 
 // Pressurised reports whether a point is inside the hull. It is a test on the
@@ -243,8 +246,12 @@ func (s Station) Pressurised(pos mgl32.Vec3) bool {
 	if pos.Y() < s.MinY || pos.Y() > s.MaxY {
 		return false
 	}
+	radius := s.Radius
+	if s.TopRadius > 0 && s.MaxY > s.MinY {
+		radius += (s.TopRadius - s.Radius) * (pos.Y() - s.MinY) / (s.MaxY - s.MinY)
+	}
 	dx, dz := pos.X()-s.CenterX, pos.Z()-s.CenterZ
-	return dx*dx+dz*dz <= s.Radius*s.Radius
+	return dx*dx+dz*dz <= radius*radius
 }
 
 // Pane is one sheet of glass: where it hangs, which way it faces and how big

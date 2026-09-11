@@ -117,28 +117,47 @@ func bloodSplatter(rng *rand.Rand) *image.RGBA {
 	})
 }
 
-// glassSize is the window pane's own canvas. Every pixel of it is the same,
-// which is the whole design: see windowGlass.
+// glassSize is the window pane's own canvas: one voxel face, two metres, so a
+// pixel is about three centimetres.
 const glassSize = 64
 
-// windowGlass is one sheet of glass, and it is a flat colour.
+// windowGlass is one pane: a thin steel frame round a teal-tinted sheet.
 //
-// Anything drawn *on* it - a frame round the edge, a diagonal sheen, a bevel -
-// is a feature of one pane, and a wall of glass is many panes side by side with
-// their edges touching. Every such feature therefore tiles, and a tiled feature
-// is a grid of seams across what is meant to read as one window. A frame in
-// particular turns a glazed ribbon into a wall of little windows, and the frame
-// on the face you are standing against reads as a gap rather than as glass.
+// The frame is what makes it glass. A flat, barely tinted sheet was faithful to
+// "a window is a hole in the wall" and read in the game as nothing at all -
+// an opening you walk into. Framed, a glazed band is a row of panes with a
+// mullion every two metres, which is what a window on a ship looks like, and a
+// frame you are standing against says "glass" where a clear sheet said "gap".
 //
-// So the sheet carries nothing. What gives a window its shape is the hole in
-// the wall around it, which the level already built. The colour is a cool
-// almost-transparent blue, low because a glass voxel is glazed on both of its
-// faces and looking across a station is looking through four of them.
+// Two pixels of frame, a dark edge and a lit one, so two panes side by side
+// meet in a four-pixel mullion. The tint is kept low because a glass voxel is
+// glazed on both of its faces: every window is looked through twice.
 func windowGlass() *image.RGBA {
+	const frame = 2
 	tile := image.NewRGBA(image.Rect(0, 0, glassSize, glassSize))
 	for y := 0; y < glassSize; y++ {
 		for x := 0; x < glassSize; x++ {
-			tile.SetRGBA(x, y, color.RGBA{165, 200, 235, 30})
+			edge := min(x, y, glassSize-1-x, glassSize-1-y)
+			switch {
+			case edge == 0:
+				tile.SetRGBA(x, y, color.RGBA{48, 58, 62, 255})
+			case edge < frame:
+				tile.SetRGBA(x, y, color.RGBA{120, 140, 145, 255})
+			default:
+				// Lighter towards the top, and a faint streak across the corner, so
+				// the sheet has a surface to it rather than being a tinted void.
+				t := float64(y) / glassSize
+				glint := 0.0
+				if d := math.Abs(float64(x+y) - 0.7*glassSize); d < 4 {
+					glint = 1 - d/4
+				}
+				tile.SetRGBA(x, y, color.RGBA{
+					uint8(70 + 30*(1-t) + 80*glint),
+					uint8(165 + 25*(1-t) + 50*glint),
+					uint8(160 + 25*(1-t) + 50*glint),
+					uint8(60 + 25*(1-t) + 35*glint),
+				})
+			}
 		}
 	}
 	return tile

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/quads/voxel"
 )
 
 // One script through the whole of build: the two shapes that are not boxes, the
@@ -147,6 +150,61 @@ glass 16 16 8 7 4
 				continue
 			}
 			t.Errorf("the %v face of the glass at %v is solid and not drawn", side, cell)
+		}
+	}
+}
+
+// A tapering hull, the pressure test tapering with it, textures by name, and a
+// blast that blows the same hole every build - a rebuild that moved a hole
+// would move every room cut next to it.
+func TestTheConeAndItsDamage(t *testing.T) {
+	script := `
+size 40 40 40
+tex plate Space/_original/METAL_1A.PNG
+tex strip Space/_original/LIGHT_3A.PNG glow
+block hull plate plate strip
+cone hull 20 20 4 5 12 25 shell=1.5
+pressure 20 20 3 5 25 11
+blast 28 15 20 3 seed=7 scorch=hull
+`
+	// mapgen runs from the repository root, which is where a `tex` path is read.
+	here, _ := os.Getwd()
+	if err := os.Chdir("../.."); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(here)
+
+	built, err := build(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, _ := build(script)
+
+	if !built.blocks.IsSolidBlockAt(24, 5, 20) || built.blocks.IsSolidBlockAt(26, 5, 20) {
+		t.Error("the cone's narrow end is not radius 4")
+	}
+	if !built.blocks.IsSolidBlockAt(32, 25, 20) || built.blocks.IsSolidBlockAt(20, 25, 20) {
+		t.Error("the cone's wide end is not a radius-12 shell")
+	}
+	if got := built.kinds["hull"].GetTexture(voxel.Bottom); got != 1 || !built.textures[1].glow {
+		t.Errorf("the ceiling texture is slot %d, want the glowing strip in slot 1", got)
+	}
+
+	station := built.result.Station
+	if !station.Pressurised(mgl32.Vec3{30, 25, 20}) || station.Pressurised(mgl32.Vec3{30, 5, 20}) {
+		t.Error("the pressure hull does not taper with the cone")
+	}
+
+	if built.blocks.IsSolidBlockAt(28, 15, 20) {
+		t.Error("the blast left the wall it hit")
+	}
+	for x := int32(20); x < 36; x++ {
+		for y := int32(8); y < 23; y++ {
+			for z := int32(12); z < 28; z++ {
+				if built.blocks.IsSolidBlockAt(x, y, z) != again.blocks.IsSolidBlockAt(x, y, z) {
+					t.Fatalf("two builds blew different holes at %d,%d,%d", x, y, z)
+				}
+			}
 		}
 	}
 }

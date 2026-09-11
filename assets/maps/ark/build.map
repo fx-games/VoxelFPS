@@ -1,0 +1,280 @@
+# The ark: the generation ship, after the war on board. Built by
+# `go run ./tools/mapgen -map ark`; this file is the level, and map.bin,
+# map.json and the atlas beside them are what it compiles to.
+#
+# A cone standing on its point. The drive is in the tip, the decks are in the
+# wide part of the cone, and the drum and the ice dome on top are the heavy end:
+# the reaction mass and the shield. "Down" is towards the tip whatever the ship
+# is doing - thrust pushes the floor up at you from the engine side, and the
+# end-over-end tumble it coasted on for centuries throws you away from the
+# heavy drum, which is the same way. So the decks are flat and gravity is the
+# engine's own -Y. The sky does not turn: two weeks out, the drive is burning.
+#
+#   y 94-104   ice dome        water ice: dust and radiation shield
+#   y 78-94    drum R22        tanks, the AI core in the middle, 8 booms
+#   y 75-77    D6 command      vented by the AI                    vacuum
+#   y 72-74    D5 farm         blown open, frozen                  vacuum
+#   y 69-71    D4 elite        window band, burnt out              air
+#   y 66-68    D3 medical      gene vault, the lab you wake in     air
+#   y 63-65    D2 crew         bunks, mess, airlock east (+z)      air
+#   y 60-62    D1 sump         life support, water, airlock west   air
+#   y 22-59    lower cone      tanks round the spine shaft         vacuum
+#   y  0-21    drive           reactor, shadow shield, the bell
+#
+# A voxel is two metres (the player is 0.875 of one). The hull's radius is
+# r(y) = 3 + (y-8)*15/70 all the way from the tip at y=8 to the drum at y=78;
+# every radius below that says "r(y)" is that line read at that height, and
+# changing the cone means changing all of them.
+#
+# Doors, ladders and everything else that is a thing rather than a wall are
+# not placed yet. The spine is the one way between decks: a ladder goes up it.
+
+size 112 112 112
+sky full
+fog 200 900
+ambient 0.55 0.60 0.75 0.30
+ceiling 4 5 10
+floor 4 5 10
+music maintenance
+
+# D3, beside the spine door, facing it.
+spawn 63.5 67 56.5 dir=-1,0
+
+# Air on D1-D4 and nowhere else: out to the hull's outside, r(y), from D1's
+# floor to D4's ceiling. Out to the outside rather than the inside so the glass,
+# which stands in the wall, is not a step into vacuum; an airlock's chamber is
+# past the hull, so it is still vacuum by the time you stand in it.
+pressure 56.5 56.5 14.36 61 72 16.71
+
+# --------------------------------------------------------------- textures ---
+tex hull     Space/_original/METAL_1A.PNG
+tex hull2    Space/_original/PANEL_4A.PNG
+tex drum     Space/_original/CLADDING_1B.PNG
+tex ice      ark/ice.png glow
+tex floor    Space/_original/FLOOR_1A.PNG
+tex ceil     Space/_original/PANEL_1A.PNG
+tex strip    Space/_original/LIGHT_3A.PNG glow
+tex grate    Space/_original/GRID_1A.PNG
+tex girder   Space/_original/SUPPORT_1A.PNG
+tex fin      Space/_original/CORRUGAT_1A.PNG
+tex scorch   shock/087_industrial_tiles.png
+tex warn     Space/_original/WARN_1A.PNG
+tex steel    Space/_original/STEEL_1A.PNG
+tex reactor  shock/002_magnetic_containment_system.png
+tex flame    shock/188_incandescent_light.png glow
+tex crop     shock/203_grass.png
+tex rack     shock/209_overgrown_panel.png
+tex server   shock/122_tech_rack.png
+tex tank     Space/_original/METAL_1C.PNG
+
+# -------------------------------------------------------------- materials ---
+# wall, floor, ceiling
+block hull    hull
+block habhull hull2 floor ceil
+block deck    ceil floor ceil
+block drum    drum
+block ice     ice
+block strip   strip hull2 hull2
+block spine   grate
+block girder  girder
+block fin     fin
+block scorch  scorch
+block lock    warn steel steel
+block steel   steel
+block reactor reactor
+block throat  flame
+block crop    rack crop
+block console server steel
+block tank    tank
+
+# ------------------------------------------------------------------- dome ---
+# First, because a cap is a sphere with the rest cut away and the cut takes the
+# whole band under it: a radius-30 ball whose top is 10 voxels above the drum
+# and whose rim meets the drum's edge at y=94.
+ball ice 56 73.6 56 30
+clear 0 0 0 111 94 111
+
+# ------------------------------------------------------------------ drive ---
+# The bell opens downwards from the throat, which is lit: the drive is on.
+cone steel 56 56 7 0 3 7 shell=1
+cone throat 56 56 2 7 2 7
+# The tip is solid reactor, the hull skin goes over it, and the shadow shield
+# above it is what the decks are standing behind.
+cone reactor 56 56 3 8 5.14 18
+cone steel 56 56 5 19 5 21
+
+# ------------------------------------------------------------------- hull ---
+cone hull 56 56 3 8 18 78 shell=1.5
+# The decks' own band of it, lighter, from D1's floor to the drum.
+cone habhull 56 56 14.14 60 18 78 shell=1.5
+
+# Three tanks round the spine in the lower cone, all of it reaction mass.
+cone tank 61.5 56 2.5 40 2.5 57
+cone tank 53.25 60.76 2.5 40 2.5 57
+cone tank 53.25 51.24 2.5 40 2.5 57
+
+# ------------------------------------------------------------------- drum ---
+# Wider than the cone, so the decks' roof is the middle of its floor and the
+# ledge round it is drum.
+cone drum 56 56 22 78 22 78
+cone drum 56 56 22 79 22 94 shell=1.5
+cone drum 56 56 22 94 22 94
+# The AI core: a vault of racks on the spine's axis, at the ship's heart.
+cone console 56 56 5 79 5 91 shell=1
+cone console 56 56 5 91 5 91
+# Six tanks round it, one every sixty degrees from thirty.
+ball tank 67.26 86 62.5 4
+ball tank 56 86 69 4
+ball tank 44.74 86 62.5 4
+ball tank 44.74 86 49.5 4
+ball tank 56 86 43 4
+ball tank 67.26 86 49.5 4
+
+# ------------------------------------------------------------------ decks ---
+# A floor every three voxels, each out to r(y) so it meets the hull; the top
+# one is the roof, which is the middle of the drum's floor.
+cone deck 56 56 14.14 60 14.14 60
+cone deck 56 56 14.79 63 14.79 63
+cone deck 56 56 15.43 66 15.43 66
+cone deck 56 56 16.07 69 16.07 69
+cone deck 56 56 16.71 72 16.71 72
+cone deck 56 56 17.36 75 17.36 75
+cone deck 56 56 18 78 18 78
+
+# A lit strip under the ceiling of D1-D3: the deck's own light indoors, and a
+# band on the hull outside for each deck that still has power.
+cone strip 56 56 14.57 62 14.57 62 shell=1.5
+cone strip 56 56 15.21 65 15.21 65 shell=1.5
+cone strip 56 56 15.86 68 15.86 68 shell=1.5
+
+# D4's promenade: floor to ceiling glass the whole way round. The hull is
+# carved out of the band first, then glazed; the glass ring sits inside the
+# carved one, so what is left either side of it is air.
+cone air 56 56 16.29 70 16.5 71 shell=1.5
+glass 56 56 16 15 70
+glass 56 56 16 15 71
+
+# D5, the farm: a disc of growing racks with walkways cut across it, a clear
+# lane round the wall and round the spine.
+cone crop 56 56 13 73 13 73
+clear 51 73 44 61 73 44
+clear 47 73 47 65 73 47
+clear 45 73 50 67 73 50
+clear 44 73 53 68 73 53
+clear 44 73 59 68 73 59
+clear 45 73 62 67 73 62
+clear 47 73 65 65 73 65
+clear 51 73 68 61 73 68
+clear 52 73 52 60 73 60
+
+# D6, the bridge: a ring of consoles round the spine, two aisles through it.
+cone console 56 56 6 76 6 76 shell=1
+clear 55 76 48 57 76 64
+clear 48 76 55 64 76 57
+
+# ------------------------------------------------------------------ spine ---
+# The maintenance shaft from the shadow shield to the core: a grate tube with
+# a 3x3 well inside it, through every floor. A door out of it on each deck,
+# one voxel tall so a slide door fits with the deck above as its lintel.
+cone spine 56 56 2.5 22 2.5 78 shell=1
+cone air 56 56 1.45 22 1.45 78
+clear 58 61 56 58 61 56
+clear 58 64 56 58 64 56
+clear 58 67 56 58 67 56
+clear 58 70 56 58 70 56
+clear 58 73 56 58 73 56
+clear 58 76 56 58 76 56
+
+# --------------------------------------------------------------- airlocks ---
+# A box on the hull, a chamber in it, a one-voxel passage through both. The
+# door cells are marked for when doors go in; each has lock above it.
+# D2, east (+z): inner door z=71, outer door z=76.
+fill lock 54 63 70 58 66 77
+clear 55 64 72 57 65 75
+clear 56 64 69 56 64 77
+# D1, west (-x): inner door x=42, outer door x=35.
+fill lock 34 60 54 42 63 58
+clear 36 61 55 40 62 57
+clear 34 61 56 43 61 56
+
+# ------------------------------------------------------------------ booms ---
+# Eight radiator booms round the drum at y=86, one every 45 degrees. Three
+# survived: the sensor mast east, and the two radiators north-west and north.
+# The other five are stubs, and what came off them is still drifting.
+#
+# east (+x): the long-range sensor mast, which heard the planet first.
+beam girder 77 86 56 100 86 56 r=1
+ball steel 105 86 56 5 shell=1
+clear 104 76 46 111 96 66
+# north-west: radiator, a corrugated fin above and below the boom.
+beam girder 41.15 86 70.85 23.47 86 88.53 r=1
+beam fin 38.32 83 73.68 24.18 83 87.82 r=0.5
+beam fin 38.32 84 73.68 24.18 84 87.82 r=0.5
+beam fin 38.32 85 73.68 24.18 85 87.82 r=0.5
+beam fin 38.32 87 73.68 24.18 87 87.82 r=0.5
+beam fin 38.32 88 73.68 24.18 88 87.82 r=0.5
+beam fin 38.32 89 73.68 24.18 89 87.82 r=0.5
+# north (-z): radiator.
+fill fin 56 83 11 56 89 31
+beam girder 56 86 35 56 86 10 r=1
+# The stubs.
+beam girder 70.85 86 70.85 77.21 86 77.21 r=1
+beam girder 86 83 84 92 89 93 r=1
+beam girder 56 86 77 56 86 82 r=1
+beam girder 35 86 56 22 86 56 r=1
+beam girder 41.15 86 41.15 36.2 86 36.2 r=1
+beam girder 70.85 86 41.15 78.63 86 33.37 r=1
+
+# ----------------------------------------------------------------- damage ---
+# Last, so every hole goes through whatever was built where it landed.
+#
+# The farm, blown open from outside the hull: the war stopped being about who
+# ran the ship when someone decided the other side could starve. It takes the
+# floor of D6 with it, so the two vented decks are one hole.
+# Two holes side by side, high enough that the ragged edge stops short of D4's
+# floor; D4's ceiling is laid again under them, because D4 still holds air.
+blast 72 75 53 3.5 seed=1 scorch=scorch debris=8
+blast 72 75 59 3.5 seed=21 scorch=scorch debris=8
+cone deck 56 56 16.71 72 16.71 72
+# The way into the core, blown through the top of the spine by the people who
+# came to switch the AI off. The AI vented D6 to stop them.
+blast 56 78 56 2.5 seed=2 scorch=scorch
+# D6's emergency vents, opened: the hull cut through either side of the bridge.
+clear 54 76 38 58 77 41
+clear 54 76 71 58 77 74
+# The drum, holed twice, one tank torn open behind the bigger hole.
+blast 75 86 67 4.5 seed=3 scorch=scorch debris=10
+blast 37 82 45 3.5 seed=4 scorch=scorch debris=8
+# The lower cone, a tank showing through.
+blast 46 44 52 4 seed=5 scorch=scorch debris=8
+# A crater in the ice.
+blast 64 101 50 3 seed=6 scorch=ice debris=6
+# Where the five booms broke.
+blast 77.21 86 77.21 2 seed=11 scorch=scorch debris=5
+blast 56 86 82 2 seed=12 scorch=scorch debris=4
+blast 22 86 56 2.2 seed=14 scorch=scorch debris=6
+blast 36.2 86 36.2 2 seed=15 scorch=scorch debris=4
+blast 78.63 86 33.37 2 seed=17 scorch=scorch debris=5
+# D4 burnt out from the inside: scorch on floor and ceiling, nothing opened.
+blast 50 70.5 60 0.6 seed=7 scorch=scorch
+blast 62 70.5 50 0.6 seed=8 scorch=scorch
+blast 60 70.5 64 0.6 seed=9 scorch=scorch
+
+# ----------------------------------------------------------------- lights ---
+# Four lamps under each ceiling that has power; D4 is on its emergency red.
+light 63.5 62.8 56.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
+light 49.5 62.8 56.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
+light 56.5 62.8 63.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
+light 56.5 62.8 49.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
+light 63.5 65.8 56.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
+light 49.5 65.8 56.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
+light 56.5 65.8 63.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
+light 56.5 65.8 49.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
+light 63.5 68.8 56.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
+light 49.5 68.8 56.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
+light 56.5 68.8 63.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
+light 56.5 68.8 49.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
+light 63.5 71.8 56.5 color=1,0.3,0.2 power=3 angle=140 reach=10 baked
+light 49.5 71.8 56.5 color=1,0.3,0.2 power=3 angle=140 reach=10 baked
+# The core still runs.
+light 56.5 90.5 56.5 color=0.6,1,0.7 power=3 angle=160 reach=8 baked

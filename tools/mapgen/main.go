@@ -9,6 +9,7 @@
 //	go run ./tools/mapgen -gallery              # write the imported gallery's script
 //	go run ./tools/mapgen -map station          # build.map -> map.bin + map.json
 //	go run ./tools/mapgen -map station -show 15 # what is solid at height 15
+//	go run ./tools/mapgen -map ark -side 56     # what is solid in the x-y plane at z=56
 //	go run ./tools/mapgen -help                 # every command, with its arguments
 //
 // The text is the source and the two files are the output, the same way
@@ -21,12 +22,32 @@
 //
 //	size W H D                     the level's own size in voxels
 //	spawn X Y Z [dir=DX,DZ]        where the player starts, in world units
+//	tex NAME PATH [glow]           put a texture from assets/textures in the
+//	                               level's own atlas, in the order named, and
+//	                               call it NAME. A script with any `tex` in it
+//	                               writes map_64x64.png beside the level, so
+//	                               nothing it draws depends on the shared one
 //	block NAME T [T T]             name a kind of block: wall, floor, ceiling
-//	                               textures by atlas slot, repeating the last
+//	                               textures by `tex` name or atlas slot,
+//	                               repeating the last
 //	fill NAME x0 y0 z0 x1 y1 z1    make an inclusive box of it solid
 //	clear x0 y0 z0 x1 y1 z1        make an inclusive box air
 //	cyl NAME cx cz r y0 y1         a solid upright cylinder
 //	tube NAME cx cz rOuter rInner y0 y1   the wall of one, hollow inside
+//	cone NAME cx cz r0 y0 r1 y1 [shell=N] an upright cylinder whose radius runs
+//	                               from r0 at y0 to r1 at y1; shell keeps only
+//	                               the outer N voxels of it
+//	ball NAME cx cy cz r [shell=N] a sphere, or the skin of one
+//	beam NAME x0 y0 z0 x1 y1 z1 [r=N]     every voxel within r of the line
+//	                               between two voxel centres (default 0.75)
+//	                               Every shape takes `air` for NAME, which
+//	                               carves it out instead: a window band out of
+//	                               a slanted hull, a shaft through the decks
+//	blast cx cy cz r [seed=N] [scorch=NAME] [debris=N]
+//	                               a ragged hole: air inside a lumpy sphere,
+//	                               whatever is left solid at its edge turned to
+//	                               the scorch block, and debris loose blocks of
+//	                               it scattered around, the same every build
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
@@ -50,7 +71,8 @@
 //	                               [angle=N] [reach=N]
 //	sky full                       no horizon: the cubemap covers the sphere
 //	spin DEG                       degrees a second the sky turns, about Y
-//	pressure CX CZ R Y0 Y1         the cylinder that has air and gravity in it
+//	pressure CX CZ R Y0 Y1 [R1]    the cylinder that has air and gravity in it;
+//	                               R1 is its radius at Y1, for a hull that tapers
 //	fog START END                  how far the level can be seen through
 //	ambient R G B STRENGTH         what an unlit corner looks like
 //	ceiling R G B / floor R G B    the two flat colours, 0-255
@@ -63,11 +85,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"image"
 	"image/color"
+	"image/png"
 	"math"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -75,6 +101,7 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/png_chunks"
 	"github.com/memmaker/goray/quads/voxel"
 )
 
@@ -83,6 +110,11 @@ const (
 	scriptName    = "build.map"
 	voxelFileName = "map.bin"
 	mapFileName   = "map.json"
+	// atlasFileName is the atlas a level's folder draws with, named after the
+	// template it would otherwise be given a copy of (quads.UseMapAtlasIn).
+	atlasFileName = "map_64x64.png"
+	// texRoot is quads.TexLibraryRoot: what a `tex` path is relative to.
+	texRoot = "assets/textures"
 	// chunkSize is the edge of a chunk on every axis, and has to be the engine's
 	// own (see map_build.go's levelChunkSize) or a level built here loads at the
 	// wrong size.
@@ -92,6 +124,7 @@ const (
 func main() {
 	name := flag.String("map", "", "level folder under "+mapDir)
 	show := flag.Int("show", -1, "instead of building, print what is solid at this height")
+	side := flag.Int("side", -1, "instead of building, print what is solid in the x-y plane at this z")
 	gallery := flag.Bool("gallery", false, "write the imported gallery's build.map from whatever is installed")
 	flag.Parse()
 
@@ -109,10 +142,14 @@ func main() {
 	}
 	dir := filepath.Join(mapDir, *name)
 
-	if *show >= 0 {
+	if *show >= 0 || *side >= 0 {
 		blocks := voxel.NewMapWithEmptyChunks(1, 1, 1, chunkSize, chunkSize)
 		blocks.LoadFromDisk(filepath.Join(dir, voxelFileName))
-		fmt.Print(slice(blocks, int32(*show)))
+		if *side >= 0 {
+			fmt.Print(sideSlice(blocks, int32(*side)))
+		} else {
+			fmt.Print(slice(blocks, int32(*show)))
+		}
 		return
 	}
 
@@ -126,6 +163,11 @@ func main() {
 	}
 	if err := level.blocks.SaveToDisk(filepath.Join(dir, voxelFileName)); err != nil {
 		fatal(err)
+	}
+	if len(level.textures) > 0 {
+		if err := writeAtlas(dir, level.textures); err != nil {
+			fatal(err)
+		}
 	}
 	// core.MapLoadResult is what the engine's own mapFile mirrors field for
 	// field, so marshalling the real thing writes the file the engine reads. The
@@ -155,6 +197,15 @@ type level struct {
 	result core.MapLoadResult
 	kinds  map[string]*voxel.Block
 	solid  int
+	// textures is the level's own atlas, slot by slot, and slots names them.
+	textures []texture
+	slots    map[string]uint16
+}
+
+// texture is one `tex` line: a file in the library and whether it glows.
+type texture struct {
+	path string
+	glow bool
 }
 
 // build runs a whole script. Nothing is written until it has run to the end, so
@@ -163,6 +214,7 @@ type level struct {
 func build(script string) (*level, error) {
 	l := &level{
 		kinds: map[string]*voxel.Block{},
+		slots: map[string]uint16{},
 		result: core.MapLoadResult{
 			CeilingColor: color.RGBA{R: 20, G: 20, B: 26, A: 255},
 			FloorColor:   color.RGBA{R: 20, G: 20, B: 26, A: 255},
@@ -245,11 +297,15 @@ func (l *level) run(words []string, options map[string]string) error {
 		}
 		textures := make([]uint16, 0, 3)
 		for _, arg := range args[1:] {
-			slot, err := strconv.ParseUint(arg, 10, 16)
-			if err != nil {
-				return fmt.Errorf("texture slot %q: %w", arg, err)
+			slot, named := l.slots[arg]
+			if !named {
+				number, err := strconv.ParseUint(arg, 10, 16)
+				if err != nil {
+					return fmt.Errorf("texture %q is neither a slot nor a `tex` name", arg)
+				}
+				slot = uint16(number)
 			}
-			textures = append(textures, uint16(slot))
+			textures = append(textures, slot)
 		}
 		for len(textures) < 3 {
 			textures = append(textures, textures[len(textures)-1])
@@ -284,7 +340,7 @@ func (l *level) run(words []string, options map[string]string) error {
 
 	case "cyl", "tube":
 		kind, known := l.kinds[args[0]]
-		if !known {
+		if !known && args[0] != "air" {
 			return fmt.Errorf("no block called %q - name one with `block` first", args[0])
 		}
 		want := 6
@@ -305,6 +361,76 @@ func (l *level) run(words []string, options map[string]string) error {
 			inner, rest = numbers[3], numbers[4:]
 		}
 		l.cylinder(kind, centreX, centreZ, outer, inner, rest[0], rest[1])
+
+	case "tex":
+		if len(args) < 2 || len(args) > 3 || (len(args) == 3 && args[2] != "glow") {
+			return fmt.Errorf("want NAME PATH [glow]")
+		}
+		if _, taken := l.slots[args[0]]; taken {
+			return fmt.Errorf("%q is named twice", args[0])
+		}
+		if _, err := os.Stat(filepath.Join(texRoot, filepath.FromSlash(args[1]))); err != nil {
+			return err
+		}
+		l.slots[args[0]] = uint16(len(l.textures))
+		l.textures = append(l.textures, texture{path: args[1], glow: len(args) == 3})
+
+	case "cone", "ball", "beam":
+		kind, known := l.kinds[args[0]]
+		if !known && args[0] != "air" {
+			return fmt.Errorf("no block called %q - name one with `block` first", args[0])
+		}
+		want := map[string]int{"cone": 7, "ball": 5, "beam": 7}[words[0]]
+		if len(args) != want {
+			return fmt.Errorf("want %d arguments, got %d", want, len(args))
+		}
+		numbers, err := floats(args[1:])
+		if err != nil {
+			return err
+		}
+		shell, err := option(options, "shell", 0)
+		if err != nil {
+			return err
+		}
+		switch words[0] {
+		case "cone":
+			l.cone(kind, numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5], shell)
+		case "ball":
+			l.ball(kind, mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, numbers[3], shell)
+		case "beam":
+			radius, err := option(options, "r", 0.75)
+			if err != nil {
+				return err
+			}
+			l.beam(kind, mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, mgl32.Vec3{numbers[3], numbers[4], numbers[5]}, radius)
+		}
+
+	case "blast":
+		if len(args) != 4 {
+			return fmt.Errorf("want CX CY CZ R")
+		}
+		numbers, err := floats(args)
+		if err != nil {
+			return err
+		}
+		var scorch *voxel.Block
+		if name, given := options["scorch"]; given {
+			if scorch = l.kinds[name]; scorch == nil {
+				return fmt.Errorf("no block called %q", name)
+			}
+		}
+		seed, err := option(options, "seed", 1)
+		if err != nil {
+			return err
+		}
+		debris, err := option(options, "debris", 0)
+		if err != nil {
+			return err
+		}
+		if debris > 0 && scorch == nil {
+			return fmt.Errorf("debris is made of the scorch block - name one with scorch=")
+		}
+		l.blast(mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, numbers[3], uint32(seed), scorch, int(debris))
 
 	case "glass":
 		if len(args) != 5 {
@@ -466,12 +592,15 @@ func (l *level) run(words []string, options map[string]string) error {
 		if err != nil {
 			return err
 		}
-		if len(numbers) != 5 {
-			return fmt.Errorf("want CX CZ RADIUS Y0 Y1")
+		if len(numbers) != 5 && len(numbers) != 6 {
+			return fmt.Errorf("want CX CZ RADIUS Y0 Y1 [RADIUS1]")
 		}
 		station := l.station()
 		station.CenterX, station.CenterZ, station.Radius = numbers[0], numbers[1], numbers[2]
 		station.MinY, station.MaxY = numbers[3], numbers[4]
+		if len(numbers) == 6 {
+			station.TopRadius = numbers[5]
+		}
 
 	case "fog":
 		numbers, err := floats(args)
@@ -637,6 +766,191 @@ func (l *level) glazeRing(centreX, centreZ, outer, inner, y int32) {
 	}
 }
 
+// inShell is whether a squared distance lands inside a radius and, with a shell
+// above zero, within that many voxels of its outside.
+func inShell(distance2, radius, shell float32) bool {
+	inner := radius - shell
+	return distance2 <= radius*radius && (shell <= 0 || inner <= 0 || distance2 >= inner*inner)
+}
+
+// cone is cylinder with the radius worked out again on every layer, running
+// straight from r0 at y0 to r1 at y1. Distances are from voxel to centre the
+// way inTube measures them, so a cone with r0 == r1 is the cylinder `cyl` draws.
+func (l *level) cone(block *voxel.Block, centreX, centreZ, r0, y0, r1, y1, shell float32) {
+	reach := int32(math.Ceil(float64(max(r0, r1))))
+	for y := int32(min(y0, y1)); y <= int32(max(y0, y1)); y++ {
+		radius := r0
+		if y1 != y0 {
+			radius += (r1 - r0) * (float32(y) - y0) / (y1 - y0)
+		}
+		for x := int32(centreX) - reach; x <= int32(centreX)+reach; x++ {
+			for z := int32(centreZ) - reach; z <= int32(centreZ)+reach; z++ {
+				dx, dz := float32(x)-centreX, float32(z)-centreZ
+				if inShell(dx*dx+dz*dz, radius, shell) {
+					l.set(x, y, z, block)
+				}
+			}
+		}
+	}
+}
+
+func (l *level) ball(block *voxel.Block, centre mgl32.Vec3, radius, shell float32) {
+	l.around(centre, radius, func(x, y, z int32, offset mgl32.Vec3) {
+		if inShell(offset.Dot(offset), radius, shell) {
+			l.set(x, y, z, block)
+		}
+	})
+}
+
+// beam is every voxel whose centre is within radius of the segment between two
+// others, which is a line with no gaps in it at any angle.
+func (l *level) beam(block *voxel.Block, from, to mgl32.Vec3, radius float32) {
+	along := to.Sub(from)
+	length2 := along.Dot(along)
+	l.around(from.Add(along.Mul(0.5)), along.Len()/2+radius, func(x, y, z int32, _ mgl32.Vec3) {
+		at := mgl32.Vec3{float32(x), float32(y), float32(z)}
+		t := float32(0)
+		if length2 > 0 {
+			t = min(max(at.Sub(from).Dot(along)/length2, 0), 1)
+		}
+		if at.Sub(from.Add(along.Mul(t))).Len() <= radius {
+			l.set(x, y, z, block)
+		}
+	})
+}
+
+// blast is battle damage: a hole whose outline is lumpy rather than a sphere's,
+// a scorched rim on whatever it left standing, and loose pieces thrown round
+// it. Everything random in it is drawn from the seed in a fixed order, so a
+// rebuild blows exactly the same hole and another seed blows a different one.
+func (l *level) blast(centre mgl32.Vec3, radius float32, seed uint32, scorch *voxel.Block, debris int) {
+	random := rand.New(rand.NewPCG(uint64(seed), 0x5eed))
+	var phase [3]float64
+	for i := range phase {
+		phase[i] = random.Float64() * 2 * math.Pi
+	}
+	// Three lobes a side, from where the direction points: the hole reaches a
+	// third further out along some of them and a third less along others.
+	outline := func(offset mgl32.Vec3) float32 {
+		length := offset.Len()
+		if length == 0 {
+			return radius
+		}
+		u := offset.Mul(1 / length)
+		lump := math.Sin(3*float64(u.X())+phase[0]) + math.Sin(3*float64(u.Y())+phase[1]) + math.Sin(3*float64(u.Z())+phase[2])
+		return radius * (1 + 0.35*float32(lump/3))
+	}
+	l.around(centre, radius*1.35+2.5, func(x, y, z int32, offset mgl32.Vec3) {
+		distance := offset.Len()
+		edge := outline(offset) + (random.Float32()-0.5)*1.2
+		switch {
+		case distance < edge:
+			l.set(x, y, z, nil)
+		case scorch != nil && distance < edge+1.5 && l.blocks.IsSolidBlockAt(x, y, z):
+			l.set(x, y, z, scorch)
+		}
+	})
+	// The pieces go out, away from the hull's axis, and never land where there
+	// is air: a blast on the hull throws them into space rather than into a
+	// room, and a piece in a shaft is a shaft nobody can climb.
+	hull := l.result.Station
+	for range debris {
+		direction := mgl32.Vec3{random.Float32() - 0.5, random.Float32() - 0.5, random.Float32() - 0.5}
+		distance := radius * (1.4 + 1.6*random.Float32())
+		if direction.Len() == 0 {
+			continue
+		}
+		at := centre.Add(direction.Normalize().Mul(distance))
+		x, y, z := int32(math.Round(float64(at.X()))), int32(math.Round(float64(at.Y()))), int32(math.Round(float64(at.Z())))
+		cell := mgl32.Vec3{float32(x) + 0.5, float32(y) + 0.5, float32(z) + 0.5}
+		if hull != nil {
+			outward := direction.X()*(centre.X()+0.5-hull.CenterX) + direction.Z()*(centre.Z()+0.5-hull.CenterZ)
+			if outward < 0 || hull.Pressurised(cell) {
+				continue
+			}
+		}
+		if !l.blocks.IsSolidBlockAt(x, y, z) {
+			l.set(x, y, z, scorch)
+		}
+	}
+}
+
+// around visits every voxel in the cube that holds a sphere, with its offset
+// from the centre, for the shapes that are distances from a point.
+func (l *level) around(centre mgl32.Vec3, radius float32, visit func(x, y, z int32, offset mgl32.Vec3)) {
+	lo := func(v float32) int32 { return int32(math.Floor(float64(v - radius))) }
+	hi := func(v float32) int32 { return int32(math.Ceil(float64(v + radius))) }
+	for x := lo(centre.X()); x <= hi(centre.X()); x++ {
+		for y := lo(centre.Y()); y <= hi(centre.Y()); y++ {
+			for z := lo(centre.Z()); z <= hi(centre.Z()); z++ {
+				visit(x, y, z, mgl32.Vec3{float32(x), float32(y), float32(z)}.Sub(centre))
+			}
+		}
+	}
+}
+
+// writeAtlas writes the level's own atlas from its `tex` lines: the sheet the
+// engine draws with, the .paths record the editor reads to know which library
+// texture sits in which slot, and the list of the ones that glow. It is the same
+// three things quads.AtlasIndex.Bake writes, so the editor opens a scripted
+// level's atlas as if it had baked it.
+func writeAtlas(dir string, textures []texture) error {
+	const tile, columns = 64, 16 // map_64x64, sixteen across like assets/base
+	rows := (len(textures) + columns - 1) / columns
+	sheet := image.NewRGBA(image.Rect(0, 0, columns*tile, rows*tile))
+	paths := make([]string, len(textures))
+	var glowing []string
+	for slot, texture := range textures {
+		file, err := os.Open(filepath.Join(texRoot, filepath.FromSlash(texture.path)))
+		if err != nil {
+			return err
+		}
+		picture, _, err := image.Decode(file)
+		file.Close()
+		if err != nil {
+			return fmt.Errorf("%s: %w", texture.path, err)
+		}
+		// Nearest neighbour, like quads.TileImage: pixel art keeps its edges.
+		at, from := image.Pt(slot%columns*tile, slot/columns*tile), picture.Bounds()
+		for y := 0; y < tile; y++ {
+			for x := 0; x < tile; x++ {
+				sheet.Set(at.X+x, at.Y+y, picture.At(from.Min.X+x*from.Dx()/tile, from.Min.Y+y*from.Dy()/tile))
+			}
+		}
+		paths[slot] = texture.path
+		if texture.glow {
+			glowing = append(glowing, strconv.Itoa(slot))
+		}
+	}
+	var encoded, out bytes.Buffer
+	if err := png.Encode(&encoded, sheet); err != nil {
+		return err
+	}
+	// "emIS" is quads.EmissiveChunkKey, spelled out so a command-line tool does
+	// not link the renderer for one constant.
+	if err := png_chunks.InjectTextChunkIntoPNG(&encoded, &out, "emIS", strings.Join(glowing, ",")); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, atlasFileName), out.Bytes(), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, strings.TrimSuffix(atlasFileName, ".png")+".paths"),
+		[]byte(strings.Join(paths, "\n")+"\n"), 0o644)
+}
+
+// option is a number given as key=value, or the fallback when it is not.
+func option(options map[string]string, key string, fallback float32) (float32, error) {
+	value, given := options[key]
+	if !given {
+		return fallback, nil
+	}
+	number, err := strconv.ParseFloat(value, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s=%s: %w", key, value, err)
+	}
+	return float32(number), nil
+}
+
 func (l *level) set(x, y, z int32, block *voxel.Block) {
 	if block == nil {
 		l.blocks.SetAir(voxel.Int3{X: x, Y: y, Z: z})
@@ -655,11 +969,27 @@ func slice(blocks *voxel.Map, y int32) string {
 	if y < 0 || y >= bounds.Y {
 		return fmt.Sprintf("y=%d is outside the level (0..%d)\n", y, bounds.Y-1)
 	}
-	var out strings.Builder
-	fmt.Fprintf(&out, "y=%d  %dx%d  # is solid, . is air, x runs right, z runs down\n", y, bounds.X, bounds.Z)
+	header := fmt.Sprintf("y=%d  %dx%d  # is solid, . is air, x runs right, z runs down", y, bounds.X, bounds.Z)
+	return plane(header, bounds.X, 0, bounds.Z-1, func(x, z int32) bool { return blocks.IsSolidBlockAt(x, y, z) })
+}
 
-	out.WriteString("     ")
-	for x := int32(0); x < bounds.X; x++ {
+// sideSlice is the same read back standing up: the x-y plane at one z, top of
+// the level first, which is the one view of a tall level that shows its floors.
+func sideSlice(blocks *voxel.Map, z int32) string {
+	bounds := blocks.Bounds()
+	if z < 0 || z >= bounds.Z {
+		return fmt.Sprintf("z=%d is outside the level (0..%d)\n", z, bounds.Z-1)
+	}
+	header := fmt.Sprintf("z=%d  %dx%d  # is solid, . is air, x runs right, y runs up", z, bounds.X, bounds.Y)
+	return plane(header, bounds.X, bounds.Y-1, 0, func(x, y int32) bool { return blocks.IsSolidBlockAt(x, y, z) })
+}
+
+// plane prints rows first to last with an x ruler along the top and the row's
+// own coordinate down the side.
+func plane(header string, width, first, last int32, solid func(x, row int32) bool) string {
+	var out strings.Builder
+	out.WriteString(header + "\n     ")
+	for x := int32(0); x < width; x++ {
 		if x%10 == 0 {
 			out.WriteString(strconv.Itoa(int(x / 10 % 10)))
 		} else {
@@ -668,10 +998,14 @@ func slice(blocks *voxel.Map, y int32) string {
 	}
 	out.WriteByte('\n')
 
-	for z := int32(0); z < bounds.Z; z++ {
-		fmt.Fprintf(&out, "%4d ", z)
-		for x := int32(0); x < bounds.X; x++ {
-			if blocks.IsSolidBlockAt(x, y, z) {
+	step := int32(1)
+	if last < first {
+		step = -1
+	}
+	for row := first; row != last+step; row += step {
+		fmt.Fprintf(&out, "%4d ", row)
+		for x := int32(0); x < width; x++ {
+			if solid(x, row) {
 				out.WriteByte('#')
 			} else {
 				out.WriteByte('.')

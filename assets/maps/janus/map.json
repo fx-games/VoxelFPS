@@ -23,11 +23,11 @@
   "FogStart": 0,
   "FogEnd": 0,
   "AmbientColor": [
-    0,
-    0,
-    0
+    1,
+    1,
+    1
   ],
-  "AmbientStrength": 0,
+  "AmbientStrength": 0.50000006,
   "Entities": null,
   "Lights": null,
   "Music": "medical",
