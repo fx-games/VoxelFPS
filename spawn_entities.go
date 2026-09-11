@@ -8,6 +8,7 @@ import (
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
+	"log"
 	"path/filepath"
 )
 
@@ -49,6 +50,19 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		g.spawnWeaponRange(spawnPos)
 		return nil
 	}
+	if entity.WeaponName != "" {
+		// A weapon lying on the floor is not built like the other entities: its
+		// picture is in the shared store rather than in an atlas of its own, and
+		// what it is worth to the player is on the weapon rather than on the
+		// entity. spawnPickup is the one path that knows both.
+		index, known := g.weaponByID[entity.WeaponName]
+		if !known {
+			log.Printf("[map] no weapon named %q to put on the floor", entity.WeaponName)
+			return nil
+		}
+		return g.spawnPickup(g.weapons[index], entity.WeaponAmmo, spawnPos)
+	}
+
 	goFromEntity := quads.NewGameObject(entity.Name)
 	goFromEntity.Transform().SetPosition(spawnPos)
 	if entity.Facing.Len() > 0 {

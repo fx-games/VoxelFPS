@@ -91,6 +91,20 @@ func (q *MeshDrawer) loadGLTF(fileName string) (meshIndex int) {
 	return meshIndex
 }
 
+// Mesh is the loaded model and the box around it, loading it if this is the
+// first time it has been asked for. The preview renderer wants the model without
+// anything placed in the world holding it - see GlApplication.MeshThumbnail - and
+// it wants it out of the same cache, so browsing a folder and then placing a
+// piece out of it costs one load between them and not two.
+//
+// The box comes from here rather than from CompoundMesh.FindBounds because a
+// model that has been uploaded no longer has its vertices to be measured: the
+// bounds are taken once on load, before the upload, and kept.
+func (q *MeshDrawer) Mesh(gltfFile string) (*CompoundMesh, voxel.AABB) {
+	index := q.loadGLTF(gltfFile)
+	return q.loadedMeshes[index], q.loadedAABBs[index]
+}
+
 func (q *MeshDrawer) NewMesh(gltfFile string) (*MeshComponent, voxel.AABB) {
 	meshIndex := q.loadGLTF(gltfFile)
 	meshComponent := NewMeshComponent(meshIndex)

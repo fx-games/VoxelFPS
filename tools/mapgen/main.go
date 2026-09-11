@@ -30,7 +30,7 @@
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
-//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [facing=DX,DZ] [collider=false] [passthrough=true]
+//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [weapon=ID [ammo=true]] [facing=DX,DZ] [collider=false] [passthrough=true]
 //	                               [code=NNNN]
 //	                               sprite=ID is a folder under assets/sprites -
 //	                               a character or a piece of scenery drawn as a
@@ -349,6 +349,19 @@ func (l *level) run(words []string, options map[string]string) error {
 			entity.TextureIndices = kind.idleFrames()
 			if entity.Name == "-" {
 				entity.Name = kind.Name
+			}
+		}
+		// weapon= names a folder under assets/weapons: a gun lying on the floor
+		// for the player to walk over. ammo=true is the box of what it fires
+		// rather than the gun, which is the other picture every weapon brings.
+		if id, given := options["weapon"]; given {
+			if _, err := os.Stat(filepath.Join("assets", "weapons", id, "weapon.json")); err != nil {
+				return fmt.Errorf("no weapon called %q", id)
+			}
+			entity.WeaponName = id
+			entity.WeaponAmmo = options["ammo"] == "true"
+			if entity.Name == "-" {
+				entity.Name = id
 			}
 		}
 		if facing, given := options["facing"]; given {

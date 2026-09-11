@@ -26,19 +26,42 @@ const (
 	// ModeBlocks builds the level itself out of voxels. It is where a session
 	// starts, because a map with nothing in it has nowhere to stand.
 	ModeBlocks EditorMode = iota
-	ModeProps
+	// The four placement modes. They were one - PROPS - and one palette of
+	// everything placeable, which was fine at a dozen pieces and unusable at a
+	// thousand: the models, the flat decorations, the things the player picks up
+	// and the guns are four different jobs done at four different times, and a
+	// wheel that walks all of them at once is a wheel nobody reaches the end of.
+	// Each mode now has its own palette and its own folder to browse - see
+	// buildPropPalette and openModePicker.
+	ModeProps3D
+	ModeProps2D
+	ModePickups
+	ModeWeapons
 	ModeActors
 	editorModeCount
 )
 
 func (m EditorMode) String() string {
 	switch m {
-	case ModeProps:
-		return "PROPS"
+	case ModeProps3D:
+		return "3D PROPS"
+	case ModeProps2D:
+		return "2D PROPS"
+	case ModePickups:
+		return "PICKUPS"
+	case ModeWeapons:
+		return "WEAPONS"
 	case ModeActors:
 		return "ACTORS"
 	}
 	return "BLOCKS"
+}
+
+// placesProps is whether this mode puts a ghost on the crosshair out of a
+// palette. The four that do share every key: the number row, the wheel, Tab's
+// snap, the turn key and both mouse buttons. Blocks and actors are their own.
+func (m EditorMode) placesProps() bool {
+	return m >= ModeProps3D && m <= ModeWeapons
 }
 
 // propKind is one slot in the placement palette: a piece of scenery by its
@@ -54,8 +77,15 @@ type propKind struct {
 	// picture, and because the barrel the request was about has four frames and
 	// has to stay one object.
 	spriteKind string
-	torch      bool
-	sprite     bool
+	// weapon is a folder under assets/weapons/ standing on the floor as
+	// something to pick up, and ammo is whether it is the gun or its ammunition
+	// - the two pictures a weapon brings with it. See spawnPickup, which is what
+	// puts one in the world, and core.MapEntity.WeaponName, which is how a map
+	// remembers it.
+	weapon string
+	ammo   bool
+	torch  bool
+	sprite bool
 }
 
 // buildActorPalette fills what the actor tool can place: every folder under
@@ -88,29 +118,68 @@ func (g *Game) buildActorPalette() {
 const defaultDecorationTexture = 136
 
 // The two palette slots that are not folders, so the keys and menus that place
-// one directly do not have to search for it.
+// one directly do not have to search for them. Both are zero because they are in
+// different palettes now - the torch is a model and the raw sprite is a picture -
+// and each goes first in its own.
 const (
-	torchPaletteSlot = iota
-	spritePaletteSlot
+	torchPaletteSlot  = 0
+	spritePaletteSlot = 0
 )
 
-// buildPropPalette fills the placement palette: the torch and the sprite
-// decoration first, because neither is a folder, then the scenery in the
-// folder's own order.
+// buildPropPalette fills the four placement palettes, each out of the folder its
+// mode places from: the models under assets/meshes, the flat decorations and the
+// things the player picks up under assets/sprites, and the guns under
+// assets/weapons. There is no list of pieces in Go and there must not be one -
+// adding a piece is adding a folder.
+//
+// The torch and the raw sprite decoration are the two slots that are not folders,
+// and they go first in the mode each belongs to so the keys that place one
+// directly do not have to search for it.
 func (g *Game) buildPropPalette() {
-	palette := []propKind{
-		torchPaletteSlot:  {label: "Torch", torch: true},
-		spritePaletteSlot: {label: "Sprite", sprite: true},
-	}
+	models := []propKind{torchPaletteSlot: {label: "Torch", torch: true}}
 	for _, id := range g.sceneryIDs() {
-		palette = append(palette, propKind{label: g.scenery[id].Name, scenery: id})
+		models = append(models, propKind{label: g.scenery[id].Name, scenery: id})
 	}
+	g.editor.props[ModeProps3D] = models
+
+	flat := []propKind{spritePaletteSlot: {label: "Sprite", sprite: true}}
+	var items []propKind
 	for _, id := range g.spriteKindIDs() {
-		if kind := g.spriteKinds[id]; !kind.Actor {
-			palette = append(palette, propKind{label: kind.Name, spriteKind: id})
+		kind := g.spriteKinds[id]
+		if kind.Actor {
+			continue
 		}
+		slot := propKind{label: kind.Name, spriteKind: id}
+		// Which of the two palettes a picture belongs in is which role folder it
+		// is filed under: something the player walks over and takes is placed
+		// while dressing a level with loot, not while dressing it with furniture.
+		if spriteRole(id) == itemsRole {
+			items = append(items, slot)
+			continue
+		}
+		flat = append(flat, slot)
 	}
-	g.editor.props = palette
+	g.editor.props[ModeProps2D] = flat
+	g.editor.props[ModePickups] = items
+
+	var guns []propKind
+	for _, weapon := range g.weapons {
+		guns = append(guns,
+			propKind{label: weapon.Data.Tag, weapon: weapon.Data.ID},
+			propKind{label: weapon.Data.Tag + " ammo", weapon: weapon.Data.ID, ammo: true})
+	}
+	g.editor.props[ModeWeapons] = guns
+}
+
+// palette is the current mode's own, and paletteIndex the slot of it on the
+// crosshair. Every placement key goes through these rather than through a field,
+// so the four modes share one implementation of picking, ghosting and placing.
+func (g *Game) palette() []propKind {
+	return g.editor.props[g.editor.mode]
+}
+
+func (g *Game) paletteIndex() int {
+	return g.editor.propIndex[g.editor.mode]
 }
 
 // cycleEditorMode is the mode key: BLOCKS -> PROPS -> ACTORS -> BLOCKS. Three
@@ -127,8 +196,9 @@ func (g *Game) setEditorMode(mode EditorMode) {
 	g.cancelEditorSelection()
 	g.clearGhost()
 	g.editor.mode = mode
-	if mode == ModeProps {
-		g.selectProp(g.editor.propIndex)
+	if mode.placesProps() {
+		g.selectProp(g.paletteIndex())
+		g.Toast(mode.String())
 		return
 	}
 	g.Toast(mode.String())
@@ -138,16 +208,18 @@ func (g *Game) setEditorMode(mode EditorMode) {
 // the voxel shapes and the three paint tools, the placement palette, the kind
 // of actor. index is zero based.
 func (g *Game) editorNumberKey(index int) {
-	switch g.editor.mode {
-	case ModeBlocks:
-		g.selectBlockSlot(index)
-	case ModeProps:
+	if g.editor.mode.placesProps() {
 		// Only a slot that exists. The wheel wraps round the palette; a number
 		// key that wrapped would quietly pick something else when the row is
 		// longer than the palette.
-		if index < len(g.editor.props) {
+		if index < len(g.palette()) {
 			g.selectProp(index)
 		}
+		return
+	}
+	switch g.editor.mode {
+	case ModeBlocks:
+		g.selectBlockSlot(index)
 	case ModeActors:
 		if index < len(g.editor.actors) {
 			g.editor.actorIndex = index
@@ -172,7 +244,12 @@ func (g *Game) selectBlockSlot(index int) {
 	tools := []EditorTool{EditorToolDig, EditorToolPaint, EditorToolFill}
 	if slot := index - len(editShapes); slot < len(tools) {
 		g.setEditorTool(tools[slot])
+		return
 	}
+	// 9 is not a shape but where every shape aims, so it flips rather than picks.
+	g.editor.aimInFront = !g.editor.aimInFront
+	g.cancelEditorSelection()
+	g.Toast(map[bool]string{true: "aim: in front of you", false: "aim: crosshair"}[g.editor.aimInFront])
 }
 
 // editShapes is the number row's half of EditShape, in the order the keys are
@@ -183,14 +260,24 @@ var editShapes = []EditShape{EditShapeSingle, EditShapeLine, EditShapePlane, Edi
 // on screen, so the key is "flip this mode's switch" rather than three keys to
 // remember.
 func (g *Game) editorTabAction() {
+	if g.editor.mode == ModeWeapons {
+		// A weapon brings two pictures with it - the gun and a box of what it
+		// fires - and they sit next to each other in the palette, so the toggle
+		// is the slot beside this one. Snap is set from any of the other three
+		// placement modes and is shared with them.
+		g.selectProp(g.paletteIndex() ^ 1)
+		return
+	}
+	if g.editor.mode.placesProps() {
+		g.editor.snapToGrid = !g.editor.snapToGrid
+		g.Toast(map[bool]string{true: "snap to grid", false: "free placement"}[g.editor.snapToGrid])
+		return
+	}
 	switch g.editor.mode {
 	case ModeBlocks:
 		g.editor.addMode = !g.editor.addMode
 		g.cancelEditorSelection()
 		g.Toast(map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode])
-	case ModeProps:
-		g.editor.snapToGrid = !g.editor.snapToGrid
-		g.Toast(map[bool]string{true: "snap to grid", false: "free placement"}[g.editor.snapToGrid])
 	case ModeActors:
 		g.editor.selectedActor = nil
 		g.Toast("Nothing selected - a click on the floor places an actor")
@@ -205,11 +292,13 @@ func (g *Game) editorScroll(yoff float64) {
 	if yoff < 0 {
 		step = -1
 	}
+	if g.editor.mode.placesProps() {
+		g.selectProp(g.paletteIndex() + step)
+		return
+	}
 	switch g.editor.mode {
 	case ModeBlocks:
 		g.selectBlockSlot((slices.Index(editShapes, g.editor.shapeMethod) + step + len(editShapes)) % len(editShapes))
-	case ModeProps:
-		g.selectProp(g.editor.propIndex + step)
 	case ModeActors:
 		if len(g.editor.actors) == 0 {
 			return
@@ -224,16 +313,21 @@ func (g *Game) editorScroll(yoff float64) {
 // time, which is what makes the placement WYSIWYG: what is standing under the
 // crosshair is the thing a click leaves behind.
 func (g *Game) selectProp(index int) {
-	if len(g.editor.props) == 0 {
+	palette := g.palette()
+	if len(palette) == 0 {
+		g.clearGhost()
 		return
 	}
-	g.editor.propIndex = (index%len(g.editor.props) + len(g.editor.props)) % len(g.editor.props)
-	kind := g.editor.props[g.editor.propIndex]
+	index = (index%len(palette) + len(palette)) % len(palette)
+	g.editor.propIndex[g.editor.mode] = index
+	kind := palette[index]
 	switch {
 	case kind.torch:
 		g.startTorchPlacement()
 	case kind.sprite:
 		g.startSpritePlacement()
+	case kind.weapon != "":
+		g.startPickupPlacement(kind)
 	case kind.spriteKind != "":
 		g.startSpriteKindPlacement(kind.spriteKind)
 	default:
@@ -249,10 +343,39 @@ func (g *Game) selectProp(index int) {
 // being placed and the piece a click writes to the map file are always the same
 // one.
 func (g *Game) selectPropByID(id string) {
-	for index, kind := range g.editor.props {
-		if kind.scenery == id || kind.spriteKind == id {
-			g.setEditorMode(ModeProps)
+	for mode := ModeProps3D; mode <= ModeWeapons; mode++ {
+		for index, kind := range g.editor.props[mode] {
+			if kind.scenery == id || kind.spriteKind == id {
+				g.setEditorMode(mode)
+				g.selectProp(index)
+				return
+			}
+		}
+	}
+}
+
+// selectWeaponPickup is selectPropByID for the guns, which are told apart by two
+// things rather than one: which weapon, and whether it is the gun or its ammo.
+func (g *Game) selectWeaponPickup(id string, ammo bool) {
+	for index, kind := range g.editor.props[ModeWeapons] {
+		if kind.weapon == id && kind.ammo == ammo {
+			g.setEditorMode(ModeWeapons)
 			g.selectProp(index)
+			return
+		}
+	}
+}
+
+// selectActorByID puts a character on the actor tool by its folder name, the way
+// selectPropByID does for the things that are placed out of a palette. It goes
+// through the palette rather than round it, so what the tool says it will place
+// and what a click actually places are always the same one.
+func (g *Game) selectActorByID(id string) {
+	for index, entity := range g.editor.actors {
+		if entity.SpriteSheetName == id {
+			g.setEditorMode(ModeActors)
+			g.editor.actorIndex = index
+			g.Toast("Place: " + entity.Name)
 			return
 		}
 	}
@@ -265,6 +388,25 @@ func (g *Game) startSpritePlacement() {
 	g.clearGhost()
 	g.editor.gameObjectForSpawning = g.spawnEntity(mgl32.Vec3{}, g.decorationEntity(false))
 	g.editor.gameObjectForSpawning.Sprite().Tint = mgl32.Vec4{1, 1, 1, 0.5}
+}
+
+// startPickupPlacement puts a weapon or a box of its ammo on the crosshair. It
+// is the pickup itself, built the way a placed one is - see newPickupObject -
+// but never registered as one: a ghost the player could walk into and pocket is
+// a ghost that disappears the moment they step forward.
+func (g *Game) startPickupPlacement(kind propKind) {
+	g.clearGhost()
+	index, known := g.weaponByID[kind.weapon]
+	if !known {
+		return
+	}
+	ghost, sprite := g.newPickupObject(g.weapons[index], kind.ammo, mgl32.Vec3{})
+	if ghost == nil {
+		g.Toast(kind.label + " has no pickup art")
+		return
+	}
+	sprite.Tint = mgl32.Vec4{1, 1, 1, 0.5}
+	g.editor.gameObjectForSpawning = ghost
 }
 
 // startSpriteKindPlacement puts a folder's own picture on the crosshair, half
@@ -398,17 +540,19 @@ func (g *Game) placeProp() {
 	// A fresh ghost, because the one that was on the crosshair is now the
 	// piece standing on the floor... except for scenery, which spawned a
 	// separate solid copy - either way the crosshair gets a new one.
-	g.selectProp(g.editor.propIndex)
+	g.selectProp(g.paletteIndex())
 }
 
 // propEntity is the palette's current slot as the map format describes it.
 func (g *Game) propEntity() core.MapEntity {
-	kind := g.editor.props[g.editor.propIndex]
+	kind := g.palette()[g.paletteIndex()]
 	switch {
 	case kind.torch:
 		return core.MapEntity{Name: "Torch", MeshName: torchMeshName, Facing: propFacing(g.editor.facing)}
 	case kind.sprite:
 		return g.decorationEntity(true)
+	case kind.weapon != "":
+		return core.MapEntity{Name: kind.label, WeaponName: kind.weapon, WeaponAmmo: kind.ammo}
 	case kind.spriteKind != "":
 		return g.spriteKindEntity(kind.spriteKind, true)
 	}
@@ -634,15 +778,14 @@ func (g *Game) editorModeLine() string {
 // lay and the shape it would lay it in, the piece on the crosshair and how it
 // will land, the actor whose route is being drawn.
 func (g *Game) editorStateLine() string {
-	switch g.editor.mode {
-	case ModeProps:
+	if g.editor.mode.placesProps() {
 		placement := "free"
 		if g.editor.snapToGrid {
 			placement = "snap"
 		}
 		label := "nothing"
-		if len(g.editor.props) > 0 {
-			label = g.editor.props[g.editor.propIndex].label
+		if palette := g.palette(); len(palette) > 0 {
+			label = palette[g.paletteIndex()].label
 		}
 		line := fmt.Sprintf("%s   %s   facing %s", label, placement, facingNames[g.editor.facing])
 		// What the crosshair is on, when it is one of the things that carries
@@ -652,6 +795,8 @@ func (g *Game) editorStateLine() string {
 			line += "   |   " + status
 		}
 		return line
+	}
+	switch g.editor.mode {
 	case ModeActors:
 		if g.editor.actorIndex >= len(g.editor.actors) {
 			return "no actors installed"
@@ -665,21 +810,30 @@ func (g *Game) editorStateLine() string {
 	if g.editor.tool != EditorToolNone {
 		return "tool: " + g.editor.tool.String()
 	}
-	return map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode] + "   " + g.editor.shapeMethod.String()
+	line := map[bool]string{true: "ADD", false: "DEL"}[g.editor.addMode] + "   " + g.editor.shapeMethod.String()
+	if g.editor.aimInFront {
+		line += "   in front of you"
+	}
+	return line
 }
 
 // editorKeyLine is the mode's own keys. Only the mode's own: a legend that
 // listed all three modes' keys at once would be the menu this is here to avoid.
 func (g *Game) editorKeyLine() string {
 	tab := g.keyLabel(ActionEditorTabAction)
-	switch g.editor.mode {
-	case ModeProps:
-		return fmt.Sprintf("1-9/wheel piece   %s snap   %s turn   LMB place   RMB delete",
-			tab, g.keyLabel(ActionEditorRotate))
-	case ModeActors:
-		return fmt.Sprintf("1-9 kind   LMB place/select/waypoint   RMB undo point   %s deselect", tab)
+	pick := g.keyLabel(ActionEditorOpenPicker)
+	if g.editor.mode == ModeWeapons {
+		return fmt.Sprintf("1-9/wheel gun   %s browse   %s gun/ammo   LMB place   RMB delete", pick, tab)
 	}
-	return fmt.Sprintf("1-5 shape   6-8 dig/paint/fill   %s add/del   LMB build   RMB cancel", tab)
+	if g.editor.mode.placesProps() {
+		return fmt.Sprintf("1-9/wheel piece   %s browse   %s snap   %s turn   LMB place   RMB delete",
+			pick, tab, g.keyLabel(ActionEditorRotate))
+	}
+	switch g.editor.mode {
+	case ModeActors:
+		return fmt.Sprintf("1-9 kind   %s browse   LMB place/select/waypoint   RMB undo point   %s deselect", pick, tab)
+	}
+	return fmt.Sprintf("1-5 shape   6-8 dig/paint/fill   9 aim   %s blocks   %s add/del   LMB build   RMB cancel", pick, tab)
 }
 
 // keyLabel names the key an action is bound to. The legend is the whole
@@ -699,8 +853,14 @@ func (g *Game) keyLabel(action string) string {
 // tools, which is where the editor starts anyway.
 func editorModeByName(name string) EditorMode {
 	switch name {
-	case "props":
-		return ModeProps
+	case "props", "props3d", "3dprops":
+		return ModeProps3D
+	case "props2d", "2dprops", "sprites":
+		return ModeProps2D
+	case "pickups", "items":
+		return ModePickups
+	case "weapons":
+		return ModeWeapons
 	case "actors":
 		return ModeActors
 	}

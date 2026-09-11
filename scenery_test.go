@@ -21,6 +21,12 @@ func TestEverySceneryFolderLoadsAndHasItsMesh(t *testing.T) {
 	if len(library) == 0 {
 		t.Fatalf("no scenery in %s", meshDir)
 	}
+	// The imported models are a folder deep, one category each - see
+	// modelCategory in tools/importss - so a loader that reads only the top level
+	// finds the engine's own dozen and none of the ninety.
+	if _, ok := library["furniture/ss3d_16_couch"]; !ok {
+		t.Errorf("the couch is missing: scenery in a category folder is not being found")
+	}
 	for id, piece := range library {
 		if piece.Name == "" {
 			t.Errorf("%s has no name", id)

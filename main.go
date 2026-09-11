@@ -46,6 +46,7 @@ func main() {
 	shotPitch := flag.Float64("pitch", 0, "start looking this many degrees down, for a capture of something on the floor")
 	autoWalk := flag.Bool("walk", false, "hold the forward key down, for looking at anything that only happens while moving")
 	startEditor := flag.String("editor", "", "start in the map editor, in this mode: blocks, props or actors")
+	startPicker := flag.String("pick", "", "open the editor mode's own asset browser on this folder, so a capture can photograph it; \".\" for the top")
 	autoCycle := flag.Float64("cycle", 0, "switch to the next weapon every this many seconds, for walking the whole folder in one run")
 	width := flag.Int("width", 0, "window width, 0 for the default")
 	height := flag.Int("height", 0, "window height, 0 for the default")
@@ -111,6 +112,7 @@ func main() {
 		game.mapName = loadedMap
 		game.blocks = blocks
 		game.startEditorMode = *startEditor
+		game.startPickerDir = *startPicker
 		game.startTimeFactor = *timeFactor
 		game.startWeapon = *startWeapon
 		game.shot = shotRun{
@@ -422,6 +424,11 @@ type Game struct {
 	// F1 menu's Show OBBs without a menu to click. A wrong picking box is only
 	// ever obvious when it is drawn.
 	startOBBs bool
+	// startPickerDir is -pick: the folder to open the current mode's asset
+	// browser on once the editor is up, empty for not opening it at all. A
+	// capture takes no keystrokes, so a widget only reachable through a key is a
+	// widget no screenshot can ever be taken of.
+	startPickerDir string
 	// startEditorMode is -editor: which editor mode to boot into, empty for a
 	// normal run. It is here so a screenshot can be taken of the editor at all
 	// - see AGENTS.md, a capture takes no keystrokes.
@@ -441,6 +448,10 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 
 	g.SetupUIAtlas(eassets.Embedded.TextureAtlasFixed("ui_sheet.png", 16, 16))
 	g.SetupUIFont(eassets.Embedded.BitmapFont("quadratica.png", 8, 14, g.UIScale))
+	// The same glyphs again, on the CPU this time: the editor's asset browsers
+	// write the name of each thing into the picture of it. quads cannot read the
+	// font itself - it is baked into eassets, which imports quads.
+	g.setupTileLabelFont()
 
 	if g.startTimeFactor > 0 {
 		g.setTimeFactor(nearestTimeFactorIndex(g.startTimeFactor))
@@ -609,6 +620,9 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	if g.startEditorMode != "" {
 		g.toggleEditorMode()
 		g.setEditorMode(editorModeByName(g.startEditorMode))
+		if g.startPickerDir != "" {
+			g.openModePickerAt(g.startPickerDir)
+		}
 	}
 
 	g.HandleResize(g.WindowWidth, g.WindowHeight)
@@ -680,6 +694,13 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.lastAudioLog = nil
 	g.logCuesLoaded = false
 
+	// The level's own atlas, out of its own folder, before the blocks that
+	// index into it - and the block list kept beside it.
+	if err := g.UseMapAtlasIn(filepath.Join(mapDir, g.savedAs())); err != nil {
+		log.Printf("[map] %s keeps the atlas already loaded: %v", g.savedAs(), err)
+	}
+	g.loadBlocks()
+
 	// Load Map. The blocks came off disk or out of a generator before there was
 	// a window; this is where they become the scene's.
 	g.LoadVoxelMap(mapLoad, g.blocks)
@@ -719,7 +740,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	}
 
 	// Setup Collision Solver
-	g.physicsSystem = quads.NewCollisionSolver(g.solidAt, g.CubeMap.ContainsVec)
+	g.physicsSystem = quads.NewCollisionSolver(g.solidAt)
 	g.physicsSystem.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	g.physicsSystem.SetStepHeight(pmStepSize)
 	// Feet on the floor is the game; flying is the thing you switch on to build
@@ -1177,6 +1198,9 @@ type RaycastResult struct {
 	WorldPos  mgl32.Vec3
 	Relative  mgl32.Vec3
 	HitInfo   voxel.HitInfo3D
+	// OnTop is whether the object was hit on the lid of its box - a table top,
+	// a crate's upper face - which is somewhere to stand a smaller piece.
+	OnTop bool
 }
 
 func (r RaycastResult) WorldPosition() mgl32.Vec3 {
@@ -1189,8 +1213,11 @@ func (r RaycastResult) WorldPosition() mgl32.Vec3 {
 	return r.WorldPos
 }
 func (r RaycastResult) GroundPosition() (mgl32.Vec3, bool) {
-	if !r.HitInfo.Hit || r.HitObject != nil {
+	if !r.HitInfo.Hit {
 		return mgl32.Vec3{}, false
+	}
+	if r.HitObject != nil {
+		return r.WorldPos, r.OnTop
 	}
 	cwp := r.HitInfo.CollisionWorldPosition
 	//worldPos := mgl32.Vec3{cwp.X(), float32(math.Floor(float64(cwp.Y()))), cwp.Z()}
@@ -1211,6 +1238,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 	var hitObject *quads.GameObject
 	var worldPos mgl32.Vec3
 	var relativePos mgl32.Vec3
+	var onTop bool
 	hitInfo = voxel.DDARaycast(origin, direction, rayCastRange, func(x, y, z int32) (stopRay bool) {
 		if !g.CubeMap.Contains(int32(x), int32(y), int32(z)) {
 			return false // outside the map there is nothing to hit, keep going until the ray runs out
@@ -1241,6 +1269,7 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 			hitObject = nearestObj.GameObject()
 			worldPos = collisionWorldPos
 			relativePos = collisionWorldPos.Sub(nearestObj.Position())
+			onTop = onLid(nearestObj.OBB(g.Camera), collisionWorldPos)
 			return true
 		}
 		return g.CubeMap.IsSolidBlockAt(x, y, z)
@@ -1251,7 +1280,19 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 		WorldPos:  worldPos,
 		Relative:  relativePos,
 		HitInfo:   hitInfo,
+		OnTop:     onTop,
 	}
+}
+
+// onLid is whether a point where a ray entered this box lies on its top face.
+// The entry point sits on whichever face the ray came in through, so it is the
+// lid when its height in the box's own space is the box's top, give or take
+// float error - a hair of the box's height, which on a side face means the very
+// top edge, where standing a piece on the lid is what was meant anyway.
+func onLid(obb voxel.OBB, hit mgl32.Vec3) bool {
+	local := obb.Transform.Inv().Mul4x1(hit.Vec4(1)).Vec3()
+	height := obb.Max().Y() - obb.Min().Y()
+	return math.Abs(float64(obb.Max().Y()-local.Y())) <= float64(height)*1e-3
 }
 
 func (g *Game) Print(text string) {
@@ -1282,8 +1323,14 @@ func (g *Game) openCubeTextureMapper() {
 	guiWidth, guiHeight := g.GuiSize()
 	atlasPicker.HandleResize(guiWidth, guiHeight, g.UIScale)
 
+	// The mapper edits the brush's own sides in place, so what it was opened on
+	// is kept to tell whether closing it left a new block to put on the list.
+	before := designOf(g.editor.voxelBlock)
 	atlasPicker.SetOnClose(func() {
 		g.SetMouseCapture(true)
+		if after := designOf(g.editor.voxelBlock); after != before {
+			g.rememberBlock(after)
+		}
 	})
 	g.replaceWidgetStack(atlasPicker)
 }
@@ -1417,6 +1464,9 @@ func (g *Game) switchToMap(name string) {
 	}
 	g.clearGhost()
 	g.editor.selectedActor = nil
+	// The brush's slots index the level being left's atlas, so it starts over as
+	// the default block the editor opens with - see toggleEditorMode.
+	g.editor.voxelBlock = voxel.NewBlock(2)
 	g.mapName = name
 	g.blocks = blocks
 	g.mapLoad(result, true)

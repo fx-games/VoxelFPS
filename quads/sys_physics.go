@@ -14,7 +14,6 @@ type PhysicsSystem struct {
 	objectsOnGrid           map[core.Int3]map[*PhysicsComponent]bool
 	accelerationFromGravity mgl32.Vec3
 	isSolid                 func(x int32, y int32, z int32) bool
-	isInsideMap             func(pos mgl32.Vec3) bool
 	collisionPairsChecked   int
 	gravityEnabled          bool
 	colliderScratch         []LinkedAABB
@@ -45,10 +44,12 @@ func (c *PhysicsSystem) GravityEnabled() bool {
 	return c.gravityEnabled
 }
 
-func NewCollisionSolver(isSolid func(x int32, y int32, z int32) bool, isInsideMap func(pos mgl32.Vec3) bool) *PhysicsSystem {
+// NewCollisionSolver is a world whose only walls are the cells isSolid says
+// are. Past the edge of a level there are none: it is air, and whatever goes
+// out there falls or hovers like anywhere else.
+func NewCollisionSolver(isSolid func(x int32, y int32, z int32) bool) *PhysicsSystem {
 	return &PhysicsSystem{
 		isSolid:                 isSolid,
-		isInsideMap:             isInsideMap,
 		objectsOnGrid:           make(map[core.Int3]map[*PhysicsComponent]bool),
 		accelerationFromGravity: mgl32.Vec3{0, -9.8, 0},
 	}
@@ -156,14 +157,6 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 		obj := c.movingObjects[id]
 
 		if obj.IsDead(deltaTime) {
-			c.remove(id, obj)
-			continue
-		}
-
-		// Anything that made it out of the map is gone: it can only fall
-		// forever, and the collision grid has nothing to stop it with.
-		if !c.isInsideMap(obj.Position()) {
-			obj.GameObject().Kill()
 			c.remove(id, obj)
 			continue
 		}
@@ -346,6 +339,11 @@ func (c *PhysicsSystem) removeFromGrid(atPos mgl32.Vec3, obj *PhysicsComponent) 
 	forEachGridCell(obj.gridAABBAt(atPos), func(gridPos core.Int3) {
 		if c.objectsOnGrid[gridPos] != nil {
 			delete(c.objectsOnGrid[gridPos], obj)
+			// An empty cell goes too, or something falling off the level
+			// leaves a trail of them all the way down.
+			if len(c.objectsOnGrid[gridPos]) == 0 {
+				delete(c.objectsOnGrid, gridPos)
+			}
 		}
 	})
 }

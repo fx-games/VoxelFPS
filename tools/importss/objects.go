@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"path"
 
 	"github.com/inkyblackness/hacked/ss1/content/object"
 	"github.com/memmaker/goray/wep"
@@ -76,7 +77,7 @@ func (in *installer) installObjects() (int, error) {
 			continue
 		}
 		name := in.objectName(layout.triple)
-		id := in.folderFor(name, layout.triple)
+		id := path.Join(spriteCategory(layout.triple), in.folderFor(name, layout.triple))
 
 		grid := &sheet{}
 		row := grid.addAll(frames)
@@ -91,10 +92,13 @@ func (in *installer) installObjects() (int, error) {
 				"actor":  fmt.Sprintf("%d/%d/%d", layout.triple.Class, layout.triple.Subclass, layout.triple.Type),
 			},
 		}
-		if err := in.writeKind(id, kind, grid, 8, nil); err != nil {
+		wrote, err := in.writeKind(id, kind, grid, 8, nil)
+		if err != nil {
 			return written, fmt.Errorf("%s: %w", id, err)
 		}
-		written++
+		if wrote {
+			written++
+		}
 	}
 	return written, nil
 }

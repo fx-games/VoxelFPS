@@ -48,7 +48,7 @@
           7
         ],
         "MeshName": "",
-        "SpriteSheetName": "scientist",
+        "SpriteSheetName": "actors/humans/scientist",
         "SpriteSheetTileSize": {
           "X": 64,
           "Y": 64

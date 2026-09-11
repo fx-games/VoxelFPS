@@ -1,0 +1,21 @@
+# Guns on the floor: the check that a weapon placed in the editor is a weapon
+# again when the level is loaded. WEAPONS mode writes exactly these entities.
+size 24 6 24
+ambient 0.7 0.7 0.75 0.9
+ceiling 26 26 34
+floor 18 18 24
+fog 60 200
+
+block room 21 22 20
+fill room 0 0 0 23 5 23
+clear 1 1 1 22 4 22
+
+spawn 11.5 1.5 5.5 dir=0,1
+
+light 12.5 3 12.5 color=1,0.95,0.85 power=6 baked
+
+# --- one of each, the gun and its ammo side by side
+entity - at=8.5,1,10.5 weapon=bd_chaingun
+entity - at=10.5,1,10.5 weapon=bd_chaingun ammo=true
+entity - at=12.5,1,10.5 weapon=bd_rocket_launcher
+entity - at=14.5,1,10.5 weapon=bd_rocket_launcher ammo=true

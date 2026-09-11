@@ -8,9 +8,11 @@ import (
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
+	"image"
 	"log"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -99,8 +101,15 @@ type GlApplication struct {
 
 	colorBatch *glhf.SpriteBatch
 
-	shadowBuffer       *glhf.Frame
-	postFrameBuffer    *glhf.Frame
+	shadowBuffer    *glhf.Frame
+	postFrameBuffer *glhf.Frame
+	// thumbBuffer is where a model is drawn on its own for the editor's browser.
+	// One buffer for every preview: they are all the same size, and a folder of
+	// eighty models is eighty draws into it rather than eighty of it.
+	thumbBuffer *glhf.Frame
+	// ambient is what SetAmbientLight was last given, so a pass that has to
+	// change it - a preview, which is lit flat - can put the level's own back.
+	ambient            mgl32.Vec4
 	bloomBuffers       [2]*glhf.Frame
 	bloomShader        *glhf.Shader
 	bloomQuad          *glhf.VertexArray[glhf.GlFloat]
@@ -161,6 +170,9 @@ type GlApplication struct {
 	// of TexLibraryRoot and lands it in one of these.
 	MapTextures    *AtlasIndex
 	SpriteTextures *AtlasIndex
+	// templateMapAtlas is the atlas in assets/base, which no level draws with:
+	// it is what a level without an atlas of its own is given a copy of.
+	templateMapAtlas string
 
 	UIAtlas *glhf.TextureAtlasFixed
 	UIFont  BitmapFont
@@ -355,6 +367,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 
 		glApp.MapTextures = NewAtlasIndex(glApp.AtlasMap)
 		glApp.MapTextures.OnGrow(glApp.SetCubeAtlasGridSize)
+		glApp.templateMapAtlas = glApp.AtlasMap.SourceFile()
 		glApp.SpriteTextures = NewAtlasIndex(glApp.AtlasSprites)
 
 		glApp.screenQuad = PostQuad(glApp.postShader)
@@ -387,7 +400,8 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 		mainUbo.BindUBOTo(0)
 
 		//ubo.SetAttribute("fogRange", mgl32.Vec2{12, 99})
-		mainUbo.SetAttribute(UboGlobalLightColor, mgl32.Vec4{0.2, 0.2, 0.2, 1})
+		glApp.ambient = mgl32.Vec4{0.2, 0.2, 0.2, 1}
+		mainUbo.SetAttribute(UboGlobalLightColor, glApp.ambient)
 		mainUbo.SetAttribute(UboToneMapParams, mgl32.Vec2{DefaultExposure, DefaultGamma})
 		mainUbo.SetAttribute(UboShadowParams, mgl32.Vec2{DefaultShadowNormalOffset, DefaultShadowDepthBias})
 		mainUbo.End()
@@ -1352,8 +1366,9 @@ func (a *GlApplication) SceneSummary() string {
 // strength, that a surface gets no matter which lights reach it. Turning it down is
 // how a scene is made to show what its lights actually do.
 func (a *GlApplication) SetAmbientLight(colour mgl32.Vec3, strength float32) {
+	a.ambient = colour.Vec4(strength)
 	a.mainUbo.Begin()
-	a.mainUbo.SetAttribute(UboGlobalLightColor, colour.Vec4(strength))
+	a.mainUbo.SetAttribute(UboGlobalLightColor, a.ambient)
 	a.mainUbo.End()
 }
 
@@ -1538,6 +1553,68 @@ func (a *GlApplication) OpenTextureBrowser(dest *AtlasIndex) *GuiAtlasPicker {
 	picker.HandleResize(guiWidth, guiHeight, a.UIScale)
 	return picker
 }
+
+// OpenAssetBrowser is the "pick a thing out of a folder of things" widget: a
+// tree of assets browsed the way the texture library is, with each cell a picture
+// of the asset in it rather than a folder icon. Choosing one is choosing its
+// folder, so the index a caller gets back is turned into a name through the
+// browser it is handed.
+//
+// isAsset and tile are the caller's, because what makes a folder an asset is the
+// caller's business and so is what one looks like: a model is a scenery.json
+// beside a mesh and its picture is a render of it, a sprite kind is a sprite.json
+// beside a sheet and its picture is one frame off that sheet, a weapon is a
+// weapon.json and its picture is the icon it lies on the floor as.
+// startDir is the folder to open at, or "" for wherever this root was left last.
+func (a *GlApplication) OpenAssetBrowser(root, startDir string, isAsset func(dir string) bool, tile func(dir string, w, h int) *image.RGBA) (*GuiAtlasPicker, *TexBrowser) {
+	browser := &TexBrowser{
+		root:       root,
+		tileW:      ThumbSize,
+		tileH:      ThumbSize,
+		setupBatch: a.SetupSpriteBatch,
+		dropBatch:  a.DropSpriteBatch,
+		pick:       func(p string, isDir bool) bool { return isDir && isAsset(root+"/"+p) },
+		tile:       func(p string, w, h int) *image.RGBA { return tile(root+"/"+p, w, h) },
+	}
+	if startDir == "" {
+		startDir = lastBrowsedDir[root]
+	}
+	browser.Open(path.Clean("/" + startDir)[1:]) // no leading slash, and "." is the root
+
+	picker := NewGuiAtlasPicker(a.UiContext(), nil)
+	picker.SetBrowser(browser, nil, func(s string) { a.Toast(s) })
+	guiWidth, guiHeight := a.GuiSize()
+	picker.HandleResize(guiWidth, guiHeight, a.UIScale)
+	return picker, browser
+}
+
+// OpenListBrowser is OpenAssetBrowser over a list the caller keeps rather than
+// a folder on disk: one cell per name, drawn by tile, and the index a click
+// hands back is the position in that list. title is the breadcrumb.
+func (a *GlApplication) OpenListBrowser(title string, names []string, tile func(index, w, h int) *image.RGBA) *GuiAtlasPicker {
+	browser := &TexBrowser{
+		root:       title,
+		tileW:      ThumbSize,
+		tileH:      ThumbSize,
+		setupBatch: a.SetupSpriteBatch,
+		dropBatch:  a.DropSpriteBatch,
+		tile: func(p string, w, h int) *image.RGBA {
+			index, _ := strconv.Atoi(p)
+			return tile(index, w, h)
+		},
+	}
+	for index, name := range names {
+		browser.entries = append(browser.entries, TexEntry{Path: strconv.Itoa(index), Name: name})
+	}
+	browser.upload()
+
+	picker := NewGuiAtlasPicker(a.UiContext(), nil)
+	picker.SetBrowser(browser, nil, func(s string) { a.Toast(s) })
+	guiWidth, guiHeight := a.GuiSize()
+	picker.HandleResize(guiWidth, guiHeight, a.UIScale)
+	return picker
+}
+
 func (a *GlApplication) OpenConfigMenu() *GuiConfig {
 	return NewGuiConfig(a.UiContext())
 }
@@ -1621,6 +1698,47 @@ func (a *GlApplication) setMainUBOCam(pos, dir mgl32.Vec3, projectionView mgl32.
 	a.mainUbo.SetAttribute(UboCamPosition, pos.Vec4(1))
 	a.mainUbo.SetAttribute(UboCamProjectionView, projectionView)
 	a.mainUbo.End()
+}
+
+// UseMapAtlasIn makes the atlas in a level's folder the one its voxels draw
+// with and the editor picks textures into, so every level bakes its own and none
+// renumbers another's. A folder without one is given a copy of the template
+// first - its .paths record too - which is also how a level that indexed into
+// the old shared atlas keeps drawing what it drew. The same file again is left
+// as it is: a hot reload must not drop textures picked since the last save.
+func (a *GlApplication) UseMapAtlasIn(dir string) error {
+	file := path.Join(filepath.ToSlash(dir), path.Base(a.templateMapAtlas))
+	if a.AtlasMap.SourceFile() == file {
+		return nil
+	}
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		if err := copyFile(a.templateMapAtlas, file); err != nil {
+			return err
+		}
+		if err := copyFile(pathsFile(a.templateMapAtlas), pathsFile(file)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	tileW, tileH := a.AtlasMap.GetAtlasItemSize()
+	a.DropSpriteBatch(a.AtlasMap.GetSpriteBatch())
+	a.AtlasMap = Disk.TextureAtlasFixed(file, tileW, tileH)
+	a.AtlasMap.SetGuiShader(a.guiShader)
+	a.AtlasMap.SetMaxSprites(10)
+	a.spriteBatches = append(a.spriteBatches, a.AtlasMap.GetSpriteBatch())
+	a.MapTextures = NewAtlasIndex(a.AtlasMap)
+	a.MapTextures.OnGrow(a.SetCubeAtlasGridSize)
+	return nil
+}
+
+func copyFile(from, to string) error {
+	content, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(to, content, 0o644)
 }
 
 // LoadVoxelMap takes the level's blocks - read off disk or painted by a

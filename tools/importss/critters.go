@@ -30,6 +30,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"path"
 
 	"github.com/inkyblackness/hacked/ss1/content/object"
 	"github.com/inkyblackness/hacked/ss1/resource"
@@ -244,11 +245,14 @@ func (in *installer) installCritters() (int, error) {
 			"death":  int(c.generic[critterDeathSound]),
 			"hurt":   int(c.generic[critterHurtSound]),
 		}
-		id := in.folderFor(c.name, c.triple)
-		if err := in.writeKind(id, kind, grid, 8, cues); err != nil {
+		id := path.Join(spriteCategory(c.triple), in.folderFor(c.name, c.triple))
+		wrote, err := in.writeKind(id, kind, grid, 8, cues)
+		if err != nil {
 			return written, fmt.Errorf("%s: %w", id, err)
 		}
-		written++
+		if wrote {
+			written++
+		}
 	}
 	return written, nil
 }

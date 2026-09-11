@@ -2,7 +2,13 @@ package main
 
 import (
 	"fmt"
+	"math"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
 
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
@@ -10,40 +16,32 @@ import (
 	"github.com/memmaker/goray/quads/voxel"
 )
 
-// openSceneryMenu is the placement half of the two folders a prop can come out
-// of: the models under assets/meshes and the pictures under assets/sprites.
-// Whatever is in them is in this menu, without a line of Go per piece. Picking
-// one puts a ghost of it on the crosshair, and a left click drops it - the same
-// ghost the torch rides.
-//
-// It is a menu rather than only the number row because the row is ten keys and
-// the folders now hold several hundred pieces: importing two DOS games' worth
-// of scenery turned "wheel to the piece you want" into a minute of scrolling.
+// openSceneryMenu browses assets/meshes and puts the model that is clicked on
+// the crosshair, where a left click drops it - the same ghost the torch rides.
+// It is the 3D prop tool's own picker, reached from the menu; the placement key
+// opens whichever picker the current mode has - see openModePicker.
 func (g *Game) openSceneryMenu() {
-	previousMouseState := g.setupModal()
-	configMenu := g.OpenConfigMenu()
+	g.setEditorMode(ModeProps3D)
+	g.openModePicker()
+}
 
-	var options []quads.GuiOption
-	place := func(id, name string) {
-		options = append(options, quads.NewGuiOptionAction(name, func() {
-			g.captureMouse(previousMouseState)
-			g.selectPropByID(id)
-			g.popFromWidgetStack()
-		}))
-	}
-	for _, id := range g.sceneryIDs() {
-		place(id, g.scenery[id].Name)
-	}
-	for _, id := range g.spriteKindIDs() {
-		if kind := g.spriteKinds[id]; !kind.Actor {
-			place(id, kind.Name)
-		}
-	}
-	configMenu.SetOptions(options)
-	guiWidth, guiHeight := g.GuiSize()
-	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
+// openSpriteMenu is the flat decorations under assets/sprites/props - a barrel, a
+// jet of steam, a corpse - and openPickupMenu the things under items/ that the
+// player walks over and takes. Each switches to the tool that places them and
+// opens that tool's browser, which is the same thing the placement key does.
+func (g *Game) openSpriteMenu() {
+	g.setEditorMode(ModeProps2D)
+	g.openModePicker()
+}
 
-	g.pushToWidgetStack(configMenu)
+func (g *Game) openPickupMenu() {
+	g.setEditorMode(ModePickups)
+	g.openModePicker()
+}
+
+func (g *Game) openWeaponMenu() {
+	g.setEditorMode(ModeWeapons)
+	g.openModePicker()
 }
 
 // startSceneryPlacement puts a piece on the cursor. The ghost is not solid: a
@@ -53,28 +51,12 @@ func (g *Game) startSceneryPlacement(id string) {
 	g.editor.gameObjectForSpawning = g.spawnScenery(id, mgl32.Vec3{}, false)
 }
 
-// openActorMenu is the same for the characters: every folder under
-// assets/sprites that says it is an actor, by name. Picking one switches to the
+// openActorMenu is the same for the characters: the folders under
+// assets/sprites/actors, browsed by their pictures. Picking one switches to the
 // actor tool with that kind selected, which is what a click then places.
 func (g *Game) openActorMenu() {
-	previousMouseState := g.setupModal()
-	configMenu := g.OpenConfigMenu()
-
-	var options []quads.GuiOption
-	for index, entity := range g.editor.actors {
-		options = append(options, quads.NewGuiOptionAction(entity.Name, func() {
-			g.captureMouse(previousMouseState)
-			g.setEditorMode(ModeActors)
-			g.editor.actorIndex = index
-			g.Toast("Place: " + entity.Name)
-			g.popFromWidgetStack()
-		}))
-	}
-	configMenu.SetOptions(options)
-	guiWidth, guiHeight := g.GuiSize()
-	configMenu.HandleResize(guiWidth, guiHeight, g.UIScale)
-
-	g.pushToWidgetStack(configMenu)
+	g.setEditorMode(ModeActors)
+	g.openModePicker()
 }
 
 func (g *Game) openVoxelEditMenu() {
@@ -104,10 +86,14 @@ func (g *Game) openVoxelEditMenu() {
 			})
 		}),
 		quads.NewGuiOptionAction("Choose Decoration Texture", g.changeDecorationTexture),
-		quads.NewGuiOptionAction("Place Scenery", g.openSceneryMenu),
+		quads.NewGuiOptionAction("Place 3D Prop", g.openSceneryMenu),
+		quads.NewGuiOptionAction("Place 2D Prop", g.openSpriteMenu),
+		quads.NewGuiOptionAction("Place Pickup", g.openPickupMenu),
+		quads.NewGuiOptionAction("Place Weapon", g.openWeaponMenu),
 		quads.NewGuiOptionAction("Place Actor", g.openActorMenu),
 		quads.NewGuiOptionAction("Place Torches", func() {
 			g.captureMouse(previousMouseState)
+			g.setEditorMode(ModeProps3D)
 			g.selectProp(torchPaletteSlot)
 			g.popFromWidgetStack()
 		}),
@@ -117,6 +103,11 @@ func (g *Game) openVoxelEditMenu() {
 		}),
 		quads.NewGuiOptionSubmenu("Load Map", func() {
 			g.pushConfigSubmenu(g.mapOptions())
+		}),
+		quads.NewGuiOptionAction("New Map", func() {
+			g.captureMouse(previousMouseState)
+			g.popFromWidgetStack()
+			g.openNewMapPanel()
 		}),
 		quads.NewGuiOptionAction("Clear Map", func() {
 			g.CubeMap.ClearAllChunks()
@@ -143,11 +134,26 @@ func (g *Game) openVoxelEditMenu() {
 // atlas holds copies, and this is where the copies that nothing points at any
 // more are dropped.
 func (g *Game) saveMap() error {
-	remap, bakeErr := g.MapTextures.Bake(g.CubeMap.UsedTextureIndices())
+	// The block list and the block in the brush point at slots too, and a bake
+	// that dropped them would leave both painting with whatever moved in.
+	designs := g.editor.blocks
+	if g.editor.voxelBlock != nil {
+		designs = append(slices.Clone(designs), designOf(g.editor.voxelBlock))
+	}
+	remap, bakeErr := g.MapTextures.Bake(keptThroughBake(g.CubeMap.UsedTextureIndices(), designs))
 	if bakeErr != nil {
 		return bakeErr
 	}
 	g.CubeMap.RemapTextures(remap)
+	remapDesigns(g.editor.blocks, remap)
+	if g.editor.voxelBlock != nil {
+		brush := []blockDesign{designOf(g.editor.voxelBlock)}
+		remapDesigns(brush, remap)
+		g.editor.voxelBlock = brush[0].block()
+	}
+	if err := g.saveBlocks(); err != nil {
+		return err
+	}
 	if err := g.CubeMap.SaveToDisk(g.voxelFile()); err != nil {
 		return err
 	}
@@ -157,6 +163,60 @@ func (g *Game) saveMap() error {
 		return nil
 	}
 	return saveJSONMap(mapPathFor(g.mapName), g.mapWithPlacedEntities())
+}
+
+// openNewMapPanel asks for a name and starts a level under it - see createMap -
+// then goes there. A name that will not do says why and stays open.
+func (g *Game) openNewMapPanel() {
+	typed, problem := "", ""
+	g.openPanel(func() string {
+		return "NEW MAP\n\n" + typed + "_\n\n" + problem + "TYPE A NAME   ENTER creates   ESC cancels"
+	}, func(key glfw.Key, mods glfw.ModifierKey) bool {
+		switch character, typedOne := typedRune(key, mods); {
+		case key == glfw.KeyEnter || key == glfw.KeyKPEnter:
+			if err := createMap(typed, g.mapSource); err != nil {
+				problem = err.Error() + "\n\n"
+				return false
+			}
+			g.switchToMap(typed)
+			return true
+		case key == glfw.KeyBackspace && len(typed) > 0:
+			typed = typed[:len(typed)-1]
+		case typedOne:
+			typed += string(character)
+		}
+		return false
+	})
+}
+
+// mapNamePattern is what a level may be called: it becomes a folder name, so
+// nothing that could climb out of assets/maps or trip up a filesystem.
+var mapNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// createMap starts a level called name on disk: its folder, a floor across it
+// with the player standing in the middle, and the look of the level it was made
+// from - sky, fog, ambient light - without anything that stood in that one. It
+// refuses a name already taken, so a slip on the keyboard never writes over a
+// level. The atlas is not made here: loading the level gives it one.
+func createMap(name string, look core.MapLoadResult) error {
+	if !mapNamePattern.MatchString(name) {
+		return fmt.Errorf("%q will not do: letters, digits, - and _ only", name)
+	}
+	if _, err := os.Stat(filepath.Join(mapDir, name)); err == nil {
+		return fmt.Errorf("there is already a map called %s", name)
+	}
+	if err := os.MkdirAll(filepath.Join(mapDir, name), 0o755); err != nil {
+		return err
+	}
+	blocks := newLevel(defaultLevelSize)
+	blocks.SetFloorAtHeight(0, voxel.NewBlock(2)) // the default brush, see switchToMap
+	if err := blocks.SaveToDisk(voxelPathFor(name)); err != nil {
+		return err
+	}
+	look.PlayerSpawn = mgl32.Vec3{float32(defaultLevelSize.X) / 2, 1, float32(defaultLevelSize.Z) / 2}
+	look.PlayerDir = mgl32.Vec2{1, 0}
+	look.Entities, look.Lights, look.Panes, look.Station = nil, nil, nil, nil
+	return saveJSONMap(mapPathFor(name), look)
 }
 
 // voxelFile is where this level's blocks live. The generated stress rig has no
@@ -196,6 +256,8 @@ type Editor struct {
 	// mid-way through - the brush dragging it out.
 	voxelBlock *voxel.Block
 	voxelBrush VoxelBrush
+	// blocks is the list the block browser shows - see edit_blocks.go.
+	blocks []blockDesign
 
 	// The cells the preview ghosts and the next click would commit.
 	voxelSelection []voxel.Int3
@@ -215,14 +277,21 @@ type Editor struct {
 	addMode      bool
 	shapeMethod  EditShape
 	pendingStart *voxel.Int3
+	// aimInFront is the number row's 9: every shape aims at the cell next to
+	// the player instead of at what the crosshair is on - see cellInFront.
+	aimInFront bool
 
-	// The prop mode's state: the placement palette built from assets/meshes at
-	// startup, which slot of it is on the crosshair, whether a click lands the
-	// piece on the tile's centre or exactly where the ray met the floor, how
-	// many quarter turns it has been turned, and which sprite the flat
-	// decorations are currently showing.
-	props         []propKind
-	propIndex     int
+	// The placement modes' state: a palette per mode, built at startup from the
+	// folder that mode places out of, and which slot of each is on the
+	// crosshair. One palette per mode rather than one for all four, because a
+	// wheel that walks a thousand pieces is a wheel that never arrives - see
+	// EditorMode.placesProps.
+	//
+	// Then: whether a click lands the piece on the tile's centre or exactly
+	// where the ray met the floor, how many quarter turns it has been turned,
+	// and which sprite the flat decorations are currently showing.
+	props         [editorModeCount][]propKind
+	propIndex     [editorModeCount]int
 	snapToGrid    bool
 	facing        int
 	spriteTexture int
@@ -318,6 +387,7 @@ func (g *Game) toggleSpawnMode() {
 		g.clearGhost()
 		return
 	}
+	g.setEditorMode(ModeProps2D)
 	g.selectProp(spritePaletteSlot)
 }
 
@@ -400,6 +470,9 @@ func editorBrushFor(shape EditShape) VoxelBrush {
 // before whatever the crosshair hit while ADDing, the solid cell it hit while
 // DELeting.
 func (g *Game) editorAimCell() (voxel.Int3, bool) {
+	if g.editor.aimInFront {
+		return cellInFront(g.Camera.GetPosition(), g.Camera.GetForward(), g.player.Physics().AABB()), true
+	}
 	if g.lastHitResult == nil || !g.lastHitResult.HitInfo.Hit || g.lastHitResult.HitObject != nil {
 		return voxel.Int3{}, false
 	}
@@ -407,6 +480,42 @@ func (g *Game) editorAimCell() (voxel.Int3, bool) {
 		return g.lastHitResult.HitInfo.PreviousGridPosition, true
 	}
 	return g.lastHitResult.HitInfo.CollisionGridPosition, true
+}
+
+// cellInFront is the voxel next to the eye's along whichever axis the view
+// points along most - ahead, or above or below when looking steeply - so a
+// structure can be started in empty space, where the crosshair has nothing to
+// land on. It steps on past any cell the player's body is in: a block placed
+// there would swallow them.
+func cellInFront(eye, forward mgl32.Vec3, body voxel.AABB) voxel.Int3 {
+	axis := 0
+	for i := 1; i < 3; i++ {
+		if math.Abs(float64(forward[i])) > math.Abs(float64(forward[axis])) {
+			axis = i
+		}
+	}
+	var step [3]int32
+	step[axis] = 1
+	if forward[axis] < 0 {
+		step[axis] = -1
+	}
+	cell := voxel.PositionToGridInt3(eye)
+	for {
+		cell = voxel.Int3{X: cell.X + step[0], Y: cell.Y + step[1], Z: cell.Z + step[2]}
+		if !overlapsCell(body, cell) {
+			return cell
+		}
+	}
+}
+
+func overlapsCell(box voxel.AABB, cell voxel.Int3) bool {
+	corner := [3]float32{float32(cell.X), float32(cell.Y), float32(cell.Z)}
+	for i := range corner {
+		if box.Max()[i] <= corner[i] || box.Min()[i] >= corner[i]+1 {
+			return false
+		}
+	}
+	return true
 }
 
 // stampAround is the method 5 shape: a 3x3x3 block of cells centered on aim.
@@ -432,10 +541,11 @@ func (g *Game) updateEditorPreview() {
 	// the piece itself, standing where it would land - and the actor tools use
 	// the same cubes for the selected actor's route instead.
 	switch g.editor.mode {
-	case ModeProps:
-		return
 	case ModeActors:
 		g.drawActorPath()
+		return
+	}
+	if g.editor.mode.placesProps() {
 		return
 	}
 	aim, hit := g.editorAimCell()

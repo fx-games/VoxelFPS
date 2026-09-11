@@ -33,7 +33,7 @@
           0
         ],
         "MeshName": "",
-        "SpriteSheetName": "bs_genetic_guard",
+        "SpriteSheetName": "actors/mutants/bs_genetic_guard",
         "SpriteSheetTileSize": {
           "X": 64,
           "Y": 64
@@ -74,7 +74,7 @@
           56
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_avian_mut",
+        "SpriteSheetName": "actors/mutants/ss_avian_mut",
         "SpriteSheetTileSize": {
           "X": 140,
           "Y": 86
@@ -108,7 +108,7 @@
           0
         ],
         "MeshName": "",
-        "SpriteSheetName": "bs_crate_1",
+        "SpriteSheetName": "props/containers/bs_crate_1",
         "SpriteSheetTileSize": {
           "X": 64,
           "Y": 64
@@ -142,7 +142,7 @@
           0
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_1st_aid_kit",
+        "SpriteSheetName": "items/supplies/ss_1st_aid_kit",
         "SpriteSheetTileSize": {
           "X": 30,
           "Y": 10
@@ -176,7 +176,7 @@
           0
         ],
         "MeshName": "",
-        "SpriteSheetName": "bs_ficus_tree",
+        "SpriteSheetName": "props/nature/bs_ficus_tree",
         "SpriteSheetTileSize": {
           "X": 64,
           "Y": 64
@@ -217,7 +217,7 @@
           7
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_corpse1",
+        "SpriteSheetName": "props/corpses/ss_corpse1",
         "SpriteSheetTileSize": {
           "X": 65,
           "Y": 25

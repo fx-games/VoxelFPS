@@ -33,7 +33,7 @@ func stairsMap(t *testing.T) (blocks *voxel.Map, staircaseAt mgl32.Vec3) {
 func walkUpTheStairs(t *testing.T, stepHeight float32) (end mgl32.Vec3, staircaseAt mgl32.Vec3) {
 	t.Helper()
 	blocks, staircaseAt := stairsMap(t)
-	system := quads.NewCollisionSolver(blocks.IsSolidBlockAt, blocks.ContainsVec)
+	system := quads.NewCollisionSolver(blocks.IsSolidBlockAt)
 	system.SetGravityEnabled(true)
 	system.SetGravity(mgl32.Vec3{0, -q3Gravity, 0})
 	system.SetStepHeight(stepHeight)

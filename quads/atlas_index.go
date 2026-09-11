@@ -116,6 +116,17 @@ func (a *AtlasIndex) SourcePath(index int) string {
 	return a.paths[index]
 }
 
+// Tile is one slot's pixels, for drawing a picture of something built out of
+// it. A slot past the end of the sheet is an empty tile rather than a panic.
+func (a *AtlasIndex) Tile(slot int) image.Image {
+	tileW, tileH := a.Atlas.GetAtlasItemSize()
+	rect := tileRect(slot, a.Atlas.GridWidth(), tileW, tileH)
+	if slot < 0 || !rect.In(a.sheet.Bounds()) {
+		return image.NewRGBA(image.Rect(0, 0, tileW, tileH))
+	}
+	return a.sheet.SubImage(rect)
+}
+
 // Import puts a library texture in the atlas and returns its slot, reusing the one
 // it already has if it is in there. libPath is relative to TexLibraryRoot.
 func (a *AtlasIndex) Import(libPath string) (int, error) {

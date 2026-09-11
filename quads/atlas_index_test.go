@@ -118,7 +118,8 @@ func TestBrowsingASubdirectoryKeepsPathsResolvable(t *testing.T) {
 		}
 	}
 
-	rootEntries := readTexDir(root, "")
+	browser := &TexBrowser{root: root}
+	rootEntries := browser.readDir("")
 	if got := names(rootEntries); !slices.Equal(got, []string{"Space", "TOP.png"}) {
 		t.Fatalf("root listing: got %v, want the folder first and the .txt left out", got)
 	}
@@ -126,7 +127,7 @@ func TestBrowsingASubdirectoryKeepsPathsResolvable(t *testing.T) {
 		t.Fatalf("folder cell: got %+v", rootEntries[0])
 	}
 
-	nested := readTexDir(root, "Space/blue")
+	nested := browser.readDir("Space/blue")
 	if got := names(nested); !slices.Equal(got, []string{"..", "WALL_1A.PNG"}) {
 		t.Fatalf("nested listing: got %v", got)
 	}
@@ -141,7 +142,7 @@ func TestBrowsingASubdirectoryKeepsPathsResolvable(t *testing.T) {
 	}
 
 	// One level up from a top-level folder is the root, not "." next to it.
-	if up := readTexDir(root, "Space")[0]; up.Path != "" {
+	if up := browser.readDir("Space")[0]; up.Path != "" {
 		t.Errorf("the .. row out of a top-level folder should be the root, got %q", up.Path)
 	}
 }

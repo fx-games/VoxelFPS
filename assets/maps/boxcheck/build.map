@@ -8,9 +8,9 @@ fill hall 0 0 0 19 3 15
 clear 1 1 1 18 2 14
 spawn 10.0 1 4.0 dir=0,1
 light 10 2 9 color=1,1,1 power=10 baked
-entity - at=6,1.0,9 sprite=bs_genetic_guard passthrough=true
-entity - at=7.6,1.0,9 sprite=ss_avian_mut passthrough=true
-entity - at=9.2,1.0,9 sprite=bs_crate_1 passthrough=true
-entity - at=10.8,1.0,9 sprite=ss_1st_aid_kit passthrough=true
-entity - at=12.4,1.0,9 sprite=bs_ficus_tree passthrough=true
-entity - at=14,1.0,9 sprite=ss_corpse1 passthrough=true
+entity - at=6,1.0,9 sprite=actors/mutants/bs_genetic_guard passthrough=true
+entity - at=7.6,1.0,9 sprite=actors/mutants/ss_avian_mut passthrough=true
+entity - at=9.2,1.0,9 sprite=props/containers/bs_crate_1 passthrough=true
+entity - at=10.8,1.0,9 sprite=items/supplies/ss_1st_aid_kit passthrough=true
+entity - at=12.4,1.0,9 sprite=props/nature/bs_ficus_tree passthrough=true
+entity - at=14,1.0,9 sprite=props/corpses/ss_corpse1 passthrough=true

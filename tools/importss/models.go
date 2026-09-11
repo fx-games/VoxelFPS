@@ -18,6 +18,7 @@ import (
 	"image/draw"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 
 	"github.com/inkyblackness/hacked/ss1/content/object"
@@ -50,14 +51,27 @@ const (
 	atlasHeight   = atlasTexArea + swatchRows*swatchSize
 )
 
-// modelScale is how big one of these is in voxels. The models are authored in
-// a space about two units across, and a crate should be about one voxel.
+// modelScale is how many voxels one unit of a model's own space is.
+//
+// A model is drawn by the same g3 pipeline as everything else in the station
+// and in the same world units: its vertices are fix 16.16 (see readFixed), and
+// one of those units is one map square - obj_coord_from_fix in map.h is a
+// shift of eight off a coordinate whose top byte is the square, and
+// gameobj.c's _o_rad divides physics_xr by the 96 radius units a square has.
+// A map square is a voxel here, so the number is one.
+//
+// It was two, and that is what made every piece of the station's furniture
+// twice the size it should be: a chair 2.3 metres tall, a couch as tall as the
+// mutant standing next to it. The same trace fixes both imports at once - a
+// sprite pixel is a ninety-sixth of a unit (pixelsPerVoxel in install.go) and
+// a model unit is one - so 96 pixels of art, one model unit and one voxel are
+// all the same length, and the sprites and the models cannot drift apart.
 //
 // ponytail: one number for every model. The real per-object size is PhysicsXR
 // and PhysicsZ in the common properties, in units nothing here shares; read
 // those and convert if a particular piece ever has to be a size its own
 // geometry does not imply.
-const modelScale = 2.0
+const modelScale = 1.0
 
 // installModels writes a folder per model: the glTF, the shared picture, and a
 // scenery.json that makes it a piece the editor can place.
@@ -71,7 +85,7 @@ func (in *installer) installModels() (int, error) {
 		return 0, err
 	}
 	atlasPNG := pngBytes(atlas)
-	names := in.modelNames()
+	names, triples := in.modelNames()
 
 	written := 0
 	for _, id := range reader.IDs() {
@@ -102,6 +116,8 @@ func (in *installer) installModels() (int, error) {
 			folder = fmt.Sprintf("ss3d_%02d_%s", index, slug(name))
 		}
 		in.taken[folder] = true
+		triple, named := triples[index]
+		folder = path.Join(modelCategory(triple, named), folder)
 
 		if err := writeModelFolder(folder, name, model, atlasPNG); err != nil {
 			return written, fmt.Errorf("%s: %w", folder, err)
@@ -122,8 +138,9 @@ func (in *installer) installModels() (int, error) {
 //
 // A mesh two objects share keeps the first name, which is why there is a DATA
 // BOLT and not a DRILL BIT.
-func (in *installer) modelNames() map[int]string {
+func (in *installer) modelNames() (map[int]string, map[int]object.Triple) {
 	names := map[int]string{}
+	triples := map[int]object.Triple{}
 	in.properties.Iterate(func(triple object.Triple, prop *object.Properties) bool {
 		if prop.Common.RenderType != object.RenderTypeTextPoly {
 			return true
@@ -131,11 +148,64 @@ func (in *installer) modelNames() map[int]string {
 		index := int(prop.Common.MfdOrMeshID)
 		if _, taken := names[index]; !taken {
 			names[index] = in.objectName(triple)
+			triples[index] = triple
 		}
 		return true
 	})
-	return names
+	return names, triples
 }
+
+// modelCategory is the folder a model is filed under, out of the class and
+// subclass of the object drawn as it. The property table is the game's own
+// taxonomy of its furniture and it is already the answer: subclass 0 of the
+// decorations is the electronics, subclass 1 the furniture, and so on down to
+// the cyberspace set, which is three whole classes rather than a subclass.
+// Sorting eighty models by hand would be the same list, guessed at.
+//
+// A folder rather than a flat eighty because the editor browses this directory:
+// nine chairs and desks under "furniture" is a page you can look at, and eighty
+// models named after their resource number is not.
+func modelCategory(triple object.Triple, named bool) string {
+	if !named {
+		// Seventeen models are drawn by no object in the table. Whatever they
+		// were for, nothing in the game reaches them, and guessing a category
+		// off the resource number next door files half of them wrong - the
+		// three after the cyberspace panels are cyberspace geometry, not panels.
+		return "unused"
+	}
+	switch {
+	case triple.Class == decorationClass:
+		switch triple.Subclass {
+		case 0:
+			return "electronics"
+		case 1:
+			return "furniture"
+		case 4:
+			return "medical"
+		case 5:
+			return "lab"
+		}
+		// Subclass 6 is the rocks and 7 the fixtures - boulders, walls, rails
+		// and a pillar. Both are the shape of the room rather than something
+		// standing in it.
+		return "structure"
+	case triple.Class == panelClass:
+		return "terminals"
+	}
+	// What is left is classes 2, 8 and 14 - the projectiles, the cyberspace
+	// items and the cyberspace critters - and every one of them is a model that
+	// only ever appears inside the cyberspace levels.
+	return "cyberspace"
+}
+
+// The two object classes the models are sorted by name. The rest are only
+// reached by the default in modelCategory, which is why they have no constant.
+const (
+	// decorationClass is class seven, the furniture and fittings of the station.
+	decorationClass = object.Class(7)
+	// panelClass is class nine: the terminals and readouts mounted on walls.
+	panelClass = object.Class(9)
+)
 
 // modelAtlas builds the one picture every model is drawn with.
 func (in *installer) modelAtlas() (image.Image, error) {
@@ -310,7 +380,9 @@ func writeModelFolder(folder, name string, model *model3D, atlasPNG []byte) erro
 		}},
 	})
 	doc.Nodes = append(doc.Nodes, &gltf.Node{
-		Name: folder, Mesh: gltf.Index(0),
+		// The leaf, not the category folder in front of it: this names the node
+		// inside the file, and it is the model that is named, not where it is filed.
+		Name: path.Base(folder), Mesh: gltf.Index(0),
 		Rotation: [4]float64{0, 0, 0, 1}, Scale: [3]float64{1, 1, 1},
 	})
 	doc.Scenes[0].Nodes = []int{0}

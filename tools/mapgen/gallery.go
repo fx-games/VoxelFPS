@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -155,33 +156,44 @@ func writeGallery() error {
 // galleryKinds sorts every installed sprite folder into the three bays it can
 // go in: scenery, a character that does not fight, and one that does.
 func galleryKinds() (props, friendly, hostile []string, err error) {
-	entries, err := os.ReadDir(gallerySpriteDir)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(gallerySpriteDir, entry.Name(), "sprite.json"))
+	// A kind is filed under a role and a category, so this walks rather than
+	// lists; what it collects is the name a map entity takes, which is the path
+	// below assets/sprites with forward slashes.
+	err = filepath.WalkDir(gallerySpriteDir, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			continue
+			return err
+		}
+		if entry.IsDir() || entry.Name() != "sprite.json" {
+			return nil
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return nil
 		}
 		var kind struct {
 			Actor   bool `json:"actor"`
 			Hostile bool `json:"hostile"`
 		}
 		if err := json.Unmarshal(raw, &kind); err != nil {
-			continue
+			return nil
 		}
+		id, err := filepath.Rel(gallerySpriteDir, filepath.Dir(p))
+		if err != nil {
+			return err
+		}
+		name := filepath.ToSlash(id)
 		switch {
 		case kind.Hostile:
-			hostile = append(hostile, entry.Name())
+			hostile = append(hostile, name)
 		case kind.Actor:
-			friendly = append(friendly, entry.Name())
+			friendly = append(friendly, name)
 		default:
-			props = append(props, entry.Name())
+			props = append(props, name)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	sort.Strings(props)
 	sort.Strings(friendly)
@@ -193,15 +205,26 @@ func galleryKinds() (props, friendly, hostile []string, err error) {
 // hall stands out: the engine's own doors and ladders belong in a level that
 // uses them, not in a row of exhibits.
 func galleryModels() ([]string, error) {
-	entries, err := os.ReadDir(galleryMeshDir)
+	var out []string
+	// The imported models are a folder deep now, one category each, so this
+	// walks rather than lists. What it collects is the mesh name a map entity
+	// takes: the path below assets/meshes, with forward slashes.
+	err := filepath.WalkDir(galleryMeshDir, func(p string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "ss3d_") {
+			return nil
+		}
+		id, err := filepath.Rel(galleryMeshDir, p)
+		if err != nil {
+			return err
+		}
+		out = append(out, filepath.ToSlash(id))
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	var out []string
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "ss3d_") {
-			out = append(out, entry.Name())
-		}
 	}
 	sort.Strings(out)
 	return out, nil

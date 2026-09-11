@@ -1,0 +1,187 @@
+{
+  "PlayerSpawn": [
+    11.5,
+    1.5,
+    5.5
+  ],
+  "PlayerDir": [
+    0,
+    1
+  ],
+  "CeilingColor": {
+    "R": 26,
+    "G": 26,
+    "B": 34,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 18,
+    "G": 18,
+    "B": 24,
+    "A": 255
+  },
+  "Entities": [
+    {
+      "Position": [
+        8.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "bd_chaingun",
+        "TextureIndices": null,
+        "MeshName": "",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "WeaponName": "bd_chaingun",
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        10.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "bd_chaingun",
+        "TextureIndices": null,
+        "MeshName": "",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "WeaponName": "bd_chaingun",
+        "WeaponAmmo": true,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        12.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "bd_rocket_launcher",
+        "TextureIndices": null,
+        "MeshName": "",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "WeaponName": "bd_rocket_launcher",
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    },
+    {
+      "Position": [
+        14.5,
+        1,
+        10.5
+      ],
+      "Entity": {
+        "Name": "bd_rocket_launcher",
+        "TextureIndices": null,
+        "MeshName": "",
+        "SpriteSheetName": "",
+        "SpriteSheetTileSize": {
+          "X": 0,
+          "Y": 0
+        },
+        "IsTransparent": false,
+        "CreateCollider": true,
+        "PatrolTo": null,
+        "Patrol": null,
+        "Facing": [
+          0,
+          0,
+          0
+        ],
+        "ClimbTo": null,
+        "WeaponName": "bd_rocket_launcher",
+        "WeaponAmmo": true,
+        "Code": "",
+        "Text": "",
+        "Sound": "",
+        "StepTo": null
+      }
+    }
+  ],
+  "FogStart": 60,
+  "FogEnd": 200,
+  "AmbientColor": [
+    0.7,
+    0.7,
+    0.75
+  ],
+  "AmbientStrength": 0.9,
+  "Lights": [
+    {
+      "Position": [
+        12.5,
+        3,
+        12.5
+      ],
+      "Yaw": 0,
+      "Pitch": 90,
+      "Color": [
+        1,
+        0.95,
+        0.85
+      ],
+      "Intensity": 6,
+      "Angle": 100,
+      "Reach": 10,
+      "Baked": true
+    }
+  ],
+  "SkyFullSphere": false,
+  "Station": null,
+  "Panes": null,
+  "Music": ""
+}

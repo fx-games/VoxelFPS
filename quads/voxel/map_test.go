@@ -228,3 +228,24 @@ func TestPlacedTorchesSurviveARebake(t *testing.T) {
 		t.Errorf("light survived the torch being removed: got %d want 0", got)
 	}
 }
+
+// Outside the map is air on every side. The chunk index is flattened, so a cell
+// one past the east edge of a map one chunk wide used to land in the next chunk
+// along z and read whatever stood there - a wall hanging in the air off the end
+// of the level.
+func TestOutsideTheMapIsAir(t *testing.T) {
+	m := NewMapWithEmptyChunks(1, 1, 2, 2, 2)
+	for x := int32(0); x < 2; x++ {
+		for y := int32(0); y < 2; y++ {
+			m.SetBlock(x, y, 2, NewBlock(1)) // the second chunk along z
+		}
+	}
+	for _, cell := range []Int3{{X: 2, Y: 0, Z: 0}, {X: 0, Y: 2, Z: 0}, {X: -1, Y: 0, Z: 2}, {X: 0, Y: -1, Z: 2}, {X: 0, Y: 0, Z: 4}} {
+		if m.IsSolidBlockAt(cell.X, cell.Y, cell.Z) {
+			t.Errorf("%v is outside the map and reads solid", cell)
+		}
+	}
+	if !m.IsSolidBlockAt(0, 0, 2) {
+		t.Error("the block inside the map went missing")
+	}
+}

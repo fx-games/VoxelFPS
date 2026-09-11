@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"path"
 	"sort"
 	"strings"
 
@@ -30,6 +31,11 @@ type character struct {
 	// are them fitted to this engine's one scale, which is what the engine can
 	// actually use.
 	damage int
+	// group is the folder this one is filed under in assets/sprites/actors. The
+	// game has no table saying what any of its characters is - the sprites are
+	// named after their own prefixes - so this is by hand, from the name and
+	// from where the game introduces it. See categories.go.
+	group  string
 	alert  []string
 	death  []string
 	attack []string
@@ -39,58 +45,58 @@ type character struct {
 // game introduces them. Health is the game's own hit points scaled to this
 // engine's hundred-point actor, which is what a default NPC has.
 var blakeCharacters = []character{
-	{prefix: "RENT", id: "sector_patrol", name: "Sector Patrol", health: 60, damage: 8,
+	{prefix: "RENT", id: "sector_patrol", name: "Sector Patrol", health: 60, damage: 8, group: "humans",
 		alert: []string{"HALT"}, death: []string{"RENTDEATH1", "RENTDEATH2"}, attack: []string{"SHOOT"}},
-	{prefix: "PRO", id: "star_sentinel", name: "Star Sentinel", health: 100, damage: 12,
+	{prefix: "PRO", id: "star_sentinel", name: "Star Sentinel", health: 100, damage: 12, group: "humans",
 		alert: []string{"PROHALT"}, death: []string{"PROGUARDDEATH", "PRODEATH2", "PRODEATH3"}, attack: []string{"SHOOT"}},
-	{prefix: "SWAT", id: "star_trooper", name: "Star Trooper", health: 120, damage: 14,
+	{prefix: "SWAT", id: "star_trooper", name: "Star Trooper", health: 120, damage: 14, group: "humans",
 		alert: []string{"SWATHALT"}, death: []string{"SWATDIE", "SWATDEATH2", "SWATDEATH3"}, attack: []string{"SHOOT"}},
-	{prefix: "OFC", id: "general_scientist", name: "General Scientist", health: 40, damage: 6,
+	{prefix: "OFC", id: "general_scientist", name: "General Scientist", health: 40, damage: 6, group: "humans",
 		alert: []string{"SCIENTISTHALT"}, death: []string{"SCIENTISTDEATH", "SCIDEATH2", "SCIDEATH3"}, attack: []string{"SHOOT"}},
-	{prefix: "GOLD", id: "goldstern", name: "Dr. Goldstern", health: 200, damage: 18,
+	{prefix: "GOLD", id: "goldstern", name: "Dr. Goldstern", health: 200, damage: 18, group: "bosses",
 		alert: []string{"GOLDSTERNHALT"}, death: []string{"GOLDSTERNLAUGH"}, attack: []string{"SHOOT"}},
 
-	{prefix: "GSCOUT", id: "gold_scout", name: "Goldstern Scout", health: 80, damage: 25,
+	{prefix: "GSCOUT", id: "gold_scout", name: "Goldstern Scout", health: 80, damage: 25, group: "robots",
 		alert: []string{"SCOUT_ALERT"}, death: []string{"EXPLODE1"}},
-	{prefix: "FSCOUT", id: "floating_bomb", name: "Floating Bomb", health: 80, damage: 25,
+	{prefix: "FSCOUT", id: "floating_bomb", name: "Floating Bomb", health: 80, damage: 25, group: "robots",
 		alert: []string{"SCOUT_ALERT"}, death: []string{"EXPLODE2"}},
 
-	{prefix: "GENETIC", id: "genetic_guard", name: "Genetic Guard", health: 120, damage: 14,
+	{prefix: "GENETIC", id: "genetic_guard", name: "Genetic Guard", health: 120, damage: 14, group: "mutants",
 		alert: []string{"GGUARDHALT"}, death: []string{"GGUARDDEATH"}, attack: []string{"PUNCHATTACK"}},
-	{prefix: "MUTHUM1", id: "mutant_human_1", name: "Mutant Human", health: 100, damage: 12,
+	{prefix: "MUTHUM1", id: "mutant_human_1", name: "Mutant Human", health: 100, damage: 12, group: "mutants",
 		alert: []string{"BLUEBOYHALT"}, death: []string{"BLUEBOYDEATH"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "MUTHUM2", id: "mutant_human_2", name: "Mutant Human II", health: 100, damage: 12,
+	{prefix: "MUTHUM2", id: "mutant_human_2", name: "Mutant Human II", health: 100, damage: 12, group: "mutants",
 		alert: []string{"DOGBOYHALT"}, death: []string{"DOGBOYDEATH"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "SCAN_ALIEN", id: "scan_alien", name: "Scan Alien", health: 140, damage: 16,
+	{prefix: "SCAN_ALIEN", id: "scan_alien", name: "Scan Alien", health: 140, damage: 16, group: "aliens",
 		alert: []string{"SCANHALT"}, death: []string{"SCANDEATH"}, attack: []string{"SPITATTACK"}},
-	{prefix: "LCAN_ALIEN", id: "lcan_alien", name: "Large Canister Alien", health: 160, damage: 18,
+	{prefix: "LCAN_ALIEN", id: "lcan_alien", name: "Large Canister Alien", health: 160, damage: 18, group: "aliens",
 		alert: []string{"LCANHALT"}, death: []string{"LCANDEATH"}, attack: []string{"SPITATTACK"}},
-	{prefix: "GURNEY_MUT", id: "gurney_mutant", name: "Gurney Mutant", health: 120, damage: 14,
+	{prefix: "GURNEY_MUT", id: "gurney_mutant", name: "Gurney Mutant", health: 120, damage: 14, group: "mutants",
 		alert: []string{"GURNEY"}, death: []string{"GURNEYDEATH"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "POD", id: "pod_alien", name: "Pod Alien", health: 140, damage: 16,
+	{prefix: "POD", id: "pod_alien", name: "Pod Alien", health: 140, damage: 16, group: "aliens",
 		alert: []string{"PODHALT"}, death: []string{"PODDEATH"}, attack: []string{"SPITATTACK"}},
-	{prefix: "ELECTRO_SPHERE", id: "electro_sphere", name: "Electro-Sphere", health: 60, damage: 10,
+	{prefix: "ELECTRO_SPHERE", id: "electro_sphere", name: "Electro-Sphere", health: 60, damage: 10, group: "aliens",
 		alert: []string{"ELECAPPEAR"}, death: []string{"ELECDIE"}, attack: []string{"ELECTSHOT"}},
-	{prefix: "ELEC", id: "electro_alien", name: "Electro-Alien", health: 100, damage: 14,
+	{prefix: "ELEC", id: "electro_alien", name: "Electro-Alien", health: 100, damage: 14, group: "aliens",
 		alert: []string{"ELECAPPEAR"}, death: []string{"ELECDIE"}, attack: []string{"ELECTSHOT"}},
-	{prefix: "LIQUID", id: "liquid_alien", name: "Liquid Alien", health: 140, damage: 16,
+	{prefix: "LIQUID", id: "liquid_alien", name: "Liquid Alien", health: 140, damage: 16, group: "aliens",
 		death: []string{"LIQUIDDIE"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "TERROT", id: "turret", name: "Hanging Turret", health: 80, damage: 10,
+	{prefix: "TERROT", id: "turret", name: "Hanging Turret", health: 80, damage: 10, group: "robots",
 		alert: []string{"TURRET"}, death: []string{"EXPLODE1"}, attack: []string{"SHOOT"}},
-	{prefix: "VITAL", id: "vital", name: "Vital Sign", health: 60, damage: 0,
+	{prefix: "VITAL", id: "vital", name: "Vital Sign", health: 60, damage: 0, group: "robots",
 		death: []string{"EXPLODE1"}},
 
-	{prefix: "BOSS1", id: "boss_1", name: "Tech Warrior", health: 250, damage: 22,
+	{prefix: "BOSS1", id: "boss_1", name: "Tech Warrior", health: 250, damage: 22, group: "bosses",
 		alert: []string{"BLUEBOYHALT"}, death: []string{"BLUEBOYDEATH"}, attack: []string{"PUNCHATTACK"}},
-	{prefix: "BOSS2", id: "boss_2", name: "Alien Protector", health: 250, damage: 22,
+	{prefix: "BOSS2", id: "boss_2", name: "Alien Protector", health: 250, damage: 22, group: "bosses",
 		alert: []string{"GGUARDHALT"}, death: []string{"PODDEATH"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "BOSS3", id: "boss_3", name: "Mech Sentinel", health: 300, damage: 25,
+	{prefix: "BOSS3", id: "boss_3", name: "Mech Sentinel", health: 300, damage: 25, group: "bosses",
 		alert: []string{"BLUEBOYHALT"}, death: []string{"BLUEBOYDEATH"}, attack: []string{"PUNCHATTACK"}},
-	{prefix: "BOSS4", id: "boss_4", name: "Reptilian Warrior", health: 300, damage: 25,
+	{prefix: "BOSS4", id: "boss_4", name: "Reptilian Warrior", health: 300, damage: 25, group: "bosses",
 		alert: []string{"GGUARDHALT"}, death: []string{"PODDEATH"}, attack: []string{"CLAWATTACK"}},
-	{prefix: "BOSS5", id: "boss_5", name: "Acid Dragon", health: 350, damage: 28,
+	{prefix: "BOSS5", id: "boss_5", name: "Acid Dragon", health: 350, damage: 28, group: "bosses",
 		alert: []string{"PODHALT"}, death: []string{"PODDEATH"}, attack: []string{"SPITATTACK"}},
-	{prefix: "BOSS6", id: "boss_6", name: "Bio-Mech Guardian", health: 400, damage: 30,
+	{prefix: "BOSS6", id: "boss_6", name: "Bio-Mech Guardian", health: 400, damage: 30, group: "bosses",
 		alert: []string{"GGUARDHALT"}, death: []string{"GGUARDDEATH"}, attack: []string{"PUNCHATTACK"}},
 }
 
@@ -142,7 +148,8 @@ func (in *installer) installCharacters() (int, error) {
 			},
 		}
 		in.taken[idPrefix+spec.id] = true
-		if err := in.writeKind(idPrefix+spec.id, kind, grid, spec.cues()); err != nil {
+		id := path.Join(roleActors, spec.group, idPrefix+spec.id)
+		if err := in.writeKind(id, kind, grid, spec.cues()); err != nil {
 			return written, fmt.Errorf("%s: %w", spec.id, err)
 		}
 		written++
@@ -395,7 +402,7 @@ func (in *installer) installProps() (int, error) {
 			continue
 		}
 		in.taken[idPrefix+id] = true
-		if err := in.writeProp(idPrefix+id, spec.name, frames, spec.fps, "SPR_"+spec.single+spec.frames); err != nil {
+		if err := in.writeProp(path.Join(blakePropCategory(id), idPrefix+id), spec.name, frames, spec.fps, "SPR_"+spec.single+spec.frames); err != nil {
 			return written, err
 		}
 		written++
@@ -417,7 +424,8 @@ func (in *installer) installProps() (int, error) {
 			id = idPrefix + slug(name) + "_" + slug(label)
 		}
 		in.taken[id] = true
-		if err := in.writeProp(id, label, []image.Image{img}, 0, "SPR_"+name); err != nil {
+		filed := path.Join(staticCategory(name, staticNames[name][1]), id)
+		if err := in.writeProp(filed, label, []image.Image{img}, 0, "SPR_"+name); err != nil {
 			return written, err
 		}
 		written++

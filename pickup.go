@@ -63,16 +63,22 @@ func (g *Game) setPickupMode(index int) {
 	g.Toast("Item pickup: " + pickupModeNames[index])
 }
 
-// spawnPickup puts one on the floor, or nothing at all when the weapon has no
-// picture for it - a weapon whose pickup art the sources did not have.
-func (g *Game) spawnPickup(weapon *Weapon, ammo bool, position mgl32.Vec3) {
+// newPickupObject builds one item standing at a position: the weapon's own
+// pickup picture out of the shared store, on the physics grid so the crosshair
+// can find it. It is nil when the weapon has no picture for it - a weapon whose
+// pickup art the sources did not have.
+//
+// Split from spawnPickup because the editor wants the same thing without it
+// being takeable: a ghost on the crosshair the player could pick up is a ghost
+// that vanishes into the inventory the moment they walk forward.
+func (g *Game) newPickupObject(weapon *Weapon, ammo bool, position mgl32.Vec3) (*quads.GameObject, *quads.SpriteComponent) {
 	name, box := weapon.Data.Icon, weapon.Data.IconBox
 	if ammo {
 		name, box = weapon.Data.AmmoIcon, weapon.Data.AmmoIconBox
 	}
 	index, known := g.sharedSpriteIndex[name]
 	if name == "" || !known || g.sharedAtlas == nil {
-		return
+		return nil, nil
 	}
 	sprite := quads.NewSpriteFloor(g.sharedAtlas, []uint16{uint16(index)})
 	sprite.Size = pickupSize(g, box, index)
@@ -98,10 +104,19 @@ func (g *Game) spawnPickup(weapon *Weapon, ammo bool, position mgl32.Vec3) {
 	object.SetComponent(shape)
 	g.physicsSystem.AddObject(shape)
 	g.Sprites.Add(sprite)
+	return object, sprite
+}
 
+// spawnPickup puts one on the floor as something the player can take.
+func (g *Game) spawnPickup(weapon *Weapon, ammo bool, position mgl32.Vec3) *quads.GameObject {
+	object, sprite := g.newPickupObject(weapon, ammo, position)
+	if object == nil {
+		return nil
+	}
 	pickup := &Pickup{weapon: weapon, ammo: ammo, object: object, sprite: sprite}
 	g.pickups = append(g.pickups, pickup)
 	g.pickupByObject[object] = pickup
+	return object
 }
 
 // pickupSize is how big the quad is: the box the migration measured off the

@@ -40,7 +40,7 @@
           20
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_humanoid",
+        "SpriteSheetName": "actors/mutants/ss_humanoid",
         "SpriteSheetTileSize": {
           "X": 78,
           "Y": 80
@@ -80,7 +80,7 @@
           28
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_cyberbabe",
+        "SpriteSheetName": "actors/cyborgs/ss_cyberbabe",
         "SpriteSheetTileSize": {
           "X": 83,
           "Y": 89
@@ -120,7 +120,7 @@
           56
         ],
         "MeshName": "",
-        "SpriteSheetName": "ss_avian_mut",
+        "SpriteSheetName": "actors/mutants/ss_avian_mut",
         "SpriteSheetTileSize": {
           "X": 140,
           "Y": 86
@@ -160,7 +160,7 @@
           7
         ],
         "MeshName": "",
-        "SpriteSheetName": "bs_star_trooper",
+        "SpriteSheetName": "actors/humans/bs_star_trooper",
         "SpriteSheetTileSize": {
           "X": 64,
           "Y": 64

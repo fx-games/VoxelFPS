@@ -31,19 +31,33 @@ const TexLibraryRoot = "assets/textures"
 // shipped with the game.
 const DroppedDir = "dropped"
 
-// lastBrowsedDir is where the picker opens next time. Choosing a texture is
-// rarely a one-off - a wall, then its trim, then the floor - and all of those are
-// in the folder the last one came from.
-var lastBrowsedDir string
+// lastBrowsedDir is where the picker opens next time, per folder it browses.
+// Choosing a texture is rarely a one-off - a wall, then its trim, then the floor -
+// and all of those are in the folder the last one came from; the same goes for
+// furnishing a room out of the models. Keyed by root so the two browsers do not
+// send each other somewhere neither has.
+var lastBrowsedDir = map[string]string{}
 
-// browseColumns is how wide a directory's page is. It matches the map atlas so a
-// texture is the same size in the browser as it is in the atlas next to it.
-const browseColumns = 16
+// browseColumns is how wide a directory's page is. Eight, and it was sixteen -
+// the width of the map atlas, so a texture was the same size in the browser as in
+// the atlas beside it. What changed is that every cell now carries the name of
+// what is in it, written into the picture at the picture's own resolution: a cell
+// eight glyphs wide can only ever say eight letters, and "ss3d_16_couch" is
+// thirteen. Half as many cells across the same page is each of them drawn twice
+// as wide, which is the room those letters need.
+const browseColumns = 8
 
-// browseMaxEntries caps one directory at what a texture can hold at this width.
+// sheetColumns is how wide the sheet itself is built, in picture widths. It stays
+// at sixteen so a cell is twice as wide as the picture in it, which is where a
+// caption longer than the picture goes.
+const sheetColumns = 16
+
+// browseMaxEntries caps one directory at what a texture can hold: sixty-four rows
+// of it, which clears the biggest folder either library has - the four hundred
+// and forty-four green space tiles.
 //
-// ponytail: a directory past this many files shows the first browseMaxEntries.
-// Paging belongs here if the library ever grows a folder that big.
+// ponytail: a directory past this many entries shows the first browseMaxEntries.
+// Paging belongs here if one ever grows that big.
 const browseMaxEntries = browseColumns * 64
 
 // TexEntry is one cell of the browser: a subdirectory to walk into, or a texture
@@ -71,6 +85,44 @@ type TexBrowser struct {
 	atlas        *glhf.TextureAtlasFixed
 	setupBatch   func(glhf.TextureAtlas)
 	dropBatch    func(*glhf.SpriteBatch)
+
+	// pick reports whether one entry of a directory is a cell to choose rather
+	// than one to walk into. Directories are asked about too, because a model is
+	// a folder here - see GlApplication.OpenAssetBrowser - and a folder with a
+	// model in it is a leaf however much it looks like somewhere to go. Nil
+	// means the library's own answer: a file, and a PNG.
+	pick func(path string, isDir bool) bool
+	// tile draws one chosen cell at exactly one atlas cell. Nil means the
+	// library's own: the texture at that path, resampled.
+	tile func(path string, w, h int) *image.RGBA
+}
+
+// The shape of one cell: the picture, and under it the strip its name is written
+// in. A cell is wider than its picture, which is what leaves room for a name
+// longer than the picture itself.
+func (b *TexBrowser) cellWidth() int {
+	return sheetColumns * b.tileW / browseColumns
+}
+
+// cellHeight is the picture plus the strip its name goes in. The atlas is built
+// at this size, so scrolling, hit-testing and the selection outline all take the
+// caption into account without knowing it is there.
+func (b *TexBrowser) cellHeight() int { return b.tileH + TileLabelHeight }
+
+// isPick and tileFor are the two hooks with their defaults folded in, so the rest
+// of the browser can call them without a nil check at every site.
+func (b *TexBrowser) isPick(path string, isDir bool) bool {
+	if b.pick != nil {
+		return b.pick(path, isDir)
+	}
+	return !isDir && strings.EqualFold(filepath.Ext(path), ".png")
+}
+
+func (b *TexBrowser) tileFor(path string) *image.RGBA {
+	if b.tile != nil {
+		return b.tile(path, b.tileW, b.tileH)
+	}
+	return TileImage(b.root+"/"+path, b.tileW, b.tileH)
 }
 
 // NewTexBrowser opens the library at its root. setupBatch and dropBatch hand a
@@ -84,7 +136,7 @@ func NewTexBrowser(tileW, tileH int, setupBatch func(glhf.TextureAtlas), dropBat
 		setupBatch: setupBatch,
 		dropBatch:  dropBatch,
 	}
-	b.Open(lastBrowsedDir)
+	b.Open(lastBrowsedDir[b.root])
 	return b
 }
 
@@ -204,14 +256,15 @@ func (b *TexBrowser) Up() {
 // is a folder a user is free to rename or move while the game is running.
 func (b *TexBrowser) Open(dir string) {
 	b.dir = dir
-	lastBrowsedDir = dir
-	b.entries = readTexDir(b.root, dir)
+	lastBrowsedDir[b.root] = dir
+	b.entries = b.readDir(dir)
 	b.upload()
 }
 
-// readTexDir lists one directory as browser cells: an ".." row first when there is
-// somewhere to go back to, then subdirectories, then textures, each group by name.
-func readTexDir(root, dir string) []TexEntry {
+// readDir lists one directory as browser cells: an ".." row first when there is
+// somewhere to go back to, then subdirectories, then the cells that can be
+// picked, each group by name.
+func (b *TexBrowser) readDir(dir string) []TexEntry {
 	var entries []TexEntry
 	if dir != "" {
 		parent := path.Dir(dir)
@@ -221,12 +274,12 @@ func readTexDir(root, dir string) []TexEntry {
 		entries = append(entries, TexEntry{Path: parent, Name: "..", IsDir: true})
 	}
 
-	osEntries, err := os.ReadDir(filepath.FromSlash(path.Join(root, dir)))
+	osEntries, err := os.ReadDir(filepath.FromSlash(path.Join(b.root, dir)))
 	if err != nil {
 		return entries
 	}
 
-	var dirs, files []TexEntry
+	var dirs, picks []TexEntry
 	for _, e := range osEntries {
 		name := e.Name()
 		if strings.HasPrefix(name, ".") {
@@ -236,21 +289,47 @@ func readTexDir(root, dir string) []TexEntry {
 		if dir != "" {
 			child = dir + "/" + name
 		}
-		if e.IsDir() {
+		// Asked in this order because a pick wins: a model's folder is a
+		// directory and is still a cell to choose, not one to walk into.
+		if b.isPick(child, e.IsDir()) {
+			picks = append(picks, TexEntry{Path: child, Name: name})
+		} else if e.IsDir() && b.worthOpening(child) {
 			dirs = append(dirs, TexEntry{Path: child, Name: name, IsDir: true})
-		} else if strings.EqualFold(filepath.Ext(name), ".png") {
-			files = append(files, TexEntry{Path: child, Name: name})
 		}
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
-	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+	sort.Slice(picks, func(i, j int) bool { return picks[i].Name < picks[j].Name })
 
 	entries = append(entries, dirs...)
-	entries = append(entries, files...)
+	entries = append(entries, picks...)
 	if len(entries) > browseMaxEntries {
 		entries = entries[:browseMaxEntries]
 	}
 	return entries
+}
+
+// worthOpening is whether a directory has anything in it to show: a cell to pick,
+// or another directory. assets/meshes/cube is the folder this is for - a model
+// nothing places as scenery, so it is neither a piece nor a category, and drawn as
+// a folder it is a cell whose only content is the way back out of it.
+//
+// ponytail: one level. A folder of nothing but empty folders still shows, which
+// no folder in either library is.
+func (b *TexBrowser) worthOpening(dir string) bool {
+	osEntries, err := os.ReadDir(filepath.FromSlash(path.Join(b.root, dir)))
+	if err != nil {
+		return false
+	}
+	for _, e := range osEntries {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		if e.IsDir() || b.isPick(dir+"/"+name, false) {
+			return true
+		}
+	}
+	return false
 }
 
 // upload packs the current directory into one texture and puts it in the 2D pass,
@@ -258,30 +337,38 @@ func readTexDir(root, dir string) []TexEntry {
 func (b *TexBrowser) upload() {
 	b.Close()
 
-	texture, err := glhf.NewTextureFromImage(browseSheet(b.root, b.entries, b.tileW, b.tileH))
+	texture, err := glhf.NewTextureFromImage(b.browseSheet())
 	if err != nil {
 		panic(err) // an in-memory RGBA that will not upload is a broken GL context
 	}
-	b.atlas = glhf.NewTextureAtlasFixed(texture, b.tileW, b.tileH, "")
+	b.atlas = glhf.NewTextureAtlasFixed(texture, b.cellWidth(), b.cellHeight(), "")
 	if b.setupBatch != nil {
 		b.setupBatch(b.atlas)
 	}
 }
 
 // browseSheet lays a directory out as the grid the picker draws: one cell per
-// entry, folders first, in the order readTexDir listed them.
-func browseSheet(root string, entries []TexEntry, tileW, tileH int) *image.RGBA {
-	rows := max((len(entries)+browseColumns-1)/browseColumns, 1)
-	sheet := image.NewRGBA(image.Rect(0, 0, browseColumns*tileW, rows*tileH))
-	folder := folderIcon(tileW, tileH)
-	for i, entry := range entries {
+// entry, folders first, in the order readDir listed them, each captioned with
+// what it is called.
+func (b *TexBrowser) browseSheet() *image.RGBA {
+	columns := browseColumns
+	cellW, cellH := b.cellWidth(), b.cellHeight()
+	rows := max((len(b.entries)+columns-1)/columns, 1)
+	sheet := image.NewRGBA(image.Rect(0, 0, columns*cellW, rows*cellH))
+	folder := folderIcon(b.tileW, b.tileH)
+	for i, entry := range b.entries {
 		tile := folder
 		if entry.Name == ".." {
-			tile = folderUpIcon(tileW, tileH)
+			tile = folderUpIcon(b.tileW, b.tileH)
 		} else if !entry.IsDir {
-			tile = TileImage(root+"/"+entry.Path, tileW, tileH)
+			tile = b.tileFor(entry.Path)
 		}
-		draw.Draw(sheet, tileRect(i, browseColumns, tileW, tileH), tile, image.Point{}, draw.Src)
+		cell := tileRect(i, columns, cellW, cellH)
+		// The picture centred at the top of the cell, the caption in the strip
+		// below it. Centred because a cell may be wider than its picture.
+		at := image.Pt(cell.Min.X+(cellW-b.tileW)/2, cell.Min.Y)
+		draw.Draw(sheet, image.Rectangle{Min: at, Max: at.Add(image.Pt(b.tileW, b.tileH))}, tile, image.Point{}, draw.Src)
+		drawTileLabel(sheet, cell, tileLabelText(entry))
 	}
 	return sheet
 }
@@ -293,6 +380,26 @@ func browseSheet(root string, entries []TexEntry, tileW, tileH int) *image.RGBA 
 // texture nobody can find out is the wrong size.
 func TileImage(filePath string, w, h int) *image.RGBA {
 	return scaleNearest(Disk.Image(filePath), w, h)
+}
+
+// FitTile is an image dropped into one atlas cell at the biggest size that fits
+// without changing its shape, centred, on transparent. Stretching is right for a
+// wall texture, which is drawn stretched over a wall anyway; it is wrong for a
+// picture of a thing, where a guard squeezed into a square is a different guard.
+func FitTile(src image.Image, w, h int) *image.RGBA {
+	bounds := src.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+		return out
+	}
+	width, height := w, bounds.Dy()*w/bounds.Dx()
+	if height > h {
+		width, height = bounds.Dx()*h/bounds.Dy(), h
+	}
+	scaled := scaleNearest(src, max(width, 1), max(height, 1))
+	at := image.Pt((w-width)/2, (h-height)/2)
+	draw.Draw(out, scaled.Bounds().Add(at), scaled, image.Point{}, draw.Src)
+	return out
 }
 
 // scaleNearest is nearest neighbour on purpose: these are pixel-art tiles, and

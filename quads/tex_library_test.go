@@ -7,7 +7,10 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 func writePNGFile(t *testing.T, path string, fill color.RGBA) {
@@ -102,5 +105,71 @@ func TestImageFromOSPathReadsAnAbsolutePath(t *testing.T) {
 	}
 	if placeholder := Disk.Image(path); placeholder.Bounds().Dx() != 1 {
 		t.Errorf("Disk.Image took an absolute path after all - this test is now pointless")
+	}
+}
+
+// The mesh browser is the texture browser with two answers swapped: a folder
+// with a model in it is a cell to pick and not a directory to walk into, and a
+// PNG sitting beside that model is not a cell at all. Everything below that in
+// the browser - the ".." row, the ordering, the paths handed out - is the same
+// code, which is the point of it being the same browser.
+func TestABrowserCanTreatFoldersAsThePickableCells(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{
+		"furniture/couch/mesh.glb",
+		"furniture/chair/mesh.glb",
+		"furniture/chair/texture.png",
+		"notes/README.txt",
+	} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	isModel := func(p string, isDir bool) bool {
+		if !isDir {
+			return false
+		}
+		_, err := os.Stat(filepath.Join(root, filepath.FromSlash(p), "mesh.glb"))
+		return err == nil
+	}
+	browser := &TexBrowser{root: root, pick: isModel}
+
+	// notes/ holds no model and no folder, so it is not somewhere to go: drawn as
+	// a folder it would be a cell whose only content is the way back out.
+	if got := names(browser.readDir("")); !slices.Equal(got, []string{"furniture"}) {
+		t.Fatalf("root listing: got %v, want only the category that has models in it", got)
+	}
+
+	inside := browser.readDir("furniture")
+	if got := names(inside); !slices.Equal(got, []string{"..", "chair", "couch"}) {
+		t.Fatalf("category listing: got %v, want the models and the way back", got)
+	}
+	if chair := inside[1]; chair.IsDir || chair.Path != "furniture/chair" {
+		t.Errorf("a model is a cell to pick, not a folder to open: got %+v", chair)
+	}
+	// The texture beside the model must not be a cell of its own: picking it
+	// would hand back a path that names no piece of scenery.
+	if got := names(browser.readDir("furniture/chair")); !slices.Equal(got, []string{".."}) {
+		t.Errorf("inside a model: got %v, want nothing but the way back", got)
+	}
+}
+
+// A preview is framed on how big the model looks from where it is looked at, not
+// on its longest diagonal: a wardrobe seen face on needs its width and its
+// height, and measuring the corner-to-corner distance instead leaves a third of
+// every cell empty around it.
+func TestAPreviewIsFramedOnWhatTheCameraSees(t *testing.T) {
+	// A slab: two wide, four tall, two deep, looked at straight down the Z axis.
+	extents := mgl32.Vec3{2, 4, 2}
+	radius := thumbRadius(extents, mgl32.Vec3{0, 0, 1})
+
+	if want := float32(2 * thumbMargin); radius != want {
+		t.Fatalf("radius %v, want %v - half the tallest side, and the margin", radius, want)
+	}
+	if diagonal := extents.Len() * 0.5 * thumbMargin; radius >= diagonal {
+		t.Errorf("radius %v is no tighter than the diagonal %v", radius, diagonal)
 	}
 }

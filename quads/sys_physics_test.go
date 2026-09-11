@@ -141,24 +141,29 @@ func TestCheckForCollisionsWithoutColliders(t *testing.T) {
 	}
 }
 
-// Objects that leave the map are dropped instead of falling forever.
-func TestUpdateRemovesObjectsThatLeaveTheMap(t *testing.T) {
-	noSolids := func(x, y, z int32) bool { return false }
-	insideMap := func(pos mgl32.Vec3) bool { return pos.X() >= 0 && pos.X() < 10 }
-	system := NewCollisionSolver(noSolids, insideMap)
+// Past the edge of the level is air, not the end of the world: something that
+// goes out there keeps moving, falls under gravity, and stays in the simulation.
+// It used to be killed, and the player with it - left standing, unable to move.
+func TestObjectsThatLeaveTheMapKeepFalling(t *testing.T) {
+	system := NewCollisionSolver(func(x, y, z int32) bool { return x >= 0 && x < 10 && y < 1 })
+	system.SetGravityEnabled(true)
 
-	escaping := mover(t, mgl32.Vec3{9, 0.5, 0.5})
+	escaping := mover(t, mgl32.Vec3{9.5, 3, 0.5})
+	escaping.ApplyGravity = true
 	escaping.SetVelocity(mgl32.Vec3{10, 0, 0})
 	system.AddObject(escaping)
 
-	// Update runs fixed steps, so the step after the one that carries the object
-	// out of the map is the one that notices - within the same call.
-	system.Update(1)
-	if len(system.movingObjects) != 0 {
-		t.Errorf("expected the escaped object to be removed, %d left", len(system.movingObjects))
+	for range 8 { // two seconds; Update takes a quarter of one at most
+		system.Update(maxFrameTime)
 	}
-	if escaping.GameObject().IsAlive() {
-		t.Error("expected the escaped object to be dead")
+	if len(system.movingObjects) != 1 || !escaping.GameObject().IsAlive() {
+		t.Fatal("the object that left the map was dropped")
+	}
+	if pos := escaping.Position(); pos.X() < 15 || pos.Y() > 0 {
+		t.Errorf("at %v, want well past the edge and fallen below the floor", pos)
+	}
+	if cells := len(system.objectsOnGrid); cells > 8 {
+		t.Errorf("%d grid cells left behind by one falling box", cells)
 	}
 }
 
@@ -167,11 +172,9 @@ func floorAt(height int32) func(x, y, z int32) bool {
 	return func(x, y, z int32) bool { return y < height }
 }
 
-func alwaysInsideMap(pos mgl32.Vec3) bool { return true }
-
 // A falling object accelerates, lands on the floor and stays there.
 func TestUpdateGravityFallsAndLands(t *testing.T) {
-	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system := NewCollisionSolver(floorAt(1))
 	system.SetGravityEnabled(true)
 
 	falling := mover(t, mgl32.Vec3{0.5, 4, 0.5})
@@ -205,7 +208,7 @@ func TestUpdateGravityFallsAndLands(t *testing.T) {
 
 // Without gravity nothing falls.
 func TestUpdateWithoutGravity(t *testing.T) {
-	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system := NewCollisionSolver(floorAt(1))
 
 	floating := mover(t, mgl32.Vec3{0.5, 4, 0.5})
 	floating.ApplyGravity = true
@@ -221,7 +224,7 @@ func TestUpdateWithoutGravity(t *testing.T) {
 // A fast object is moved in steps, so it neither passes through a wall nor
 // walks the grid cells of the whole path at once.
 func TestUpdateFastObjectStopsAtWall(t *testing.T) {
-	system := NewCollisionSolver(func(x, y, z int32) bool { return x == 10 }, alwaysInsideMap)
+	system := NewCollisionSolver(func(x, y, z int32) bool { return x == 10 })
 
 	fast := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
 	fast.SetVelocity(mgl32.Vec3{600, 0, 0})
@@ -289,7 +292,7 @@ func TestCheckForCollisionsPublishesOneEvent(t *testing.T) {
 // falling, whether the frames were 60 or 120 per second.
 func TestUpdateIsFramerateIndependent(t *testing.T) {
 	fall := func(frames int, frameTime float64) mgl32.Vec3 {
-		system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+		system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 		system.SetGravityEnabled(true)
 		object := mover(t, mgl32.Vec3{0.5, 100, 0.5})
 		object.ApplyGravity = true
@@ -314,7 +317,7 @@ func TestUpdateIsFramerateIndependent(t *testing.T) {
 // rather than pass through it. Also guards the reused collider scratch buffer
 // in step(), which every grid cell now writes into.
 func TestUpdateStopsAtObjectOnGrid(t *testing.T) {
-	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 
 	blocker := mover(t, mgl32.Vec3{3, 0.5, 0.5}) // no velocity, so it never moves
 	system.AddObject(blocker)
@@ -397,7 +400,7 @@ func TestStepOverLeavesATallLedgeAlone(t *testing.T) {
 // pickup, and before this the only way to be findable by a ray was to be a wall.
 func TestPassThroughCollidersAreWalkedThrough(t *testing.T) {
 	walkInto := func(passThrough bool) mgl32.Vec3 {
-		system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+		system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 
 		item := mover(t, mgl32.Vec3{2, 0.5, 0.5})
 		item.PassThrough = passThrough
@@ -453,7 +456,7 @@ func TestAThingWalkedThroughIsNotShovedByTheWalker(t *testing.T) {
 // own pictures - is pushed back out of the floor instead of falling through it
 // and out of the map.
 func TestGrowingColliderDoesNotFallThroughTheFloor(t *testing.T) {
-	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system := NewCollisionSolver(floorAt(1))
 	system.SetGravityEnabled(true)
 
 	standing := mover(t, mgl32.Vec3{0.5, 4, 0.5})
@@ -495,7 +498,7 @@ func TestGrowingColliderDoesNotFallThroughTheFloor(t *testing.T) {
 // cell it is walking through lists and nothing else, so a gap in the middle is a
 // thing the crosshair sits on and does not select.
 func TestWideColliderIsOnTheGridCellsItCovers(t *testing.T) {
-	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 
 	object := NewGameObject("Cortex")
 	object.Transform().SetPosition(mgl32.Vec3{0.5, 0.5, 0.5})
@@ -520,7 +523,7 @@ func TestWideColliderIsOnTheGridCellsItCovers(t *testing.T) {
 // picking box is the picture actually on the screen - and a ray only ever tests
 // what the cell it is in lists.
 func TestGridListingCoversThePickingBoxes(t *testing.T) {
-	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 
 	object := NewGameObject("Cortex")
 	object.Transform().SetPosition(mgl32.Vec3{0.5, 0.5, 0.5})
@@ -546,7 +549,7 @@ func TestGridListingCoversThePickingBoxes(t *testing.T) {
 // Moving takes the listing with it: the cells it was in are the cells it is
 // taken out of, whatever animation happens to be playing by then.
 func TestMovingLeavesNoStaleGridCells(t *testing.T) {
-	system := NewCollisionSolver(func(x, y, z int32) bool { return false }, alwaysInsideMap)
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false })
 
 	moving := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
 	moving.SetVelocity(mgl32.Vec3{3, 0, 0})
@@ -595,7 +598,7 @@ func TestSwungRoundReachesBothWays(t *testing.T) {
 // measured off its own pictures and they do not all leave the same gap under
 // the art.
 func TestColliderDroppingUnderAGroundedThingTakesItAlong(t *testing.T) {
-	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system := NewCollisionSolver(floorAt(1))
 	system.SetGravityEnabled(true)
 
 	standing := mover(t, mgl32.Vec3{0.5, 4, 0.5})
@@ -627,7 +630,7 @@ func TestColliderDroppingUnderAGroundedThingTakesItAlong(t *testing.T) {
 // Getting lower is not the same as the collider getting lower: a thing walking
 // down off a ledge is not held up by this.
 func TestWalkingDownIsNotMistakenForADroppingCollider(t *testing.T) {
-	system := NewCollisionSolver(floorAt(1), alwaysInsideMap)
+	system := NewCollisionSolver(floorAt(1))
 	system.SetGravityEnabled(true)
 
 	falling := mover(t, mgl32.Vec3{0.5, 4, 0.5})

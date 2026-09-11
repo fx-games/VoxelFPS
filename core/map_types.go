@@ -164,6 +164,17 @@ type MapEntity struct {
 	// Nil means this entity is not a ladder. See Scenery.Climbable.
 	ClimbTo *mgl32.Vec3
 
+	// WeaponName is a folder under assets/weapons/ lying on the floor as
+	// something to pick up, and WeaponAmmo says which of the two pictures that
+	// weapon brings it is - the gun itself, or a box of what it fires. Empty for
+	// everything that is not a pickup, which is nearly everything.
+	//
+	// It is a name rather than a sprite sheet and a frame because a weapon's
+	// pickup art lives in the shared store the migration built, not in an atlas
+	// of its own: see Game.spawnPickup.
+	WeaponName string `json:",omitempty"`
+	WeaponAmmo bool   `json:",omitempty"`
+
 	// Code is the four digits a keypad asks for, on the keypad that asks for
 	// them. It is on the entity rather than on the door because the keypad is
 	// what the level author places and gives a number to; which door it

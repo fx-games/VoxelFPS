@@ -413,21 +413,36 @@ func (in *installer) folderFor(name string, triple object.Triple) string {
 }
 
 // writeKind puts one folder on disk: the grid, the JSON, and whatever sounds
-// the kind names.
-func (in *installer) writeKind(id string, kind *spriteKind, grid *sheet, columns int, cues map[string]int) error {
+// the kind names. It reports whether there was anything to write.
+//
+// A kind whose sheet has no opaque pixel in it is not written at all. A quarter
+// of the objects in the property table are like that - the doors, the furniture
+// the game draws as a 3D model instead, the triggers and AI hints, which are
+// script and were never meant to be seen - and every one of them used to become a
+// folder holding a picture of nothing. In an editor that lists what can be placed
+// that is not harmless: it is a cell in the browser, a slot on the placement
+// wheel and an exhibit in the gallery, all for a thing that appears in the world
+// as an invisible rectangle. The model-drawn ones are in assets/meshes and can be
+// placed from there, which is where they belonged all along.
+func (in *installer) writeKind(id string, kind *spriteKind, grid *sheet, columns int, cues map[string]int) (bool, error) {
 	if len(grid.frames) == 0 {
-		return nil
+		return false, nil
+	}
+	tileW, tileH := grid.tile()
+	// The sheet before the folder, so a kind that turns out to be blank leaves
+	// no empty directory behind.
+	sheet := grid.image(columns)
+	if isBlank(sheet) {
+		return false, nil
 	}
 	dir := filepath.Join(spritesDir, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return false, err
 	}
-	tileW, tileH := grid.tile()
 	kind.Tile = point{X: tileW, Y: tileH}
 	kind.Scale = float32(tileH) / pixelsPerVoxel
-	sheet := grid.image(columns)
 	if err := writePNG(filepath.Join(dir, "sheet.png"), sheet); err != nil {
-		return err
+		return false, err
 	}
 	measureBoxes(kind.Animations, sheet, tileW, tileH, columns)
 	// And every frame on its own, beside the sheet: what the thing is picked
@@ -435,13 +450,13 @@ func (in *installer) writeKind(id string, kind *spriteKind, grid *sheet, columns
 	// one shape for a whole animation seen from any angle. See
 	// geometry.SpriteBoxesFile.
 	if err := geometry.WriteFrameBoxes(dir, geometry.MeasureCells(sheet, tileW, tileH)); err != nil {
-		return err
+		return false, err
 	}
 	if len(cues) > 0 {
 		kind.Sounds = map[string]string{}
 		soundDir := filepath.Join(dir, "sounds")
 		if err := os.MkdirAll(soundDir, 0o755); err != nil {
-			return err
+			return false, err
 		}
 		for cue, index := range cues {
 			samples := in.soundWAV(index)
@@ -449,7 +464,7 @@ func (in *installer) writeKind(id string, kind *spriteKind, grid *sheet, columns
 				continue
 			}
 			if err := os.WriteFile(filepath.Join(soundDir, cue+".wav"), samples, 0o644); err != nil {
-				return err
+				return false, err
 			}
 			kind.Sounds[cue] = cue
 		}
@@ -458,7 +473,26 @@ func (in *installer) writeKind(id string, kind *spriteKind, grid *sheet, columns
 			_ = os.Remove(soundDir)
 		}
 	}
-	return writeJSON(filepath.Join(dir, "sprite.json"), kind)
+	if err := writeJSON(filepath.Join(dir, "sprite.json"), kind); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// isBlank is whether an image is entirely see-through. It is the honest test for
+// "there is no art here": the frames are cut out of the game's own resources with
+// a colour key, so a picture the game never drew comes out fully transparent
+// rather than absent.
+func isBlank(picture image.Image) bool {
+	bounds := picture.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if _, _, _, alpha := picture.At(x, y).RGBA(); alpha != 0 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // soundWAV is one digitised effect as a WAV, or nil for the index the game uses

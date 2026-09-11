@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -81,31 +82,40 @@ const sceneryFile = "scenery.json"
 // loadScenery reads every folder under dir that has a scenery.json in it. A
 // folder without one is a plain model, not a mistake - they share a directory
 // since the meshes and the scenery were consolidated.
+//
+// It walks the whole tree rather than the top level, because the imported models
+// are filed under a category folder each - see modelCategory in tools/importss.
+// A piece's ID is then its path below dir with forward slashes, which is what a
+// map's MeshName holds and what meshFile joins back onto.
 func loadScenery(dir string) (map[string]*Scenery, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("scenery: %w", err)
-	}
-	library := make(map[string]*Scenery, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name(), sceneryFile))
-		if os.IsNotExist(err) {
-			continue // a model with no furniture attached to it
-		}
+	library := make(map[string]*Scenery)
+	err := filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			return nil, fmt.Errorf("scenery: %w", err)
+			return err
 		}
-		piece := &Scenery{ID: entry.Name()}
+		if entry.IsDir() || entry.Name() != sceneryFile {
+			return nil
+		}
+		id, err := filepath.Rel(dir, filepath.Dir(p))
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		piece := &Scenery{ID: filepath.ToSlash(id)}
 		if err := json.Unmarshal(data, piece); err != nil {
-			return nil, fmt.Errorf("scenery %s: %w", entry.Name(), err)
+			return fmt.Errorf("scenery %s: %w", piece.ID, err)
 		}
 		if piece.Name == "" {
 			piece.Name = piece.ID
 		}
 		library[piece.ID] = piece
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scenery: %w", err)
 	}
 	return library, nil
 }
@@ -154,11 +164,25 @@ func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo 
 // honest, not load-bearing. Scenery and the plain meshes answer to the same
 // shape now, so there is nothing to branch on.
 func (g *Game) meshFile(name string) string {
-	dir := filepath.Join(meshDir, name)
+	return meshFileIn(filepath.Join(meshDir, name))
+}
+
+// meshFileIn is the model inside one folder, given the folder. Split out of
+// meshFile because the editor's browser walks the folder itself and so has the
+// directory in hand rather than a piece's name.
+func meshFileIn(dir string) string {
 	if _, err := os.Stat(filepath.Join(dir, "mesh.gltf")); err == nil {
 		return filepath.Join(dir, "mesh.gltf")
 	}
 	return filepath.Join(dir, "mesh.glb")
+}
+
+// hasScenery is whether a folder is a piece of furniture rather than a category
+// to walk further into - which is exactly the question the browser asks of every
+// directory it lists, and the same question loadScenery answers by walking.
+func hasScenery(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, sceneryFile))
+	return err == nil
 }
 
 // sceneryIDs is the folder's contents in a fixed order, for a menu.

@@ -1,0 +1,37 @@
+{
+  "PlayerSpawn": [
+    32,
+    1,
+    32
+  ],
+  "PlayerDir": [
+    1,
+    0
+  ],
+  "CeilingColor": {
+    "R": 10,
+    "G": 38,
+    "B": 39,
+    "A": 255
+  },
+  "FloorColor": {
+    "R": 139,
+    "G": 155,
+    "B": 180,
+    "A": 255
+  },
+  "FogStart": 0,
+  "FogEnd": 0,
+  "AmbientColor": [
+    0,
+    0,
+    0
+  ],
+  "AmbientStrength": 0,
+  "Entities": null,
+  "Lights": null,
+  "Music": "medical",
+  "SkyFullSphere": false,
+  "Station": null,
+  "Panes": null
+}

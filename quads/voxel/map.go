@@ -461,11 +461,6 @@ func (m *Map) SetAirBlocks(pos []Int3) {
 	}
 }
 
-func (m *Map) ContainsVec(pos mgl32.Vec3) bool {
-	x, y, z := pos.X(), pos.Y(), pos.Z()
-	return m.Contains(int32(x), int32(y), int32(z))
-}
-
 func (m *Map) Contains(x int32, y int32, z int32) bool {
 	return x >= 0 && x < m.width*m.ChunkSizeHorizontal && y >= 0 && y < m.height*m.ChunkSizeHeight && z >= 0 && z < m.depth*m.ChunkSizeHorizontal
 }
@@ -473,7 +468,15 @@ func (m *Map) Contains(x int32, y int32, z int32) bool {
 func (m *Map) GetBlockFromInt3(pos Int3) *Block {
 	return m.GetGlobalBlock(int32(pos.X), int32(pos.Y), int32(pos.Z))
 }
+
+// GetGlobalBlock is the block at a cell, and air anywhere outside the map. The
+// check has to come first: the chunk index is flattened, so a cell one past the
+// east or top edge would otherwise read a block out of some other chunk - a wall
+// standing in the air beyond the level.
 func (m *Map) GetGlobalBlock(x int32, y int32, z int32) *Block {
+	if !m.Contains(x, y, z) {
+		return EmptyBlock
+	}
 	chunkX := x / m.ChunkSizeHorizontal
 	chunkY := y / m.ChunkSizeHeight
 	chunkZ := z / m.ChunkSizeHorizontal
@@ -491,6 +494,9 @@ func (m *Map) GetGlobalBlock(x int32, y int32, z int32) *Block {
 var EmptyBlock = NewAirBlock()
 
 func (m *Map) GetBlockAndChunk(blockPos Int3) (*Block, *Chunk) {
+	if !m.ContainsGrid(blockPos) {
+		return nil, nil
+	}
 	x := blockPos.X
 	y := blockPos.Y
 	z := blockPos.Z

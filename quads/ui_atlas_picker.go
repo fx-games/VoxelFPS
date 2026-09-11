@@ -23,6 +23,7 @@ type GuiAtlasPicker struct {
 	shouldClose           bool
 	onClose               func()
 	onIndexClicked        func(selection int)
+	onIndexRightClicked   func(selection int)
 	selectionTexture      *glhf.Texture
 	currentSelectionIndex int
 	atlasTopLeft          geometry.Point
@@ -44,10 +45,14 @@ type GuiAtlasPicker struct {
 	dirLabel *BitmapFontMesh
 }
 
-// SetBrowser turns the picker into a file browser over the texture library.
-// Cells are then directories and library textures rather than atlas slots, and an
+// SetBrowser turns the picker into a file browser over a folder of assets.
+// Cells are then directories and the things in them rather than atlas slots, and an
 // index handed to a caller is the slot the picked texture was copied into - dest
 // is what a texture is chosen *for*, the library is only where it is chosen from.
+//
+// dest is nil for a browser over something that is not a texture at all - the
+// mesh browser, where what is chosen is the folder itself. The index then means
+// the cell, and Browser().Entry says which folder that was.
 func (a *GuiAtlasPicker) SetBrowser(browser *TexBrowser, dest *AtlasIndex, toast func(string)) {
 	a.browser = browser
 	a.dest = dest
@@ -83,6 +88,10 @@ func (a *GuiAtlasPicker) Resolve(index int) (int, bool) {
 		a.browser.Open(entry.Path)
 		a.showDir()
 		return -1, false
+	}
+	if a.dest == nil {
+		// Nothing to import into: the cell itself is the answer. See SetBrowser.
+		return index, true
 	}
 	slot, err := a.dest.Import(entry.Path)
 	if err != nil {
@@ -166,7 +175,7 @@ func (a *GuiAtlasPicker) indexFromScreenPos(xpos float64, ypos float64) int {
 }
 
 func (a *GuiAtlasPicker) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.MouseButton, action glfw.Action, mods glfw.ModifierKey) (consumed bool) {
-	if action != glfw.Press || button != glfw.MouseButtonLeft {
+	if action != glfw.Press || (button != glfw.MouseButtonLeft && button != glfw.MouseButtonRight) {
 		return false
 	}
 	isValidSelection := a.HandleMousePosEvents(xpos, ypos)
@@ -174,6 +183,14 @@ func (a *GuiAtlasPicker) HandleMouseButtonEvents(xpos float64, ypos float64, but
 		return false
 	}
 	a.currentSelectionIndex = a.indexFromScreenPos(xpos, ypos)
+	if button == glfw.MouseButtonRight {
+		// The raw cell, not Resolve's answer: a right click must neither walk
+		// into a folder nor cost the atlas a slot.
+		if a.onIndexRightClicked != nil {
+			a.onIndexRightClicked(a.currentSelectionIndex)
+		}
+		return true
+	}
 	selected, isChoice := a.Resolve(a.currentSelectionIndex)
 	if isChoice && a.onIndexClicked != nil {
 		a.onIndexClicked(selected)
@@ -215,7 +232,17 @@ func (a *GuiAtlasPicker) ShouldClose() bool {
 	return a.shouldClose
 }
 
+// Browser is the folder being browsed, for a caller that has to turn a picked
+// index back into the file it stands for.
+func (a *GuiAtlasPicker) Browser() *TexBrowser { return a.browser }
+
 func (a *GuiAtlasPicker) HandleDrop(names []string, xpos float64, ypos float64) bool {
+	if a.browser != nil && a.dest == nil {
+		// A browser that is not choosing textures has nowhere to put a dropped
+		// one, and the grid under the cursor is a directory rather than an atlas
+		// with room in it, so the drop is refused rather than landing somewhere.
+		return false
+	}
 	if a.browser != nil {
 		// The library is the way in, so a dropped texture is put into it rather
 		// than refused: writing it straight into the page being browsed would
@@ -373,6 +400,12 @@ func (a *GuiAtlasPicker) SetOnClose(closeCallback func()) {
 
 func (a *GuiAtlasPicker) SetOnIndexClicked(callback func(selection int)) {
 	a.onIndexClicked = callback
+}
+
+// SetOnIndexRightClicked is the second button on a cell, for a picker whose
+// cells can be taken away as well as chosen.
+func (a *GuiAtlasPicker) SetOnIndexRightClicked(callback func(selection int)) {
+	a.onIndexRightClicked = callback
 }
 
 func (a *GuiAtlasPicker) StartDrag(xpos float64, ypos float64) int {

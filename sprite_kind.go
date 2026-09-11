@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -170,14 +172,37 @@ const spriteDir = "assets/sprites"
 var sourceScale = map[string]float32{"ss_": 1, "bs_": 1}
 
 // scaleFor is the multiplier this kind's folder falls under, or one for a
-// folder that is nobody's import.
+// folder that is nobody's import. The prefix is on the folder's own name, not on
+// the path: a kind lives under a role and a category now, so the id starts with
+// "props/" long before it gets to "ss_".
 func scaleFor(id string) float32 {
+	name := path.Base(id)
 	for prefix, scale := range sourceScale {
-		if strings.HasPrefix(id, prefix) {
+		if strings.HasPrefix(name, prefix) {
 			return scale
 		}
 	}
 	return 1
+}
+
+// The three roles a sprite kind is filed under, which are the three folders at
+// the top of assets/sprites: what stands in a room, what the player picks up, and
+// what walks. They are the importers' own - see tools/importss/categories.go -
+// and they are what the editor's three sprite tools each browse a folder of.
+const (
+	propsRole  = "props"
+	itemsRole  = "items"
+	actorsRole = "actors"
+)
+
+// spriteRole is which of the three a kind's ID falls under, or "" for a folder
+// that predates the sorting and sits at the top level.
+func spriteRole(id string) string {
+	role, _, nested := strings.Cut(id, "/")
+	if !nested {
+		return ""
+	}
+	return role
 }
 
 // spriteKindFile is what makes a folder under spriteDir a kind rather than a
@@ -210,29 +235,36 @@ var animOrder = [quads.AnimCount]string{
 // loadSpriteKinds reads every folder under dir that has a sprite.json in it. A
 // folder without one is skipped rather than being an error, the same way a
 // mesh folder without a scenery.json is a plain model.
+//
+// It walks the whole tree rather than the top level: a kind is filed under a
+// role and a category - see tools/importss/categories.go - so a kind's ID is its
+// path below dir with forward slashes, which is what a map's SpriteSheetName
+// holds and what the editor's browsers hand back.
 func loadSpriteKinds(dir string) (map[string]*SpriteKind, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]*SpriteKind{}, nil
-		}
-		return nil, fmt.Errorf("sprites: %w", err)
-	}
-	library := make(map[string]*SpriteKind, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name(), spriteKindFile)
-		raw, err := os.ReadFile(path)
+	library := map[string]*SpriteKind{}
+	err := filepath.WalkDir(dir, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
 		}
-		kind := &SpriteKind{}
+		if entry.IsDir() || entry.Name() != spriteKindFile {
+			return nil
+		}
+		folder := filepath.Dir(p)
+		id, err := filepath.Rel(dir, folder)
+		if err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		kind := &SpriteKind{ID: filepath.ToSlash(id)}
 		if err := json.Unmarshal(raw, kind); err != nil {
-			return nil, fmt.Errorf("sprites: %s: %w", path, err)
+			return fmt.Errorf("%s: %w", p, err)
 		}
-		kind.ID = entry.Name()
 		if kind.Name == "" {
 			kind.Name = kind.ID
 		}
@@ -240,14 +272,18 @@ func loadSpriteKinds(dir string) (map[string]*SpriteKind, error) {
 			kind.Scale = 1
 		}
 		kind.Scale *= scaleFor(kind.ID)
-		kind.sheetPath = filepath.Join(dir, entry.Name(), spriteSheetFile)
+		kind.sheetPath = filepath.Join(folder, spriteSheetFile)
 		if _, err := os.Stat(kind.sheetPath); err != nil {
-			return nil, fmt.Errorf("sprites: %s names no %s", entry.Name(), spriteSheetFile)
+			return fmt.Errorf("%s names no %s", kind.ID, spriteSheetFile)
 		}
 		if kind.Animations["idle"] == nil || len(kind.Animations["idle"].Frames) == 0 {
-			return nil, fmt.Errorf("sprites: %s has no idle animation", entry.Name())
+			return fmt.Errorf("%s has no idle animation", kind.ID)
 		}
 		library[kind.ID] = kind
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sprites: %w", err)
 	}
 	return library, nil
 }

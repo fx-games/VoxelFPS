@@ -55,6 +55,7 @@ const (
 	ActionEditorTabAction         = "EditorTabAction"
 	ActionEditorCycleMode         = "EditorCycleMode"
 	ActionEditorRotate            = "EditorRotate"
+	ActionEditorOpenPicker        = "EditorOpenPicker"
 	ActionToggleEmissiveTexture   = "ToggleEmissiveTexture"
 	ActionEntityMenuNext          = "EntityMenuNext"
 	ActionEntityMenuPrevious      = "EntityMenuPrevious"
@@ -99,8 +100,10 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionEditorTabAction:         glfw.KeyTab,
 	// The editor's two new keys sit next to Tab and the number row, because in
 	// editor mode the left hand never leaves them: mode, toggle, slot.
-	ActionEditorCycleMode:       glfw.KeyQ,
-	ActionEditorRotate:          glfw.KeyZ,
+	ActionEditorCycleMode: glfw.KeyQ,
+	ActionEditorRotate:    glfw.KeyZ,
+	// B for browse, next to the other two editor keys and free in every mode.
+	ActionEditorOpenPicker:      glfw.KeyB,
 	ActionToggleEmissiveTexture: glfw.KeyG,
 	ActionEntityMenuNext:        glfw.KeyL,
 	ActionEntityMenuPrevious:    glfw.KeyK,

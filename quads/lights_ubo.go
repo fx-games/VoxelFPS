@@ -291,6 +291,24 @@ func (lu *LightsUBO) AddLights(infos ...LightInfo) (dropped int) {
 	return lu.setAll(append(lu.lights, infos...))
 }
 
+// MuteLights writes a light count of zero into the block the shaders read and
+// hands back the call that puts the real one back. It is for a pass that draws
+// something which is not standing in the level - a model previewed on its own,
+// which has to look the same whatever the map around it is lit by. The lights
+// themselves are untouched, only the count the shader loops to, so restoring is
+// a word rather than a re-upload of the whole block.
+func (lu *LightsUBO) MuteLights() (restore func()) {
+	lu.uploadLightCount(0)
+	return func() { lu.uploadLightCount(lu.lightCount) }
+}
+
+func (lu *LightsUBO) uploadLightCount(count int) {
+	value := glhf.GlFloat(float32(count))
+	lu.Begin()
+	gl.BufferSubData(gl.UNIFORM_BUFFER, 0, 4, gl.Ptr(&value))
+	lu.End()
+}
+
 // Lights is the current list, for the shadow pass to walk. The pass writes to the
 // cache fields on each light, so this hands out the slice itself.
 func (lu *LightsUBO) Lights() []LightInfo {

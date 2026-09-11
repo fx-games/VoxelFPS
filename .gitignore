@@ -34,3 +34,8 @@ temp/
 /3rd-party/*
 !/3rd-party/README.md
 !/3rd-party/go.mod
+
+# Built tool binaries, from `go build ./tools/...` in the repo root.
+/importss
+/importbs
+/mapgen

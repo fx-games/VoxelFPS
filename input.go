@@ -133,6 +133,12 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 		if key == g.key(ActionEditorRotate) {
 			g.rotateProp()
 		}
+		// One key, every mode: the browser for whatever this mode places. The
+		// palettes are hundreds of pieces long now, so the wheel is for the
+		// piece next door and this is for the one three folders away.
+		if key == g.key(ActionEditorOpenPicker) {
+			g.openModePicker()
+		}
 		if key >= glfw.Key1 && key <= glfw.Key9 {
 			g.editorNumberKey(int(key - glfw.Key1))
 		}
@@ -391,8 +397,7 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 // editor mode - is whatever the current mode says. Left builds, right takes
 // back: a pending voxel corner, a prop, the last waypoint of a route.
 func (g *Game) editorClick(button glfw.MouseButton) {
-	switch g.editor.mode {
-	case ModeProps:
+	if g.editor.mode.placesProps() {
 		if button == glfw.MouseButtonRight {
 			g.deleteHovered()
 			return
@@ -400,6 +405,9 @@ func (g *Game) editorClick(button glfw.MouseButton) {
 		if button == glfw.MouseButtonLeft {
 			g.placeProp()
 		}
+		return
+	}
+	switch g.editor.mode {
 	case ModeActors:
 		if button == glfw.MouseButtonRight {
 			g.dropLastWaypoint()

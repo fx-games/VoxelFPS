@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/core"
 )
 
 // The shipped map's two lights used to be Go literals in the GlApplication
@@ -91,6 +92,57 @@ func TestMapNamesListsEveryShippedLevel(t *testing.T) {
 		}
 		if result.PlayerSpawn == (mgl32.Vec3{}) {
 			t.Errorf("%s spawns the player at the origin, which is inside the floor", name)
+		}
+		// Every model a level asks for by name has to still be where the name
+		// says. Nothing at load time complains about one that is not - the piece
+		// is quietly absent - so moving the models into category folders could
+		// have emptied the gallery without a word.
+		for _, spawn := range result.Entities {
+			mesh := spawn.Entity.MeshName
+			if mesh == "" {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(meshDir, mesh)); err != nil {
+				t.Errorf("%s wants the mesh %q, which is not in %s", name, mesh, meshDir)
+			}
+		}
+	}
+}
+
+// A new map is a level that loads: its folder, a floor with the player standing
+// on it, and the look of the map it was made from without that map's contents.
+// A name already taken, or one that is not a folder name, is refused.
+func TestNewMapIsALevelThatLoads(t *testing.T) {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(workingDir) })
+
+	look := core.MapLoadResult{
+		FogEnd:   40,
+		Entities: []core.EntitySpawn{{Entity: core.MapEntity{Name: "Barrel"}}},
+	}
+	if err := createMap("fresh", look); err != nil {
+		t.Fatal(err)
+	}
+	loaded, blocks, err := loadMap("fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.FogEnd != 40 || len(loaded.Entities) != 0 {
+		t.Errorf("fog %v and %d entities, want the look and none of the contents", loaded.FogEnd, len(loaded.Entities))
+	}
+	spawn := loaded.PlayerSpawn
+	if !blocks.IsSolidBlockAt(int32(spawn.X()), int32(spawn.Y())-1, int32(spawn.Z())) {
+		t.Errorf("no floor under the spawn at %v", spawn)
+	}
+	for _, name := range []string{"fresh", "", "../out", "a b"} {
+		if createMap(name, look) == nil {
+			t.Errorf("created a map called %q", name)
 		}
 	}
 }

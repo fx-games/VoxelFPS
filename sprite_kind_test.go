@@ -64,6 +64,56 @@ func TestEveryInstalledSpriteKindIndexesFramesItsSheetHas(t *testing.T) {
 	}
 }
 
+// A kind whose sheet has no opaque pixel in it is a thing that can be picked out
+// of the editor's browser, placed, and then never seen: an invisible rectangle
+// standing in the level. A quarter of System Shock's property table is like that
+// - the doors, the furniture it draws as a 3D model instead, the triggers and AI
+// hints that are script rather than scenery - and every one of them used to be a
+// folder here. The importer drops them now (see writeKind in tools/importss), and
+// this is what says so if a re-import or a hand-added folder brings one back.
+//
+// It reads every sheet, which is what the test above already pays for.
+func TestNoInstalledSpriteKindIsInvisible(t *testing.T) {
+	kinds, err := loadSpriteKinds(spriteDir)
+	if err != nil {
+		t.Fatalf("loading %s: %v", spriteDir, err)
+	}
+	for id, kind := range kinds {
+		sheet, err := readImage(kind.sheetPath)
+		if err != nil {
+			t.Errorf("%s: %v", id, err)
+			continue
+		}
+		if !anyOpaquePixel(sheet) {
+			t.Errorf("%s draws nothing: every pixel of its sheet is transparent", id)
+		}
+	}
+}
+
+// readImage is the whole picture rather than imageConfig's header, because
+// whether there is any art in it is a question about the pixels.
+func readImage(path string) (image.Image, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	picture, _, err := image.Decode(file)
+	return picture, err
+}
+
+func anyOpaquePixel(picture image.Image) bool {
+	bounds := picture.Bounds()
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if _, _, _, alpha := picture.At(x, y).RGBA(); alpha != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // An actor needs all six animations the engine plays, because nothing checks at
 // the point of use: spawnActor reads the last frame of AnimDying to size the
 // collider a corpse gets, and updateActors sends the cursor into AnimHit and

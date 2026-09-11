@@ -57,7 +57,8 @@ The flags:
 | `-cycle N` | put the next weapon in hand every N seconds, to walk the whole folder |
 | `-tap D,U` | tap the trigger D tics down, U up, for a weapon that acts on a press |
 | `-width`/`-height` | window size, for a capture that needs more pixels than 640x480 |
-| `-editor MODE` | boot into the map editor in `blocks`, `props` or `actors` - a capture takes no keystrokes, so this is the only way to photograph the editor |
+| `-editor MODE` | boot into the map editor in `blocks`, `props3d`, `props2d`, `pickups`, `weapons` or `actors` - a capture takes no keystrokes, so this is the only way to photograph the editor |
+| `-pick DIR` | open that mode's own asset browser on that folder (`.` for the top), for the same reason - needs `-editor` |
 | `-map NAME` | which level to load, by its folder under `assets/maps` (default `raymap`) |
 
 **A capture is deterministic.** `-shot-fps` makes every frame advance the world
@@ -912,6 +913,15 @@ from the editor's scenery menu and by `entity ... mesh=ss3d_NN`.
   objects with it name a mesh where `TPoly`, `FlatPoly` and `TLPoly` name none
   at all. The rest keep their resource number, and every folder carries the
   number anyway (`ss3d_16_couch`) so the order on disk is the order in the file.
+- **A model unit is a voxel, so nothing is resized.** The models are drawn by
+  the same `g3` pipeline as the sprites and in the same world units: a vertex is
+  fix 16.16, and one of those units is one map square (`obj_coord_from_fix` in
+  `map.h` is a shift of eight off a coordinate whose top byte is the square).
+  That is the same trace as the sprites' ninety-six pixels a square, so 96
+  pixels of art, one model unit and one voxel are all the same length and the
+  two halves of the import cannot drift apart. `modelScale` was two for a while
+  and every piece of furniture was twice the size it should be - a chair 2.3
+  metres tall standing beside a 1.7-metre mutant.
 - **The tree is thrown away.** The nodes are a BSP for the game's own renderer,
   which had no depth buffer; every face in every branch is collected and the
   depth buffer does what the tree was for.
