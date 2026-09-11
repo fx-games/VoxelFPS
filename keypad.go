@@ -285,6 +285,24 @@ func (g *Game) editEntityUnderCrosshair(object *quads.GameObject) bool {
 		})
 		return true
 	}
+	if sign := g.signFor(object); sign != nil {
+		typed := sign.text
+		g.openPanel(func() string {
+			return "SET SIGN TEXT\n\n" + strings.ReplaceAll(typed, "|", "\n") + "_" +
+				"\n\nTYPE   ENTER new line   ! first is red   BACKSPACE   ESC saves"
+		}, func(key glfw.Key, mods glfw.ModifierKey) bool {
+			if key == glfw.KeyEnter || key == glfw.KeyKPEnter {
+				typed += "|"
+			} else if character, typedOne := typedRune(key, mods); typedOne {
+				typed += string(character)
+			} else if key == glfw.KeyBackspace && len(typed) > 0 {
+				typed = typed[:len(typed)-1]
+			}
+			g.setSignText(sign, typed)
+			return false
+		})
+		return true
+	}
 	if note := g.noteFor(object); note != nil {
 		typed := note.text
 		g.openPanel(func() string {
@@ -481,6 +499,9 @@ func (g *Game) keypadStatus(object *quads.GameObject) string {
 	}
 	if note := g.noteFor(object); note != nil {
 		return "note: " + noteTitle(note.text) + "   E to write"
+	}
+	if sign := g.signFor(object); sign != nil {
+		return "sign: " + strings.ReplaceAll(sign.text, "|", " / ") + "   E to write"
 	}
 	return ""
 }

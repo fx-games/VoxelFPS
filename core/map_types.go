@@ -225,8 +225,11 @@ func LineToPlaneIntersection(lineStart, lineEnd, planeCoord, planeNormal mgl32.V
 // centrifugal and Coriolis terms on the free player, or a world that really
 // rotates - which is a different engine.
 type Station struct {
-	// Spin is degrees a second, about Y - the axis a level's own up already is.
-	Spin float32
+	// Spin is degrees a second, about SpinAxis - Y, the axis a level's own up
+	// already is, when that is zero. A ship tumbling end over end turns about an
+	// axis across it instead, and the stars wheel past overhead.
+	Spin     float32
+	SpinAxis mgl32.Vec3
 
 	// The pressurised part of the level, as an upright cylinder: inside it there
 	// is air, a floor and gravity, outside it there is vacuum and the suit. An

@@ -1,7 +1,8 @@
-// Command genpanels writes the three small props a level's intel is made of:
+// Command genpanels writes the small props a level's intel is made of:
 // assets/meshes/keypad/mesh.glb, an upright wall panel with a display and
 // twelve keys on it, assets/meshes/note/mesh.glb, a sheet of paper lying face
-// up, and assets/meshes/audiolog/mesh.glb, a data cartridge lying on its side.
+// up, assets/meshes/audiolog/mesh.glb, a data cartridge lying on its side, and
+// assets/meshes/sign/mesh.glb, a wall display the game writes on (sign.go).
 // Each is one box with a picture on one face, which is why they are generated
 // rather than modelled - see tools/genstairs for the same shape.
 //
@@ -62,6 +63,17 @@ const (
 	audioLogWidth  = 0.18
 	audioLogDepth  = 0.24
 	audioLogHeight = 0.05
+)
+
+// The sign: a display 1.8m by 0.6m, 3:1 like the picture the game paints on it
+// (quads.SignPicture), hung like the keypad - origin on the floor, face along
+// -Z - with its middle a little above eye height, which is also low enough to
+// fit under the one-voxel ceiling of a cramped deck.
+const (
+	signWidth  = 0.9
+	signHeight = 0.3
+	signDepth  = 0.04
+	signBottom = 0.58
 )
 
 // atlasSplit is where the readable face's picture ends and the flat swatch the
@@ -152,6 +164,15 @@ func main() {
 		[3]float32{logHalfX, audioLogHeight, logHalfZ},
 		[3]float32{0, 1, 0}, &lPos, &lNorm, &lUV, &lIdx)
 	write("audiolog", audioLogTexture(), lPos, lNorm, lUV, lIdx)
+
+	signHalf := float32(signWidth) / 2
+	var sPos, sNorm [][3]float32
+	var sUV [][2]float32
+	var sIdx []uint16
+	box([3]float32{-signHalf, signBottom, -signDepth / 2},
+		[3]float32{signHalf, signBottom + signHeight, signDepth / 2},
+		[3]float32{0, 0, -1}, &sPos, &sNorm, &sUV, &sIdx)
+	write("sign", signTexture(), sPos, sNorm, sUV, sIdx)
 }
 
 func write(name string, texture []byte, positions, normals [][3]float32, uvs [][2]float32, indices []uint16) {
@@ -316,6 +337,24 @@ func audioLogTexture() []byte {
 			shade := uint8(0x26 + random.Intn(0x0C))
 			img.SetNRGBA(x, y, color.NRGBA{shade, shade, uint8(int(shade) + 8), 0xFF})
 		}
+	}
+	return encode(img)
+}
+
+// signTexture is a blank sign, which is what one looks like before the game has
+// written on it and what the editor's browser shows: casing, bezel, a dark
+// display with three amber dashes on it. The game paints over the whole of it
+// with quads.SignPicture, which keeps this layout.
+func signTexture() []byte {
+	const width, height = 512, 128
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	display := int(atlasSplit*width) - 1
+	rect(img, 0, 0, width-1, height-1, color.NRGBA{58, 64, 68, 0xFF})
+	rect(img, 3, 3, display-3, height-4, color.NRGBA{28, 33, 36, 0xFF})
+	rect(img, 7, 7, display-7, height-8, color.NRGBA{8, 14, 16, 0xFF})
+	for i := 0; i < 3; i++ {
+		x := display/2 - 70 + i*56
+		rect(img, x, height/2-4, x+28, height/2+4, color.NRGBA{255, 184, 72, 0xFF})
 	}
 	return encode(img)
 }

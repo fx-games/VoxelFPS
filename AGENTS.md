@@ -115,6 +115,7 @@ level can also be a `build.map` beside them, one command a line.
 go run ./tools/mapgen -map station            # build.map -> map.bin + map.json
 go run ./tools/mapgen -map station -show 12   # what is solid at height 12
 go run ./tools/mapgen -map ark -side 56       # what is solid in the x-y plane at z=56
+go run ./tools/mapgen -map ark -leaks         # build, then: is the start sealed from space?
 go run ./tools/mapgen -help                   # every command and its arguments
 ```
 
@@ -132,7 +133,15 @@ and `blast` is battle damage: a ragged, seeded hole with a scorched rim; the
 rest of a level - where the player starts, what stands in it, its
 lights, fog and music - is the same file. Positional arguments come first and
 `key=value` options after, and a bare word among the options is a flag
-(`baked`).
+(`baked`). `fill`, `clear` and `light` take `step=DX,DY,DZ times=N` to lay the
+same thing down in a row - a corridor of cabins is one line per row.
+
+`-leaks` is the check a station level wants and nothing in the game makes: it
+floods the air from the spawn, with doors and panes counted shut, and names the
+first voxel of vacuum it reaches and the one it came through. The pressure hull
+is a shape (`core.Station.Pressurised`), not a flood, so a gap in a wall is only
+a gap to the eye - this is the eye. The ark's six lower decks pass it; that is
+the promise that the start is not open to space.
 
 **A level is authored in the text or in the editor, not both.** Saving in the
 editor writes `map.bin` back, and the next `mapgen` run overwrites it. A level
@@ -193,6 +202,32 @@ with a picture on one face. The keypad's picture faces **-Z**, which is what "as
 modelled" means for a prop nobody has turned, so a keypad on a wall whose open
 side faces +Z wants `facing=0,1`. Mount it *proud of* the wall: a panel spawned
 on the wall's own voxel is a panel inside the wall, and invisible.
+
+## A sign, and why each one is its own model
+
+A **sign** is a wall display with a few words on it (`sign.go`): a deck's
+directory, a department's name over its door, a red warning at a sealed hatch.
+What it says is its entity's `Text` - the field a note keeps its writing in -
+painted onto the display by `quads.SignPicture` with the editor's bitmap font,
+at the biggest whole-pixel size the words fit. Lines split at `|`, and a line
+starting with `!` is written red.
+
+Every sign gets **a copy of the model of its own** (`MeshDrawer.NewOwnMesh`).
+A loaded model is shared by every placement of it, and so is its texture - that
+is how a computer's screen animates on every computer at once - so a sign
+sharing the model would be every sign saying the last words painted. A copy is
+a load and a draw call; the editor's ghost, which has no collider, shares the
+blank one.
+
+- **In `build.map`**: `sign X Y Z FACING the words`. X Y Z is the floor under
+  it, like the keypad - the model is hung at head height - and FACING is the way
+  its face looks, `0,1` for a sign on a wall whose open side is +z. Put X Y Z a
+  few hundredths proud of the wall, or the sign is inside it.
+- **In the editor**, PROPS mode, the `sign` palette slot: E on it types the
+  words, Enter starts a new line, and it repaints as you type.
+
+The model is generated with the other panels, `go run ./tools/genpanels`: a
+0.9 by 0.3 box, 3:1 like the 384x128 display painted on it.
 
 ## An audio log, and the key that plays it without stopping you
 

@@ -77,6 +77,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 			panic("Mesh file not found: " + meshFile)
 		}
 		mesh, meshAABB := g.Meshes.NewMesh(meshFile)
+		// A sign's picture is its writing, so a real one gets a model of its
+		// own to paint; the editor's ghost shares the blank one.
+		if entity.MeshName == signMeshName && entity.CreateCollider {
+			mesh, meshAABB = g.Meshes.NewOwnMesh(meshFile)
+		}
 		aabb = meshAABB
 
 		goFromEntity.SetComponent(mesh)
@@ -239,6 +244,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		goFromEntity.Mesh().EmissiveStrength = audioLogEmissiveStrength
 		if entity.CreateCollider {
 			g.spawnAudioLog(goFromEntity, entity.Sound, entity.Text)
+		}
+	case signMeshName:
+		goFromEntity.Mesh().EmissiveStrength = signEmissiveStrength
+		if entity.CreateCollider {
+			g.spawnSign(goFromEntity, entity.Text)
 		}
 	case torchMeshName:
 		// A torch head is bright on screen wherever the torch came from, the

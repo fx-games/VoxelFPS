@@ -223,3 +223,38 @@ func TestABadLineNamesItself(t *testing.T) {
 		}
 	}
 }
+
+// A room the flood cannot get out of is sealed, the same room with one hole in
+// its wall is not, and a repeated fill lays down the row it says.
+func TestTheLeakCheckFindsTheGap(t *testing.T) {
+	room := `
+size 16 8 16
+block wall 20
+pressure 8 8 7 1 6
+cyl wall 8 8 5 1 1
+tube wall 8 8 5 4 2 4
+cyl wall 8 8 5 5 5
+spawn 8.5 2 8.5
+`
+	sealed, err := build(room)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report, ok := leaks(sealed); !ok {
+		t.Error(report)
+	}
+	holed, _ := build(room + "clear 12 2 8 13 2 8\n")
+	if report, ok := leaks(holed); ok {
+		t.Errorf("a hole in the wall was called sealed: %s", report)
+	}
+
+	row, err := build("size 16 4 16\nblock wall 20\nfill wall 0 0 0 0 0 0 step=3,0,0 times=4\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for x := int32(0); x < 12; x++ {
+		if want := x%3 == 0; row.blocks.IsSolidBlockAt(x, 0, 0) != want {
+			t.Errorf("x=%d solid=%v, want %v", x, !want, want)
+		}
+	}
+}

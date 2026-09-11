@@ -30,8 +30,10 @@
 //	block NAME T [T T]             name a kind of block: wall, floor, ceiling
 //	                               textures by `tex` name or atlas slot,
 //	                               repeating the last
-//	fill NAME x0 y0 z0 x1 y1 z1    make an inclusive box of it solid
-//	clear x0 y0 z0 x1 y1 z1        make an inclusive box air
+//	fill NAME x0 y0 z0 x1 y1 z1 [step=DX,DY,DZ times=N]
+//	                               make an inclusive box of it solid - N times,
+//	                               moved on by step each time, with those two
+//	clear x0 y0 z0 x1 y1 z1 [step=DX,DY,DZ times=N]   the same, air
 //	cyl NAME cx cz r y0 y1         a solid upright cylinder
 //	tube NAME cx cz rOuter rInner y0 y1   the wall of one, hollow inside
 //	cone NAME cx cz r0 y0 r1 y1 [shell=N] an upright cylinder whose radius runs
@@ -46,8 +48,9 @@
 //	blast cx cy cz r [seed=N] [scorch=NAME] [debris=N]
 //	                               a ragged hole: air inside a lumpy sphere,
 //	                               whatever is left solid at its edge turned to
-//	                               the scorch block, and debris loose blocks of
-//	                               it scattered around, the same every build
+//	                               the scorch block, any glass in it broken out,
+//	                               and debris loose blocks of it thrown outward,
+//	                               the same every build
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
@@ -63,14 +66,19 @@
 //	                               after the three coordinates is what it says,
 //	                               spaces and all, and any four digits in it is
 //	                               a code the player learns by reading it
+//	sign X Y Z FACING THE WORDS     a wall display with writing on it, standing
+//	                               on the floor at X Y Z with its face turned to
+//	                               FACING (DX,DZ). Lines split at |, and a line
+//	                               starting with ! is a warning, written red
 //	log X Y Z CUE THE LABEL        an audio log on the floor: a cartridge with a
 //	                               recording on it. CUE names the file under
 //	                               assets/audio/logs without its extension, and
 //	                               the rest of the line is the label on its lid
 //	light X Y Z [color=R,G,B] [power=N] [baked] [yaw=N] [pitch=N]
-//	                               [angle=N] [reach=N]
+//	                               [angle=N] [reach=N] [step=DX,DY,DZ times=N]
 //	sky full                       no horizon: the cubemap covers the sphere
-//	spin DEG                       degrees a second the sky turns, about Y
+//	spin DEG [axis=X,Y,Z]          degrees a second the sky turns, about Y or
+//	                               the axis given
 //	pressure CX CZ R Y0 Y1 [R1]    the cylinder that has air and gravity in it;
 //	                               R1 is its radius at Y1, for a hull that tapers
 //	fog START END                  how far the level can be seen through
@@ -96,6 +104,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -125,6 +134,7 @@ func main() {
 	name := flag.String("map", "", "level folder under "+mapDir)
 	show := flag.Int("show", -1, "instead of building, print what is solid at this height")
 	side := flag.Int("side", -1, "instead of building, print what is solid in the x-y plane at this z")
+	checkLeaks := flag.Bool("leaks", false, "after building, flood the air from the spawn and say whether it reaches vacuum")
 	gallery := flag.Bool("gallery", false, "write the imported gallery's build.map from whatever is installed")
 	flag.Parse()
 
@@ -178,6 +188,13 @@ func main() {
 	}
 	if err := os.WriteFile(filepath.Join(dir, mapFileName), data, 0o644); err != nil {
 		fatal(err)
+	}
+	if *checkLeaks {
+		report, sealed := leaks(level)
+		fmt.Println(report)
+		if !sealed {
+			defer os.Exit(1)
+		}
 	}
 	bounds := level.blocks.Bounds()
 	fmt.Printf("%s: %dx%dx%d voxels, %d solid, %d entities, %d lights, %d panes\n",
@@ -336,7 +353,27 @@ func (l *level) run(words []string, options map[string]string) error {
 		if err != nil {
 			return err
 		}
-		l.paint(box, far, block)
+		// step and times lay the same box down again and again, each one moved
+		// on by step: a row of cabins is one line rather than fifteen.
+		times, err := option(options, "times", 1)
+		if err != nil {
+			return err
+		}
+		step := [3]int32{}
+		if value, given := options["step"]; given {
+			moved, err := vec3(value)
+			if err != nil {
+				return err
+			}
+			step = [3]int32{int32(moved.X()), int32(moved.Y()), int32(moved.Z())}
+		}
+		for range int(times) {
+			l.paint(box, far, block)
+			for axis := range 3 {
+				box[axis] += step[axis]
+				far[axis] += step[axis]
+			}
+		}
 
 	case "cyl", "tube":
 		kind, known := l.kinds[args[0]]
@@ -518,6 +555,29 @@ func (l *level) run(words []string, options map[string]string) error {
 			Text:           strings.Join(args[3:], " "),
 		}})
 
+	case "sign":
+		// Prose again, like the note: FACING is the one word between the place and
+		// the words, the way the reader stands from the wall - 0,1 for a sign on a
+		// wall whose open side faces +z.
+		if len(args) < 5 {
+			return fmt.Errorf("want X Y Z FACING and something for it to say")
+		}
+		pos, err := floats3(args, 0)
+		if err != nil {
+			return err
+		}
+		facing, err := vec2(args[3])
+		if err != nil {
+			return err
+		}
+		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: core.MapEntity{
+			Name:           "Sign",
+			MeshName:       "sign",
+			CreateCollider: true,
+			Facing:         mgl32.Vec3{facing.X(), 0, facing.Y()},
+			Text:           strings.Join(args[4:], " "),
+		}})
+
 	case "log":
 		// The note's twin, and its argument is prose for the same reason - see
 		// there. The cue comes first because it is one word and the label is
@@ -572,7 +632,21 @@ func (l *level) run(words []string, options map[string]string) error {
 				*target = float32(number)
 			}
 		}
-		l.result.Lights = append(l.result.Lights, light)
+		// step and times hang a row of the same lamp, as fill lays a row of boxes.
+		times, err := option(options, "times", 1)
+		if err != nil {
+			return err
+		}
+		step := mgl32.Vec3{}
+		if value, given := options["step"]; given {
+			if step, err = vec3(value); err != nil {
+				return err
+			}
+		}
+		for range int(times) {
+			l.result.Lights = append(l.result.Lights, light)
+			light.Position = light.Position.Add(step)
+		}
 
 	case "sky":
 		if len(args) != 1 || args[0] != "full" {
@@ -586,6 +660,13 @@ func (l *level) run(words []string, options map[string]string) error {
 			return err
 		}
 		l.station().Spin = spin
+		if value, given := options["axis"]; given {
+			axis, err := vec3(value)
+			if err != nil {
+				return err
+			}
+			l.station().SpinAxis = axis
+		}
 
 	case "pressure":
 		numbers, err := floats(args)
@@ -850,6 +931,15 @@ func (l *level) blast(centre mgl32.Vec3, radius float32, seed uint32, scorch *vo
 			l.set(x, y, z, scorch)
 		}
 	})
+	// Glass in the hole goes with the wall it was set in. Tested against the
+	// outline without the jitter, which would take a draw from the seed and so
+	// move every piece of debris after it.
+	l.result.Panes = slices.DeleteFunc(l.result.Panes, func(pane core.Pane) bool {
+		cell := pane.Cell()
+		offset := mgl32.Vec3{float32(cell.X), float32(cell.Y), float32(cell.Z)}.Sub(centre)
+		return offset.Len() < outline(offset)
+	})
+
 	// The pieces go out, away from the hull's axis, and never land where there
 	// is air: a blast on the hull throws them into space rather than into a
 	// room, and a piece in a shaft is a shaft nobody can climb.
@@ -936,6 +1026,56 @@ func writeAtlas(dir string, textures []texture) error {
 	}
 	return os.WriteFile(filepath.Join(dir, strings.TrimSuffix(atlasFileName, ".png")+".paths"),
 		[]byte(strings.Join(paths, "\n")+"\n"), 0o644)
+}
+
+// leaks floods the air from the spawn, six ways, through everything that is not
+// a block, a pane or a door, and says whether it reaches vacuum - somewhere
+// outside the pressure hull, or off the edge of the level. A door counts as
+// shut, which is what makes this the question a level wants answered: is the
+// part you start in a sealed room, or is there a gap in it to space?
+//
+// The hull is a shape, not a flood (core.Station.Pressurised), so nothing in
+// the game ever asks this; a gap is only a gap to the eye. This is the eye.
+func leaks(l *level) (string, bool) {
+	hull := l.result.Station
+	if hull == nil {
+		return "leaks: no pressure hull, so nothing to leak", true
+	}
+	shut := map[voxel.Int3]bool{}
+	for _, pane := range l.result.Panes {
+		cell := pane.Cell()
+		shut[voxel.Int3{X: cell.X, Y: cell.Y, Z: cell.Z}] = true
+	}
+	for _, spawn := range l.result.Entities {
+		if strings.HasPrefix(spawn.Entity.MeshName, "door_") {
+			at := spawn.Position
+			shut[voxel.Int3{X: int32(at.X()), Y: int32(at.Y()), Z: int32(at.Z())}] = true
+		}
+	}
+	bounds := l.blocks.Bounds()
+	start := voxel.Int3{X: int32(l.result.PlayerSpawn.X()), Y: int32(l.result.PlayerSpawn.Y()), Z: int32(l.result.PlayerSpawn.Z())}
+	seen := map[voxel.Int3]voxel.Int3{start: start}
+	queue := []voxel.Int3{start}
+	for len(queue) > 0 {
+		at := queue[0]
+		queue = queue[1:]
+		centre := mgl32.Vec3{float32(at.X) + 0.5, float32(at.Y) + 0.5, float32(at.Z) + 0.5}
+		outside := at.X < 0 || at.Y < 0 || at.Z < 0 || at.X >= bounds.X || at.Y >= bounds.Y || at.Z >= bounds.Z
+		if outside || !hull.Pressurised(centre) {
+			from := seen[at]
+			return fmt.Sprintf("leaks: the air from the spawn reaches vacuum at %d,%d,%d, through %d,%d,%d",
+				at.X, at.Y, at.Z, from.X, from.Y, from.Z), false
+		}
+		for _, side := range []voxel.Int3{{X: 1}, {X: -1}, {Y: 1}, {Y: -1}, {Z: 1}, {Z: -1}} {
+			next := at.Add(side)
+			if _, been := seen[next]; been || shut[next] || l.blocks.IsSolidBlockAt(next.X, next.Y, next.Z) {
+				continue
+			}
+			seen[next] = at
+			queue = append(queue, next)
+		}
+	}
+	return fmt.Sprintf("leaks: sealed - %d voxels of air round the spawn, none of them vacuum", len(seen)), true
 }
 
 // option is a number given as key=value, or the fallback when it is not.

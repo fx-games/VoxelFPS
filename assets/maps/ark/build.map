@@ -1,50 +1,60 @@
 # The ark: the generation ship, after the war on board. Built by
 # `go run ./tools/mapgen -map ark`; this file is the level, and map.bin,
-# map.json and the atlas beside them are what it compiles to.
+# map.json and the atlas beside them are what it compiles to. Add -leaks to
+# prove the start is sealed.
 #
-# A cone standing on its point. The drive is in the tip, the decks are in the
-# wide part of the cone, and the drum and the ice dome on top are the heavy end:
-# the reaction mass and the shield. "Down" is towards the tip whatever the ship
-# is doing - thrust pushes the floor up at you from the engine side, and the
-# end-over-end tumble it coasted on for centuries throws you away from the
-# heavy drum, which is the same way. So the decks are flat and gravity is the
-# engine's own -Y. The sky does not turn: two weeks out, the drive is burning.
+# A cone standing on its point: the drive in the tip, eleven decks in the wide
+# part of the cone, the drum and the ice dome on top as the heavy end. The ship
+# coasts tumbling end over end about an axis through the drum, so "down" is
+# away from the drum - towards the tip - on every deck, and the stars wheel past
+# overhead. Gravity falls off towards the drum, which is the class system in one
+# number: the servants live low and heavy, the elites high and light, with the
+# most floor and the only windows.
 #
-#   y 94-104   ice dome        water ice: dust and radiation shield
-#   y 78-94    drum R22        tanks, the AI core in the middle, 8 booms
-#   y 75-77    D6 command      vented by the AI                    vacuum
-#   y 72-74    D5 farm         blown open, frozen                  vacuum
-#   y 69-71    D4 elite        window band, burnt out              air
-#   y 66-68    D3 medical      gene vault, the lab you wake in     air
-#   y 63-65    D2 crew         bunks, mess, airlock east (+z)      air
-#   y 60-62    D1 sump         life support, water, airlock west   air
-#   y 22-59    lower cone      tanks round the spine shaft         vacuum
-#   y  0-21    drive           reactor, shadow shield, the bell
+#   y 170-182  ice dome        water ice: dust and radiation shield
+#   y 149-170  drum R36        tanks, the AI core in the middle, 8 booms
+#   y 146-148  D11 bridge      vented by the AI                     vacuum
+#   y 141-145  D10 promenade   garden under glass, glass blown out  vacuum
+#   y 137-140  D9  residences  four suites and an atrium, windows   vacuum
+#   y 134-136  D8  staff flats officers and scientists, burnt       vacuum
+#   y 130-133  D7  hydroponics blown open from outside              vacuum
+#   ---------------------------- sealed: a hatch in the spine --------------
+#   y 127-129  D6  medical     lab, gene vault, ward, cold storage  air  START
+#   y 124-126  D5  crew flats  airlock east (+z), sealed            air
+#   y 122-123  D4  service commons: mess, laundry, chapel, washrooms air
+#   y 120-121  D3  service cabins, two metres to the ceiling        air
+#   y 118-119  D2  service cabins                                   air
+#   y 115-117  D1  life support: water tanks, airlock west, sealed  air
+#   ---------------------------- sealed: a hatch in the spine --------------
+#   y  28-114  lower cone      reaction mass round the spine        vacuum
+#   y   0-27   drive           reactor, shadow shield, the bell (cold)
 #
 # A voxel is two metres (the player is 0.875 of one). The hull's radius is
-# r(y) = 3 + (y-8)*15/70 all the way from the tip at y=8 to the drum at y=78;
-# every radius below that says "r(y)" is that line read at that height, and
-# changing the cone means changing all of them.
+# r(y) = 4 + (y-10)*26/140 from the tip at y=10 to the drum at y=149; every
+# radius below is that line read at a height, so changing the cone means
+# changing all of them. Ceilings go with class: one voxel on the service decks,
+# two for crew and medical, three and four up where the money was.
 #
-# Doors, ladders and everything else that is a thing rather than a wall are
-# not placed yet. The spine is the one way between decks: a ladder goes up it.
+# The spine is the one way between decks - a 3x3 shaft with a door on every
+# deck, where a ladder goes - and two hatches in it close the six lower decks
+# off from the rest; the airlocks are hatched shut too. Doors and ladders are
+# props and are not placed yet, so a doorway here is a hole where one goes.
 
-size 112 112 112
+size 160 192 160
 sky full
+spin 10 axis=1,0,0
 fog 200 900
 ambient 0.55 0.60 0.75 0.30
 ceiling 4 5 10
 floor 4 5 10
 music maintenance
 
-# D3, beside the spine door, facing it.
-spawn 63.5 67 56.5 dir=-1,0
+# In the lab, facing its door.
+spawn 88.5 128 70.5 dir=-1,0
 
-# Air on D1-D4 and nowhere else: out to the hull's outside, r(y), from D1's
-# floor to D4's ceiling. Out to the outside rather than the inside so the glass,
-# which stands in the wall, is not a step into vacuum; an airlock's chamber is
-# past the hull, so it is still vacuum by the time you stand in it.
-pressure 56.5 56.5 14.36 61 72 16.71
+# Air on D1-D6 and nowhere else: out to the outside of the hull, r(y), from
+# D1's floor to D6's ceiling.
+pressure 80.5 80.5 23.69 116 130 26.29
 
 # --------------------------------------------------------------- textures ---
 tex hull     Space/_original/METAL_1A.PNG
@@ -61,220 +71,501 @@ tex scorch   shock/087_industrial_tiles.png
 tex warn     Space/_original/WARN_1A.PNG
 tex steel    Space/_original/STEEL_1A.PNG
 tex reactor  shock/002_magnetic_containment_system.png
-tex flame    shock/188_incandescent_light.png glow
 tex crop     shock/203_grass.png
 tex rack     shock/209_overgrown_panel.png
 tex server   shock/122_tech_rack.png
 tex tank     Space/_original/METAL_1C.PNG
+tex rust     Space/_original/RUSTY_2A.PNG
+tex concrete Non-Space/CONCRETE_2A.PNG
+tex grime    Non-Space/CONCRETE_1B.PNG
+tex corridor shock/124_corridor_wall.png
+tex clinic   shock/038_clinical_panelling.png
+tex tiles    shock/219_tile_panelling.png
+tex silver   shock/143_silver_panelling.png
+tex green    shock/117_carpet.png
+tex oak      shock/261_oak_panelling.png
+tex marble   shock/151_marble_slab.png
+tex carpet   shock/147_carpet.png
+tex stone    Non-Space/TILE_1A.PNG
+tex lawn     shock/202_grass.png
+tex water    Space/_original/WATER_1A.PNG
+tex wood     Non-Space/WOOD_1A.PNG
+tex platinum shock/180_burnished_platinum_panelling.png
+tex grip     shock/100_hi_grip_surface.png
 
 # -------------------------------------------------------------- materials ---
 # wall, floor, ceiling
-block hull    hull
-block habhull hull2 floor ceil
-block deck    ceil floor ceil
-block drum    drum
-block ice     ice
-block strip   strip hull2 hull2
-block spine   grate
-block girder  girder
-block fin     fin
-block scorch  scorch
-block lock    warn steel steel
-block steel   steel
-block reactor reactor
-block throat  flame
-block crop    rack crop
-block console server steel
-block tank    tank
+block hull     hull
+block habhull  hull2 floor ceil
+block drum     drum
+block ice      ice
+block strip    strip hull2 hull2
+block spine    grate
+block girder   girder
+block fin      fin
+block scorch   scorch
+block lock     warn steel steel
+block hatch    warn
+block steel    steel
+block reactor  reactor
+block crop     rack crop
+block console  server steel
+block tank     tank
+# The walls, by who lived behind them.
+block sump_w   rust
+block serv_w   concrete
+block crew_w   corridor
+block med_w    clinic
+block off_w    silver
+block elite_w  oak
+block marble_w marble
+# The floors: a slab's top is the floor of the deck on it, its underside the
+# ceiling of the deck below.
+block fl_sump  ceil grate ceil
+block fl_serv  ceil grime ceil
+block fl_crew  ceil floor ceil
+block fl_med   ceil tiles ceil
+block fl_farm  ceil grate ceil
+block fl_off   ceil green ceil
+block fl_elite ceil carpet ceil
+block fl_prom  ceil stone marble
+block fl_cmd   ceil grip ceil
+block fl_roof  ceil steel ceil
+block lawn     stone lawn ceil
+block pond     stone water ceil
+block trunk    wood
+block leaves   crop
 
 # ------------------------------------------------------------------- dome ---
-# First, because a cap is a sphere with the rest cut away and the cut takes the
-# whole band under it: a radius-30 ball whose top is 10 voxels above the drum
-# and whose rim meets the drum's edge at y=94.
-ball ice 56 73.6 56 30
-clear 0 0 0 111 94 111
+# First, because a cap is a sphere with the rest cut away and the cut takes
+# everything under it: a radius-60 ball whose rim meets the drum's edge at
+# y=170 and whose top is twelve voxels above it.
+ball ice 80 122 80 60
+clear 0 0 0 159 170 159
 
 # ------------------------------------------------------------------ drive ---
-# The bell opens downwards from the throat, which is lit: the drive is on.
-cone steel 56 56 7 0 3 7 shell=1
-cone throat 56 56 2 7 2 7
+# The bell opens downwards from a cold throat: the ship is coasting.
+cone steel 80 80 10 0 4 9 shell=1
+cone steel 80 80 3 9 3 9
 # The tip is solid reactor, the hull skin goes over it, and the shadow shield
-# above it is what the decks are standing behind.
-cone reactor 56 56 3 8 5.14 18
-cone steel 56 56 5 19 5 21
+# above it, a collar wider than the hull, is what everything else is behind.
+cone reactor 80 80 4 10 7 22
+cone steel 80 80 7.5 24 7.5 27
 
-# ------------------------------------------------------------------- hull ---
-cone hull 56 56 3 8 18 78 shell=1.5
-# The decks' own band of it, lighter, from D1's floor to the drum.
-cone habhull 56 56 14.14 60 18 78 shell=1.5
-
-# Three tanks round the spine in the lower cone, all of it reaction mass.
-cone tank 61.5 56 2.5 40 2.5 57
-cone tank 53.25 60.76 2.5 40 2.5 57
-cone tank 53.25 51.24 2.5 40 2.5 57
-
-# ------------------------------------------------------------------- drum ---
-# Wider than the cone, so the decks' roof is the middle of its floor and the
-# ledge round it is drum.
-cone drum 56 56 22 78 22 78
-cone drum 56 56 22 79 22 94 shell=1.5
-cone drum 56 56 22 94 22 94
-# The AI core: a vault of racks on the spine's axis, at the ship's heart.
-cone console 56 56 5 79 5 91 shell=1
-cone console 56 56 5 91 5 91
-# Six tanks round it, one every sixty degrees from thirty.
-ball tank 67.26 86 62.5 4
-ball tank 56 86 69 4
-ball tank 44.74 86 62.5 4
-ball tank 44.74 86 49.5 4
-ball tank 56 86 43 4
-ball tank 67.26 86 49.5 4
+# Four tanks of reaction mass round the spine in the lower cone.
+cone tank 86.5 80 3 50 3 110
+cone tank 80 86.5 3 50 3 110
+cone tank 73.5 80 3 50 3 110
+cone tank 80 73.5 3 50 3 110
 
 # ------------------------------------------------------------------ decks ---
-# A floor every three voxels, each out to r(y) so it meets the hull; the top
-# one is the roof, which is the middle of the drum's floor.
-cone deck 56 56 14.14 60 14.14 60
-cone deck 56 56 14.79 63 14.79 63
-cone deck 56 56 15.43 66 15.43 66
-cone deck 56 56 16.07 69 16.07 69
-cone deck 56 56 16.71 72 16.71 72
-cone deck 56 56 17.36 75 17.36 75
-cone deck 56 56 18 78 18 78
+# A slab under every deck, out to r(y) so it meets the hull.
+cone fl_sump  80 80 23.50 115 23.50 115
+cone fl_serv  80 80 24.06 118 24.06 118
+cone fl_serv  80 80 24.80 122 24.80 122
+cone fl_crew  80 80 25.17 124 25.17 124
+cone fl_med   80 80 25.73 127 25.73 127
+cone fl_farm  80 80 26.29 130 26.29 130
+cone fl_off   80 80 27.03 134 27.03 134
+cone fl_elite 80 80 27.59 137 27.59 137
+cone fl_prom  80 80 28.33 141 28.33 141
+cone fl_cmd   80 80 29.26 146 29.26 146
 
-# A lit strip under the ceiling of D1-D3: the deck's own light indoors, and a
-# band on the hull outside for each deck that still has power.
-cone strip 56 56 14.57 62 14.57 62 shell=1.5
-cone strip 56 56 15.21 65 15.21 65 shell=1.5
-cone strip 56 56 15.86 68 15.86 68 shell=1.5
+# Every deck below is built out of solid and carved. Its walls overshoot the
+# hull on purpose; everything past the inside of the hull is cut away again
+# before the hull goes on (see "trim").
 
-# D4's promenade: floor to ceiling glass the whole way round. The hull is
-# carved out of the band first, then glazed; the glass ring sits inside the
-# carved one, so what is left either side of it is air.
-cone air 56 56 16.29 70 16.5 71 shell=1.5
-glass 56 56 16 15 70
-glass 56 56 16 15 71
+# D1, life support: an open machine hall. Six water tanks in a ring, one every
+# sixty degrees from thirty, which leaves the west (-x) clear for the airlock.
+cone tank 93.0 87.5 2.5 116 2.5 117
+cone tank 80 95 2.5 116 2.5 117
+cone tank 67.0 87.5 2.5 116 2.5 117
+cone tank 67.0 72.5 2.5 116 2.5 117
+cone tank 80 65 2.5 116 2.5 117
+cone tank 93.0 72.5 2.5 116 2.5 117
+# The pump room between the eastern tanks.
+fill sump_w 97 116 76 103 117 84
+clear 98 116 77 102 117 83
+clear 97 116 80 97 116 80
 
-# D5, the farm: a disc of growing racks with walkways cut across it, a clear
-# lane round the wall and round the spine.
-cone crop 56 56 13 73 13 73
-clear 51 73 44 61 73 44
-clear 47 73 47 65 73 47
-clear 45 73 50 67 73 50
-clear 44 73 53 68 73 53
-clear 44 73 59 68 73 59
-clear 45 73 62 67 73 62
-clear 47 73 65 65 73 65
-clear 51 73 68 61 73 68
-clear 52 73 52 60 73 60
+# D2 and D3, the service cabins, carved together through both decks and the
+# slab between them, which is laid again afterwards: the same rows on both,
+# because nobody designed them twice. A corridor every eleven voxels along x,
+# and between two corridors two rows of cabins back to back, 2 by 3 voxels -
+# four metres by six, and two metres to the ceiling - each with its door onto
+# its own corridor.
+cone serv_w 80 80 26 119 26 121
+clear 50 119 58 110 121 59 step=0,0,11 times=5
+clear 55 119 61 56 121 63 step=3,0,0 times=17
+clear 55 119 65 56 121 67 step=3,0,0 times=17
+clear 55 119 72 56 121 74 step=3,0,0 times=17
+clear 55 119 76 56 121 78 step=3,0,0 times=17
+clear 55 119 83 56 121 85 step=3,0,0 times=17
+clear 55 119 87 56 121 89 step=3,0,0 times=17
+clear 55 119 94 56 121 96 step=3,0,0 times=17
+clear 55 119 98 56 121 100 step=3,0,0 times=17
+clear 55 119 60 55 121 60 step=3,0,0 times=17
+clear 55 119 68 55 121 68 step=3,0,0 times=17
+clear 55 119 71 55 121 71 step=3,0,0 times=17
+clear 55 119 79 55 121 79 step=3,0,0 times=17
+clear 55 119 82 55 121 82 step=3,0,0 times=17
+clear 55 119 90 55 121 90 step=3,0,0 times=17
+clear 55 119 93 55 121 93 step=3,0,0 times=17
+clear 55 119 101 55 121 101 step=3,0,0 times=17
+# The stair hall round the spine, and a corridor round the hull.
+clear 74 119 74 86 121 86
+cone air 80 80 22.74 119 23.11 121 shell=2
+cone fl_serv 80 80 24.43 120 24.43 120
 
-# D6, the bridge: a ring of consoles round the spine, two aisles through it.
-cone console 56 56 6 76 6 76 shell=1
-clear 55 76 48 57 76 64
-clear 48 76 55 64 76 57
+# D4, the service commons: four rooms round the stair hall, a wall between each
+# pair. Mess north-east, laundry north-west, chapel south-west, washrooms
+# south-east. Still two metres to the ceiling.
+cone serv_w 80 80 26 123 26 123
+clear 56 123 56 79 123 79
+clear 81 123 56 104 123 79
+clear 56 123 81 79 123 104
+clear 81 123 81 104 123 104
+clear 75 123 75 85 123 85
+cone air 80 80 23.49 123 23.49 123 shell=2
+# The laundry's vats and the washrooms' stalls.
+cone tank 64 64 1.5 123 1.5 123
+cone tank 70 64 1.5 123 1.5 123
+cone tank 64 70 1.5 123 1.5 123
+fill serv_w 84 123 92 84 123 100 step=3,0,0 times=6
+
+# D5, crew flats: the same plan with room to live in - 4 by 4, eight metres
+# square and four to the ceiling, a corridor every thirteen voxels. The outer
+# band is left solid; the corridor round the hull goes through it.
+cone crew_w 80 80 27 125 27 126
+clear 50 125 66 110 126 67 step=0,0,13 times=3
+clear 55 125 61 58 126 64 step=5,0,0 times=11
+clear 55 125 69 58 126 72 step=5,0,0 times=11
+clear 55 125 74 58 126 77 step=5,0,0 times=11
+clear 55 125 82 58 126 85 step=5,0,0 times=11
+clear 55 125 87 58 126 90 step=5,0,0 times=11
+clear 55 125 95 58 126 98 step=5,0,0 times=11
+clear 56 125 65 56 125 65 step=5,0,0 times=11
+clear 56 125 68 56 125 68 step=5,0,0 times=11
+clear 56 125 78 56 125 78 step=5,0,0 times=11
+clear 56 125 81 56 125 81 step=5,0,0 times=11
+clear 56 125 91 56 125 91 step=5,0,0 times=11
+clear 56 125 94 56 125 94 step=5,0,0 times=11
+clear 74 125 74 86 126 86
+cone air 80 80 23.86 125 24.04 126 shell=2
+
+# D6, medical, where the player wakes: a cross of corridors from the stair
+# hall to the one round the hull, and a department in each quarter behind a
+# single door.
+cone med_w 80 80 28 128 28 129
+clear 75 128 75 85 129 85
+clear 79 128 54 81 129 106
+clear 54 128 79 106 129 81
+cone air 80 80 24.41 128 24.60 129 shell=2
+# north-east: the lab the Cleaners come out of
+clear 83 128 60 98 129 77
+clear 82 128 70 82 128 70
+# north-west: the gene vault, racks of embryos in rows
+clear 62 128 62 77 129 77
+clear 78 128 70 78 128 70
+fill console 64 128 64 64 129 75 step=3,0,0 times=4
+# south-west: the ward
+clear 62 128 83 77 129 98
+clear 78 128 90 78 128 90
+# south-east: cold storage
+clear 83 128 83 98 129 98
+clear 82 128 90 82 128 90
+
+# D7, hydroponics: racks two voxels tall in rows along x, a walkway between
+# every pair, aisles crossing at the spine and round the hull.
+cone crop 80 80 27 131 27 132
+clear 50 131 52 110 132 52 step=0,0,3 times=20
+clear 78 131 50 82 132 110
+clear 50 131 78 110 132 82
+cone air 80 80 24.97 131 25.16 132 shell=2
+
+# D8, officers and scientists: flats of 6 by 6, a corridor every seventeen.
+cone off_w 80 80 28 135 28 136
+clear 50 135 62 110 136 63 step=0,0,17 times=3
+clear 56 135 55 61 136 60 step=7,0,0 times=7
+clear 56 135 65 61 136 70 step=7,0,0 times=7
+clear 56 135 72 61 136 77 step=7,0,0 times=7
+clear 56 135 82 61 136 87 step=7,0,0 times=7
+clear 56 135 89 61 136 94 step=7,0,0 times=7
+clear 56 135 99 61 136 104 step=7,0,0 times=7
+clear 58 135 61 58 135 61 step=7,0,0 times=7
+clear 58 135 64 58 135 64 step=7,0,0 times=7
+clear 58 135 78 58 135 78 step=7,0,0 times=7
+clear 58 135 81 58 135 81 step=7,0,0 times=7
+clear 58 135 95 58 135 95 step=7,0,0 times=7
+clear 58 135 98 58 135 98 step=7,0,0 times=7
+clear 74 135 74 86 136 86
+cone air 80 80 25.71 135 25.90 136 shell=2
+
+# D9, the residences: four suites, a quarter of the deck each, round a marble
+# atrium with an arch into each. Six metres to the ceiling and glass floor to
+# ceiling at the hull. Each suite is two rooms.
+cone elite_w 80 80 30 138 30 140
+clear 52 138 52 79 140 79
+clear 81 138 52 108 140 79
+clear 52 138 81 79 140 108
+clear 81 138 81 108 140 108
+cone air 80 80 7 138 7 140
+cone marble_w 80 80 8 138 8 140 shell=1
+clear 84 138 84 86 139 86
+clear 74 138 84 76 139 86
+clear 84 138 74 86 139 76
+clear 74 138 74 76 139 76
+fill elite_w 81 138 66 108 140 66
+clear 94 138 66 95 139 66
+fill elite_w 52 138 66 79 140 66
+clear 65 138 66 66 139 66
+fill elite_w 52 138 94 79 140 94
+clear 65 138 94 66 139 94
+fill elite_w 81 138 94 108 140 94
+clear 94 138 94 95 139 94
+
+# D10, the promenade: one hall under eight metres of ceiling and a wall of
+# glass the whole way round, a lawn with paths across it, a pond and a ring
+# of trees. It froze when the glass went.
+cone lawn 80 80 21 141 21 141
+fill fl_prom 50 141 79 110 141 81
+fill fl_prom 79 141 50 81 141 110
+fill pond 86 141 86 93 141 93
+fill trunk 92 142 85 92 143 85
+fill trunk 85 142 92 85 143 92
+fill trunk 75 142 92 75 143 92
+fill trunk 68 142 85 68 143 85
+fill trunk 68 142 75 68 143 75
+fill trunk 75 142 68 75 143 68
+fill trunk 85 142 68 85 143 68
+fill trunk 92 142 75 92 143 75
+ball leaves 92 144.5 85 1.8
+ball leaves 85 144.5 92 1.8
+ball leaves 75 144.5 92 1.8
+ball leaves 68 144.5 85 1.8
+ball leaves 68 144.5 75 1.8
+ball leaves 75 144.5 68 1.8
+ball leaves 85 144.5 68 1.8
+ball leaves 92 144.5 75 1.8
+
+# D11, the bridge: two rings of consoles round the spine, aisles through both.
+cone console 80 80 9 147 9 147 shell=1
+cone console 80 80 20 147 20 147 shell=1
+clear 79 147 55 81 147 105
+clear 55 147 79 105 147 81
+
+# ------------------------------------------------------------------- trim ---
+# Everything past the inside of the hull, from D1's slab to D11's ceiling:
+# a cone fifty voxels wider than the hull, hollowed to r(y)-1.5.
+cone air 80 80 73.50 115 79.63 148 shell=51.5
+
+# ------------------------------------------------------------------- hull ---
+cone hull 80 80 4 10 30 149 shell=1.5
+# The decks' own band of it, lighter.
+cone habhull 80 80 23.50 115 29.81 149 shell=1.5
+# A lit strip under the ceiling of the decks that still have power and have a
+# ceiling high enough to put one under: the deck's light indoors, and a band on
+# the hull outside. The service decks' one voxel of wall would be all light.
+cone strip 80 80 23.87 117 23.87 117 shell=1.5
+cone strip 80 80 25.54 126 25.54 126 shell=1.5
+cone strip 80 80 26.10 129 26.10 129 shell=1.5
+
+# The only windows on the ship are the rich ones. The hull is carved out of the
+# band and glazed; the glass ring sits inside the carved one.
+cone air 80 80 27.77 138 28.14 140 shell=1.5
+glass 80 80 27 26 138
+glass 80 80 27 26 139
+glass 80 80 27 26 140
+cone air 80 80 28.51 142 29.07 145 shell=1.5
+glass 80 80 28 27 142
+glass 80 80 28 27 143
+glass 80 80 28 27 144
+glass 80 80 28 27 145
+
+# ------------------------------------------------------------------- drum ---
+cone drum 80 80 36 149 36 149
+cone drum 80 80 36 150 36 169 shell=1.5
+cone drum 80 80 36 170 36 170
+cone fl_roof 80 80 29.81 149 29.81 149
+# The AI core: a vault of racks on the spine's axis, at the ship's heart.
+cone console 80 80 7 150 7 164 shell=1
+cone console 80 80 7 165 7 165
+# Eight tanks round it, one every 45 degrees from 22.5.
+ball tank 100.33 159 88.42 5
+ball tank 88.42 159 100.33 5
+ball tank 71.58 159 100.33 5
+ball tank 59.67 159 88.42 5
+ball tank 59.67 159 71.58 5
+ball tank 71.58 159 59.67 5
+ball tank 88.42 159 59.67 5
+ball tank 100.33 159 71.58 5
 
 # ------------------------------------------------------------------ spine ---
-# The maintenance shaft from the shadow shield to the core: a grate tube with
-# a 3x3 well inside it, through every floor. A door out of it on each deck,
-# one voxel tall so a slide door fits with the deck above as its lintel.
-cone spine 56 56 2.5 22 2.5 78 shell=1
-cone air 56 56 1.45 22 1.45 78
-clear 58 61 56 58 61 56
-clear 58 64 56 58 64 56
-clear 58 67 56 58 67 56
-clear 58 70 56 58 70 56
-clear 58 73 56 58 73 56
-clear 58 76 56 58 76 56
+# From the shadow shield to the core: a grate tube round a 3x3 well, through
+# every floor, with a door on each deck - one voxel tall, so a slide door fits
+# with what is above it as its lintel.
+cone spine 80 80 2.5 28 2.5 149 shell=1
+cone air 80 80 1.45 28 1.45 149
+clear 82 116 80 82 116 80
+clear 82 119 80 82 119 80
+clear 82 121 80 82 121 80
+clear 82 123 80 82 123 80
+clear 82 125 80 82 125 80
+clear 82 128 80 82 128 80
+clear 82 131 80 82 131 80
+clear 82 135 80 82 135 80
+clear 82 138 80 82 138 80
+clear 82 142 80 82 142 80
+clear 82 147 80 82 147 80
 
 # --------------------------------------------------------------- airlocks ---
 # A box on the hull, a chamber in it, a one-voxel passage through both. The
-# door cells are marked for when doors go in; each has lock above it.
-# D2, east (+z): inner door z=71, outer door z=76.
-fill lock 54 63 70 58 66 77
-clear 55 64 72 57 65 75
-clear 56 64 69 56 64 77
-# D1, west (-x): inner door x=42, outer door x=35.
-fill lock 34 60 54 42 63 58
-clear 36 61 55 40 62 57
-clear 34 61 56 43 61 56
+# inner door of each is a hatch for now - welded, as far as the start of the
+# game is concerned.
+# D1, west (-x): hatch at x=57, outer door x=49.
+fill lock 48 115 77 57 118 83
+clear 50 116 78 55 117 82
+clear 47 116 80 58 116 80
+# D5, east (+z): hatch at z=104, outer door z=112.
+fill lock 77 124 104 83 127 113
+clear 78 125 106 82 126 111
+clear 80 125 103 80 125 114
 
 # ------------------------------------------------------------------ booms ---
-# Eight radiator booms round the drum at y=86, one every 45 degrees. Three
-# survived: the sensor mast east, and the two radiators north-west and north.
-# The other five are stubs, and what came off them is still drifting.
+# Eight radiator booms round the drum at y=160, one every 45 degrees. Three
+# survived: the sensor mast east, the radiators north-west and north.
 #
 # east (+x): the long-range sensor mast, which heard the planet first.
-beam girder 77 86 56 100 86 56 r=1
-ball steel 105 86 56 5 shell=1
-clear 104 76 46 111 96 66
+beam girder 115 160 80 148 160 80 r=1.2
+ball steel 154 160 80 6 shell=1
+clear 152 150 70 159 170 90
 # north-west: radiator, a corrugated fin above and below the boom.
-beam girder 41.15 86 70.85 23.47 86 88.53 r=1
-beam fin 38.32 83 73.68 24.18 83 87.82 r=0.5
-beam fin 38.32 84 73.68 24.18 84 87.82 r=0.5
-beam fin 38.32 85 73.68 24.18 85 87.82 r=0.5
-beam fin 38.32 87 73.68 24.18 87 87.82 r=0.5
-beam fin 38.32 88 73.68 24.18 88 87.82 r=0.5
-beam fin 38.32 89 73.68 24.18 89 87.82 r=0.5
+beam girder 55.25 160 104.75 30.5 160 129.5 r=1.2
+beam fin 51.72 156 108.28 31.92 156 128.08 r=0.5
+beam fin 51.72 157 108.28 31.92 157 128.08 r=0.5
+beam fin 51.72 158 108.28 31.92 158 128.08 r=0.5
+beam fin 51.72 159 108.28 31.92 159 128.08 r=0.5
+beam fin 51.72 161 108.28 31.92 161 128.08 r=0.5
+beam fin 51.72 162 108.28 31.92 162 128.08 r=0.5
+beam fin 51.72 163 108.28 31.92 163 128.08 r=0.5
+beam fin 51.72 164 108.28 31.92 164 128.08 r=0.5
 # north (-z): radiator.
-fill fin 56 83 11 56 89 31
-beam girder 56 86 35 56 86 10 r=1
-# The stubs.
-beam girder 70.85 86 70.85 77.21 86 77.21 r=1
-beam girder 86 83 84 92 89 93 r=1
-beam girder 56 86 77 56 86 82 r=1
-beam girder 35 86 56 22 86 56 r=1
-beam girder 41.15 86 41.15 36.2 86 36.2 r=1
-beam girder 70.85 86 41.15 78.63 86 33.37 r=1
+fill fin 80 156 8 80 164 40
+beam girder 80 160 45 80 160 6 r=1.2
+# The stubs, and one piece still drifting off the north-east one.
+beam girder 104.75 160 104.75 112.53 160 112.53 r=1.2
+beam girder 122 157 118 131 163 129 r=1.2
+beam girder 80 160 115 80 160 120 r=1.2
+beam girder 45 160 80 25 160 80 r=1.2
+beam girder 55.25 160 55.25 50.3 160 50.3 r=1.2
+beam girder 104.75 160 55.25 115.36 160 44.64 r=1.2
 
 # ----------------------------------------------------------------- damage ---
-# Last, so every hole goes through whatever was built where it landed.
+# Last, so every hole goes through whatever was built where it landed. Every
+# one of them is above D6's ceiling or outside the hull below it: the six
+# lower decks were a long way from the fighting.
 #
-# The farm, blown open from outside the hull: the war stopped being about who
-# ran the ship when someone decided the other side could starve. It takes the
-# floor of D6 with it, so the two vented decks are one hole.
-# Two holes side by side, high enough that the ragged edge stops short of D4's
-# floor; D4's ceiling is laid again under them, because D4 still holds air.
-blast 72 75 53 3.5 seed=1 scorch=scorch debris=8
-blast 72 75 59 3.5 seed=21 scorch=scorch debris=8
-cone deck 56 56 16.71 72 16.71 72
+# Hydroponics, blown open from outside: the war stopped being about who ran
+# the ship when someone decided the other side could starve. The hole climbs
+# through the staff flats into the residences.
+blast 106 135 76 3.5 seed=1 scorch=scorch debris=10
+blast 106 135 84 3.5 seed=21 scorch=scorch debris=10
+# The promenade's glass, gone on the north side, and what was behind it froze.
+blast 80 143.5 51 4 seed=22 scorch=scorch debris=8
 # The way into the core, blown through the top of the spine by the people who
-# came to switch the AI off. The AI vented D6 to stop them.
-blast 56 78 56 2.5 seed=2 scorch=scorch
-# D6's emergency vents, opened: the hull cut through either side of the bridge.
-clear 54 76 38 58 77 41
-clear 54 76 71 58 77 74
-# The drum, holed twice, one tank torn open behind the bigger hole.
-blast 75 86 67 4.5 seed=3 scorch=scorch debris=10
-blast 37 82 45 3.5 seed=4 scorch=scorch debris=8
+# came to switch the AI off. The AI vented the bridge to stop them.
+blast 80 149 80 3 seed=2 scorch=scorch
+# The bridge's emergency vents, opened.
+clear 49 147 77 53 148 83
+clear 107 147 77 111 148 83
+# The drum, holed twice, a tank torn open behind the bigger hole.
+blast 113.3 158 93.8 6 seed=3 scorch=scorch debris=12
+blast 46.7 165 66.2 4.5 seed=4 scorch=scorch debris=8
 # The lower cone, a tank showing through.
-blast 46 44 52 4 seed=5 scorch=scorch debris=8
+blast 65.8 70 74.8 5 seed=5 scorch=scorch debris=10
 # A crater in the ice.
-blast 64 101 50 3 seed=6 scorch=ice debris=6
+blast 92 180 70 4 seed=6 scorch=ice debris=8
 # Where the five booms broke.
-blast 77.21 86 77.21 2 seed=11 scorch=scorch debris=5
-blast 56 86 82 2 seed=12 scorch=scorch debris=4
-blast 22 86 56 2.2 seed=14 scorch=scorch debris=6
-blast 36.2 86 36.2 2 seed=15 scorch=scorch debris=4
-blast 78.63 86 33.37 2 seed=17 scorch=scorch debris=5
-# D4 burnt out from the inside: scorch on floor and ceiling, nothing opened.
-blast 50 70.5 60 0.6 seed=7 scorch=scorch
-blast 62 70.5 50 0.6 seed=8 scorch=scorch
-blast 60 70.5 64 0.6 seed=9 scorch=scorch
+blast 112.53 160 112.53 2.5 seed=11 scorch=scorch debris=6
+blast 80 160 120 2.5 seed=12 scorch=scorch debris=5
+blast 25 160 80 2.8 seed=14 scorch=scorch debris=7
+blast 50.3 160 50.3 2.5 seed=15 scorch=scorch debris=5
+blast 115.36 160 44.64 2.5 seed=17 scorch=scorch debris=6
+# Fires in the staff flats and the residences: scorch, nothing opened.
+blast 66 135.5 66 0.6 seed=7 scorch=scorch
+blast 94 135.5 91 0.6 seed=8 scorch=scorch
+blast 92 139 66 0.8 seed=9 scorch=scorch
+blast 66 139 92 0.8 seed=10 scorch=scorch
+# The hole in hydroponics reached D6's ceiling slab; D6 still holds air, so
+# the slab is laid again - and then the hatches, which it would have covered.
+cone fl_farm 80 80 26.29 130 26.29 130
+fill hatch 79 115 79 81 115 81
+fill hatch 79 130 79 81 130 81
+fill hatch 57 116 80 57 116 80
+fill hatch 80 125 104 80 125 104
 
 # ----------------------------------------------------------------- lights ---
-# Four lamps under each ceiling that has power; D4 is on its emergency red.
-light 63.5 62.8 56.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
-light 49.5 62.8 56.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
-light 56.5 62.8 63.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
-light 56.5 62.8 49.5 color=1,0.75,0.45 power=5 angle=140 reach=10 baked
-light 63.5 65.8 56.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
-light 49.5 65.8 56.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
-light 56.5 65.8 63.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
-light 56.5 65.8 49.5 color=1,0.95,0.85 power=5 angle=140 reach=10 baked
-light 63.5 68.8 56.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
-light 49.5 68.8 56.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
-light 56.5 68.8 63.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
-light 56.5 68.8 49.5 color=0.8,0.95,1 power=5 angle=140 reach=10 baked
-light 63.5 71.8 56.5 color=1,0.3,0.2 power=3 angle=140 reach=10 baked
-light 49.5 71.8 56.5 color=1,0.3,0.2 power=3 angle=140 reach=10 baked
+# The six decks that still have power: a lamp every eight or ten voxels down
+# every corridor. Warm and dim at the bottom, white in the crew flats, cold in
+# medical.
+light 65.5 117.8 65.5 color=1,0.7,0.4 power=5 baked step=10,0,0 times=4
+light 65.5 117.8 75.5 color=1,0.7,0.4 power=5 baked step=10,0,0 times=4
+light 65.5 117.8 85.5 color=1,0.7,0.4 power=5 baked step=10,0,0 times=4
+light 65.5 117.8 95.5 color=1,0.7,0.4 power=5 baked step=10,0,0 times=4
+light 100.5 117.8 80.5 color=1,0.7,0.4 power=4 baked
+light 60.5 119.8 69.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 60.5 119.8 81.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 60.5 119.8 91.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 72.5 119.8 58.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=3
+light 72.5 119.8 102.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=3
+light 60.5 121.8 69.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 60.5 121.8 81.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 60.5 121.8 91.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=6
+light 72.5 121.8 58.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=3
+light 72.5 121.8 102.5 color=1,0.85,0.65 power=4 baked step=8,0,0 times=3
+light 65.5 123.8 65.5 color=1,0.85,0.65 power=5 baked step=10,0,0 times=4
+light 65.5 123.8 75.5 color=1,0.85,0.65 power=5 baked step=10,0,0 times=4
+light 65.5 123.8 85.5 color=1,0.85,0.65 power=5 baked step=10,0,0 times=4
+light 65.5 123.8 95.5 color=1,0.85,0.65 power=5 baked step=10,0,0 times=4
+light 60.5 126.8 66.5 color=1,0.95,0.85 power=5 baked step=8,0,0 times=6
+light 60.5 126.8 79.5 color=1,0.95,0.85 power=5 baked step=8,0,0 times=6
+light 60.5 126.8 92.5 color=1,0.95,0.85 power=5 baked step=8,0,0 times=6
+light 90.5 129.8 68.5 color=0.8,0.95,1 power=6 baked
+light 70.5 129.8 70.5 color=0.8,0.95,1 power=5 baked
+light 70.5 129.8 90.5 color=0.8,0.95,1 power=5 baked
+light 90.5 129.8 90.5 color=0.8,0.95,1 power=5 baked
+light 80.5 129.8 60.5 color=0.8,0.95,1 power=5 baked
+light 80.5 129.8 100.5 color=0.8,0.95,1 power=5 baked
+light 60.5 129.8 80.5 color=0.8,0.95,1 power=5 baked
+light 100.5 129.8 80.5 color=0.8,0.95,1 power=5 baked
+# Above the hatch the power is gone: emergency red here and there.
+light 80.5 133.8 70.5 color=1,0.3,0.2 power=3 baked
+light 80.5 140.8 70.5 color=1,0.3,0.2 power=3 baked
+light 80.5 148.8 70.5 color=1,0.3,0.2 power=3 baked
 # The core still runs.
-light 56.5 90.5 56.5 color=0.6,1,0.7 power=3 angle=160 reach=8 baked
+light 80.5 162.5 80.5 color=0.6,1,0.7 power=4 baked
+
+# ------------------------------------------------------------------ signs ---
+# A directory on the north face of the spine on every deck, facing -z, and on
+# medical a sign at each department's door. `sign X Y Z FACING words`, lines
+# split at |, a line starting with ! is red.
+sign 80.5 116 77.97 0,-1 DECK 1|LIFE SUPPORT|WATER RECLAMATION
+sign 80.5 119 77.97 0,-1 DECK 2|SERVICE QUARTERS|CABINS 2-001 TO 2-136
+sign 80.5 121 77.97 0,-1 DECK 3|SERVICE QUARTERS|CABINS 3-001 TO 3-136
+sign 80.5 123 77.97 0,-1 DECK 4|SERVICE COMMONS|MESS  LAUNDRY|CHAPEL  WASHROOMS
+sign 80.5 125 77.97 0,-1 DECK 5|CREW QUARTERS|AIRLOCK EAST
+sign 80.5 128 77.97 0,-1 DECK 6|MEDICAL|LAB  GENE VAULT|WARD  COLD STORAGE
+sign 80.5 131 77.97 0,-1 DECK 7|HYDROPONICS
+sign 80.5 135 77.97 0,-1 DECK 8|STAFF RESIDENCES
+sign 80.5 138 77.97 0,-1 DECK 9|THE RESIDENCES|!RESIDENTS ONLY
+sign 80.5 142 77.97 0,-1 DECK 10|PROMENADE|GARDENS
+sign 80.5 147 77.97 0,-1 DECK 11|BRIDGE|!AUTHORIZED CREW ONLY
+# Medical's four doors.
+sign 81.97 128 72.5 -1,0 CLEANER LAB|!RESTRICTED
+sign 79.03 128 72.5 1,0 GENE VAULT|EMBRYO BANK
+sign 79.03 128 87.5 1,0 WARD
+sign 81.97 128 87.5 -1,0 COLD STORAGE
+# The ways out, shut.
+sign 80.5 128 83.03 0,1 !DECK 7 SEALED|!HULL BREACH ABOVE
+sign 58.03 116 80.5 1,0 !AIRLOCK SEALED|VACUUM BEYOND
+sign 80.5 125 103.97 0,-1 !AIRLOCK SEALED|VACUUM BEYOND

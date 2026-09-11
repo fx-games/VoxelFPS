@@ -341,6 +341,7 @@ type Game struct {
 	// recognises its own number there.
 	keypads    []*Keypad
 	notes      []*Note
+	signs      []*Sign
 	knownCodes map[string]bool
 
 	// audioLogs is the same for the level's recordings - see audiolog.go.
@@ -696,6 +697,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.doors = nil
 	g.keypads = nil
 	g.notes = nil
+	g.signs = nil
 	g.knownCodes = map[string]bool{}
 	// UnloadAllCues just above took the recordings with everything else, so the
 	// next log played loads them again.
@@ -811,7 +813,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	g.station = mapLoad.Station
 	g.skySpin = 0
 	g.inEVA = false
-	g.SetSkyboxSpin(0)
+	g.SetSkyboxSpin(0, mgl32.Vec3{})
 	g.exposure = quads.DefaultExposure
 	g.bloomThreshold = quads.DefaultBloomThreshold
 	g.bloomStrength = quads.DefaultBloomStrength
@@ -914,7 +916,7 @@ func (g *Game) updateStationSpin(elapsed float64) {
 	}
 	turned := float64(g.skySpin) + float64(mgl32.DegToRad(g.station.Spin))*elapsed
 	g.skySpin = float32(math.Mod(turned, 2*math.Pi))
-	g.SetSkyboxSpin(g.skySpin)
+	g.SetSkyboxSpin(g.skySpin, g.station.SpinAxis)
 }
 
 // paneLight is the baked light level a window pane is drawn at. It is a fixed

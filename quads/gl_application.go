@@ -92,8 +92,10 @@ type GlApplication struct {
 
 	skybox        *glhf.VertexArray[glhf.GlFloat]
 	skyboxCubeMap *glhf.Cubemap
-	// skyboxSpin is how far the sky has turned about Y - see SetSkyboxSpin.
+	// skyboxSpin is how far the sky has turned, about skyboxAxis - see
+	// SetSkyboxSpin.
 	skyboxSpin float32
+	skyboxAxis mgl32.Vec3
 	mainUbo    *glhf.UniformBufferObject
 	lightsUbo  *LightsUBO
 	// The one light slot that follows a game object around. -1 until something asks
@@ -1483,16 +1485,22 @@ func (a *GlApplication) SetBloom(threshold, strength float32) {
 func (a *GlApplication) BloomThreshold() float32 { return a.bloomThreshold }
 func (a *GlApplication) BloomStrength() float32  { return a.bloomStrength }
 
-// SetSkyboxSpin turns the whole sky about Y, in radians. It is how a level that
-// is itself a turning body shows that it turns: the blocks stay put and the
-// stars go round, which is the same relative motion and costs one matrix.
-func (a *GlApplication) SetSkyboxSpin(radians float32) { a.skyboxSpin = radians }
+// SetSkyboxSpin turns the whole sky about an axis, in radians. It is how a level
+// that is itself a turning body shows that it turns: the blocks stay put and the
+// stars go round, which is the same relative motion and costs one matrix. A zero
+// axis is Y.
+func (a *GlApplication) SetSkyboxSpin(radians float32, axis mgl32.Vec3) {
+	if axis.Len() == 0 {
+		axis = mgl32.Vec3{0, 1, 0}
+	}
+	a.skyboxSpin, a.skyboxAxis = radians, axis.Normalize()
+}
 
 func (a *GlApplication) drawSkybox(cubemap *glhf.Cubemap) {
 	projection := a.Camera.GetProjectionMatrix()
 	view := a.Camera.GetViewMatrix().Mat3().Mat4() // remove translation
 	if a.skyboxSpin != 0 {
-		view = view.Mul4(mgl32.HomogRotate3DY(a.skyboxSpin))
+		view = view.Mul4(mgl32.HomogRotate3D(a.skyboxSpin, a.skyboxAxis))
 	}
 	projView := projection.Mul4(view)
 
