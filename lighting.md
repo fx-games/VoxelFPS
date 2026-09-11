@@ -33,7 +33,7 @@ while the others are light *arriving*, so they scale what the texture reflects.
 reads the eight cells around the one a face looks into (the solid bit of the lookup
 entry) and darkens the corners other blocks close in on. It scales only the light that
 comes from everywhere; spotlights answer the same question with their shadow maps.
-Toggled with "Ambient Occlusion" in the rendering menu.
+Toggled with "Ambient Occlusion" in the rendering menu, "AO Strength" beside it (0..1).
 
 ---
 

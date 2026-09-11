@@ -141,6 +141,7 @@ func NewGame(stress *StressConfig) *Game {
 		currentTimeFactorIndex: defaultTimeFactorIndex,
 		editorSunStrength:      defaultEditorSunStrength,
 		ambientOcclusion:       true,
+		aoStrength:             quads.DefaultAmbientOcclusionStrength,
 	}
 }
 
@@ -214,8 +215,10 @@ type Game struct {
 	ambientStrength float32
 	// editorSunStrength is the sun the editor builds under, see updateEditorSun.
 	editorSunStrength float32
-	// ambientOcclusion is the rendering menu's switch for the block faces' AO.
+	// ambientOcclusion and aoStrength are the rendering menu's switch and slider
+	// for the block faces' AO. The switch keeps the strength it turns off.
 	ambientOcclusion       bool
+	aoStrength             float32
 	emissiveCutoff         float32
 	emissiveSaturation     float32
 	shadowNormalOffset     float32
@@ -1544,6 +1547,7 @@ func (g *Game) renderingOptions() []quads.GuiOption {
 		quads.NewGuiOptionFloat("Ambient Strength", &g.ambientStrength).StepSize(0.05).ActivateFunc(g.updateAmbient),
 		quads.NewGuiOptionFloat("Editor Sun", &g.editorSunStrength).StepSize(0.1).ActivateFunc(g.updateEditorSun),
 		quads.NewGuiOptionBool("Ambient Occlusion", &g.ambientOcclusion).ActivateFunc(g.updateAmbientOcclusion),
+		quads.NewGuiOptionFloat("AO Strength", &g.aoStrength).StepSize(0.05).ActivateFunc(g.updateAmbientOcclusion),
 		quads.NewGuiOptionFloat("Fog Start", &g.fogStart).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Fog End", &g.fogEnd).StepSize(5).ActivateFunc(g.updateFog),
 		quads.NewGuiOptionFloat("Sky Horizon Fade", &g.skyHorizonFade).StepSize(1).ActivateFunc(g.updateFog),
@@ -1692,8 +1696,15 @@ func (g *Game) updateEditorSun() {
 	g.SetSunLight(editorSunDirection, strength)
 }
 
+// updateAmbientOcclusion clamps the slider to 0..1: past 1 a buried corner
+// would take light away rather than just not get any.
 func (g *Game) updateAmbientOcclusion() {
-	g.SetAmbientOcclusion(g.ambientOcclusion)
+	g.aoStrength = max(0, min(1, g.aoStrength))
+	strength := g.aoStrength
+	if !g.ambientOcclusion {
+		strength = 0
+	}
+	g.SetAmbientOcclusion(strength)
 }
 
 func (g *Game) updateEmissive() {
