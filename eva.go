@@ -33,6 +33,13 @@ const (
 	// ponytail: a stabiliser, not Newton. Take it to 1 and add a brake key if
 	// drifting is meant to be the difficulty rather than the scenery.
 	evaDrag = 0.35
+	// evaRollSpeed is degrees a second the roll keys turn the horizon at. Slow
+	// enough that the level is read while it turns rather than after it.
+	evaRollSpeed = 90.0
+	// evaLevelSpeed is how fast the horizon comes back once there is a deck
+	// underfoot again: about a second from upside down, so gravity reads as
+	// taking hold of the player rather than as a cut.
+	evaLevelSpeed = 180.0
 )
 
 // inVacuum reports whether a point is outside the level's pressure hull. A
@@ -44,25 +51,39 @@ func (g *Game) inVacuum(pos mgl32.Vec3) bool {
 // evaMove flies the suit for one frame, and reports whether it took movement
 // over. It is also what puts gravity back on the way in, so walking out of an
 // airlock and back in needs nothing to happen at the threshold itself.
-func (g *Game) evaMove(physics *quads.PhysicsComponent, moveDir [2]int, upDown int, elapsed float64) bool {
+func (g *Game) evaMove(physics *quads.PhysicsComponent, moveDir [2]int, upDown, roll int, elapsed float64) bool {
 	if !g.inVacuum(physics.Position()) {
 		if g.inEVA {
 			g.inEVA = false
+			// The mouse goes back to turning the player rather than the visor,
+			// reading its two angles off wherever the eyes are pointing now.
+			g.Camera.SetFreeLook(false)
 			g.Toast("Pressure restored")
 		}
+		// A tilted horizon is only allowed where nothing says which way up is.
+		// Back inside it eases level rather than snapping, which is the whole
+		// difference between gravity taking hold and a cut.
+		g.levelHorizon(elapsed)
 		physics.ApplyGravity = true
 		return false
 	}
 	if !g.inEVA {
 		g.inEVA = true
+		// Out here the mouse turns the visor: yaw about the helmet's own up,
+		// pitch about its own right, and no clamp short of vertical, because
+		// there is nothing to be upside down relative to. See SetFreeLook.
+		g.Camera.SetFreeLook(true)
 		g.Toast("Vacuum - suit thrusters")
 	}
 	physics.ApplyGravity = false
 	physics.SetGrounded(false)
 
+	if roll != 0 {
+		g.Camera.RollBy(float32(roll) * evaRollSpeed * float32(elapsed))
+	}
+
 	// Forward is the full look direction, pitch included: a pack pointed at the
-	// hull pushes you at the hull. Up and down stay the world's own, which is
-	// what makes lining up with a hatch possible at all.
+	// hull pushes you at the hull, and up and down are the suit's own.
 	thrust := mgl32.Vec3{}
 	if moveDir[1] != 0 {
 		thrust = thrust.Add(g.Camera.ForwardBackward(float32(moveDir[1])))
@@ -71,7 +92,9 @@ func (g *Game) evaMove(physics *quads.PhysicsComponent, moveDir [2]int, upDown i
 		thrust = thrust.Add(g.Camera.LeftRight(float32(moveDir[0])))
 	}
 	if upDown != 0 {
-		thrust = thrust.Add(mgl32.Vec3{0, float32(upDown), 0})
+		// The visor's up, not the world's: once the suit can roll, "up" is
+		// wherever the helmet is pointing and the world has no say in it.
+		thrust = thrust.Add(g.Camera.GetUp().Mul(float32(upDown)))
 	}
 
 	velocity := physics.Velocity()
@@ -86,4 +109,28 @@ func (g *Game) evaMove(physics *quads.PhysicsComponent, moveDir [2]int, upDown i
 	}
 	physics.SetVelocity(velocity)
 	return true
+}
+
+// levelHorizon eases the roll back to zero, the short way round, at
+// evaLevelSpeed. It is a no-op everywhere the horizon is already level, which
+// is everywhere but the seconds after coming in out of the vacuum.
+func (g *Game) levelHorizon(elapsed float64) {
+	roll := g.Camera.Roll()
+	if roll == 0 {
+		return
+	}
+	g.Camera.SetRoll(levelledRoll(roll, float32(evaLevelSpeed*elapsed)))
+}
+
+// levelledRoll is one step of that ease: roll brought step degrees towards
+// zero, and zero once it is within a step, so it settles instead of wobbling
+// either side of level for ever.
+func levelledRoll(roll, step float32) float32 {
+	if mgl32.Abs(roll) <= step {
+		return 0
+	}
+	if roll > 0 {
+		return roll - step
+	}
+	return roll + step
 }

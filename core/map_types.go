@@ -156,7 +156,8 @@ type MapEntity struct {
 	// Facing is which way this entity is turned, as a direction on the floor.
 	// The zero vector is "however the model was exported", which is what
 	// everything placed before there was a rotate key is. See the editor's
-	// prop rotation.
+	// prop rotation. A Y in it turns the piece out of the floor plane
+	// altogether: (0,-1,0) lays a slide door flat as a floor hatch.
 	Facing mgl32.Vec3
 
 	// ClimbTo is the landing at the top of a ladder entity: the point pathfinding

@@ -92,9 +92,10 @@ macOS/Linux/Windows binaries via `.github/workflows/go.yml`.
 | `1`..`9` / `,` `.` | pick a weapon you are carrying, by its `keys.txt` binding / walk the rest |
 | `R` | reload (while the mouse is captured) |
 | `I` | inventory: what you are carrying, and what it is |
-| `F` | toggle gravity |
+| `G` | toggle gravity |
+| `Q` / `E` | roll the horizon - outside the hull only, where the suit flies |
 | `T` | toggle flashlight (off by default) |
-| `E` | take the outlined item / interact with hovered object |
+| `F` | take the outlined item / interact with hovered object |
 | `V` | spawn current object |
 | `Esc` / `F1` | escape menu / wizard menu |
 | `F2` | toggle mouse capture |
@@ -137,7 +138,7 @@ whole beat is ghosted as unit cubes while it is being drawn.
 
 `Ctrl+S` saves both halves of the level back into its own folder: the blocks to
 `map.bin`, and everything standing in them - props, torches, actors and their
-routes - to `map.json`. `F` is the fly toggle, and `R` still opens the menu for
+routes - to `map.json`. `G` is the fly toggle, and `R` still opens the menu for
 what a key cannot carry: a texture out of an atlas of hundreds, load, clear.
 
 `-editor blocks|props|actors` boots straight into it, which is how a screenshot of
@@ -426,7 +427,7 @@ map down: this is content edited while the game is running.
 Two modes, switchable in the `F1` menu:
 
 - **Intentional**, the default - aim at it. The selection beam outlines the item
-  and names it, and `E` takes it. Nothing is picked up by accident.
+  and names it, and `F` takes it. Nothing is picked up by accident.
 - **Collision Based** - Doom's own. Walk within an item's radius and it is yours.
 
 How big an item is, and so what the beam has to be on, is measured off the

@@ -54,14 +54,19 @@
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
-//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [weapon=ID [ammo=true]] [facing=DX,DZ] [collider=false] [passthrough=true]
+//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [weapon=ID [ammo=true]] [facing=DX[,DY],DZ] [collider=false] [passthrough=true]
+//	       [step=DX,DY,DZ times=N]
 //	                               [code=NNNN]
 //	                               sprite=ID is a folder under assets/sprites -
 //	                               a character or a piece of scenery drawn as a
 //	                               picture. A NAME of "-" takes the folder's own.
 //	                               code is the four digits a keypad
 //	                               (mesh=keypad) asks for; the door it holds
-//	                               shut is whichever one is nearest to it
+//	                               shut is whichever one is nearest to it.
+//	                               facing is a direction on the floor, or
+//	                               X,Y,Z to turn a piece out of that plane:
+//	                               facing=0,-1,0 lays a slide door down as a
+//	                               floor hatch, and it slides sideways
 //	note X Y Z THE WRITING         a sheet of paper on the floor. Everything
 //	                               after the three coordinates is what it says,
 //	                               spaces and all, and any four digits in it is
@@ -253,7 +258,59 @@ func build(script string) (*level, error) {
 			return nil, fmt.Errorf("line %d: %s: %w", line, words[0], err)
 		}
 	}
+	l.capGlass()
 	return l, scanner.Err()
+}
+
+// capGlass puts glass on the top and bottom of every glazed cell that has open
+// air there.
+//
+// A `glass` ring is a course of upright sheets: it glazes the sides of its
+// cells and leaves their top and bottom open, which is all a window in a wall
+// needs. Where a blast has torn the hull open the player ends up looking along
+// the course instead of through it, and an open top is a cell with nothing
+// drawn in it at all - a hole in the glass you cannot walk into, because the
+// cell still collides. Capping them closes that: the same sheet, laid flat.
+//
+// It runs once the whole script has, so the cells a later course stacked on top
+// and the ones a blast broke out are both already known - a cap goes on what is
+// still glass and still exposed, and never between two courses of it. The cells
+// are sorted before they are capped: a build has to write the same file twice.
+func (l *level) capGlass() {
+	glazed := map[core.Int3]bool{}
+	for _, pane := range l.result.Panes {
+		glazed[pane.Cell()] = true
+	}
+	cells := make([]core.Int3, 0, len(glazed))
+	for cell := range glazed {
+		cells = append(cells, cell)
+	}
+	slices.SortFunc(cells, func(a, b core.Int3) int {
+		if a.Y != b.Y {
+			return int(a.Y - b.Y)
+		}
+		if a.X != b.X {
+			return int(a.X - b.X)
+		}
+		return int(a.Z - b.Z)
+	})
+	for _, cell := range cells {
+		for _, up := range []int32{1, -1} {
+			if glazed[core.Int3{X: cell.X, Y: cell.Y + up, Z: cell.Z}] {
+				continue
+			}
+			l.result.Panes = append(l.result.Panes, core.Pane{
+				Position: mgl32.Vec3{
+					float32(cell.X) + 0.5,
+					float32(cell.Y) + 0.5 + float32(up)*0.5,
+					float32(cell.Z) + 0.5,
+				},
+				Normal: mgl32.Vec3{0, float32(up), 0},
+				Width:  1,
+				Height: 1,
+			})
+		}
+	}
 }
 
 // parseLine splits one line into its positional words and its key=value
@@ -527,14 +584,29 @@ func (l *level) run(words []string, options map[string]string) error {
 				entity.Name = id
 			}
 		}
-		if facing, given := options["facing"]; given {
-			flat, err := vec2(facing)
+		if turned, given := options["facing"]; given {
+			direction, err := facing(turned)
 			if err != nil {
 				return err
 			}
-			entity.Facing = mgl32.Vec3{flat.X(), 0, flat.Y()}
+			entity.Facing = direction
 		}
-		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: entity})
+		// step and times stand the same piece up again and again, as fill lays a
+		// row of boxes: a ladder the height of a shaft is one line of script.
+		times, err := option(options, "times", 1)
+		if err != nil {
+			return err
+		}
+		step := mgl32.Vec3{}
+		if value, given := options["step"]; given {
+			if step, err = vec3(value); err != nil {
+				return err
+			}
+		}
+		for range int(times) {
+			l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: entity})
+			pos = pos.Add(step)
+		}
 
 	case "note":
 		// The one command whose argument is prose, which is why it is a command
@@ -1224,6 +1296,23 @@ func vec3(value string) (mgl32.Vec3, error) {
 		return mgl32.Vec3{}, fmt.Errorf("%q is not X,Y,Z", value)
 	}
 	return mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, nil
+}
+
+// facing reads a direction a piece is turned to: X,Z for the ordinary case of
+// something standing on the floor, or X,Y,Z for one turned out of that plane -
+// facing=0,-1,0 lays a slide door down as a floor hatch.
+func facing(value string) (mgl32.Vec3, error) {
+	numbers, err := floats(strings.Split(value, ","))
+	if err != nil {
+		return mgl32.Vec3{}, err
+	}
+	switch len(numbers) {
+	case 2:
+		return mgl32.Vec3{numbers[0], 0, numbers[1]}, nil
+	case 3:
+		return mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, nil
+	}
+	return mgl32.Vec3{}, fmt.Errorf("%q is not X,Z or X,Y,Z", value)
 }
 
 func vec2(value string) (mgl32.Vec2, error) {

@@ -66,7 +66,15 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	goFromEntity := quads.NewGameObject(entity.Name)
 	goFromEntity.Transform().SetPosition(spawnPos)
 	if entity.Facing.Len() > 0 {
-		goFromEntity.Transform().SetForward2D(entity.Facing)
+		// Flat on the floor for nearly everything, which is what SetForward2D
+		// is for. A facing that points up or down is a piece turned out of that
+		// plane - a floor hatch is a slide door lying down - and has to keep its
+		// Y, so it takes the 3D one.
+		if entity.Facing.Y() != 0 {
+			goFromEntity.Transform().SetForward(entity.Facing)
+		} else {
+			goFromEntity.Transform().SetForward2D(entity.Facing)
+		}
 	}
 
 	var aabb voxel.AABB
@@ -210,6 +218,8 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	switch entity.MeshName {
 	case doorSlideMeshName:
 		if entity.CreateCollider {
+			spawnPos = slideDoorPlacement(goFromEntity, spawnPos)
+			goFromEntity.Transform().SetPosition(spawnPos)
 			g.spawnDoor(goFromEntity, doorSlide, spawnPos)
 		}
 	case doorSwingLeafMeshName:
@@ -300,6 +310,28 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	return goFromEntity
 }
 
+// slideDoorPlacement puts a leaf where the voxel it was placed in wants it.
+//
+// The model stands on its own origin: a metre wide across its face and a metre
+// tall up from that point, which is exactly the doorway an upright door was
+// placed in the floor of. Laid flat as a floor hatch that same metre runs along
+// the deck instead, so the leaf reaches a whole voxel out of the hole on one
+// side and covers none of it on the other - the half-open-looking hatch - and
+// lies a voxel below the deck it is a hatch in, which is a pit to stand in.
+//
+// A flat leaf is therefore centred on its voxel and lifted to that voxel's top
+// face, which is the surface it is a hatch in: shut it is flush with the deck,
+// and open it has slid its own width aside and is lying on the plate next to
+// the hole. An upright door is already where its model wants to be and is left
+// alone.
+func slideDoorPlacement(object *quads.GameObject, spawnPos mgl32.Vec3) mgl32.Vec3 {
+	up := object.Transform().GetRotation().Rotate(mgl32.Vec3{0, 1, 0})
+	if mgl32.Abs(up.Y()) > 0.001 {
+		return spawnPos // upright, or as near as makes no difference
+	}
+	return spawnPos.Add(mgl32.Vec3{0, 1, 0}).Sub(up.Mul(0.5))
+}
+
 // weaponRangeEntity is what the map calls the marker the test range is laid
 // out from. The map decides where the range is; the engine decides what goes
 // in it, which is every weapon the folder holds.
@@ -309,7 +341,7 @@ const weaponRangeEntity = "WeaponRange"
 // out of the same palette as a table, and unlike a table it is used.
 func interactableMesh(meshName string) bool {
 	switch meshName {
-	case doorSlideMeshName, doorSwingLeafMeshName, keypadMeshName, noteMeshName, audioLogMeshName:
+	case doorSlideMeshName, doorSwingLeafMeshName, keypadMeshName, noteMeshName, audioLogMeshName, signMeshName:
 		return true
 	}
 	return false

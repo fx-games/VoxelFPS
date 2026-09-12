@@ -2,8 +2,10 @@ package main
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 
+	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/wep"
 )
@@ -339,5 +341,36 @@ func TestFillingAmmoLeavesAScriptsOwnFlagsAlone(t *testing.T) {
 		if pools[i] != item {
 			t.Errorf("ammo pool %d = %q, want %q", i, pools[i], item)
 		}
+	}
+}
+
+// A shotgun's spread is wider across than it is tall, so which way is across
+// is the shooter's own and not the world's: rolled onto his side in the suit,
+// the pellets fan out the way the gun is held. A horizontal-only spread is the
+// clean case - every pellet moves along one axis, and rolling a quarter turn
+// has to move them along the other.
+func TestPelletSpreadFollowsTheVisor(t *testing.T) {
+	aim := mgl32.Vec3{0, 0, -1}
+	worldUp := mgl32.Vec3{0, 1, 0}
+	rolledUp := mgl32.Vec3{-1, 0, 0} // a quarter turn to the right
+
+	spreadOn := func(overhead mgl32.Vec3) (alongX, alongY float32) {
+		random := rand.New(rand.NewSource(1))
+		for i := 0; i < 32; i++ {
+			pellet := spreadDirection(random, aim, overhead, 10, 0)
+			alongX += mgl32.Abs(pellet.X())
+			alongY += mgl32.Abs(pellet.Y())
+		}
+		return alongX, alongY
+	}
+
+	x, y := spreadOn(worldUp)
+	if x <= 0.01 || y > 1e-5 {
+		t.Errorf("standing up, the fan spread %v across and %v up; want it all across", x, y)
+	}
+
+	x, y = spreadOn(rolledUp)
+	if y <= 0.01 || x > 1e-5 {
+		t.Errorf("on its side, the fan spread %v across and %v up; want it all up", x, y)
 	}
 }

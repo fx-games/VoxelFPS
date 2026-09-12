@@ -647,3 +647,31 @@ func TestWalkingDownIsNotMistakenForADroppingCollider(t *testing.T) {
 		t.Errorf("came to rest at y = %f, want 1.25", falling.Position().Y())
 	}
 }
+
+// Gravity is a fact about a place. A station's hull has air and a deck inside
+// it and vacuum outside, so the same casing falls in one and hangs in the
+// other - and nothing had to be told which it was when it was thrown.
+func TestNothingFallsWhereThereIsNoGravity(t *testing.T) {
+	system := NewCollisionSolver(floorAt(0))
+	system.SetGravityEnabled(true)
+	// Everything above y=10 is outside the hull.
+	system.SetWeightlessAt(func(at mgl32.Vec3) bool { return at.Y() > 10 })
+
+	outside := mover(t, mgl32.Vec3{0.5, 20, 0.5})
+	outside.ApplyGravity = true
+	system.AddObject(outside)
+
+	inside := mover(t, mgl32.Vec3{4.5, 5, 0.5})
+	inside.ApplyGravity = true
+	system.AddObject(inside)
+
+	for range 8 {
+		system.Update(maxFrameTime)
+	}
+	if pos := outside.Position(); pos != (mgl32.Vec3{0.5, 20, 0.5}) {
+		t.Errorf("weightless object moved to %v, want it hanging where it was", pos)
+	}
+	if pos := inside.Position(); pos.Y() >= 5 {
+		t.Errorf("object inside the hull is at %v, want it fallen", pos)
+	}
+}

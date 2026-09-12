@@ -319,3 +319,35 @@ func TestCellInFrontIsNextToThePlayerAndNeverInThem(t *testing.T) {
 		}
 	}
 }
+
+// A sign hangs on the wall the crosshair is on, facing out of it - and only on
+// a wall: a floor, a ceiling and the top of a table are not where a sign goes,
+// and on those the ghost falls back to standing on the ground.
+func TestASignHangsOnTheWallItIsAimedAt(t *testing.T) {
+	wall := func(side voxel.CubeSide, at mgl32.Vec3) RaycastResult {
+		return RaycastResult{HitInfo: voxel.HitInfo3D{Hit: true, Side: side, CollisionWorldPosition: at}}
+	}
+	pos, facing, onWall := wall(voxel.North, mgl32.Vec3{80.5, 116, 78}).WallPosition()
+	if !onWall {
+		t.Fatal("the north face of a block is a wall and was not taken for one")
+	}
+	if want := (mgl32.Vec3{80.5, 116, 78 - signWallGap}); pos != want {
+		t.Errorf("the sign hangs at %v, want %v - clear of the wall", pos, want)
+	}
+	if want := (mgl32.Vec3{0, 0, -1}); facing != want {
+		t.Errorf("the sign looks %v, want %v - out of the wall", facing, want)
+	}
+	if _, _, onWall := wall(voxel.Top, mgl32.Vec3{1, 1, 1}).WallPosition(); onWall {
+		t.Error("a floor was taken for a wall")
+	}
+	onProp := wall(voxel.North, mgl32.Vec3{1, 1, 1})
+	onProp.HitObject = quads.NewGameObject("Table")
+	if _, _, onWall := onProp.WallPosition(); onWall {
+		t.Error("the side of a table was taken for a wall")
+	}
+	// And what hangs there is something to press E on, not furniture the
+	// selection looks straight through - or it could never be written.
+	if !interactableMesh(signMeshName) {
+		t.Error("a sign is furniture, so the editor cannot reach it to write on it")
+	}
+}

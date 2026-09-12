@@ -6,6 +6,8 @@
 # remappable actions, and aren't listed here. EditorOpenPicker is the browser
 # for whatever the current editor mode places - models, sprites, items, guns,
 # characters, or the texture library while the block tools are in hand.
+# Every other action is listed here, whether or not it is rebound: the file is
+# the list of what can be rebound, and a test fails if one goes missing.
 
 W => MoveForward
 S => MoveBackward
@@ -13,11 +15,13 @@ A => MoveLeft
 D => MoveRight
 C => Crouch
 Space => Jump
+Q => RollLeft
+E => RollRight
 
 R => Reload
 Comma => PreviousWeapon
 Period => NextWeapon
-E => Interact
+F => Interact
 Y => CarryItem
 L => QuickplayLog
 
@@ -36,12 +40,12 @@ F9 => IncreaseFOV
 F10 => DecreaseFOV
 F11 => TestAtlasPicker
 F12 => SaveScreenshot
-F => ToggleGravity
+G => ToggleGravity
 T => CyclePlayerLight
 V => SpawnGameObject
 R => OpenVoxelEditMenu
 Tab => EditorTabAction
-G => ToggleEmissiveTexture
+X => ToggleEmissiveTexture
 L => EntityMenuNext
 K => EntityMenuPrevious
 O => EntityMenuScrollUp

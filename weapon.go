@@ -986,17 +986,17 @@ func (g *Game) fireBullets(weapon *Weapon, op wep.Op, random *rand.Rand) {
 		count = 1
 	}
 	for i := 0; i < count; i++ {
-		g.fireHitscanWith(weapon, origin, spreadDirection(random, direction, op.SpreadH, op.SpreadV), op)
+		g.fireHitscanWith(weapon, origin, spreadDirection(random, direction, g.Camera.GetUp(), op.SpreadH, op.SpreadV), op)
 	}
 }
 
 // spreadDirection scatters a pellet within the horizontal and vertical spread,
 // which are half angles in degrees the way ZDoom writes them.
-func spreadDirection(random *rand.Rand, direction mgl32.Vec3, spreadH, spreadV float64) mgl32.Vec3 {
+func spreadDirection(random *rand.Rand, direction, overhead mgl32.Vec3, spreadH, spreadV float64) mgl32.Vec3 {
 	if spreadH == 0 && spreadV == 0 {
 		return direction
 	}
-	right, up := spreadBasis(direction)
+	right, up := spreadBasis(direction, overhead)
 	yaw := (randomSpan(random)) * spreadH * math.Pi / 180
 	pitch := (randomSpan(random)) * spreadV * math.Pi / 180
 	scattered := direction.
@@ -1005,13 +1005,20 @@ func spreadDirection(random *rand.Rand, direction mgl32.Vec3, spreadH, spreadV f
 	return scattered.Normalize()
 }
 
-// spreadBasis gives two axes across the line of fire. Crossing with world up
-// collapses when the player is looking straight up or down, which would scatter
-// every pellet to NaN, so that case crosses with something else.
-func spreadBasis(direction mgl32.Vec3) (right, up mgl32.Vec3) {
-	reference := mgl32.Vec3{0, 1, 0}
-	if math.Abs(float64(direction.Y())) > 0.999 {
+// spreadBasis gives two axes across the line of fire, the shooter's own way up
+// deciding which is across and which is up: a shotgun's spread is wider one way
+// than the other, so a gun held on its side scatters on its side too.
+//
+// Crossing with the reference collapses when the line of fire is along it -
+// looking straight up, on a deck - which would scatter every pellet to NaN, so
+// that case crosses with something else.
+func spreadBasis(direction, overhead mgl32.Vec3) (right, up mgl32.Vec3) {
+	reference := overhead
+	if reference.Len() < 0.001 || math.Abs(float64(direction.Dot(reference.Normalize()))) > 0.999 {
 		reference = mgl32.Vec3{0, 0, 1}
+		if math.Abs(float64(direction.Z())) > 0.999 {
+			reference = mgl32.Vec3{1, 0, 0}
+		}
 	}
 	right = direction.Cross(reference).Normalize()
 	return right, right.Cross(direction).Normalize()

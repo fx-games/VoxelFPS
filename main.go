@@ -44,6 +44,7 @@ func main() {
 	shotFPS := flag.Float64("shot-fps", 60, "the frame time a capture pretends every frame took, so two runs land on the same animation frame")
 	timeFactor := flag.Float64("time-factor", 1, "scale how fast time flows: 0.5 runs the whole world at half speed, 2 at double")
 	shotPitch := flag.Float64("pitch", 0, "start looking this many degrees down, for a capture of something on the floor")
+	shotRoll := flag.Float64("roll", 0, "start with the horizon rolled this many degrees, for a capture of what the suit sees")
 	autoWalk := flag.Bool("walk", false, "hold the forward key down, for looking at anything that only happens while moving")
 	startEditor := flag.String("editor", "", "start in the map editor, in this mode: blocks, props or actors")
 	startPicker := flag.String("pick", "", "open the editor mode's own asset browser on this folder, so a capture can photograph it; \".\" for the top")
@@ -117,7 +118,7 @@ func main() {
 		game.startWeapon = *startWeapon
 		game.shot = shotRun{
 			path: *shot, first: *shotFirst, every: *shotEvery, count: *shotCount,
-			step: 1 / *shotFPS, pitch: *shotPitch,
+			step: 1 / *shotFPS, pitch: *shotPitch, roll: *shotRoll,
 		}
 		windowWidth, windowHeight := 640, 480
 		if *width > 0 {
@@ -526,8 +527,8 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 	g.entityMenu.SetTextCentered(true)
 	g.entityMenu.SetKeyHandler(func(selectedIndex int, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) bool {
 		// Same vocabulary as every other menu: cursor keys or WASD to move,
-		// Enter or E to act. W/S stay out of it - the menu is not modal and
-		// the player is still walking around while it is up.
+		// Enter or the interact key to act. W/S stay out of it - the menu is
+		// not modal and the player is still walking around while it is up.
 		switch key {
 		case glfw.KeyUp:
 			g.entityMenu.SelectPrevious()
@@ -536,7 +537,7 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 			g.entityMenu.SelectNext()
 			return true
 		}
-		if key == glfw.KeyEnter || key == glfw.KeyKPEnter || key == glfw.KeyE {
+		if key == glfw.KeyEnter || key == glfw.KeyKPEnter || key == g.key(ActionInteract) {
 			switch selectedIndex {
 			case 0:
 				hoveredObj := g.hoveredObj()
@@ -626,6 +627,9 @@ func (g *Game) Init(app *quads.GlApplication, mapLoadResult core.MapLoadResult) 
 		yaw, _ := g.Camera.GetRotation()
 		g.Camera.SetAngles(yaw, float32(-g.shot.pitch))
 	}
+	if g.shot.roll != 0 {
+		g.Camera.SetRoll(float32(g.shot.roll))
+	}
 
 	if g.startEditorMode != "" {
 		g.toggleEditorMode()
@@ -651,6 +655,9 @@ type shotRun struct {
 	// the world often lands on the floor, and a capture that only ever looks
 	// at the horizon never sees it.
 	pitch float64
+	// roll is the horizon's tilt, in degrees - the suit's own, which no
+	// keystroke can ask for in a capture. See eva.go.
+	roll float64
 }
 
 // benchmarkLabel names the run in the report, so two reports pasted next to each
@@ -811,8 +818,17 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 		g.skyHorizonFade = 0
 	}
 	g.station = mapLoad.Station
+	// Gravity stops at the hull, for everything and not only for the player: a
+	// casing thrown out of an airlock, a grenade let go in vacuum and the
+	// sparks off a shot all hang there rather than falling towards a deck that
+	// is not under them. See Station.Pressurised and eva.go.
+	g.physicsSystem.SetWeightlessAt(g.inVacuum)
 	g.skySpin = 0
 	g.inEVA = false
+	// A new level has a deck underfoot: the mouse turns the player again and
+	// the horizon is level, whatever the suit was doing in the last one.
+	g.Camera.SetFreeLook(false)
+	g.Camera.SetRoll(0)
 	g.SetSkyboxSpin(0, mgl32.Vec3{})
 	g.exposure = quads.DefaultExposure
 	g.bloomThreshold = quads.DefaultBloomThreshold
@@ -1158,10 +1174,15 @@ func (g *Game) updateGUI(elapsed float64) {
 		g.updateEditorPreview()
 	}
 
-	if g.editor.gameObjectForSpawning != nil {
-		groundPos, hitGround := g.lastHitResult.GroundPosition()
-		if hitGround {
-			g.editor.gameObjectForSpawning.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid))
+	if ghost := g.editor.gameObjectForSpawning; ghost != nil {
+		// A sign hangs on a wall, so its ghost rides the wall the crosshair is on
+		// - flat against the face and turned to look out of it, which is the only
+		// way a sign is ever mounted. Everything else stands on the floor.
+		if wallPos, facing, onWall := g.lastHitResult.WallPosition(); onWall && g.placingWallPiece() {
+			ghost.Transform().SetPosition(wallPos)
+			ghost.Transform().SetForward2D(facing)
+		} else if groundPos, hitGround := g.lastHitResult.GroundPosition(); hitGround {
+			ghost.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid))
 		}
 	}
 
@@ -1234,6 +1255,27 @@ func (r RaycastResult) GroundPosition() (mgl32.Vec3, bool) {
 	//worldPos := mgl32.Vec3{cwp.X(), float32(math.Floor(float64(cwp.Y()))), cwp.Z()}
 	return cwp, r.HitInfo.Side == voxel.Top
 }
+// signWallGap is how far off the wall a sign hangs, so its face is not in the
+// same plane as the block behind it and the two do not flicker against each
+// other. It is the gap the hand-written signs in build.map already stand at.
+const signWallGap = 0.03
+
+// WallPosition is GroundPosition's twin for the things that go on a wall rather
+// than on a floor: a hit on one of the four upright faces of a voxel, reported
+// as the spot on the face to hang at and the way that face looks. A hit on a
+// prop is not a wall - a sign belongs on the structure, not on a table.
+func (r RaycastResult) WallPosition() (mgl32.Vec3, mgl32.Vec3, bool) {
+	if !r.HitInfo.Hit || r.HitObject != nil {
+		return mgl32.Vec3{}, mgl32.Vec3{}, false
+	}
+	side := r.HitInfo.Side.AsDirection()
+	if side.Y != 0 {
+		return mgl32.Vec3{}, mgl32.Vec3{}, false
+	}
+	outOfTheWall := mgl32.Vec3{float32(side.X), 0, float32(side.Z)}
+	return r.HitInfo.CollisionWorldPosition.Add(outOfTheWall.Mul(signWallGap)), outOfTheWall, true
+}
+
 func (g *Game) rayCastFromScreenPos(screenPosX, screenPosY float64) RaycastResult {
 	normalizedX := screenPosX / float64(g.WindowWidth)
 	normalizedY := screenPosY / float64(g.WindowHeight)

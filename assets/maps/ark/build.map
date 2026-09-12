@@ -20,11 +20,11 @@
 #   y 130-133  D7  hydroponics blown open from outside              vacuum
 #   ---------------------------- sealed: a hatch in the spine --------------
 #   y 127-129  D6  medical     lab, gene vault, ward, cold storage  air  START
-#   y 124-126  D5  crew flats  airlock east (+z), sealed            air
+#   y 124-126  D5  crew flats  airlock east (+z), a door on it     air
 #   y 122-123  D4  service commons: mess, laundry, chapel, washrooms air
 #   y 120-121  D3  service cabins, two metres to the ceiling        air
 #   y 118-119  D2  service cabins                                   air
-#   y 115-117  D1  life support: water tanks, airlock west, sealed  air
+#   y 115-117  D1  life support: water tanks, airlock west, a door air
 #   ---------------------------- sealed: a hatch in the spine --------------
 #   y  28-114  lower cone      reaction mass round the spine        vacuum
 #   y   0-27   drive           reactor, shadow shield, the bell (cold)
@@ -35,10 +35,16 @@
 # changing all of them. Ceilings go with class: one voxel on the service decks,
 # two for crew and medical, three and four up where the money was.
 #
-# The spine is the one way between decks - a 3x3 shaft with a door on every
-# deck, where a ladder goes - and two hatches in it close the six lower decks
-# off from the rest; the airlocks are hatched shut too. Doors and ladders are
-# props and are not placed yet, so a doorway here is a hole where one goes.
+# The spine is how the ship was built to be moved through: a 3x3 shaft with a
+# door on every deck and a ladder running the whole height of it, from the
+# reactor gallery to the bridge, with two hatches that close the six lower
+# decks off from the rest. Every deck hangs off that one shaft.
+#
+# The war left it in pieces, so the ladder is not the whole story any more -
+# see "ways" at the end of this file. Two stretches of shaft are choked with
+# wreckage and the run above D9 was torn out; what the fighting opened instead
+# is what gets you past them. Every deck is still reachable, and which way
+# round depends on whether you are in the pressurised half or the suit.
 
 size 160 192 160
 sky full
@@ -131,6 +137,9 @@ block fl_elite ceil carpet ceil
 block fl_prom  ceil stone marble
 block fl_cmd   ceil grip ceil
 block fl_roof  ceil steel ceil
+# The engineering decks below D1: bare gratings and a rusted wall.
+block fl_eng   girder grate girder
+block eng_w    rust
 block lawn     stone lawn ceil
 block pond     stone water ceil
 block trunk    wood
@@ -152,11 +161,76 @@ cone steel 80 80 3 9 3 9
 cone reactor 80 80 4 10 7 22
 cone steel 80 80 7.5 24 7.5 27
 
-# Four tanks of reaction mass round the spine in the lower cone.
-cone tank 86.5 80 3 50 3 110
-cone tank 80 86.5 3 50 3 110
-cone tank 73.5 80 3 50 3 110
-cone tank 80 73.5 3 50 3 110
+# ------------------------------------------------------------ engineering ---
+# The lower cone is the other half of the ship: the drive at the bottom, the
+# reaction mass round the spine, and six machine decks hung between them. None
+# of it has held air since the war - the hatch under D1 is what keeps that out
+# of the decks above - so everything down here is suit work, in the dark, with
+# the shaft as the only way through. It is reached by opening the lower spine
+# hatch, and nothing else.
+#
+# Every slab is the hull line r(y) = 4 + (y-10)*26/140 read at its own height,
+# less the voxel and a half the hull skin takes, so a deck meets the inside of
+# the plating rather than pushing out through it.
+#
+#   y 104  E6  stores       crates lashed down, the widest deck
+#   y  90  E5  pump hall    the machine room, walled, off the deck's south side
+#   y  76  E4  mass deck    catwalk between the four tanks
+#   y  62  E3  mass deck    the same, one deck down
+#   y  48  E2  coolant      where the tanks stand on their feet
+#   y  34  E1  reactor gallery, right over the shadow shield
+cone fl_eng 80 80  7.0  34  7.0  34
+cone fl_eng 80 80  9.6  48  9.6  48
+cone fl_eng 80 80 12.2  62 12.2  62
+cone fl_eng 80 80 14.8  76 14.8  76
+cone fl_eng 80 80 17.4  90 17.4  90
+cone fl_eng 80 80 20.0 104 20.0 104
+# A door out of the spine onto each of them, one voxel tall like every other.
+clear 82 35 80 82 35 80
+clear 82 49 80 82 49 80
+clear 82 63 80 82 63 80
+clear 82 77 80 82 77 80
+clear 82 91 80 82 91 80
+clear 82 105 80 82 105 80
+
+# The four tanks of reaction mass, standing on E2 and reaching the hatch under
+# D1. They are skins rather than solid: a tank with a wall and an inside is a
+# place, and four solid pillars were only ever a way of using up the room. The
+# decks they pass through are cut back out of them, so a suit can go down one
+# from the top - which is the only way into E3 and E4 that is not the shaft.
+cone tank 86.5 80 3 48 3 110 shell=1
+cone tank 80 86.5 3 48 3 110 shell=1
+cone tank 73.5 80 3 48 3 110 shell=1
+cone tank 80 73.5 3 48 3 110 shell=1
+cone air 86.5 80 2 49 2 109
+cone air 80 86.5 2 49 2 109
+cone air 73.5 80 2 49 2 109
+cone air 80 73.5 2 49 2 109
+# A hatch out of each tank onto the deck it stands on: one voxel of its skin,
+# taken out on the side that faces the shaft.
+clear 84 49 80 84 49 80
+clear 80 49 84 80 49 84
+clear 76 49 80 76 49 80
+clear 80 49 76 80 49 76
+
+# E5's pump hall: the one room down here with walls of its own, on the south
+# side of the deck with its door onto it. Two pump stacks and the pipe between
+# them, which is what the tanks were feeding.
+fill eng_w 72 90 66 88 95 74
+clear 73 91 67 87 94 73
+clear 79 91 74 81 93 74
+fill console 74 91 68 76 92 72
+fill console 84 91 68 86 92 72
+beam steel 77 93 70 83 93 70 r=0.8
+# The coolant runs from the hall to the two near tanks.
+beam steel 76 94 74 76 94 78 r=0.6
+beam steel 84 94 74 84 94 78 r=0.6
+
+# E6's stores: crates lashed to the deck, and a gap between them to get by.
+fill steel 66 105 76 70 107 84
+fill steel 90 105 76 94 107 84
+fill steel 76 105 66 84 107 70
+clear 78 105 67 82 106 69
 
 # ------------------------------------------------------------------ decks ---
 # A slab under every deck, out to r(y) so it meets the hull.
@@ -419,17 +493,24 @@ clear 82 142 80 82 142 80
 clear 82 147 80 82 147 80
 
 # --------------------------------------------------------------- airlocks ---
-# A box on the hull, a chamber in it, a one-voxel passage through both. The
-# inner door of each is a hatch for now - welded, as far as the start of the
-# game is concerned.
-# D1, west (-x): hatch at x=57, outer door x=49.
+# A box on the hull, a chamber in it, a passage through both. The inner door of
+# each is a slide door, so the way out is a door to open rather than a plate to
+# cut: the passage is bored two voxels tall and the voxel over the leaf filled
+# back in, which is what a slide door needs - see AGENTS.md. The chamber past it
+# is already outside the pressure hull, so opening one is stepping into vacuum
+# and the suit.
+# D1, west (-x): inner door at x=57, the way out at x=49.
 fill lock 48 115 77 57 118 83
 clear 50 116 78 55 117 82
-clear 47 116 80 58 116 80
-# D5, east (+z): hatch at z=104, outer door z=112.
+clear 47 116 80 58 117 80
+fill lock 57 117 80 57 117 80
+entity LockDoorWest mesh=door_slide at=57.5,116,80.5 facing=1,0
+# D5, east (+z): inner door at z=104, the way out at z=112.
 fill lock 77 124 104 83 127 113
 clear 78 125 106 82 126 111
-clear 80 125 103 80 125 114
+clear 80 125 103 80 126 114
+fill lock 80 126 104 80 126 104
+entity LockDoorEast mesh=door_slide at=80.5,125,104.5
 
 # ------------------------------------------------------------------ booms ---
 # Eight radiator booms round the drum at y=160, one every 45 degrees. Three
@@ -499,12 +580,79 @@ blast 66 139 92 0.8 seed=10 scorch=scorch
 # The hole in hydroponics reached D6's ceiling slab; D6 still holds air, so
 # the slab is laid again - and then the hatches, which it would have covered.
 cone fl_farm 80 80 26.29 130 26.29 130
+# The two bulkheads that close the six lower decks off, one under D1 and one
+# over D6: a plate across the well with a one-voxel way through it, and a slide
+# door lying flat in that hole. A facing with a Y in it turns the leaf out of
+# the floor plane, and it slides along its own up - which is now sideways,
+# under the plate beside it. See AGENTS.md.
 fill hatch 79 115 79 81 115 81
+clear 80 115 80 80 115 80
+entity SpineHatchLower mesh=door_slide at=80.5,115,80.5 facing=0,-1,0
 fill hatch 79 130 79 81 130 81
-fill hatch 57 116 80 57 116 80
-fill hatch 80 125 104 80 125 104
+clear 80 130 80 80 130 80
+entity SpineHatchUpper mesh=door_slide at=80.5,130,80.5 facing=0,-1,0
+
+# -------------------------------------------------------------------- ways ---
+# How you get from deck to deck, as built and as the war left it.
+#
+# As built: the ladder. It stands against the north wall of the shaft, the
+# whole way up, with a landing at every deck door. The piece is one voxel tall
+# and stacks, so a run is one line: where it starts, and how many voxels of it.
+#
+# The six pressurised decks, D1's floor to D6's ceiling.
+entity Ladder mesh=ladder at=80.5,116,79.0 step=0,1,0 times=14
+# The vacuum decks above the upper hatch, as far as the run survived: D7 and
+# D8, and then nothing, because the rest of it went with the residences.
+entity Ladder mesh=ladder at=80.5,131,79.0 step=0,1,0 times=5
+# The engineering decks, the reactor gallery to the hatch under D1, less the
+# stretch the mass tanks took with them when they tore loose.
+entity Ladder mesh=ladder at=80.5,35,79.0 step=0,1,0 times=28
+entity Ladder mesh=ladder at=80.5,79,79.0 step=0,1,0 times=36
+
+# What the war did to it. Two plugs of wreckage in the shaft, which is what
+# "partially obstructed" means here: the ladder is still there behind them and
+# it no longer gets you through.
+#
+# Between D3 and D4, where the mess deck came down into the shaft.
+fill scorch 79 122 79 81 122 81
+# Between D8 and D9, under the hole the hydroponics blast tore upwards.
+fill scorch 79 136 79 81 137 81
+# And the run above D9 is simply gone, which is why there are no rungs past
+# y=139: out there the suit is the way up.
+
+# What it opened instead.
+#
+# The mess floor fell into the service cabins below it, and somebody rigged a
+# ladder up through the hole. It is the only way between D3 and D4 now.
+clear 84 122 68 86 122 70
+entity Ladder mesh=ladder at=85.5,121,69.0 step=0,1,0 times=2
+# Above the plug at D8, the hydroponics hole is the way: it goes from the farm
+# deck up through the staff flats into the residences, and it was already
+# there - see the damage section. From D9 up, the promenade's blown-out glass
+# and the bridge's vents are open to space, so the suit goes round the outside.
 
 # ----------------------------------------------------------------- lights ---
+# Below D1 there is no power to speak of: what is left down the engineering
+# decks is emergency lighting on its own cells, red and nearly out. Enough to
+# read a deck by with a suit lamp already on, not enough to work by.
+light 80.5 35.8 76.5 color=1,0.35,0.2 power=6 baked
+light 80.5 49.8 76.5 color=1,0.35,0.2 power=6 baked
+light 80.5 63.8 76.5 color=1,0.35,0.2 power=6 baked
+light 80.5 77.8 76.5 color=1,0.35,0.2 power=6 baked
+light 80.5 91.8 76.5 color=1,0.35,0.2 power=6 baked
+light 80.5 105.8 76.5 color=1,0.35,0.2 power=6 baked
+# One more at the rim of each of the wider decks, so a deck reads as a deck
+# rather than as a lit patch by the shaft door.
+light 68.5 77.8 88.5 color=1,0.35,0.2 power=6 baked
+light 68.5 91.8 88.5 color=1,0.35,0.2 power=6 baked
+light 92.5 91.8 88.5 color=1,0.35,0.2 power=6 baked
+light 68.5 105.8 88.5 color=1,0.35,0.2 power=6 baked
+light 92.5 105.8 88.5 color=1,0.35,0.2 power=6 baked
+# The pump hall kept a working lamp over each stack, amber where the rest is red.
+light 75.5 93.5 70.5 color=1,0.7,0.4 power=7 baked
+light 85.5 93.5 70.5 color=1,0.7,0.4 power=7 baked
+light 80.5 93.5 68.5 color=1,0.7,0.4 power=6 baked
+
 # The six decks that still have power: a lamp every eight or ten voxels down
 # every corridor. Warm and dim at the bottom, white in the crew flats, cold in
 # medical.
@@ -567,5 +715,5 @@ sign 79.03 128 87.5 1,0 WARD
 sign 81.97 128 87.5 -1,0 COLD STORAGE
 # The ways out, shut.
 sign 80.5 128 83.03 0,1 !DECK 7 SEALED|!HULL BREACH ABOVE
-sign 58.03 116 80.5 1,0 !AIRLOCK SEALED|VACUUM BEYOND
-sign 80.5 125 103.97 0,-1 !AIRLOCK SEALED|VACUUM BEYOND
+sign 58.03 116 78.5 1,0 !AIRLOCK|VACUUM BEYOND
+sign 78.5 125 103.97 0,-1 !AIRLOCK|VACUUM BEYOND

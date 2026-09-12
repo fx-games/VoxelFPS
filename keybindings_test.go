@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-gl/glfw/v3.3/glfw"
@@ -38,6 +39,31 @@ func TestLoadKeyBindingsMissingFileUsesDefaults(t *testing.T) {
 	for action, want := range defaultKeyBindings {
 		if bindings[action] != want {
 			t.Errorf("%s: got %v, want default %v", action, bindings[action], want)
+		}
+	}
+}
+
+// Every action has to be in keybindings.txt, not only the ones somebody wanted
+// moved. The file is how a player finds out what can be rebound at all, and an
+// action that only exists in the Go defaults is one nobody can discover.
+func TestEveryActionIsListedInTheDefaultFile(t *testing.T) {
+	listed := map[string]bool{}
+	text, err := os.ReadFile(keyBindingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(text), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, action, found := strings.Cut(line, "=>"); found {
+			listed[strings.TrimSpace(action)] = true
+		}
+	}
+	for action := range defaultKeyBindings {
+		if !listed[action] {
+			t.Errorf("%s is bound in the defaults but missing from %s", action, keyBindingsFile)
 		}
 	}
 }

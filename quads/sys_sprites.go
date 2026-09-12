@@ -201,7 +201,7 @@ func (q *SpriteDrawer) Draw(observer core.Observer, spriteShader *glhf.Shader, f
 				continue
 			}
 
-			viewDirection := core.GetViewDirection(observer.GetPosition(), sprite.Position(), sprite.LookDirection())
+			viewDirection := core.GetViewDirection(observer.GetPosition(), observer.GetForward(), sprite.Position(), sprite.LookDirection())
 			// TODO: This should not change when drawing the sprites multiple times in the same frame
 			texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
 			if !shouldShow {
@@ -324,7 +324,7 @@ func (q *SpriteDrawer) DrawTransparent(observer core.Observer, spriteShader *glh
 		if !sprite.GameObject().IsInViewFrustum(observer) {
 			continue
 		}
-		viewDirection := core.GetViewDirection(observer.GetPosition(), sprite.Position(), sprite.LookDirection())
+		viewDirection := core.GetViewDirection(observer.GetPosition(), observer.GetForward(), sprite.Position(), sprite.LookDirection())
 		// TODO: This should not change when drawing the sprites multiple times in the same frame
 		texIndex, shouldShow := q.textureIndex(sprite, viewDirection)
 		if !shouldShow {

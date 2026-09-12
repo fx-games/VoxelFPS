@@ -21,8 +21,8 @@ const (
 	doorSwing
 )
 
-// doorSlideRise is how far a sliding door travels, straight up: one whole
-// voxel, out of the opening and into the empty tile above it. A door tile is
+// doorSlideRise is how far a sliding door travels: one whole voxel, out of the
+// opening and into the solid next to it - straight up for the upright ones. A door tile is
 // empty (WallHeight 0) in the map, so that headroom is already there -
 // nothing has to be carved out for it, the same way ladders rely on the
 // climb volume's own tile being open rather than clearing one.
@@ -146,9 +146,13 @@ func (g *Game) updateDoors(elapsed float64) {
 
 		switch door.kind {
 		case doorSlide:
-			pos := door.closedPos
-			pos[1] += doorSlideRise * door.openT
-			door.object.Transform().SetPosition(pos)
+			// Along the leaf's own up, not the world's. A door standing in a
+			// wall has the two pointing the same way and rises into its lintel;
+			// one laid flat - a floor hatch, turned there by a facing with a Y
+			// in it - slides sideways under the deck instead. Same door, same
+			// model, one vector.
+			up := door.object.Transform().GetRotation().Rotate(mgl32.Vec3{0, 1, 0})
+			door.object.Transform().SetPosition(door.closedPos.Add(up.Mul(doorSlideRise * door.openT)))
 		case doorSwing:
 			angle := mgl32.DegToRad(doorSwingOpenAngle) * door.openT
 			door.object.Transform().SetRotation(mgl32.QuatRotate(angle, mgl32.Vec3{0, 1, 0}))

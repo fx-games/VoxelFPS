@@ -16,6 +16,7 @@ type PhysicsSystem struct {
 	isSolid                 func(x int32, y int32, z int32) bool
 	collisionPairsChecked   int
 	gravityEnabled          bool
+	weightlessAt            func(mgl32.Vec3) bool
 	colliderScratch         []LinkedAABB
 	stepAccumulator         float64
 	stepHeight              float32
@@ -25,6 +26,15 @@ type PhysicsSystem struct {
 // by it. With gravity off, objects keep whatever velocity they are given.
 func (c *PhysicsSystem) SetGravityEnabled(enabled bool) {
 	c.gravityEnabled = enabled
+}
+
+// SetWeightlessAt says where in this world gravity does not reach - outside a
+// station's pressure hull, which is the only place so far that has anywhere.
+// Gravity is a fact about a place, not a switch on the world: a level with no
+// such region (nil, the default) pulls on everything everywhere, the way every
+// level that is not a station does.
+func (c *PhysicsSystem) SetWeightlessAt(weightless func(mgl32.Vec3) bool) {
+	c.weightlessAt = weightless
 }
 
 // SetStepHeight is how high a ledge a falling object may walk straight up, as
@@ -42,6 +52,10 @@ func (c *PhysicsSystem) SetGravity(acceleration mgl32.Vec3) {
 
 func (c *PhysicsSystem) GravityEnabled() bool {
 	return c.gravityEnabled
+}
+
+func (c *PhysicsSystem) weightless(position mgl32.Vec3) bool {
+	return c.weightlessAt != nil && c.weightlessAt(position)
 }
 
 // NewCollisionSolver is a world whose only walls are the cells isSolid says
@@ -170,7 +184,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 		c.keepStandingOnIt(obj)
 
 		velocity := obj.Velocity()
-		if c.gravityEnabled && obj.AffectedByGravity() {
+		if c.gravityEnabled && obj.AffectedByGravity() && !c.weightless(obj.Position()) {
 			velocity = velocity.Add(c.accelerationFromGravity.Mul(float32(deltaTime)))
 			if velocity.Y() < -terminalVelocity {
 				velocity = mgl32.Vec3{velocity.X(), -terminalVelocity, velocity.Z()}

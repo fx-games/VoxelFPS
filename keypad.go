@@ -410,7 +410,7 @@ func (p *panel) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, 
 	switch {
 	case key == glfw.KeyEscape:
 		p.close()
-	case p.onKey == nil && (key == glfw.KeyEnter || key == glfw.KeyKPEnter || key == glfw.KeyE):
+	case p.onKey == nil && (key == glfw.KeyEnter || key == glfw.KeyKPEnter || key == p.game.key(ActionInteract)):
 		p.close()
 	case p.onKey != nil && p.onKey(key, mods):
 		p.close()

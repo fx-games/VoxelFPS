@@ -296,7 +296,7 @@ func (g *Game) spawnPosition(op wep.Op) mgl32.Vec3 {
 		height += playerCenterHeight + attackOffset
 	}
 	eye := g.playerFeet().Add(mgl32.Vec3{0, playerEyeHeight, 0})
-	return eye.Add(aimOffset(aim,
+	return eye.Add(aimOffset(aim, g.Camera.GetUp(),
 		float32(rollRange(op.SpawnForward, op.SpawnForwardTo)*worldUnitsPerDoomUnit),
 		float32(rollRange(op.SpawnOffset, op.SpawnOffsetTo)*worldUnitsPerDoomUnit),
 		height-playerEyeHeight))
@@ -306,11 +306,20 @@ func (g *Game) spawnPosition(op wep.Op) mgl32.Vec3 {
 // the line of aim, sideways to its right, and up across the two. Measured that
 // way rather than along a flat facing, a height stays a height above the gun
 // however the gun is pointed.
-func aimOffset(aim mgl32.Vec3, forward, sideways, up float32) mgl32.Vec3 {
-	across := aim.Cross(mgl32.Vec3{0, 1, 0})
+//
+// overhead is which way is up for the thing doing the spawning - the world's
+// own on the ground, and the visor's in a suit that can roll. A barrel roll
+// turns the gun on the screen, so a muzzle offset measured against the world
+// would leave the shot out of the side of a barrel that is no longer there.
+func aimOffset(aim, overhead mgl32.Vec3, forward, sideways, up float32) mgl32.Vec3 {
+	across := aim.Cross(overhead)
 	if across.Len() < 0.001 {
-		// Straight up or down, where there is no right hand side to speak of.
+		// Looking straight along the way up, where there is no right hand side
+		// to speak of.
 		across = aim.Cross(mgl32.Vec3{0, 0, 1})
+		if across.Len() < 0.001 {
+			across = aim.Cross(mgl32.Vec3{1, 0, 0})
+		}
 	}
 	right := across.Normalize()
 	return aim.Mul(forward).
@@ -346,7 +355,7 @@ const (
 // goes where the player is looking; anything else drifts, so that smoke does
 // not sit in a rigid dot.
 func (g *Game) launchVelocity(actor *wep.Effect, op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) mgl32.Vec3 {
-	if velocity, ok := explicitVelocity(op, direction, spawner); ok {
+	if velocity, ok := explicitVelocity(op, direction, g.Camera.GetUp(), spawner); ok {
 		return velocity
 	}
 	// Speed is a missile's speed, and only a missile is launched with it.
@@ -381,7 +390,7 @@ func (g *Game) launchVelocity(actor *wep.Effect, op wep.Op, direction mgl32.Vec3
 // "seven units a tic, ninety two degrees round" means seven units a tic
 // sideways. Dropping the angle here left every ejected shell casing flying
 // straight down the line of fire to land in front of the player.
-func explicitVelocity(op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) (mgl32.Vec3, bool) {
+func explicitVelocity(op wep.Op, direction, overhead mgl32.Vec3, spawner *wep.Runtime) (mgl32.Vec3, bool) {
 	forward, sideways, up, written := spawnVelocity(op, spawner)
 	if !written {
 		return mgl32.Vec3{}, false
@@ -395,11 +404,13 @@ func explicitVelocity(op wep.Op, direction mgl32.Vec3, spawner *wep.Runtime) (mg
 		// back this way hands a spawn exactly the throw it inherited.
 		velocity = mgl32.Vec3{float32(forward), float32(up), float32(sideways)}
 	} else {
+		// Sideways and up are the shooter's, not the world's: a casing thrown
+		// out of the right of a rolled gun leaves to the right of the gun.
 		heading := turnedBy(direction, rollRange(op.Angle, op.AngleTo))
-		side := heading.Cross(mgl32.Vec3{0, 1, 0}).Normalize()
+		side := heading.Cross(overhead).Normalize()
 		velocity = heading.Mul(float32(forward)).
 			Add(side.Mul(float32(sideways))).
-			Add(mgl32.Vec3{0, float32(up), 0})
+			Add(side.Cross(heading).Normalize().Mul(float32(up)))
 	}
 	return velocity.Mul(float32(worldUnitsPerDoomUnit * wep.TicRate)), true
 }
@@ -573,14 +584,18 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 	if live.homing {
 		live.steerTowards(live.seekTo, elapsed)
 	}
-	if !live.data.NoGravity {
+	transform := live.object.Transform()
+	from := transform.GetPosition()
+
+	// What falls falls where there is something to fall towards. Out past the
+	// hull there is not, so sparks, casings and a thrown grenade keep the throw
+	// they were given - see Game.inVacuum and PhysicsSystem.SetWeightlessAt,
+	// which say the same thing for everything that is not a spawned effect.
+	if !live.data.NoGravity && !g.inVacuum(from) {
 		live.velocity = live.velocity.Add(mgl32.Vec3{0, float32(-gravity * elapsed), 0})
 	}
 
 	live.face(live.velocity, live.facing)
-
-	transform := live.object.Transform()
-	from := transform.GetPosition()
 	step := live.velocity.Mul(float32(elapsed))
 	to := from.Add(step)
 
@@ -615,7 +630,9 @@ func (live *WorldActor) move(g *Game, elapsed float64) {
 		return
 	}
 
-	live.settleOnSolid(g, from)
+	// Landed on a floor, rather than stopped against a wall or a ceiling: it
+	// was on its way down and what blocked it was underneath. See settleOnSolid.
+	live.settleOnSolid(g, from, blockedByFloorOrCeiling && step.Y() < 0)
 }
 
 // bounceOff answers what a frag grenade's own +BOUNCEONFLOORS/WALLS/CEILINGS
@@ -675,7 +692,7 @@ func (live *WorldActor) bounceOff(from, to, step mgl32.Vec3, blockedByX, blocked
 
 // settleOnSolid is where anything that does not bounce off what it just met
 // ends up: a shell lying on the floor, or a missile's own Death state.
-func (live *WorldActor) settleOnSolid(g *Game, from mgl32.Vec3) {
+func (live *WorldActor) settleOnSolid(g *Game, from mgl32.Vec3, onFloor bool) {
 	// It has arrived somewhere solid. A shell settles just above the
 	// surface and lies there; anything with a speed of its own has hit
 	// something, and its script decides what that means.
@@ -698,7 +715,17 @@ func (live *WorldActor) settleOnSolid(g *Game, from mgl32.Vec3) {
 	// visibly spinning is the first thing anybody notices. Resting, it
 	// drops to a plain Y billboard, which is GZDoom's own default mode
 	// (gl_billboard_mode 0): upright, facing you, never pitching.
-	live.sprite.CameraFollowMode = quads.SpriteModeFollowHorizontal
+	//
+	// Only what landed on a floor, though. An upright quad has one bad
+	// angle - straight down the plane of it, where it is a line - and a
+	// player who can roll and pitch freely in a suit finds that angle on
+	// purpose. A muzzle flash that never moved, a tracer stopped against
+	// a wall and a puff stuck to a ceiling all used to take this too, and
+	// out in vacuum they turned into a bright bar lying across the screen
+	// at steep pitches. Nothing about them was ever lying on the ground.
+	if onFloor {
+		live.sprite.CameraFollowMode = quads.SpriteModeFollowHorizontal
+	}
 	if live.data.Speed > 0 || live.data.Missile {
 		live.hitSomething(g, from)
 		return
@@ -927,7 +954,7 @@ func (live *WorldActor) showCurrentFrame(g *Game) {
 	// because Doom's rotations are not all the same width.
 	if views := live.data.Views[sprite]; len(views) == core.ViewDirections {
 		sprite = views[core.GetViewDirection(
-			g.Camera.GetPosition(), live.object.Transform().GetPosition(), live.facing)]
+			g.Camera.GetPosition(), g.Camera.GetForward(), live.object.Transform().GetPosition(), live.facing)]
 	}
 	index, known := g.sharedSpriteIndex[sprite]
 	if !known {

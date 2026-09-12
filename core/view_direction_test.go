@@ -32,8 +32,39 @@ func TestGetViewDirectionRunsRoundTheThingsOwnLeft(t *testing.T) {
 		{mgl32.Vec3{0, 0, 10}, 6, "on its right"},
 		{mgl32.Vec3{7, 0, 7}, 7, "off its front right"},
 	} {
-		if got := GetViewDirection(c.observer, at, looking); got != c.want {
+		// Every observer here stands well clear of the thing, so which way they
+		// happen to be facing never comes into it.
+		if got := GetViewDirection(c.observer, mgl32.Vec3{0, 0, -1}, at, looking); got != c.want {
 			t.Errorf("standing %s: view direction %d, want %d", c.side, got, c.want)
 		}
+	}
+}
+
+// A thing standing where the viewer does has no side to be seen from: the
+// player's own muzzle flash hangs a hand's breadth from the eye, and the scrap
+// of horizontal offset left when the gun points steeply up or down is noise.
+// Taken literally it says "you are looking at this from the side", and the
+// flash - whose side view is a long thin sliver of art - is drawn as a bright
+// bar lying across the screen. Which way the viewer faces answers it instead.
+func TestAThingAtTheViewerIsSeenFromBehindNotFromTheSide(t *testing.T) {
+	looking := mgl32.Vec2{1, 0} // the flash points away down +X, as the shot does
+	eye := mgl32.Vec3{0, 2, 0}
+
+	// Level, the flash is a little way down the line of fire: seen from behind.
+	ahead := mgl32.Vec3{0.8, 2, 0}
+	if got := GetViewDirection(eye, mgl32.Vec3{1, 0, 0}, ahead, looking); got != 4 {
+		t.Errorf("flash out in front: view %d, want 4 - the view from behind it", got)
+	}
+
+	// Pointed almost straight down, the same flash is under the eye with a
+	// couple of centimetres of horizontal offset left over.
+	below := mgl32.Vec3{0.04, 1.2, -0.09}
+	if got := GetViewDirection(eye, mgl32.Vec3{0.17, -0.98, 0}, below, looking); got != 4 {
+		t.Errorf("flash under the eye: view %d, want 4 - the same view from behind", got)
+	}
+
+	// And straight down, where the viewer has no flat facing either.
+	if got := GetViewDirection(eye, mgl32.Vec3{0, -1, 0}, below, looking); got != 4 {
+		t.Errorf("viewer looking straight down: view %d, want 4", got)
 	}
 }

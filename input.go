@@ -45,6 +45,15 @@ func (g *Game) pollInput(elapsed float64) {
 		upDown = 1
 	}
 
+	// Roll is the suit's alone; on the ground the horizon is gravity's and
+	// these two keys do nothing. See evaMove.
+	roll := int(0)
+	if inputSrc.GetKey(g.key(ActionRollLeft)) == glfw.Press {
+		roll = -1
+	} else if inputSrc.GetKey(g.key(ActionRollRight)) == glfw.Press {
+		roll = 1
+	}
+
 	physics := g.player.Physics()
 
 	// The direction the player is asking to move in, flattened: looking up must
@@ -66,7 +75,7 @@ func (g *Game) pollInput(elapsed float64) {
 	// ladder for the same reason the ladder comes first: both of them switch
 	// gravity, and the one that is actually happening has to be the one that
 	// writes it last.
-	if g.gravitationEnabled && g.evaMove(physics, moveDir, upDown, elapsed) {
+	if g.gravitationEnabled && g.evaMove(physics, moveDir, upDown, roll, elapsed) {
 		return
 	}
 

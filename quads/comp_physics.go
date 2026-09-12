@@ -211,7 +211,7 @@ func (g *PhysicsComponent) pickBoxFrom(camera *core.FPSCamera) voxel.AABB {
 		anim, frame = AnimIdle, 0
 	}
 	facings := g.pickBoxes[anim]
-	facing := core.GetViewDirection(camera.GetPosition(), sprite.Position(), sprite.LookDirection())
+	facing := core.GetViewDirection(camera.GetPosition(), camera.GetForward(), sprite.Position(), sprite.LookDirection())
 	if len(facings) == 1 {
 		// Drawn the same from everywhere - an explosion, a barrel - which is
 		// the same one list SpriteDrawer falls back to.

@@ -1,9 +1,14 @@
 // Command genladder writes assets/meshes/ladder/mesh.glb: two rails and a run of
 // rungs, with one 16x16 wood texture embedded the way gentorch/genstairs do
 // it. It is generated rather than modelled for the same reason stairs are -
-// it is a handful of boxes, and the height has to match ladderHeight in
-// ladder.go / the scenery.json Climbable box exactly or the model and the
-// climb volume disagree about where the top is.
+// it is a handful of boxes, and the height has to match the scenery.json boxes
+// exactly or the model and the climb volume disagree about where the top is.
+//
+// The piece is one voxel tall and tiles: a shaft's worth of ladder is the same
+// module stacked, one a voxel, which is what `entity ... step=0,1,0 times=N`
+// lays down. That is why the rung spacing has to divide the height - the rung
+// pattern has to carry across the seam without a double gap at every joint -
+// and why the rails run the full height, so stacked rails meet flush.
 //
 // Run with `go run ./tools/genladder` from the repository root.
 package main
@@ -22,12 +27,18 @@ import (
 )
 
 // The ladder, in world units where a voxel is 1. Height must match the
-// Climbable box in assets/meshes/ladder/scenery.json.
+// Collider box in assets/meshes/ladder/scenery.json, and the Climbable box is
+// that plus climbOut there.
 const (
-	ladderHeight  = 4.0
+	// One voxel, so the piece stacks: see the package comment.
+	ladderHeight  = 1.0
 	railThickness = 0.08
 	railInset     = 0.28 // rail centre distance from the ladder's own x=0
-	rungSpacing   = 0.4
+	// Four rungs to the voxel, which is a rung every half metre at two metres
+	// to the voxel. It has to divide ladderHeight exactly: the first rung sits
+	// half a spacing up, so an exact division puts the last one half a spacing
+	// below the top and the next module's first one a full spacing above it.
+	rungSpacing   = 0.25
 	rungThickness = 0.06
 	rungDepth     = 0.08
 	// wallZ pushes the whole model to the far edge of the tile it is placed

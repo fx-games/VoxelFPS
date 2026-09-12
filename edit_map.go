@@ -421,11 +421,23 @@ func (g *Game) toggleEditorMode() {
 	g.updateEditorSun()
 }
 
-// setGravity is F's switch, set rather than flipped: the player and the
+// setGravity is the fly switch, set rather than flipped: the player and the
 // physics have to agree on it.
+//
+// Flying is the builder's frame, not the suit's: gravity off means the world's
+// own axes, a level horizon and no thrusters, the way a creative mode flies.
+// So switching it off ends an EVA rather than leaving the suit's rolled,
+// visor-steered frame on a player who is now flying a level around. Switching
+// it back on decides nothing here: evaMove looks at where the player is
+// standing on the next frame and starts the suit again if that is vacuum.
 func (g *Game) setGravity(on bool) {
 	g.gravitationEnabled = on
 	g.physicsSystem.SetGravityEnabled(on)
+	if !on && g.inEVA {
+		g.inEVA = false
+		g.Camera.SetFreeLook(false)
+		g.Camera.SetRoll(0)
+	}
 }
 
 // EditShape is what the number keys pick in editor mode: the geometry the next

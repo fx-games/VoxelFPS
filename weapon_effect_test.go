@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/wep"
 	"github.com/stretchr/testify/assert"
@@ -69,11 +70,11 @@ func TestSeekingDoesNotOvershoot(t *testing.T) {
 func TestSpawnOffsetsFollowTheAim(t *testing.T) {
 	forward, sideways, up := float32(0.5), float32(0), float32(-0.2)
 
-	level := aimOffset(mgl32.Vec3{0, 0, -1}, forward, sideways, up)
+	level := aimOffset(mgl32.Vec3{0, 0, -1}, worldUp, forward, sideways, up)
 	assert.InDelta(t, -0.2, level.Y(), 0.001, "level aim keeps the height as written")
 	assert.InDelta(t, -0.5, level.Z(), 0.001)
 
-	down := aimOffset(mgl32.Vec3{0, -1, 0}, forward, sideways, up)
+	down := aimOffset(mgl32.Vec3{0, -1, 0}, worldUp, forward, sideways, up)
 	assert.InDelta(t, -0.5, down.Y(), 0.001, "looking down, the reach ahead is downwards")
 	require.InDelta(t, level.Len(), down.Len(), 0.001, "the rig turns, it does not stretch")
 }
@@ -86,10 +87,10 @@ func TestSpawnVelocityTurnsWithItsAngle(t *testing.T) {
 	aim := mgl32.Vec3{1, 0, 0}
 	right := aim.Cross(mgl32.Vec3{0, 1, 0}) // which is +z
 
-	sideways, _ := explicitVelocity(wep.Op{VelY: 2, VelYTo: 2}, aim, nil)
+	sideways, _ := explicitVelocity(wep.Op{VelY: 2, VelYTo: 2}, aim, worldUp, nil)
 	require.Greater(t, sideways.Dot(right), float32(0), "a positive sideways velocity goes right")
 
-	ejected, _ := explicitVelocity(wep.Op{VelX: 7, VelXTo: 7, Angle: -90, AngleTo: -90}, aim, nil)
+	ejected, _ := explicitVelocity(wep.Op{VelX: 7, VelXTo: 7, Angle: -90, AngleTo: -90}, aim, worldUp, nil)
 	assert.Greater(t, ejected.Dot(right), float32(0), "a negative angle throws it right")
 	assert.InDelta(t, 0, ejected.Dot(aim), 0.001, "ninety degrees round leaves nothing going forward")
 
@@ -100,7 +101,7 @@ func TestSpawnVelocityTurnsWithItsAngle(t *testing.T) {
 
 func mustVelocity(t *testing.T, op wep.Op, aim mgl32.Vec3) mgl32.Vec3 {
 	t.Helper()
-	velocity, ok := explicitVelocity(op, aim, nil)
+	velocity, ok := explicitVelocity(op, aim, worldUp, nil)
 	require.True(t, ok)
 	return velocity
 }
@@ -156,14 +157,14 @@ func TestAnInheritedVelocityIsReadOffTheSpawnerAndLeftInWorldAxes(t *testing.T) 
 	}
 
 	// The aim points east; the throw must not follow it.
-	velocity, ok := explicitVelocity(op, mgl32.Vec3{1, 0, 0}, spawner)
+	velocity, ok := explicitVelocity(op, mgl32.Vec3{1, 0, 0}, worldUp, spawner)
 	require.True(t, ok, "a velocity read off the spawner still counts as written")
 	assert.InDelta(t, 0, velocity.X(), 1e-5, "nothing was going east")
 	assert.Less(t, velocity.Z(), float32(0), "it keeps the spawner's own heading")
 
 	// Without a spawner to read there is nothing to inherit, and the spawn is
 	// left to whatever launchVelocity decides rather than pinned still.
-	_, ok = explicitVelocity(op, mgl32.Vec3{1, 0, 0}, nil)
+	_, ok = explicitVelocity(op, mgl32.Vec3{1, 0, 0}, worldUp, nil)
 	assert.False(t, ok)
 }
 
@@ -367,4 +368,68 @@ func TestBounceOffOnlyReflectsTheAxisTheWallActuallyBlocked(t *testing.T) {
 	_, bounced = grenade.bounceOff(from, to, step, true, true, false)
 	require.True(t, bounced)
 	assert.Equal(t, mgl32.Vec3{-incoming.X(), 0, -incoming.Z()}, grenade.velocity)
+}
+
+// worldUp is which way is up for a shooter standing on a deck, which is what
+// every one of these cases is. A suit that has rolled hands its own instead -
+// see aimOffset - and TestSpawnOffsetsRollWithTheVisor is that case.
+var worldUp = mgl32.Vec3{0, 1, 0}
+
+// Rolled on his side in the suit, the player's gun is on its side with him: the
+// muzzle a spawn leaves from has to go round with it, or the shot comes out of
+// where the barrel was rather than where it is. The offsets are the same three
+// numbers; only which way is up has changed.
+func TestSpawnOffsetsRollWithTheVisor(t *testing.T) {
+	forward, sideways, up := float32(0.5), float32(0.1), float32(-0.2)
+	aim := mgl32.Vec3{0, 0, -1}
+
+	level := aimOffset(aim, worldUp, forward, sideways, up)
+	// A quarter roll to the right puts the visor's up along the world's left.
+	rolled := aimOffset(aim, mgl32.Vec3{-1, 0, 0}, forward, sideways, up)
+
+	require.InDelta(t, level.Len(), rolled.Len(), 0.001, "the rig turns, it does not stretch")
+	assert.InDelta(t, -0.5, rolled.Z(), 0.001, "the reach along the aim is unchanged")
+	// What was a height below the aim is now a step to the side of it, and what
+	// was a step to the side is a height.
+	assert.InDelta(t, level.Y(), -rolled.X(), 0.001)
+	assert.InDelta(t, level.X(), rolled.Y(), 0.001)
+}
+
+// Sparks off a shot, an ejected casing and a thrown grenade all fall the same
+// way: they are spawned effects carrying their own velocity. Inside the hull
+// that velocity gains a downward bite every frame; outside it, where the deck
+// is not under them and there is nothing to fall towards, the throw they were
+// given is the throw they keep.
+func TestSpawnedEffectsOnlyFallWhereThereIsGravity(t *testing.T) {
+	hull := &core.Station{CenterX: 0, CenterZ: 0, Radius: 10, MinY: 0, MaxY: 10}
+	g := &Game{station: hull}
+
+	thrown := func(at mgl32.Vec3) *WorldActor {
+		object := quads.NewGameObject("t")
+		object.Transform().SetPosition(at)
+		return &WorldActor{
+			data:     &wep.Effect{},
+			object:   object,
+			velocity: mgl32.Vec3{1, 0, 0},
+		}
+	}
+
+	inside := thrown(mgl32.Vec3{0, 5, 0})
+	outside := thrown(mgl32.Vec3{0, 50, 0}) // well clear of the hull
+
+	const frame = 1.0 / 60.0
+	for range 10 {
+		inside.move(g, frame)
+		outside.move(g, frame)
+	}
+
+	if inside.velocity.Y() >= 0 {
+		t.Errorf("inside the hull the effect is not falling: velocity %v", inside.velocity)
+	}
+	if outside.velocity != (mgl32.Vec3{1, 0, 0}) {
+		t.Errorf("in vacuum the effect picked up %v, want the throw it was given", outside.velocity)
+	}
+	if y := outside.object.Transform().GetPosition().Y(); y != 50 {
+		t.Errorf("in vacuum the effect drifted to y=%v, want it holding its line", y)
+	}
 }

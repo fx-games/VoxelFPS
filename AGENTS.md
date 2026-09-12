@@ -50,6 +50,7 @@ The flags:
 | `-shot-count N` | how many to take; above 1 they are numbered `-00`, `-01`, ... |
 | `-shot-fps N` | the frame time every frame is told it took (default 60) |
 | `-pitch N` | start looking N degrees down, for what a weapon leaves on the floor |
+| `-roll N` | start with the horizon rolled N degrees, for what the suit sees |
 | `-walk` | hold the forward key, for anything that only happens while moving |
 | `-weapon ID` | start holding this weapon, by its `assets/weapons/` folder name |
 | `-autofire` | hold the trigger down for the whole run |
@@ -163,6 +164,34 @@ door rather than about the level:
   two tall for headroom and then `fill` the voxel directly above each door: the
   shut door is a shut doorway, and the open one has slid up inside the lintel.
 
+A **floor hatch** is that same door lying down: `facing=0,-1,0` turns the leaf
+out of the floor plane, and because a slide door travels along its own up
+rather than the world's, a hatch slides sideways under the deck beside it
+instead of rising. It wants a one-voxel hole in an otherwise solid plate - the
+voxel it slides into has to be there to hide in - and it holds the player's
+weight shut, because the solver collides it as an oriented box. The ark's two
+spine bulkheads are built that way; `facing` takes `DX,DZ` or `DX,DY,DZ`.
+
+## A ladder, and why it is one voxel of ladder
+
+A **ladder** is the piece that makes a level's vertical circulation work: a
+climb volume the player goes up and down inside of instead of falling (see
+`Game.climbVelocity`), with the model to look at bolted to it. Walking is
+gravity's, and a deck without a ladder is a deck you can only fall out of.
+
+The piece is **one voxel tall and stacks**. A shaft's worth of it is the same
+module laid one a voxel - `entity Ladder mesh=ladder at=X,Y,Z step=0,1,0
+times=N` - which is why `tools/genladder`'s rung spacing has to divide its
+height exactly: the first rung sits half a spacing up, so an exact division
+puts the next module's first rung a full spacing above the last one and the
+seam does not show. The rails run the full height and meet flush. It was four
+voxels tall once, which is a piece that fits no deck in particular: the ark's
+decks are two, three and four voxels apart.
+
+The climb volume is the model's height plus a little (`climbable` in
+`assets/meshes/ladder/scenery.json`), and that little is what lets go of the
+top rung onto the deck above rather than leaving the player stuck under it.
+
 ## A locked door, and the note that tells you the number
 
 A door knows nothing about codes. A **keypad** stands beside it with four digits
@@ -186,10 +215,10 @@ fields (`Code` and `Text`):
 
 - **In the editor**, PROPS mode. `keypad`, `note`, `door_slide` and
   `door_swing_leaf` are folders under `assets/meshes/` with a `scenery.json`, so
-  they are palette slots like a table. Place one, then press **E on it** - the
+  they are palette slots like a table. Place one, then press **F on it** - the
   key that uses a thing in the game gives it what it says while building one.
   The editor's own line in the corner prints a keypad's code and whether it has
-  a door in reach. E on a door still opens it.
+  a door in reach. F on a door still opens it.
 - **In `build.map`**: `entity Keypad mesh=keypad at=X,Y,Z code=7412` and
   `note X Y Z the writing`. `note` is its own command rather than a `text=`
   option because a `key=value` may not hold a space.
@@ -223,7 +252,7 @@ blank one.
   it, like the keypad - the model is hung at head height - and FACING is the way
   its face looks, `0,1` for a sign on a wall whose open side is +z. Put X Y Z a
   few hundredths proud of the wall, or the sign is inside it.
-- **In the editor**, PROPS mode, the `sign` palette slot: E on it types the
+- **In the editor**, PROPS mode, the `sign` palette slot: F on it types the
   words, Enter starts a new line, and it repaints as you type.
 
 The model is generated with the other panels, `go run ./tools/genpanels`: a
@@ -285,7 +314,7 @@ Two ways to put one in a level:
   lid. Same shape as `note`, and for the same reason. `assets/maps/keypads` has
   one lying a couple of steps from where the player starts, saying out loud what
   its notes say in writing.
-- **In the editor**, PROPS mode, as the `audiolog` palette slot. It has no `E`
+- **In the editor**, PROPS mode, as the `audiolog` palette slot. It has no `F`
   authoring page the way a keypad and a note do, so one placed there is a
   cartridge with no recording and no label until `build.map` gives it one. It
   says so when played rather than playing silence.
@@ -300,7 +329,7 @@ consequences worth knowing:
   left/right and A/D. `Escape` and `I` close it.
 - **A row's index stopped being a name for it**, since a tab shows only some of
   what is carried. `InventoryItem.Use` is a closure on the item instead, which
-  is what `E` on a row runs: hold that weapon, play that recording, nothing at
+  is what `F` on a row runs: hold that weapon, play that recording, nothing at
   all for a note.
 
 ## Glass, and why it is not a block
@@ -374,6 +403,44 @@ than by a flag:
   walked off. Which side of the hull the player is on is a test on the position
   and nothing else, so there is no entering and leaving to get wrong - an
   airlock is only where the hull lets you cross, not a switch.
+- **Out there the horizon is the suit's**, and so is the frame the mouse turns
+  in. On the ground the camera is two angles about the world - yaw about world
+  up, pitch off the world horizon, clamped short of vertical so a walking
+  player is never on their head. In vacuum `FPSCamera.SetFreeLook` hands the
+  same mouse deltas to the basis instead: yaw about the helmet's own up, pitch
+  about its own right, no clamp anywhere, so the suit loops over the top and
+  keeps going. `Q` and `E` roll it (`RollBy`, `evaRollSpeed`), and jump and
+  crouch push along the visor's up rather than the world's. Everything that
+  moves the camera goes through `ChangeAngles`, which is where the two ways
+  part, so a weapon's recoil follows the visor out there without knowing that
+  it does.
+- **Gravity is a fact about a place, not a switch on the world.** Inside the
+  hull things fall; outside it nothing does, and that is one rule rather than a
+  special case per thing that falls. `PhysicsSystem.SetWeightlessAt` is handed
+  `Game.inVacuum` when a level with a `Station` loads, which covers everything
+  the solver moves - a dropped item, a body, an actor - and `WorldActor.move`
+  asks the same question for the things weapons spawn: sparks, shell casings,
+  a thrown grenade. The symptom when it was only the player who floated was a
+  shotgun throwing sparks that fell out of a vacuum, and a grenade arcing in
+  it.
+- **What a gun spawns is measured against the visor, not the world.** The
+  muzzle offsets a weapon script writes - forward, sideways, and a height - are
+  turned by `aimOffset` and `explicitVelocity` about whichever way is up for
+  the shooter, which is the camera's own up. Barrel-rolled in a suit, the gun
+  on screen is on its side and its muzzle has to be where the barrel now is;
+  measured against world up, the shot leaves from where the barrel would have
+  been standing on a deck. A pellet spread is the same question asked of a
+  shape rather than a point - `spreadBasis` fans wider across than up, and
+  across is the shooter's across - so a shotgun held on its side scatters on
+  its side. `SXF_ABSOLUTEVELOCITY` is left alone: it says world axes and means
+  them.
+- **Coming back in is a blend, not a cut.** Leaving free look reads the two
+  angles back off wherever the eyes ended up, so gravity taking over moves
+  nothing, and then `Game.levelHorizon` eases the roll to level over about a
+  second. A player who crosses the threshold looking past vertical cannot be
+  written as a yaw and a pitch at all and has their pitch clamped into range -
+  which is where the levelling was taking them anyway. `-roll N` is the capture
+  flag for photographing any of it, because a capture takes no keystrokes.
 
 `MapLoadResult.SkyFullSphere` is the third piece: a level with no horizon, so
 the cubemap covers the whole sphere instead of fading into fog below eye level.
@@ -546,7 +613,7 @@ needs the same four pieces `spawnPickup` (`pickup.go`) wires up for a weapon:**
    back per ray unless `rayCast`'s per-cell nearest-first logic (`main.go`)
    already covers the case.
 3. An entry in `g.pickupByObject[object] = pickup`, which is what
-   `hoveredObj`/`hoveredPickup` reads to outline it, name it, and hand `E` to
+   `hoveredObj`/`hoveredPickup` reads to outline it, name it, and hand `F` to
    `take()`.
 4. A `take()` case that does whatever picking it up means - give an item,
    flip a flag, whatever - and clears the map entry and kills the object.
@@ -1086,7 +1153,7 @@ menu:
 - **Collision Based**, what this has always done: a flat distance test in
   `updatePickups`, Doom's own radius, no collider.
 - **Intentional**, the default: the same ray `updateGUI` already casts finds
-  the nearest pickup it passes through, `DrawGui` outlines and names it, `E`
+  the nearest pickup it passes through, `DrawGui` outlines and names it, `F`
   takes it.
 
 The world's own hit caps the beam's reach, so nothing behind a wall is

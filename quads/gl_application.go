@@ -781,8 +781,13 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 	a.setMainUBOCam(observer.GetPosition(), observer.GetForward(), observer.GetProjectionViewMatrix())
 
 	// Cull against the observer, not the camera: a shadow pass has to include every
-	// caster inside the light's frustum, including the ones behind the player.
-	a.CubeMap.DrawWithShader(observer, chunkShader)
+	// caster inside the light's frustum, including the ones behind the player. Only
+	// the camera's pass hands over the box shader that culls what walls hide.
+	var boxShader *glhf.Shader
+	if chunkShader == a.cubeShader {
+		boxShader = a.cubeShaderDepth
+	}
+	a.CubeMap.DrawWithShader(observer, chunkShader, boxShader)
 
 	if a.ShouldDrawMeshes {
 		a.Meshes.Draw(observer, meshShader)

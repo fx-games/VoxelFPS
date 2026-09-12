@@ -50,6 +50,8 @@ const (
 	ActionSaveScreenshot          = "SaveScreenshot"
 	ActionToggleGravity           = "ToggleGravity"
 	ActionCyclePlayerLight        = "CyclePlayerLight"
+	ActionRollLeft                = "RollLeft"
+	ActionRollRight               = "RollRight"
 	ActionSpawnGameObject         = "SpawnGameObject"
 	ActionOpenVoxelEditMenu       = "OpenVoxelEditMenu"
 	ActionEditorTabAction         = "EditorTabAction"
@@ -74,7 +76,7 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionReload:         glfw.KeyR,
 	ActionPreviousWeapon: glfw.KeyComma,
 	ActionNextWeapon:     glfw.KeyPeriod,
-	ActionInteract:       glfw.KeyE,
+	ActionInteract:       glfw.KeyF,
 	ActionCarryItem:      glfw.KeyY,
 	ActionQuickplayLog:   glfw.KeyL,
 
@@ -93,8 +95,15 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionDecreaseFOV:             glfw.KeyF10,
 	ActionTestAtlasPicker:         glfw.KeyF11,
 	ActionSaveScreenshot:          glfw.KeyF12,
-	ActionToggleGravity:           glfw.KeyF,
+	ActionToggleGravity:           glfw.KeyG,
 	ActionCyclePlayerLight:        glfw.KeyT,
+	// Roll, which only the suit has any use for - see eva.go. Q and E are the
+	// pair either side of the movement keys, which is where a space sim puts
+	// them; E gave up interacting to F for it. Q is the editor's mode key as
+	// well, and they never collide: the editor flies with gravity off, and
+	// there is no suit to roll there.
+	ActionRollLeft:  glfw.KeyQ,
+	ActionRollRight: glfw.KeyE,
 	ActionSpawnGameObject:         glfw.KeyV,
 	ActionOpenVoxelEditMenu:       glfw.KeyR,
 	ActionEditorTabAction:         glfw.KeyTab,
@@ -104,7 +113,7 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionEditorRotate:    glfw.KeyZ,
 	// B for browse, next to the other two editor keys and free in every mode.
 	ActionEditorOpenPicker:      glfw.KeyB,
-	ActionToggleEmissiveTexture: glfw.KeyG,
+	ActionToggleEmissiveTexture: glfw.KeyX,
 	ActionEntityMenuNext:        glfw.KeyL,
 	ActionEntityMenuPrevious:    glfw.KeyK,
 	ActionEntityMenuScrollUp:    glfw.KeyO,

@@ -182,6 +182,15 @@ func (g *Game) paletteIndex() int {
 	return g.editor.propIndex[g.editor.mode]
 }
 
+// placingWallPiece is whether the slot on the crosshair is one of the pieces
+// that hang on a wall rather than stand on the floor - which is the sign, and
+// so far only the sign.
+func (g *Game) placingWallPiece() bool {
+	palette := g.palette()
+	index := g.paletteIndex()
+	return index >= 0 && index < len(palette) && palette[index].scenery == signMeshName
+}
+
 // cycleEditorMode is the mode key: BLOCKS -> PROPS -> ACTORS -> BLOCKS. Three
 // modes is short enough to walk one way round.
 func (g *Game) cycleEditorMode() {
@@ -511,6 +520,12 @@ func (g *Game) placeProp() {
 	}
 	at := ghost.Transform().GetPosition()
 	entity := g.propEntity()
+	// A wall piece is turned by the wall it is on and not by the turn key, so
+	// what a save writes out is where the ghost was actually looking.
+	if g.placingWallPiece() {
+		forward := ghost.Transform().GetForward()
+		entity.Facing = mgl32.Vec3{forward.X(), 0, forward.Z()}
+	}
 	placed := g.spawnEntity(at, entity)
 	if placed == nil {
 		return

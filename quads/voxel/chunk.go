@@ -24,6 +24,11 @@ type Chunk struct {
 	cZP         *Chunk
 	isDirty     bool
 	meshBuffer  *MeshBuffer
+
+	// query is the chunk's occlusion query, 0 until its box is first tested, and
+	// hidden is what it said the last time it was read - see drawOccluded.
+	query  uint32
+	hidden bool
 }
 
 func NewChunk(voxelMap *Map, x, y, z int32) *Chunk {
