@@ -1255,6 +1255,7 @@ func (r RaycastResult) GroundPosition() (mgl32.Vec3, bool) {
 	//worldPos := mgl32.Vec3{cwp.X(), float32(math.Floor(float64(cwp.Y()))), cwp.Z()}
 	return cwp, r.HitInfo.Side == voxel.Top
 }
+
 // signWallGap is how far off the wall a sign hangs, so its face is not in the
 // same plane as the block behind it and the two do not flicker against each
 // other. It is the gap the hand-written signs in build.map already stand at.

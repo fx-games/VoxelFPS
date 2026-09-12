@@ -23,10 +23,10 @@ type FPSCamera struct {
 	// eva.go.
 	roll float32
 	// freeLook is the suit's way of steering: see SetFreeLook.
-	freeLook bool
-	LookSensitivity  float32
-	invertedY        bool
-	parent           Transformer
+	freeLook        bool
+	LookSensitivity float32
+	invertedY       bool
+	parent          Transformer
 }
 
 func (c *FPSCamera) GetUp() mgl32.Vec3 {

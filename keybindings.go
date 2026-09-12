@@ -102,11 +102,11 @@ var defaultKeyBindings = map[string]glfw.Key{
 	// them; E gave up interacting to F for it. Q is the editor's mode key as
 	// well, and they never collide: the editor flies with gravity off, and
 	// there is no suit to roll there.
-	ActionRollLeft:  glfw.KeyQ,
-	ActionRollRight: glfw.KeyE,
-	ActionSpawnGameObject:         glfw.KeyV,
-	ActionOpenVoxelEditMenu:       glfw.KeyR,
-	ActionEditorTabAction:         glfw.KeyTab,
+	ActionRollLeft:          glfw.KeyQ,
+	ActionRollRight:         glfw.KeyE,
+	ActionSpawnGameObject:   glfw.KeyV,
+	ActionOpenVoxelEditMenu: glfw.KeyR,
+	ActionEditorTabAction:   glfw.KeyTab,
 	// The editor's two new keys sit next to Tab and the number row, because in
 	// editor mode the left hand never leaves them: mode, toggle, slot.
 	ActionEditorCycleMode: glfw.KeyQ,
