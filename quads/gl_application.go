@@ -142,6 +142,7 @@ type GlApplication struct {
 	drawCallCountParticles              int
 	benchmark                           *Benchmark
 	benchmarkLabel                      string
+	profile                             frameProfile
 
 	// The last workTimeWindow work times in wrap-around order, plus a scratch
 	// slice to sort a copy of them in - see WorkTimePercentiles.
@@ -473,6 +474,7 @@ func (a *GlApplication) StartEventLoop() {
 			}
 			deltaTime := elapsed * a.TimeFactor
 
+			a.profile.mark("update: toasts, paths, minimap")
 			{ // Update BEGIN
 				a.updateToasts(deltaTime)
 
@@ -482,13 +484,19 @@ func (a *GlApplication) StartEventLoop() {
 				if a.minimap != nil {
 					a.minimap.Update()
 				}
+				a.profile.mark("update: game")
 				a.UpdateFunc(deltaTime)
 
+				a.profile.mark("update: sprites, meshes")
 				a.Sprites.Update(deltaTime)
 				a.Meshes.Update(deltaTime)
+				a.profile.mark("update: particles")
 				a.UpdateParticles(deltaTime)
+				a.profile.mark("update: player lights")
 				a.lightsUbo.UpdatePlayerLight()
 				a.lightsUbo.UpdateTrackedLight()
+				a.profile.mark("update: upload lights")
+				a.lightsUbo.Flush()
 			} // Update END
 
 			// The scene buffer is linear HDR, so the authored ceiling colour is lifted to
@@ -501,6 +509,7 @@ func (a *GlApplication) StartEventLoop() {
 				a.CeilingColor.W(),
 			)
 
+			a.profile.mark("shadow: setup")
 			{ // BEGIN SHADOW MAPPING
 				gl.Viewport(0, 0, int32(a.shadowResolution), int32(a.shadowResolution))
 				a.shadowBuffer.Begin()
@@ -535,6 +544,7 @@ func (a *GlApplication) StartEventLoop() {
 				gl.Viewport(0, 0, int32(a.FramebufferWidth), int32(a.FramebufferHeight))
 			} // END SHADOW MAPPING
 
+			a.profile.mark("scene: clear")
 			{ // BEGIN RENDER 3D SCENE
 				a.postFrameBuffer.Begin()
 				a.shadowBuffer.DepthTextureArray().BeginOnUnit(gl.TEXTURE2)
@@ -550,6 +560,7 @@ func (a *GlApplication) StartEventLoop() {
 				// projection matrices separately (the geometry shader billboards in
 				// view space), which Observer does not expose, and a shadow pass has
 				// no business rasterising them.
+				a.profile.mark("scene: particles, debug")
 				if a.ShouldDrawParticles {
 					a.DrawParticles(a.Camera)
 				}
@@ -560,6 +571,7 @@ func (a *GlApplication) StartEventLoop() {
 				a.postFrameBuffer.End() // will effectively do "gl.BindFramebuffer(gl.FRAMEBUFFER, 0)"
 			} // End Render 3D Scene
 
+			a.profile.mark("bloom, post")
 			{ // BLOOM, TONE MAPPING, THEN THE SCENE TO THE SCREEN
 				bloomResult := a.renderBloom()
 
@@ -582,6 +594,7 @@ func (a *GlApplication) StartEventLoop() {
 			} // End bloom, tone mapping and the scene to the screen
 
 			// DRAW UI ON TOP OF POSTPROCESSING
+			a.profile.mark("gui")
 			{ // Begin Draw 2D Scene
 				gl.Clear(gl.DEPTH_BUFFER_BIT)
 				gl.Enable(gl.BLEND)
@@ -642,16 +655,26 @@ func (a *GlApplication) StartEventLoop() {
 				shouldQuit = a.shotsTaken >= a.shotCount
 			}
 
+			a.profile.mark("swap, events")
 			a.Window.SwapBuffers()
 			glfw.PollEvents()
+			a.profile.endFrame()
 			a.Ticks++
 
 			// Measured after SwapBuffers, so the wait for vblank is inside the frame
 			// it belongs to. With vsync on that makes every number the refresh rate,
 			// which is why -bench turns vsync off.
-			if a.benchmark != nil && a.benchmark.record(elapsed) {
-				fmt.Print(a.benchmark.Report(a.benchmarkLabel, a.SceneSummary()))
-				shouldQuit = true
+			if a.benchmark != nil {
+				wasWarm := a.benchmark.warm()
+				done := a.benchmark.record(elapsed)
+				if !wasWarm && a.benchmark.warm() {
+					a.profile.reset()
+				}
+				if done {
+					fmt.Print(a.benchmark.Report(a.benchmarkLabel, a.SceneSummary()))
+					fmt.Print(a.profile.report())
+					shouldQuit = true
+				}
 			}
 		})
 	}
@@ -777,25 +800,37 @@ func (a *GlApplication) shadowSceneSignature(light *LightInfo, casterPositions [
 // given, runs after the opaque geometry and before the alpha-blended sprites - that
 // is where the skybox goes, so translucent sprites blend against the sky instead of
 // the clear colour. The shadow pass passes nil: it has no sky and writes depth only.
+// sceneSections and shadowSections name draw3dScene's parts in the frame profile,
+// one set per pass, so the camera's meshes and a light's meshes are told apart.
+var (
+	sceneSections  = [6]string{"scene: map", "scene: meshes", "scene: sprites, decals", "scene: sky", "scene: panes", "scene: transparent"}
+	shadowSections = [6]string{"shadow: map", "shadow: meshes", "shadow: sprites", "shadow: (sky)", "shadow: (panes)", "shadow: transparent"}
+)
+
 func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshShader, spriteShader *glhf.Shader, betweenPasses func()) {
+	// Everything below culls thousands of things against a view that does not
+	// move while it draws - see core.FrozenObserver.
+	observer = core.Freeze(observer)
+	forShadows := spriteShader == a.quadShaderDepth
+	sections := &sceneSections
+	if forShadows {
+		sections = &shadowSections
+	}
+	a.profile.mark(sections[0])
 	a.setMainUBOCam(observer.GetPosition(), observer.GetForward(), observer.GetProjectionViewMatrix())
 
 	// Cull against the observer, not the camera: a shadow pass has to include every
-	// caster inside the light's frustum, including the ones behind the player. Only
-	// the camera's pass hands over the box shader that culls what walls hide.
-	var boxShader *glhf.Shader
-	if chunkShader == a.cubeShader {
-		boxShader = a.cubeShaderDepth
-	}
-	a.CubeMap.DrawWithShader(observer, chunkShader, boxShader)
+	// caster inside the light's frustum, including the ones behind the player.
+	a.CubeMap.DrawWithShader(observer, chunkShader)
 
+	a.profile.mark(sections[1])
 	if a.ShouldDrawMeshes {
-		a.Meshes.Draw(observer, meshShader)
+		a.Meshes.Draw(observer, meshShader, forShadows)
 	}
+	a.profile.mark(sections[2])
 	// Sprites keep blending: the atlases have soft edges and the shader only
 	// discards fully transparent texels. Chunks and meshes are opaque and no
 	// longer pay for the blend unit.
-	forShadows := spriteShader == a.quadShaderDepth
 	if a.ShouldDrawSprites {
 		gl.Enable(gl.BLEND)
 		a.Sprites.Draw(observer, spriteShader, forShadows)
@@ -808,10 +843,12 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 		gl.Disable(gl.BLEND)
 	}
 
+	a.profile.mark(sections[3])
 	if betweenPasses != nil {
 		betweenPasses()
 	}
 
+	a.profile.mark(sections[4])
 	// The glass in the windows, after the sky and never in a depth pass: a pane
 	// writes no depth, so a sky drawn after it would paint over it, and a pane
 	// in a light's depth map would shadow the room it is meant to let light
@@ -822,6 +859,7 @@ func (a *GlApplication) draw3dScene(observer core.Observer, chunkShader, meshSha
 		gl.Disable(gl.BLEND)
 	}
 
+	a.profile.mark(sections[5])
 	if a.ShouldDrawSprites {
 		gl.Enable(gl.BLEND)
 		a.Sprites.DrawTransparent(observer, spriteShader, forShadows)
@@ -1351,6 +1389,7 @@ func (a *GlApplication) capture() {
 func (a *GlApplication) StartBenchmark(bench *Benchmark, label string) {
 	a.benchmark = bench
 	a.benchmarkLabel = label
+	a.profile.start()
 	a.ShouldUseVsync = false
 	a.SetVSync(false)
 }
@@ -1932,6 +1971,16 @@ func (a *GlApplication) DetachLight() {
 // how many did not fit under MaxLights.
 func (a *GlApplication) AddLights(infos ...LightInfo) int {
 	return a.lightsUbo.AddLights(infos...)
+}
+
+// AddMovableLight appends a light and returns the slot it landed in, for MoveLight.
+func (a *GlApplication) AddMovableLight(info LightInfo) int {
+	return a.lightsUbo.AddMovableLight(info)
+}
+
+// MoveLight stands the light in a slot somewhere else and points it somewhere else.
+func (a *GlApplication) MoveLight(index int, position, forward mgl32.Vec3) {
+	a.lightsUbo.MoveLight(index, position, forward)
 }
 
 // SetStaticLights replaces every light in the scene except the player's, which

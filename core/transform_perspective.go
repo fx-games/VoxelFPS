@@ -169,8 +169,18 @@ func (c *PerspectiveTransform) FrustumPlanes() [6]mgl32.Vec4 {
 	if projView == c.cachedPlanesKey {
 		return c.cachedPlanes
 	}
+	c.cachedPlanes = FrustumFrom(projView)
+	c.cachedPlanesKey = projView
+	return c.cachedPlanes
+}
+
+// Frustum is a view's six clip planes, taken once. See FrustumPlanes for what
+// the planes are.
+type Frustum [6]mgl32.Vec4
+
+func FrustumFrom(projView mgl32.Mat4) Frustum {
 	r0, r1, r2, r3 := projView.Rows()
-	planes := [6]mgl32.Vec4{
+	planes := Frustum{
 		r3.Add(r0), // left
 		r3.Sub(r0), // right
 		r3.Add(r1), // bottom
@@ -184,13 +194,50 @@ func (c *PerspectiveTransform) FrustumPlanes() [6]mgl32.Vec4 {
 			planes[i] = p.Mul(1 / length)
 		}
 	}
-	c.cachedPlanes = planes
-	c.cachedPlanesKey = projView
 	return planes
 }
 
+// FrozenObserver is an Observer that culls against planes taken when it was
+// frozen. A PerspectiveTransform rebuilds its projection-view matrix on every
+// test to find out whether its cached planes are still current - the camera
+// hangs off the player, so that is two transforms, a product and an inverse -
+// and a pass tests thousands of things: the ark's 3626 window panes alone cost
+// 1.2 ms a frame that way. A pass's view does not move while it draws.
+type FrozenObserver struct {
+	Observer
+	frustum Frustum
+}
+
+func Freeze(observer Observer) *FrozenObserver {
+	return &FrozenObserver{observer, FrustumFrom(observer.GetProjectionViewMatrix())}
+}
+
+func (f *FrozenObserver) IsInViewFrustum(point mgl32.Vec3) bool {
+	return f.frustum.IsInViewFrustum(point)
+}
+
+func (f *FrozenObserver) IsSphereInViewFrustum(center mgl32.Vec3, radius float32) bool {
+	return f.frustum.IsSphereInViewFrustum(center, radius)
+}
+
+func (f *FrozenObserver) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool {
+	return f.frustum.IsCubeInViewFrustum(minVals, maxVals)
+}
+
 func (c *PerspectiveTransform) IsInViewFrustum(point mgl32.Vec3) bool {
-	for _, plane := range c.FrustumPlanes() {
+	return Frustum(c.FrustumPlanes()).IsInViewFrustum(point)
+}
+
+func (c *PerspectiveTransform) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool {
+	return Frustum(c.FrustumPlanes()).IsCubeInViewFrustum(minVals, maxVals)
+}
+
+func (c *PerspectiveTransform) IsSphereInViewFrustum(centerWorldSpace mgl32.Vec3, radiusWorldSpace float32) bool {
+	return Frustum(c.FrustumPlanes()).IsSphereInViewFrustum(centerWorldSpace, radiusWorldSpace)
+}
+
+func (f Frustum) IsInViewFrustum(point mgl32.Vec3) bool {
+	for _, plane := range f {
 		if plane.Dot(point.Vec4(1)) < 0 {
 			return false
 		}
@@ -207,8 +254,8 @@ func (c *PerspectiveTransform) IsInViewFrustum(point mgl32.Vec3) bool {
 // ponytail: plane-vs-AABB is conservative at the frustum corners, so a box just
 // outside a corner can survive. Add a corner-vs-box pass if the false positives
 // ever show up in the chunk counts.
-func (c *PerspectiveTransform) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool {
-	for _, plane := range c.FrustumPlanes() {
+func (f Frustum) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) bool {
+	for _, plane := range f {
 		positive := mgl32.Vec3{minVals.X(), minVals.Y(), minVals.Z()}
 		if plane.X() >= 0 {
 			positive[0] = maxVals.X()
@@ -226,8 +273,8 @@ func (c *PerspectiveTransform) IsCubeInViewFrustum(minVals, maxVals mgl32.Vec3) 
 	return true
 }
 
-func (c *PerspectiveTransform) IsSphereInViewFrustum(centerWorldSpace mgl32.Vec3, radiusWorldSpace float32) bool {
-	for _, plane := range c.FrustumPlanes() {
+func (f Frustum) IsSphereInViewFrustum(centerWorldSpace mgl32.Vec3, radiusWorldSpace float32) bool {
+	for _, plane := range f {
 		if plane.Dot(centerWorldSpace.Vec4(1)) < -radiusWorldSpace {
 			return false
 		}
@@ -260,6 +307,15 @@ func (c *PerspectiveTransform) GetFarPlaneDist() float32 {
 // plane, and the far plane only enters as 1/far, which against a near plane of
 // 0.05 is noise. Precision at fifty units is the same whether the frustum ends
 // at a hundred or a thousand.
+// SetNearPlaneDist moves the near plane out. A shadow frustum spends its depth
+// precision on its near-to-far ratio, so a light standing a long way off its
+// subject - see core.Sun - has to bring the near plane up with it or the depth
+// bias, which is a constant in a non-linear depth buffer, ends up worth tens of
+// world units out at the far end.
+func (c *PerspectiveTransform) SetNearPlaneDist(distance float32) {
+	c.nearPlaneDist = distance
+}
+
 func (c *PerspectiveTransform) SetFarPlaneDist(distance float32) {
 	if distance <= c.nearPlaneDist {
 		return

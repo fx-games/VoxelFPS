@@ -6,18 +6,24 @@ import (
 )
 
 const (
-	MeshShaderModelTransform int = iota
-	// MeshShaderEmissiveStrength is how far past white the glowing texels of this
-	// mesh are pushed - 0 for everything that does not glow, which is every mesh
-	// but the torch today. The depth-pass shader does not have it, and both are
-	// handed the same draw code, hence the HasUniform check in MeshDrawer.Draw.
-	MeshShaderEmissiveStrength
 	// The two thresholds deciding which of this mesh's texels count as glowing.
 	// Shared with the cube and sprite shaders and driven from the F1 menu - see
 	// emissiveMask in the fragment header.
-	MeshShaderEmissiveCutoff
+	MeshShaderEmissiveCutoff int = iota
 	MeshShaderEmissiveSaturation
 )
+
+// MeshInstanceFormat is what one drawn copy of a model part carries: where it
+// stands, as a mat4 at locations 4 to 7, and how it is lit, at 8 - its emissive
+// strength and the baked voxel light level where it stands (see MeshComponent).
+// The locations are pinned in the shader so the lit and the depth program read
+// the same vertex array.
+var MeshInstanceFormat = []glhf.InstanceAttr{
+	{Location: 4, Floats: 16},
+	{Location: 8, Floats: 2},
+}
+
+const meshInstanceFloats = 18
 
 func LoadMeshShader(uboBlock string) *glhf.Shader {
 	var (
@@ -28,10 +34,8 @@ func LoadMeshShader(uboBlock string) *glhf.Shader {
 			{Name: "normal", Type: glhf.Vec3},
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4},      // 0
-			glhf.Attr{Name: "emissiveStrength", Type: glhf.Float},   // 1
-			glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float},     // 2
-			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 3
+			glhf.Attr{Name: "emissiveCutoff", Type: glhf.Float},     // 0
+			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 1
 		}
 		shader *glhf.Shader
 	)
@@ -67,10 +71,8 @@ func LoadMeshShaderDepthPass(uboBlock string) *glhf.Shader {
 			{Name: "vertexColor", Type: glhf.Vec3},
 			{Name: "normal", Type: glhf.Vec3},
 		}
-		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "modelTransform", Type: glhf.Mat4}, // 0
-		}
-		shader *glhf.Shader
+		uniformFormat = glhf.AttrFormat{}
+		shader        *glhf.Shader
 	)
 	var err error
 	shader, err = glhf.NewBasicShader(vertexFormat, uniformFormat, depthVertexShaderHeader(uboBlock)+meshVertexShaderSource, emptyFragmentShaderSource)
@@ -96,57 +98,56 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoord;
 layout(location = 2) in vec3 vertexColor;
 layout(location = 3) in vec3 normal;
-
-uniform mat4 modelTransform;
+// One drawn copy of the part - see MeshInstanceFormat.
+layout(location = 4) in mat4 instanceTransform;
+layout(location = 8) in vec2 instanceLight;// x: emissive strength, y: baked light 0..15
 
 #ifndef DEPTH_PASS
-out vec3 VertPos;
+out vec3 VertWorldPos;
 out vec2 VertUV;
-out vec3 VertNormal;
-out vec3 VertColor;
+out vec3 VertWorldNormal;
+flat out vec2 VertLight;
 #endif
 
 void main() {
-    gl_Position = camProjectionView * modelTransform * vec4(position, 1.0);
+    vec4 worldPos = instanceTransform * vec4(position, 1.0);
+    gl_Position = camProjectionView * worldPos;
 
-    // pass-through for fragment shader
 #ifndef DEPTH_PASS
     VertUV = texCoord;
-    VertNormal = normal;
-    VertPos = position;
-    VertColor = vertexColor;
+    // Here rather than per fragment: the transform is affine, so interpolating
+    // the transformed values is what the fragment used to work out itself.
+    VertWorldPos = worldPos.xyz;
+    VertWorldNormal = (instanceTransform * vec4(normal, 0.0)).xyz;
+    VertLight = instanceLight;
 #endif
 }`
 
 const meshFragmentShaderSource = `
-in vec3 VertPos;
+in vec3 VertWorldPos;
 in vec2 VertUV;// tl: 0,0 tr: 1,0 bl: 0,1 br: 1,1
-in vec3 VertNormal;
-in vec3 VertColor;
-
-uniform mat4 modelTransform;
+in vec3 VertWorldNormal;
+// glhf fails a program on any link log, and the linker warns about a varying the
+// fragment stage never reads, so the vertex colour the model format carries is
+// not passed on at all rather than passed on and ignored.
+flat in vec2 VertLight;// x: emissive strength, y: baked light 0..15
 
 uniform sampler2D tex;
-uniform float emissiveStrength;
 
 out vec4 fragmentColor;
 
 void main() {
     vec4 surfaceColor = texture(tex, VertUV);
-    
+
     if (surfaceColor.a == 0) {
         discard;
     }
-    vec3 colorPerVertex = VertColor;
-    
-    vec3 fragWorldPos = (modelTransform * vec4(VertPos, 1.0)).xyz;
-    vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 
     // The same emissiveMask a wall face and a sprite are put through, so a torch's
     // flame glows and the dark stick holding it does not, by the same numbers.
     // Zero strength - every mesh but the torch - costs the multiply and nothing else.
-    vec3 emissive = surfaceColor.rgb * emissiveMask(surfaceColor.rgb) * emissiveStrength;
+    vec3 emissive = surfaceColor.rgb * emissiveMask(surfaceColor.rgb) * VertLight.x;
 
-    fragmentColor = finalColor(surfaceColor, fragWorldPos, fragWorldNormal, emissive);
+    fragmentColor = finalColor(surfaceColor, VertWorldPos, VertWorldNormal, emissive, bakedLight(VertLight.y));
 }
 `

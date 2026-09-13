@@ -33,9 +33,19 @@ const dialogueDir = "assets/dialogue"
 // what it says. A file names one by key; anything a conversation wants to do
 // has to be listed here, so a dialogue file can never reach further into the
 // game than the actor it belongs to.
-var dialogueActions = map[string]func(*Actor){
-	"follow": (*Actor).follow,
-	"stay":   (*Actor).stopFollowing,
+// The line the reply leads to is handed over as well, for an action whose
+// answer is only known when it is asked - a guide saying where on its route
+// it has got to. It writes into the line it is about to be shown, which the
+// widget reads after running this - see GuiDialogue.choose.
+var dialogueActions = map[string]func(*Actor, *quads.DialogueLine){
+	"follow": func(a *Actor, _ *quads.DialogueLine) { a.follow() },
+	"stay":   func(a *Actor, _ *quads.DialogueLine) { a.stopFollowing() },
+	"tour":   func(a *Actor, _ *quads.DialogueLine) { a.startTour() },
+	"waypoint": func(a *Actor, next *quads.DialogueLine) {
+		if next != nil {
+			next.Text = a.waypointText()
+		}
+	},
 }
 
 // dialogueFile is the on-disk shape: nodes in a flat map rather than nested,
@@ -108,7 +118,7 @@ func parseDialogue(data []byte, actor *Actor) (*quads.DialogueLine, error) {
 			if choice.Next != "" && !known {
 				return nil, fmt.Errorf("line %q replies to unknown line %q", id, choice.Next)
 			}
-			do, err := dialogueAction(choice.Do, actor)
+			do, err := dialogueAction(choice.Do, actor, next)
 			if err != nil {
 				return nil, fmt.Errorf("line %q: %w", id, err)
 			}
@@ -126,7 +136,7 @@ func parseDialogue(data []byte, actor *Actor) (*quads.DialogueLine, error) {
 
 // dialogueAction binds a named action to this actor. An empty name is the
 // ordinary reply that only talks.
-func dialogueAction(name string, actor *Actor) (func(), error) {
+func dialogueAction(name string, actor *Actor, next *quads.DialogueLine) (func(), error) {
 	if name == "" {
 		return nil, nil
 	}
@@ -134,5 +144,5 @@ func dialogueAction(name string, actor *Actor) (func(), error) {
 	if !known {
 		return nil, fmt.Errorf("unknown action %q", name)
 	}
-	return func() { action(actor) }, nil
+	return func() { action(actor, next) }, nil
 }

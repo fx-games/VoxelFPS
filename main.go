@@ -58,6 +58,7 @@ func main() {
 	showOBBs := flag.Bool("obb", false, "draw every collider, which is the F1 menu's Show OBBs from the command line")
 	shockScale := flag.Float64("ss-scale", 1, "scale every System Shock sprite by this, on top of the size its own art implies")
 	blakeScale := flag.Float64("bs-scale", 1, "scale every Blake Stone sprite by this, on top of the size its own art implies")
+	startAt := flag.String("at", "", "start here instead of the level's spawn: \"X,Y,Z\" or \"X,Y,Z,DX,DZ\" to face a way too, for a capture of one corner of a big level")
 	flag.Parse()
 	sourceScale["ss_"] = float32(*shockScale)
 	sourceScale["bs_"] = float32(*blakeScale)
@@ -86,6 +87,15 @@ func main() {
 		if mapLoad, blocks, err = loadMap(loadedMap); err != nil {
 			log.Fatalf("%s (levels in %s: %v)", err, mapDir, mapNames())
 		}
+	}
+	if *startAt != "" {
+		var at [5]float32
+		if n, _ := fmt.Sscanf(strings.ReplaceAll(*startAt, ",", " "), "%f %f %f %f %f", &at[0], &at[1], &at[2], &at[3], &at[4]); n < 3 {
+			log.Fatalf("-at wants X,Y,Z or X,Y,Z,DX,DZ, not %q", *startAt)
+		} else if n == 5 {
+			mapLoad.PlayerDir = mgl32.Vec2{at[3], at[4]}
+		}
+		mapLoad.PlayerSpawn = mgl32.Vec3{at[0], at[1], at[2]}
 	}
 
 	if *cpuProfile != "" {
@@ -259,6 +269,11 @@ type Game struct {
 	gravitationEnabled bool
 	move               q3Move
 
+	// crouched is whether the player is ducked, and eyeHeight is where their
+	// eye is on the way between the two heights - see crouch.go.
+	crouched  bool
+	eyeHeight float32
+
 	// glassCells is which voxels the level's window panes fill. The panes
 	// themselves are quads in the sprite pass with no collider of their own, so
 	// this is what makes a window a wall to walk into - see solidAt.
@@ -271,6 +286,9 @@ type Game struct {
 	station *core.Station
 	skySpin float32
 	inEVA   bool
+	// sunSlot is where the level's star sits in the light list, or -1 for a level
+	// with no sun in its sky. See updateSun.
+	sunSlot int
 
 	// The map editor's half of the state. Kept together rather than mixed into the
 	// player's, because the two are only ever touched by different halves of the
@@ -773,6 +791,8 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// path could get down from.
 	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, g.CubeMap.Bounds().Y)
 
+	// The props sample the baked light where they stand, so it has to exist.
+	g.CubeMap.BakeTorchlight()
 	// Spawn Entities. Each one is remembered as it goes in, so that a save
 	// writes the whole level back out rather than only the part of it the
 	// editor happened to add this run.
@@ -818,6 +838,13 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 		g.skyHorizonFade = 0
 	}
 	g.station = mapLoad.Station
+	// The star in the sky, as a light. It is added after the map's own lights so
+	// it takes the slot behind them, and moved from then on rather than rebuilt -
+	// see updateSun.
+	g.sunSlot = -1
+	if g.station != nil && g.station.Sun != nil {
+		g.sunSlot = g.AddMovableLight(quads.SunLightFrom(g.station.Sun, g.ShadowResolution()))
+	}
 	// Gravity stops at the hull, for everything and not only for the player: a
 	// casing thrown out of an airlock, a grenade let go in vacuum and the
 	// sparks off a shot all hang there rather than falling towards a deck that
@@ -933,6 +960,25 @@ func (g *Game) updateStationSpin(elapsed float64) {
 	turned := float64(g.skySpin) + float64(mgl32.DegToRad(g.station.Spin))*elapsed
 	g.skySpin = float32(math.Mod(turned, 2*math.Pi))
 	g.SetSkyboxSpin(g.skySpin, g.station.SpinAxis)
+	g.updateSun()
+}
+
+// updateSun stands the star where the sky it is drawn in has turned to. That is
+// the whole of the effect: the light goes round the ship as the ship tumbles, so
+// the beam through the promenade's glass crosses the deck and goes out again
+// once a turn, and every deck it cannot see is lit by its own lamps or not at
+// all.
+//
+// It moves one slot of the light list rather than rebuilding it - a rebuild
+// hands the shadow layers out again - and the depth map behind it is redrawn
+// because the frustum moved, which is one extra pass a frame for as long as the
+// ship is turning. See LightsUBO.MoveLight and NeedsShadowUpdate.
+func (g *Game) updateSun() {
+	if g.sunSlot < 0 {
+		return
+	}
+	position, forward := quads.SunStandpoint(g.station.Sun, g.skySpin, g.station.SpinAxis)
+	g.MoveLight(g.sunSlot, position, forward)
 }
 
 // paneLight is the baked light level a window pane is drawn at. It is a fixed
@@ -1336,6 +1382,29 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 		HitInfo:   hitInfo,
 		OnTop:     onTop,
 	}
+}
+
+// rayCastIgnoringHolograms is rayCast for anything that should treat a
+// hologram as not there at all - a bullet, a blast, a melee swing, a homing
+// missile's lock, an enemy's line of fire. Light does not stop any of them,
+// so a hit on one is simply cast again from just past it, in the same
+// direction, the way splatterBehind already restarts a ray past the body it
+// just hit. The crosshair's own hover ray (updateGUI) deliberately does not
+// go through this - a hologram has to be seen and interacted with, only shot
+// through.
+func (g *Game) rayCastIgnoringHolograms(origin, direction mgl32.Vec3) RaycastResult {
+	// A real level never stacks more than a couple of these in one line of
+	// fire; the cap is only so a pathological run of them can't hang a frame.
+	const maxHolograms = 8
+	for i := 0; i < maxHolograms; i++ {
+		hit := g.rayCast(origin, direction)
+		actor := g.actorFor(hit.HitObject)
+		if actor == nil || actor.kind == nil || !actor.kind.Hologram {
+			return hit
+		}
+		origin = hit.WorldPosition().Add(direction.Mul(0.1))
+	}
+	return g.rayCast(origin, direction)
 }
 
 // onLid is whether a point where a ray entered this box lies on its top face.

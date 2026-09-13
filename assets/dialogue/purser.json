@@ -1,0 +1,63 @@
+{
+  "speaker": "Purser (Orientation Hologram)",
+  "start": "greeting",
+  "lines": {
+    "greeting": {
+      "text": "You made it up top? Wonderful - I didn't think anyone was touring today. Welcome aboard. I walk new arrivals through the whole ship, engineering to the bridge, if you'd like to see it.",
+      "choices": [
+        {
+          "text": "What is this place?",
+          "next": "what_is_this"
+        },
+        {
+          "text": "Show me around.",
+          "next": "starting_tour",
+          "do": "tour"
+        },
+        {
+          "text": "Where are we headed?",
+          "next": "waypoint",
+          "do": "waypoint"
+        },
+        {
+          "text": "Maybe later.",
+          "next": "later"
+        }
+      ]
+    },
+    "what_is_this": {
+      "text": "The Ark. Fifteen generations to the new system, give or take. Eleven decks, a working farm, and the whole of the drum topside for the last of the ice. The tour will make more sense of it than I can standing here.",
+      "choices": [
+        {
+          "text": "Show me around.",
+          "next": "starting_tour",
+          "do": "tour"
+        },
+        {
+          "text": "Where are we headed?",
+          "next": "waypoint",
+          "do": "waypoint"
+        },
+        {
+          "text": "Maybe later.",
+          "next": "later"
+        }
+      ]
+    },
+    "starting_tour": {
+      "text": "Wonderful. Right this way - the ladder will take us up through officer country, all the way to the bridge."
+    },
+    "later": {
+      "text": "Of course. I'll be right here whenever you'd like to see the ship."
+    },
+    "waypoint": {
+      "text": "One moment - let me find us on the plan.",
+      "choices": [
+        {
+          "text": "Right you are.",
+          "next": "greeting"
+        }
+      ]
+    }
+  }
+}

@@ -144,6 +144,11 @@ type MapEntity struct {
 	// wants to be, and what a note lying on the floor already is.
 	PassThrough bool `json:",omitempty"`
 
+	// NoShadow keeps the entity out of the lights' depth maps. A prop on a deck
+	// no shadow-casting light reaches casts nothing anyone could see, and still
+	// costs a draw in every depth pass - see MeshComponent.NoShadow.
+	NoShadow bool `json:",omitempty"`
+
 	// PatrolTo is the far end of a walking entity's beat. It walks there, then back
 	// to where it spawned, forever. Nil means the spawner picks a default.
 	//
@@ -241,6 +246,47 @@ type Station struct {
 	// TopRadius is the radius at MaxY, for a hull that tapers: Radius holds at
 	// MinY and the wall runs straight between the two. Zero is a cylinder.
 	TopRadius float32
+
+	// Sun is the star the sky shows, as a light as well as a picture, or nil for
+	// a level whose sky is only scenery. See Sun.
+	Sun *Sun
+}
+
+// Sun is the star in the level's own sky, made into a light that stands outside
+// the level and shines through whatever the hull leaves open.
+//
+// It is a spotlight rather than the engine's directional sun (GlApplication's
+// SetSunLight) because that one casts no shadow, and light that falls on the
+// outside of a hull and the inside alike is not a sun, it is a tint. A spot has
+// the shadow map already, which is the whole feature: the beam stops at the
+// plating and comes in through the glass.
+//
+// ponytail: a lamp a long way off rather than parallel light. It stands far
+// enough out that the falloff across the ship reads as a beam brightest by the
+// window, and its cone covers what is worth lighting rather than the whole
+// level. A real directional light needs an orthographic shadow map of its own -
+// add that when the sun has to light all of a level at once.
+type Sun struct {
+	// Towards is the unit vector to the star in the sky's own frame, which is
+	// the frame the cubemap is drawn in: the spin turns this exactly as it turns
+	// the sky, so the light and the picture of it cannot drift apart.
+	Towards mgl32.Vec3
+	// At is what it is aimed at, and Distance how far out from that it stands.
+	At       mgl32.Vec3
+	Distance float32
+	// Depth is how much of the level the shadow frustum brackets, centred on At:
+	// its near and far planes are half of this either side. Everything outside it
+	// is neither lit nor casting.
+	Depth float32
+	// Angle is the full cone angle in degrees, wide enough to cover what is
+	// meant to be lit at that distance and no wider - it is also the shadow
+	// frustum, so every degree spends resolution.
+	Angle float32
+	// Color and Power are a light's, except that Power is the brightness where
+	// the beam lands rather than at the bulb: nothing sane wants to write down
+	// what a lamp a hundred and fifty units away has to be to light a deck.
+	Color mgl32.Vec3
+	Power float32
 }
 
 // Pressurised reports whether a point is inside the hull. It is a test on the

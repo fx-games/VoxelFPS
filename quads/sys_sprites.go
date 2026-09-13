@@ -56,8 +56,11 @@ type SpriteDrawer struct {
 
 	// Panes are the level's own quads of the same kind: glass in a window. See
 	// AddPane - they are not a ring buffer and they are drawn after the sky.
-	panes     []decal
-	paneAtlas glhf.TextureAtlas
+	// visiblePanes is the handful of them the observer can see, sorted, reused
+	// every frame so the pass does not allocate.
+	panes        []decal
+	visiblePanes []decal
+	paneAtlas    glhf.TextureAtlas
 
 	// Instance attribute scratch, reused every frame so the per-frame draw does
 	// not allocate. Three batches: a static sprite needs face culling off, and

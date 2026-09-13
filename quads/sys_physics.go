@@ -419,6 +419,21 @@ func (c *PhysicsSystem) remove(id int, obj *PhysicsComponent) {
 	c.movingObjects = append(c.movingObjects[:id], c.movingObjects[id+1:]...)
 }
 
+// Teleport puts an object somewhere without the simulation having moved it
+// there, and - the point of it - re-lists it on the collision grid where it
+// now stands. Anything that writes a position itself has to come through
+// here rather than through the transform: the grid is what a picking ray
+// reads (see Game.rayCast, which only ever looks at GetCollidersAt), so an
+// object moved behind the system's back stays pickable at the place it
+// started and nowhere else. That is what made a guide unselectable - and so
+// unable to be talked to again - the moment it walked its first leg, since
+// updateTour drives it by hand rather than through the pathfinder.
+func (c *PhysicsSystem) Teleport(obj *PhysicsComponent, pos mgl32.Vec3) {
+	oldPos := obj.Position()
+	obj.SetPosition(pos)
+	c.moveObjectOnGrid(obj, oldPos, pos)
+}
+
 func (c *PhysicsSystem) GetCollidersAt(x int32, y int32, z int32) map[*PhysicsComponent]bool {
 	mapPos := core.Int3{X: x, Y: y, Z: z}
 	m, ok := c.objectsOnGrid[mapPos]

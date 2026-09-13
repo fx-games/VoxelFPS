@@ -54,7 +54,7 @@
 //	glass cx cz rOuter rInner y     window panes filling the ring a `tube` of
 //	                               the same numbers would have walled: they are
 //	                               see-through to look at and wall to walk into
-//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [weapon=ID [ammo=true]] [facing=DX[,DY],DZ] [collider=false] [passthrough=true]
+//	entity NAME at=X,Y,Z [mesh=M] [sprite=ID] [weapon=ID [ammo=true]] [facing=DX[,DY],DZ] [collider=false] [passthrough=true] [shadow=false]
 //	       [step=DX,DY,DZ times=N]
 //	                               [code=NNNN]
 //	                               sprite=ID is a folder under assets/sprites -
@@ -75,6 +75,9 @@
 //	                               on the floor at X Y Z with its face turned to
 //	                               FACING (DX,DZ). Lines split at |, and a line
 //	                               starting with ! is a warning, written red
+//	graffiti X Y Z FACING THE WORDS paint on a wall, placed like a sign and hung
+//	                               lower: lines split at |, a line starting
+//	                               with ! is red, ~ black, * yellow, else white
 //	log X Y Z CUE THE LABEL        an audio log on the floor: a cartridge with a
 //	                               recording on it. CUE names the file under
 //	                               assets/audio/logs without its extension, and
@@ -84,6 +87,14 @@
 //	sky full                       no horizon: the cubemap covers the sphere
 //	spin DEG [axis=X,Y,Z]          degrees a second the sky turns, about Y or
 //	                               the axis given
+//	sun DX DY DZ [at=X,Y,Z] [dist=N] [depth=N] [angle=N] [color=R,G,B] [power=N]
+//	                               the star in the sky, as a light as well as a
+//	                               picture: DX DY DZ is the way to it in the
+//	                               sky's own frame, so the spin turns it with the
+//	                               sky. It stands dist out from at, brackets
+//	                               depth of the level with its shadow frustum,
+//	                               and power is the brightness where the beam
+//	                               lands rather than at the light
 //	pressure CX CZ R Y0 Y1 [R1]    the cylinder that has air and gravity in it;
 //	                               R1 is its radius at Y1, for a hull that tapers
 //	fog START END                  how far the level can be seen through
@@ -140,6 +151,7 @@ func main() {
 	show := flag.Int("show", -1, "instead of building, print what is solid at this height")
 	side := flag.Int("side", -1, "instead of building, print what is solid in the x-y plane at this z")
 	checkLeaks := flag.Bool("leaks", false, "after building, flood the air from the spawn and say whether it reaches vacuum")
+	checkReach := flag.Bool("reach", false, "after building, say whether every sign can be got to from the spawn")
 	gallery := flag.Bool("gallery", false, "write the imported gallery's build.map from whatever is installed")
 	flag.Parse()
 
@@ -198,6 +210,13 @@ func main() {
 		report, sealed := leaks(level)
 		fmt.Println(report)
 		if !sealed {
+			defer os.Exit(1)
+		}
+	}
+	if *checkReach {
+		report, all := reach(level)
+		fmt.Println(report)
+		if !all {
 			defer os.Exit(1)
 		}
 	}
@@ -553,6 +572,7 @@ func (l *level) run(words []string, options map[string]string) error {
 			MeshName:       options["mesh"],
 			CreateCollider: options["collider"] != "false",
 			PassThrough:    options["passthrough"] == "true",
+			NoShadow:       options["shadow"] == "false",
 			Code:           options["code"],
 		}
 		// sprite= names a folder under assets/sprites: a character or a piece
@@ -591,6 +611,16 @@ func (l *level) run(words []string, options map[string]string) error {
 			}
 			entity.Facing = direction
 		}
+		// patrol= is the route a walking entity beats, one leg an "X,Y,Z"
+		// point and ";" between them - see core.MapEntity.Patrol. An actor
+		// spawned this way starts here and walks the list in order.
+		if route, given := options["patrol"]; given {
+			points, err := vec3List(route)
+			if err != nil {
+				return err
+			}
+			entity.Patrol = points
+		}
 		// step and times stand the same piece up again and again, as fill lays a
 		// row of boxes: a ladder the height of a shaft is one line of script.
 		times, err := option(options, "times", 1)
@@ -627,7 +657,7 @@ func (l *level) run(words []string, options map[string]string) error {
 			Text:           strings.Join(args[3:], " "),
 		}})
 
-	case "sign":
+	case "sign", "graffiti":
 		// Prose again, like the note: FACING is the one word between the place and
 		// the words, the way the reader stands from the wall - 0,1 for a sign on a
 		// wall whose open side faces +z.
@@ -643,8 +673,8 @@ func (l *level) run(words []string, options map[string]string) error {
 			return err
 		}
 		l.result.Entities = append(l.result.Entities, core.EntitySpawn{Position: pos, Entity: core.MapEntity{
-			Name:           "Sign",
-			MeshName:       "sign",
+			Name:           strings.ToUpper(words[0][:1]) + words[0][1:],
+			MeshName:       words[0],
 			CreateCollider: true,
 			Facing:         mgl32.Vec3{facing.X(), 0, facing.Y()},
 			Text:           strings.Join(args[4:], " "),
@@ -739,6 +769,44 @@ func (l *level) run(words []string, options map[string]string) error {
 			}
 			l.station().SpinAxis = axis
 		}
+
+	case "sun":
+		// The star the sky already shows, made into a light. The direction is the
+		// way to it in the sky's own frame, which is where it is drawn: read it
+		// off the cubemap once and the spin takes care of the rest.
+		towards, err := floats3(args, 0)
+		if err != nil {
+			return err
+		}
+		if towards.Len() == 0 {
+			return fmt.Errorf("wants a direction to the star, not a zero vector")
+		}
+		sun := &core.Sun{Towards: towards.Normalize(), Color: mgl32.Vec3{1, 1, 1}}
+		if value, given := options["at"]; given {
+			if sun.At, err = vec3(value); err != nil {
+				return err
+			}
+		}
+		if value, given := options["color"]; given {
+			if sun.Color, err = vec3(value); err != nil {
+				return err
+			}
+		}
+		for _, knob := range []struct {
+			name     string
+			into     *float32
+			fallback float32
+		}{
+			{"dist", &sun.Distance, 150},
+			{"depth", &sun.Depth, 200},
+			{"angle", &sun.Angle, 26},
+			{"power", &sun.Power, 4},
+		} {
+			if *knob.into, err = option(options, knob.name, knob.fallback); err != nil {
+				return err
+			}
+		}
+		l.station().Sun = sun
 
 	case "pressure":
 		numbers, err := floats(args)
@@ -1113,30 +1181,81 @@ func leaks(l *level) (string, bool) {
 	if hull == nil {
 		return "leaks: no pressure hull, so nothing to leak", true
 	}
+	seen, escaped := floodAir(l, spawnVoxel(l), hull)
+	if escaped != nil {
+		from := seen[*escaped]
+		return fmt.Sprintf("leaks: the air from the spawn reaches vacuum at %d,%d,%d, through %d,%d,%d",
+			escaped.X, escaped.Y, escaped.Z, from.X, from.Y, from.Z), false
+	}
+	return fmt.Sprintf("leaks: sealed - %d voxels of air round the spawn, none of them vacuum", len(seen)), true
+}
+
+// reach says whether every sign in the level can be got to from the spawn. A
+// sign stands where a deck is entered and names it, so a sign the flood cannot
+// reach is a deck with no way in - which is the thing worth being told about,
+// since a level builds happily with one walled off.
+//
+// ponytail: connectivity through air, with no hull to stop at, which is the
+// truth outside the pressure hull - out there the suit flies and a hole in a
+// deck is a way into it. Inside the hull it is generous: it will walk up a well
+// a player would need a ladder for. Model the climb if that ever bites.
+func reach(l *level) (string, bool) {
+	seen, _ := floodAir(l, spawnVoxel(l), nil)
+	var missed []string
+	signs := 0
+	for _, spawn := range l.result.Entities {
+		if spawn.Entity.MeshName != "sign" {
+			continue
+		}
+		signs++
+		at := voxelOf(spawn.Position)
+		if _, been := seen[at]; !been {
+			name, _, _ := strings.Cut(spawn.Entity.Text, "|")
+			missed = append(missed, fmt.Sprintf("%s at %d,%d,%d", strings.TrimPrefix(name, "!"), at.X, at.Y, at.Z))
+		}
+	}
+	if len(missed) > 0 {
+		return fmt.Sprintf("reach: %d of %d signs cannot be got to from the spawn:\n  %s",
+			len(missed), signs, strings.Join(missed, "\n  ")), false
+	}
+	return fmt.Sprintf("reach: all %d signs can be got to from the spawn, through %d voxels of air", signs, len(seen)), true
+}
+
+// floodAir spreads through the level's air from one voxel and hands back how it
+// got to each one it reached. Glass is always shut - a pane is a wall you can
+// see through - and a door is shut or open depending on which question is being
+// asked, which is what the hull argument decides.
+//
+// With a hull it stops the moment it leaves it and says where, with every door
+// shut, because that is a leak: air escaping a ship nobody is opening anything
+// on. With none it floods the whole level through open doors, vacuum included,
+// which is what asking whether somewhere can be got to means on a ship with a
+// suit and an airlock on it.
+func floodAir(l *level, start voxel.Int3, hull *core.Station) (seen map[voxel.Int3]voxel.Int3, escaped *voxel.Int3) {
 	shut := map[voxel.Int3]bool{}
 	for _, pane := range l.result.Panes {
 		cell := pane.Cell()
 		shut[voxel.Int3{X: cell.X, Y: cell.Y, Z: cell.Z}] = true
 	}
 	for _, spawn := range l.result.Entities {
-		if strings.HasPrefix(spawn.Entity.MeshName, "door_") {
-			at := spawn.Position
-			shut[voxel.Int3{X: int32(at.X()), Y: int32(at.Y()), Z: int32(at.Z())}] = true
+		if strings.HasPrefix(spawn.Entity.MeshName, "door_") && hull != nil {
+			shut[voxelOf(spawn.Position)] = true
 		}
 	}
 	bounds := l.blocks.Bounds()
-	start := voxel.Int3{X: int32(l.result.PlayerSpawn.X()), Y: int32(l.result.PlayerSpawn.Y()), Z: int32(l.result.PlayerSpawn.Z())}
-	seen := map[voxel.Int3]voxel.Int3{start: start}
+	seen = map[voxel.Int3]voxel.Int3{start: start}
 	queue := []voxel.Int3{start}
 	for len(queue) > 0 {
 		at := queue[0]
 		queue = queue[1:]
-		centre := mgl32.Vec3{float32(at.X) + 0.5, float32(at.Y) + 0.5, float32(at.Z) + 0.5}
 		outside := at.X < 0 || at.Y < 0 || at.Z < 0 || at.X >= bounds.X || at.Y >= bounds.Y || at.Z >= bounds.Z
-		if outside || !hull.Pressurised(centre) {
-			from := seen[at]
-			return fmt.Sprintf("leaks: the air from the spawn reaches vacuum at %d,%d,%d, through %d,%d,%d",
-				at.X, at.Y, at.Z, from.X, from.Y, from.Z), false
+		if hull != nil {
+			centre := mgl32.Vec3{float32(at.X) + 0.5, float32(at.Y) + 0.5, float32(at.Z) + 0.5}
+			if outside || !hull.Pressurised(centre) {
+				return seen, &at
+			}
+		} else if outside {
+			continue
 		}
 		for _, side := range []voxel.Int3{{X: 1}, {X: -1}, {Y: 1}, {Y: -1}, {Z: 1}, {Z: -1}} {
 			next := at.Add(side)
@@ -1147,7 +1266,15 @@ func leaks(l *level) (string, bool) {
 			queue = append(queue, next)
 		}
 	}
-	return fmt.Sprintf("leaks: sealed - %d voxels of air round the spawn, none of them vacuum", len(seen)), true
+	return seen, nil
+}
+
+func spawnVoxel(l *level) voxel.Int3 {
+	return voxelOf(l.result.PlayerSpawn)
+}
+
+func voxelOf(pos mgl32.Vec3) voxel.Int3 {
+	return voxel.Int3{X: int32(pos.X()), Y: int32(pos.Y()), Z: int32(pos.Z())}
 }
 
 // option is a number given as key=value, or the fallback when it is not.
@@ -1296,6 +1423,21 @@ func vec3(value string) (mgl32.Vec3, error) {
 		return mgl32.Vec3{}, fmt.Errorf("%q is not X,Y,Z", value)
 	}
 	return mgl32.Vec3{numbers[0], numbers[1], numbers[2]}, nil
+}
+
+// vec3List reads a route: a semicolon-separated list of X,Y,Z points, one leg
+// an entry, in the order they are walked - what `entity`'s patrol= wants.
+func vec3List(value string) ([]mgl32.Vec3, error) {
+	parts := strings.Split(value, ";")
+	points := make([]mgl32.Vec3, len(parts))
+	for i, part := range parts {
+		point, err := vec3(part)
+		if err != nil {
+			return nil, err
+		}
+		points[i] = point
+	}
+	return points, nil
 }
 
 // facing reads a direction a piece is turned to: X,Z for the ordinary case of

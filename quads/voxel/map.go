@@ -43,11 +43,6 @@ type Map struct {
 	torchLights           map[Int3]bool
 	locationTex           int32
 	locationVox           int32
-
-	// For occlusion culling: the chunks in the camera's frustum this frame that
-	// get their box tested, and the one box they are all tested with.
-	tested   []*Chunk
-	chunkBox *glhf.VertexArray[glhf.GlUInt]
 }
 
 func NewDefaultMap(width, height, depth int32) *Map {
@@ -317,10 +312,14 @@ func (m *Map) remeshDirtyChunks() {
 	}
 }
 
-// DrawWithShader draws the chunks the observer can see. With a box shader - the
-// camera's pass - that is what its frustum holds and no wall hides; without one,
-// everything in its frustum.
-func (m *Map) DrawWithShader(observer core.Observer, chunkShader, boxShader *glhf.Shader) {
+// DrawWithShader draws the chunks in the observer's frustum.
+//
+// Chunks used to be occlusion culled here too, with a GPU query per chunk box.
+// Measured with -bench's frame profile it cost ~1.8 ms of render thread a frame on
+// the ark to save drawing ~28k map triangles, and more than halved raymap's frame
+// time when it went. A level whose map triangles really cost something should
+// measure again before bringing it back.
+func (m *Map) DrawWithShader(observer core.Observer, chunkShader *glhf.Shader) {
 	m.remeshDirtyChunks()
 	if m.textureBufferIsDirty {
 		// The light has to be re-flooded before the buffer is packed, because the
@@ -346,16 +345,9 @@ func (m *Map) DrawWithShader(observer core.Observer, chunkShader, boxShader *glh
 
 	m.trianglesDrawn = 0
 	m.drawCallCount = 0
-	m.tested = m.tested[:0]
 	for _, chunk := range m.chunks {
 		if chunk == nil || chunk.meshBuffer.TriangleCount() == 0 || !m.chunkIsVisible(observer, chunk) || chunk.chunkPosY > m.maxChunkHeightForDraw {
 			continue
-		}
-		if boxShader != nil && m.testsOcclusion(chunk, observer.GetPosition()) {
-			m.tested = append(m.tested, chunk)
-			if chunk.hidden {
-				continue
-			}
 		}
 		m.trianglesDrawn += chunk.meshBuffer.TriangleCount()
 		m.drawCallCount += 1
@@ -363,124 +355,10 @@ func (m *Map) DrawWithShader(observer core.Observer, chunkShader, boxShader *glh
 	}
 	chunkShader.End()
 
-	if boxShader != nil {
-		m.drawOccluded(chunkShader, boxShader)
-	}
-
 	m.lookupVoxels.End()
 	m.terrainTexture.End()
 
 	glhf.ActiveTexture(gl.TEXTURE0)
-}
-
-// Occlusion culling, with the GPU's occlusion queries. A chunk is 32 voxels on a
-// side and inside a ship nearly all of them are behind a wall, a floor or a
-// ceiling, which the frustum cannot know and the depth buffer can:
-//
-//  1. the chunks that were visible last time are drawn, as they always were;
-//  2. every chunk's box is drawn into that depth buffer, invisibly, each inside
-//     a query that counts whether any of it got past the depth test;
-//  3. the chunks that were hidden last time are drawn on their query's word -
-//     conditional rendering, decided on the GPU, so a chunk that comes into
-//     view is drawn in the same frame and nothing pops in a frame late.
-//
-// The result of 2 is read back a frame later to sort the chunks for 1, which is
-// only a guess at what to draw unconditionally: a wrong guess costs a wasted
-// draw or a late one, never a missing chunk. The count of what was drawn leaves
-// out 3, which is nothing unless something just came into view.
-//
-// A box the camera stands in or next to cannot be tested - its near side is
-// clipped away and its far side is behind what it holds - so that chunk is
-// always drawn. A shadow pass passes no box shader and culls nothing: a light
-// has to see what the player cannot, it throws shadows where they can.
-func (m *Map) testsOcclusion(chunk *Chunk, eye mgl32.Vec3) bool {
-	if NewAABB(chunk.AsAABB()).InflatedBy(mgl32.Vec3{1, 1, 1}).Contains(eye) {
-		chunk.hidden = false
-		return false
-	}
-	if chunk.query != 0 {
-		var ready, passed uint32
-		gl.GetQueryObjectuiv(chunk.query, gl.QUERY_RESULT_AVAILABLE, &ready)
-		if ready != 0 {
-			gl.GetQueryObjectuiv(chunk.query, gl.QUERY_RESULT, &passed)
-			chunk.hidden = passed == 0
-		}
-	}
-	return true
-}
-
-func (m *Map) drawOccluded(chunkShader, boxShader *glhf.Shader) {
-	box := m.box(boxShader)
-	culling := gl.IsEnabled(gl.CULL_FACE)
-	gl.Disable(gl.CULL_FACE) // from inside the frustum's reach a box shows its back
-	gl.ColorMask(false, false, false, false)
-	gl.DepthMask(false)
-	// Pulled a hair towards the camera, so a box face lying on the very surface
-	// its own chunk drew - a floor on the chunk's top edge - is in front of it
-	// rather than a rounding error either side.
-	gl.Enable(gl.POLYGON_OFFSET_FILL)
-	gl.PolygonOffset(-1, -1)
-	boxShader.Begin()
-	box.Begin()
-	for _, chunk := range m.tested {
-		if chunk.query == 0 {
-			gl.GenQueries(1, &chunk.query)
-		}
-		boxShader.SetMat4(m.modelIndex, chunk.GetMatrix())
-		gl.BeginQuery(gl.ANY_SAMPLES_PASSED, chunk.query)
-		box.Draw()
-		gl.EndQuery(gl.ANY_SAMPLES_PASSED)
-	}
-	box.End()
-	boxShader.End()
-	gl.Disable(gl.POLYGON_OFFSET_FILL)
-	gl.DepthMask(true)
-	gl.ColorMask(true, true, true, true)
-	if culling {
-		gl.Enable(gl.CULL_FACE)
-	}
-
-	chunkShader.Begin()
-	for _, chunk := range m.tested {
-		if chunk.hidden {
-			// Not chunk.Draw: its glValidateProgram inside a conditional render
-			// segfaults Apple's GL driver in glEndConditionalRender.
-			chunkShader.SetMat4(m.modelIndex, chunk.GetMatrix())
-			chunk.meshBuffer.drawableVertexData.Begin()
-			gl.BeginConditionalRender(chunk.query, gl.QUERY_WAIT)
-			chunk.meshBuffer.drawableVertexData.Draw()
-			gl.EndConditionalRender()
-			chunk.meshBuffer.drawableVertexData.End()
-		}
-	}
-	chunkShader.End()
-}
-
-// box is a chunk's bounding box in the chunks' own vertex format, so it is drawn
-// with the chunk depth shader and the same model matrix as the chunk it stands for.
-func (m *Map) box(shader *glhf.Shader) *glhf.VertexArray[glhf.GlUInt] {
-	if m.chunkBox != nil {
-		return m.chunkBox
-	}
-	var packer MeshBuffer
-	corner := func(i int) glhf.GlUInt { // bit 0 is x, 1 is y, 2 is z
-		return glhf.GlUInt(packer.Compress(Int3{
-			int32(i&1) * m.ChunkSizeHorizontal,
-			int32(i>>1&1) * m.ChunkSizeHeight,
-			int32(i>>2&1) * m.ChunkSizeHorizontal,
-		}, Top))
-	}
-	var vertices []glhf.GlUInt
-	for _, side := range [6][4]int{{0, 1, 3, 2}, {4, 5, 7, 6}, {0, 1, 5, 4}, {2, 3, 7, 6}, {0, 2, 6, 4}, {1, 3, 7, 5}} {
-		for _, i := range [6]int{0, 1, 2, 0, 2, 3} {
-			vertices = append(vertices, corner(side[i]))
-		}
-	}
-	m.chunkBox = glhf.NewVertexArray[glhf.GlUInt](shader, false)
-	m.chunkBox.Begin()
-	m.chunkBox.SetVertexData(vertices)
-	m.chunkBox.End()
-	return m.chunkBox
 }
 
 // MeshGeneration counts chunk mesh uploads. It only has to change when the world
@@ -935,6 +813,15 @@ var emissiveFaceOffsets = [6]Int3{
 	{1, 0, 0}, {-1, 0, 0},
 	{0, 1, 0}, {0, -1, 0},
 	{0, 0, 1}, {0, 0, -1},
+}
+
+// BakeTorchlight floods the baked light now rather than on the next draw, for
+// whoever has to ask a block how lit it is before the level has been drawn once:
+// the props a level spawns sample their light where they stand.
+//
+// ponytail: the first draw floods again, a few milliseconds once per load.
+func (m *Map) BakeTorchlight() {
+	m.bakeEmissiveTorchlight()
 }
 
 // bakeEmissiveTorchlight turns the emissive texture set into per-block light: every

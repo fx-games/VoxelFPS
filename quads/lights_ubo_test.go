@@ -279,3 +279,68 @@ func TestBakedMapLightsSeedTheVoxelLightInsteadOfASlot(t *testing.T) {
 		t.Errorf("torch baked at %v, want the grid cell holding 1.5, 0.3, 2.5", got)
 	}
 }
+
+// The ark's own sun: a star all but straight up in the sky's own frame, aimed
+// at the promenade, on a ship that tumbles end over end about x.
+func arkSun() *core.Sun {
+	return &core.Sun{
+		Towards:  mgl32.Vec3{0.233, 0.897, -0.375},
+		At:       mgl32.Vec3{80.5, 143, 80.5},
+		Distance: 150,
+		Depth:    200,
+		Angle:    26,
+		Color:    mgl32.Vec3{1, 0.97, 0.92},
+		Power:    5,
+	}
+}
+
+func TestTheSunGoesRoundWithTheSkyItIsDrawnIn(t *testing.T) {
+	sun := arkSun()
+	axis := mgl32.Vec3{1, 0, 0}
+
+	position, forward := SunStandpoint(sun, 0, axis)
+	if got := position.Sub(sun.At).Len(); mgl32.Abs(got-sun.Distance) > 0.01 {
+		t.Errorf("the sun stands %.2f from what it lights, want %.0f", got, sun.Distance)
+	}
+	if got := forward.Dot(sun.At.Sub(position).Normalize()); got < 0.999 {
+		t.Errorf("the sun points %.3f of the way at what it lights, want all of it", got)
+	}
+	if position.Y() < sun.At.Y() {
+		t.Error("a star drawn overhead has to stand over the ship, not under it")
+	}
+
+	// Half a tumble about x and it is on the other side: what was up is down.
+	turned, _ := SunStandpoint(sun, mgl32.DegToRad(180), axis)
+	if turned.Y() > sun.At.Y() {
+		t.Error("after half a turn about x the sun must have gone under the ship")
+	}
+	if mgl32.Abs(turned.X()-position.X()) > 0.01 {
+		t.Error("a turn about x must not move the sun along x")
+	}
+}
+
+func TestTheSunsPowerIsWhereItLandsNotWhereItIs(t *testing.T) {
+	sun := arkSun()
+	light := SunLightFrom(sun, 512)
+
+	// The shader's own falloff at the distance the beam lands from: the authored
+	// power is what a surface there sees, whatever the standoff is.
+	const lightRefDist = 2.5
+	falloff := 1 / (1 + (sun.Distance/lightRefDist)*(sun.Distance/lightRefDist))
+	if landed := light.Color.W() * falloff; mgl32.Abs(landed-sun.Power) > 0.01 {
+		t.Errorf("the beam lands at %.2f, want the authored %.2f", landed, sun.Power)
+	}
+
+	// The frustum brackets the ship rather than starting at the light: a depth
+	// bias is a constant in a non-linear depth buffer, so a near plane left at
+	// half a unit against a 250 unit far plane is worth metres out at the ship.
+	if near := light.GetNearPlaneDist(); mgl32.Abs(near-(sun.Distance-sun.Depth/2)) > 0.01 {
+		t.Errorf("the sun's near plane is %.1f, want %.1f", near, sun.Distance-sun.Depth/2)
+	}
+	if far := light.GetFarPlaneDist(); mgl32.Abs(far-(sun.Distance+sun.Depth/2)) > 0.01 {
+		t.Errorf("the sun's far plane is %.1f, want %.1f", far, sun.Distance+sun.Depth/2)
+	}
+	if !light.CastsShadow() {
+		t.Error("a sun that casts no shadow is a tint, not a sun")
+	}
+}

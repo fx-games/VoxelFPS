@@ -2,7 +2,8 @@
 // assets/meshes/keypad/mesh.glb, an upright wall panel with a display and
 // twelve keys on it, assets/meshes/note/mesh.glb, a sheet of paper lying face
 // up, assets/meshes/audiolog/mesh.glb, a data cartridge lying on its side, and
-// assets/meshes/sign/mesh.glb, a wall display the game writes on (sign.go).
+// assets/meshes/sign/mesh.glb, a wall display the game writes on (sign.go), and
+// assets/meshes/ark_chart/mesh.glb, the ark's own wayfinding plate (ark_chart.go).
 // Each is one box with a picture on one face, which is why they are generated
 // rather than modelled - see tools/genstairs for the same shape.
 //
@@ -17,6 +18,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"image"
 	"image/color"
 	"image/png"
@@ -76,6 +78,12 @@ const (
 	signBottom = 0.58
 )
 
+// Graffiti, 3.2m by 1.6m of wall, from twenty centimetres off the floor.
+const (
+	graffitiWidth  = 1.6
+	graffitiBottom = 0.1
+)
+
 // atlasSplit is where the readable face's picture ends and the flat swatch the
 // other five faces sample begins, as a fraction of the texture's width.
 const atlasSplit = 0.75
@@ -129,7 +137,21 @@ func box(min, max [3]float32, artNormal [3]float32,
 	}
 }
 
+// -png writes the ark chart's picture and nothing else. The chart is a drawing
+// rather than a placeholder the game paints over (see ark_chart.go), so whoever
+// edits it needs to see it without unpacking a model first.
+var chartPicture = flag.String("png", "", "write the ark chart's picture to this file and stop")
+
 func main() {
+	flag.Parse()
+	if *chartPicture != "" {
+		if err := os.WriteFile(*chartPicture, arkChartTexture(), 0o644); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("wrote %s", *chartPicture)
+		return
+	}
+
 	half := float32(keypadWidth) / 2
 	var kPos, kNorm [][3]float32
 	var kUV [][2]float32
@@ -173,6 +195,30 @@ func main() {
 		[3]float32{signHalf, signBottom + signHeight, signDepth / 2},
 		[3]float32{0, 0, -1}, &sPos, &sNorm, &sUV, &sIdx)
 	write("sign", signTexture(), sPos, sNorm, sUV, sIdx)
+
+	// Graffiti: a sheet of nothing a hair thick, 2:1, hung low enough to fit
+	// the one-voxel ceilings of the service decks. The game sprays the words
+	// onto it (quads.GraffitiPicture); this picture is fully transparent, so
+	// every face but the painted one draws nothing.
+	graffitiHalf := float32(graffitiWidth) / 2
+	var gPos, gNorm [][3]float32
+	var gUV [][2]float32
+	var gIdx []uint16
+	box([3]float32{-graffitiHalf, graffitiBottom, -0.002},
+		[3]float32{graffitiHalf, graffitiBottom + graffitiWidth/2, 0.002},
+		[3]float32{0, 0, -1}, &gPos, &gNorm, &gUV, &gIdx)
+	write("graffiti", encode(image.NewNRGBA(image.Rect(0, 0, 320, 120))), gPos, gNorm, gUV, gIdx)
+
+	chartHalf := float32(arkChartWidth) / 2
+	var cPos, cNorm [][3]float32
+	var cUV [][2]float32
+	var cIdx []uint16
+	box([3]float32{-chartHalf, arkChartBottom, -arkChartDepth / 2},
+		[3]float32{chartHalf, arkChartBottom + arkChartHeight, arkChartDepth / 2},
+		[3]float32{0, 0, -1}, &cPos, &cNorm, &cUV, &cIdx)
+	write("ark_chart", arkChartTexture(), cPos, cNorm, cUV, cIdx)
+
+	writeFurnishings()
 }
 
 func write(name string, texture []byte, positions, normals [][3]float32, uvs [][2]float32, indices []uint16) {

@@ -53,7 +53,7 @@ func (g *Game) applyActorsActive() {
 		return
 	}
 	for _, actor := range g.actors {
-		if actor.dying || !actor.object.IsAlive() {
+		if actor.dying || !actor.object.IsAlive() || actor.touring {
 			continue
 		}
 		actor.halt()

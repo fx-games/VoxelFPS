@@ -41,13 +41,21 @@ type Scenery struct {
 	// or down instead of falling or being walled off. See registerClimbable and
 	// core.MapEntity.ClimbTo.
 	//
-	// ponytail: a climbable box that stopped exactly at the ladder's own model
-	// left nowhere to land - gravity always came back before the player was
-	// horizontally clear of the wall the ladder is mounted on. assets/meshes/ladder's
-	// box runs taller than the model and a tile past it, into the landing, so
-	// there is still a window with no gravity to walk out over the edge in.
-	// That bakes in "this ladder climbs towards +Z"; a ladder facing another
-	// way needs its own box, there is no rotation to derive it from yet.
+	// A box is what the player has to be *in* to climb, so it is the ladder's
+	// own model plus the room the player's collider needs to be touching it:
+	// the half-tile in front of the rungs, and no further. A box the size of
+	// the whole voxel made the voxel the ladder - jumping anywhere in it left
+	// you hanging in mid-air, and walking across it over a shaft meant you
+	// could not fall - which is not what holding onto a ladder is.
+	//
+	// ponytail: it still runs taller than the model, so there is a window with
+	// no gravity above the last rung to walk out of onto the landing in. That
+	// window is the one place the player hovers without touching anything;
+	// tightening it wants a real dismount, not a smaller box.
+	//
+	// It is authored as "this ladder climbs towards +Z"; registerClimbable is
+	// what turns a ladder's own facing= into the box actually landing on the
+	// wall it was placed against.
 	Climbable [][2]mgl32.Vec3 `json:"climbable"`
 
 	// Screen, if set, makes this piece's given material slot play a looping
@@ -128,6 +136,13 @@ func loadScenery(dir string) (map[string]*Scenery, error) {
 //
 // That is what makes a shelf one thing: the ray that hits a board reports the
 // shelf, not a nameless box, and killing the shelf takes its boxes with it.
+//
+// They stay in the piece's own space, exactly as its scenery.json authored
+// them: the solver turns them with the piece's matrix on its way past (see
+// PhysicsComponent.WorldOBB), and so does the ray that picks them out. Turning
+// them here as well is the rotation applied twice - which on the ark's ladders,
+// a half turn each, put the solid slab back on the side of the tile the player
+// is supposed to stand in.
 func (s *Scenery) colliders(piece *quads.GameObject) []*quads.PhysicsComponent {
 	boxes := make([]*quads.PhysicsComponent, 0, len(s.Colliders))
 	for _, box := range s.Colliders {
@@ -146,8 +161,12 @@ func (s *Scenery) colliders(piece *quads.GameObject) []*quads.PhysicsComponent {
 // where it comes out.
 func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo *mgl32.Vec3) {
 	pos := piece.Transform().GetPosition()
+	rotation := piece.Transform().GetRotation()
+	// These are the one box that really is turned here: a climb volume is kept
+	// as world extents and checked against the player's position directly, with
+	// no piece and no matrix anywhere in the path - see Game.onLadder.
 	for _, box := range def.Climbable {
-		world := voxel.NewAABB(box[0], box[1]).Add(pos)
+		world := voxel.NewAABB(box[0], box[1]).Rotated(rotation).Add(pos)
 		g.climbVolumes = append(g.climbVolumes, world)
 	}
 	if climbTo != nil && g.Pathfinder != nil {

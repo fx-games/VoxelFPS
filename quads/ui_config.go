@@ -237,10 +237,11 @@ func (g *GuiConfig) handleKeys(index int, key glfw.Key, scancode int, action glf
 		return false
 	}
 	selectedOption := g.options[selected]
-	// Both hands do the same thing: WASD+E and the cursor keys+Enter are one
-	// vocabulary, so no menu ever has to be learned twice.
+	// Both hands do the same thing: WASD+F and the cursor keys+Enter are one
+	// vocabulary, so no menu ever has to be learned twice. F rather than E so
+	// "activate" is the same key here as ActionInteract is in the world.
 	switch key {
-	case glfw.KeyE, glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace:
+	case glfw.KeyF, glfw.KeyEnter, glfw.KeyKPEnter, glfw.KeySpace:
 		selectedOption.Activate()
 		g.ReplaceText(selected, selectedOption.String())
 		return true

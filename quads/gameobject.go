@@ -173,7 +173,7 @@ func (g *GameObject) IsAlive() bool {
 
 func (g *GameObject) IsInViewFrustum(frustum core.Culler) bool {
 	if g.HasComponent(ComponentTypePhysics) {
-		if !frustum.IsCubeInViewFrustum(g.Physics().AABB().Extremes()) {
+		if !frustum.IsCubeInViewFrustum(g.Physics().WorldAABB().Extremes()) {
 			return false
 		}
 	} else {

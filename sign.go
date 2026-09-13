@@ -18,6 +18,9 @@ import (
 
 const (
 	signMeshName = "sign"
+	// graffitiMeshName is a sign's rougher cousin: words painted straight on a
+	// wall, a transparent panel with quads.GraffitiPicture on it.
+	graffitiMeshName = "graffiti"
 	// signEmissiveStrength lights the writing. It is the only bright, saturated
 	// thing on the panel, which is what the emissive pass picks out - see the
 	// keypad for the same trick.

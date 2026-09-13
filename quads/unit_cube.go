@@ -35,7 +35,7 @@ func (u *UnitCube) DrawAllQueued() {
 	u.shader.Begin()
 	for pos, _ := range u.positions {
 		u.parent.SetPosition(pos.ToBlockCenterVec3D())
-		u.mesh.Draw(u.shader, MeshShaderModelTransform)
+		u.mesh.Draw()
 	}
 	u.shader.End()
 	clear(u.positions)

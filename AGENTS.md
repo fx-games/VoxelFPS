@@ -61,6 +61,7 @@ The flags:
 | `-editor MODE` | boot into the map editor in `blocks`, `props3d`, `props2d`, `pickups`, `weapons` or `actors` - a capture takes no keystrokes, so this is the only way to photograph the editor |
 | `-pick DIR` | open that mode's own asset browser on that folder (`.` for the top), for the same reason - needs `-editor` |
 | `-map NAME` | which level to load, by its folder under `assets/maps` (default `raymap`) |
+| `-at X,Y,Z[,DX,DZ]` | start the player here, facing that way, instead of at the level's spawn - for a capture of one corner of a big level |
 
 **A capture is deterministic.** `-shot-fps` makes every frame advance the world
 by the same amount whatever the machine took to draw it, so tick 120 of one run
@@ -104,6 +105,72 @@ mirror). `baked=0` on something standing in a lit room means it is lit as if
 in the dark. A size in the tens means the pixels-per-unit conversion is wrong
 for that sprite. `at=` next to the player's own position says whether a spawn
 landed where the call asked or in the camera's lap.
+
+## Seeing where a frame goes: -bench
+
+`-bench N` runs N seconds after a 2 s warm up with vsync off and prints the
+frame time distribution, what the last frame drew, and a frame profile: one row
+per pass, in the order the frame reaches it.
+
+```bash
+go run . -map ark -at 85.5,128,61.5,0,1 -bench 8
+```
+
+```
+  section                               cpu      gpu
+  scene: meshes                       0.855    0.000
+  scene: sprites, decals              0.484    0.000
+  scene: panes                        0.313    0.000
+```
+
+(That run was `FRAMEPROF_CPU=1`, so the gpu column is empty.) Before
+`core.FrozenObserver` the panes row read 1.2 ms, all of it culling 3626 panes
+against a camera that rebuilt its matrices per test; before chunk occlusion
+queries were deleted the map row read 1.8 ms; before props were drawn instanced
+- one call per model part instead of per prop, see `MeshDrawer.Draw` - the
+meshes row read 3.6 ms; before moved lights were uploaded once a frame, see
+`LightsUBO.Flush`, the `update: player lights` row read 2.1 ms; and before
+`PhysicsComponent.WorldAABB` kept a prop's turned box between frames, the meshes
+row read 1.6 ms, most of it turning eight corners of every prop on every cull.
+All five were found with this table.
+
+It also rules things out. Testing the 3626 panes in spatial bins instead of one
+by one moved the panes row by 0.02 ms and the frame not at all, and skipping
+every sprite instance upload saved under 0.1 ms - so neither went in.
+
+That last one was not work at all. A `BufferSubData` into a buffer the GPU is
+still reading for the previous frame makes the driver hold the render thread
+until it is done, and the wait lands in whichever row made the call. A row that
+is big here but nearly empty in `-cpuprofile` is a wait like that, and the fix is
+to stop writing into in-flight storage (orphan it with `BufferData`, as
+`LightsUBO.Flush` and `glhf.SetInstanceData` do), not to make the code faster.
+
+Not every capture repeats exactly. On the ark's promenade, `-at
+80.5,142,65.5,0,1`, a few small far-off spots differ between two runs of the same
+binary, so a before/after diff there has to be read against two runs of the
+before.
+
+- **cpu** is wall time on the render thread between one pass's start and the
+  next: the Go code *and* the time spent inside GL calls, which on macOS is
+  where the driver does its work. A pass with a big cpu and a small gpu is
+  paying for calls, not pixels.
+- **gpu** is a `GL_TIME_ELAPSED` query around the same pass: what the GPU spent
+  executing it.
+- The queries cost about 2 ms a frame, which lands in the cpu column.
+  `FRAMEPROF_CPU=1` leaves them out for cpu numbers that are only the frame's.
+  Compare its frame time median with a run of the build before the change, not
+  with a run that has the queries on.
+- `glFinish` per pass does not work as a GPU measure here: macOS holds it to
+  the display refresh, and every frame reads 16.67 ms.
+
+The same binary's median moves by up to a millisecond between sessions, so
+compare two builds back to back in one session. `-cpuprofile PATH` adds a Go
+CPU profile of the same run; time inside GL calls shows up there as
+`runtime.cgocall`, attributed to whatever Go function made the call.
+
+The ark's heaviest spot a player can stand in is deck 6's open hall,
+`-at 85.5,128,61.5,0,1`: about 1700 props in view, drawn in about 160
+instanced calls. A typical spot has a few dozen props in view.
 
 ## Making and changing a level, in text
 
@@ -192,6 +259,20 @@ The climb volume is the model's height plus a little (`climbable` in
 `assets/meshes/ladder/scenery.json`), and that little is what lets go of the
 top rung onto the deck above rather than leaving the player stuck under it.
 
+**`at` is the tile, not the wall.** `genladder`'s own `wallZ` pushes the whole
+model to the local +Z edge of the tile it stands in, rather than centering it
+there, because an entity spawns at its tile's own centre and a ladder left
+centred stands half a tile out from the wall it is meant to be mounted on -
+free-standing in the middle of the passage, nothing behind it. So `at=X,Y,Z`
+wants the tile's centre, a half like every other entity's, and the model does
+the rest - *if* the wall it is meant to meet is on that tile's local +Z side.
+For one on the local -Z side (the ark's own shaft ladder stands against its
+**north** wall), add `facing=0,1`: that turns the model's own +Z to face
+world -Z, which is what carries the push to the near wall instead of stranding
+the rails in the air on the far one. A ladder that renders too wide, too close
+and floating - filling the view rather than standing a tile away against a
+wall - is this: the `at` written at the wall's own coordinate instead of the
+tile's centre, `facing` missing, or both.
 ## A locked door, and the note that tells you the number
 
 A door knows nothing about codes. A **keypad** stands beside it with four digits
@@ -257,6 +338,121 @@ blank one.
 
 The model is generated with the other panels, `go run ./tools/genpanels`: a
 0.9 by 0.3 box, 3:1 like the 384x128 display painted on it.
+
+## Graffiti, and the props a deck is furnished with
+
+**Graffiti** is a sign's rougher cousin: words sprayed straight onto a wall
+(`quads.GraffitiPicture`), on a transparent panel 1.6 by 0.8 units with its own
+copy of the model, so the wall behind the paint is the wall it was written on.
+
+- **In `build.map`**: `graffiti X Y Z FACING the words`, placed exactly like a
+  sign, a few hundredths proud of the wall. Lines split at `|`; a line starting
+  `!` is red, `~` black, `*` yellow, anything else white.
+- **Keep lines short.** The letters are as big as the longest line lets them
+  be, so `PULL|THE PLUG` is paint you read down a corridor and `PULL THE PLUG
+  NOW` is a caption. Six letters a line, three lines, is about the most.
+- **No `=` in the words**, of a sign or of graffiti: the script reads any word
+  with an `=` in it as an option, and the line then has nothing left to say.
+
+The ark's own furniture - pipes, ducts, bunks, lockers, mess tables, pews,
+crates, barricades, ration dispensers, cryo pods, washers, valve stands - is
+generated with the panels, `go run ./tools/genpanels`, out of the same texture
+library the walls use (`tools/genpanels/furnish.go`), into `assets/meshes/ark/`.
+Each is a scenery folder, placed like a table. The pipes and the duct push
+themselves to their tile's +Z edge the way the ladder does, so `at` is the tile
+centre and `facing` points away from the wall they hang on.
+
+**A prop is lit by the voxel it stands in.** A mesh or a sprite samples the
+baked light once, where it is spawned (`MeshComponent.BakedLight`), which is why
+`Game.mapLoad` floods the light before the entities go in rather than leaving it
+to the first draw. Without that a desk in a lit room is black.
+
+**`shadow=false` on anything no shadow-casting light reaches.** The ark's star
+turns with the sky, so its depth map is redrawn every frame, and every mesh and
+sprite in its frustum - the whole ship - is drawn again for it. Only the
+promenade is sunlit, so everything placed anywhere else carries `shadow=false`
+(`core.MapEntity.NoShadow`); graffiti never casts. Leaving it off a few
+thousand props was most of a frame.
+
+To look at one corner of a big level, `-at X,Y,Z,DX,DZ` starts the player
+there instead of at the spawn, which a capture needs: `go run . -map ark -at
+80.5,142,65.5,0,1 -shot /tmp/p.png`.
+
+## A script is read in order, and the spine goes on last
+
+`build.map` is a list of things done to a block of voxels in the order they are
+written, and the ark builds the decks first and the spine through them
+afterwards. So a door cut into the shaft next to the deck it opens onto is
+filled straight back in by `cone spine ... shell=1` a few hundred lines later.
+The six engineering decks had exactly that for a while: doors in the script,
+no doors in the level, and nothing to say so.
+
+Every shaft door is now cut in the spine section, after the tube exists, and
+`go run ./tools/mapgen -map ark -reach` is what catches the next one: it floods
+the level's air from the spawn, through open doors and not through glass, and
+names every sign it cannot get to. A sign stands where a deck is entered and
+says which deck it is, so a sign the flood cannot reach is a deck with no way
+in. Run it beside `-leaks`, which is the same flood with every door shut and
+the pressure hull as the thing it must not escape.
+
+## The sun is a spotlight standing a long way off
+
+The star on the skybox casts real light and real shadows (`sun` in build.map,
+`core.Sun`, `quads.SunLightFrom`). It is not the engine's directional sun -
+`SetSunLight` has no shadow map, so it lights the inside of a hull as happily as
+the outside, which is a tint rather than a star. It is an ordinary spotlight,
+which already has the shadow map, standing 150 units out in space and aimed at
+the promenade: the beam stops at the plating and comes in through the glass.
+
+Three things make that work and are worth keeping if it ever moves:
+
+- **The direction is in the sky's own frame.** `Towards` is where the star is
+  painted on the cubemap (blink/top.png, the white disc at 645,298 of 1024),
+  and `SunStandpoint` applies the same rotation the skybox is drawn with, so the
+  light and the picture of it cannot drift apart as the ship tumbles.
+- **The frustum brackets the ship** (`Depth`), rather than running from half a
+  unit in front of the lamp. The shadow depth bias is a constant in a non-linear
+  depth buffer: at a 0.5 near plane and a 250 far plane it is worth twenty world
+  units out where the ship is, and nothing casts a shadow at all.
+- **`power` is the brightness where the beam lands**, not at the bulb. The
+  falloff is inverse square referenced to 2.5 units, so the honest number for a
+  light 150 units away is five figures, and a five-figure number in a map file
+  reads as a typo.
+
+The light is added once and moved with `MoveLight`, one slot re-uploaded a
+frame. A rebuild would hand out the shadow atlas layers again and throw away
+every cached depth map with them.
+
+## The ark's plate: a sign the game knows nothing about
+
+The **ark chart** (`tools/genpanels/ark_chart.go`) is the ship's wayfinding
+plate: the whole ark in section, a directory of every deck beside it, and a mark
+on deck six saying where the reader is standing. It hangs on the lab wall the
+player wakes up facing, `entity ArkChart mesh=ark_chart at=83.03,128,72.5
+facing=1,0`.
+
+It is the same object the keypad and the sign are - one box with a picture on
+one face - with one difference worth copying for anything else like it: **the
+picture is baked into the model**, 768x1152 of it on the readable face, so there
+is no `ark_chart` case anywhere in the game. It is a piece of scenery with a
+`scenery.json`, placed like a table, and the engine never learns what it says.
+A sign needs code because its words change; a drawing does not.
+
+Every figure on it - the hull line `r(y)`, each deck's floor, where the two
+pressure bulkheads and the two airlocks are - is read off the same numbers
+`assets/maps/ark/build.map` builds the level from, so the drawing cannot drift
+from the ship. What it cannot do is know about the war: it was screwed to the
+wall when the ship was new and still says the spine ladder runs bridge to
+reactor gallery. The red signs and the hologram guides carry that news instead.
+
+The section is a schematic and says so on its face: drawn true to scale, the
+eleven decks people live on are eight pixels each. `chartAnchors` pins heights
+of the ship to rows of the plate and everything between two anchors is drawn at
+the scale they imply, which is what gives the decks half the plate and squashes
+the drive and the machine decks under a break.
+
+`go run ./tools/genpanels -png /tmp/chart.png` writes just the picture, for
+looking at the drawing without unpacking a model to see it.
 
 ## An audio log, and the key that plays it without stopping you
 

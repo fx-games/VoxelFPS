@@ -56,6 +56,11 @@ func (b *Benchmark) record(frameTime float64) bool {
 	return b.elapsed >= b.Warmup+b.Duration
 }
 
+// warm is whether the warm up is over and frames are being counted.
+func (b *Benchmark) warm() bool {
+	return b.elapsed >= b.Warmup
+}
+
 // percentile takes the sorted frame times. Frame time is the honest axis, not FPS:
 // FPS is a reciprocal, so averaging it weights the fast frames and hides exactly the
 // hitches anyone cares about. The p95 here is the 95th percentile *frame time* - the

@@ -2,6 +2,7 @@ package quads
 
 import (
 	"image"
+	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
@@ -17,6 +18,11 @@ type MeshDrawer struct {
 	nameCache          map[string]int
 	drawCalls          int
 	trianglesDrawn     int
+	// visible, nodes and instances are Draw's scratch, kept so a frame does not
+	// allocate them.
+	visible   []*MeshComponent
+	nodes     []*MeshNode
+	instances []float32
 
 	// screenAnims is one flipbook clock per meshIndex, not per placed
 	// instance - loadGLTF already shares one CompoundMesh across every
@@ -33,6 +39,15 @@ type MeshComponent struct {
 	// way an emissive block face is pushed. 0 - the default - means the mesh only
 	// reflects light. A torch sets it so its flame glows and blooms.
 	EmissiveStrength float32
+	// BakedLight is the voxel light level, 0 to 15, this mesh is lit by. It is
+	// sampled once where the piece is placed: scenery does not move, and a door
+	// sliding a voxel is not worth sampling every frame.
+	BakedLight float32
+	// NoShadow keeps this mesh out of every depth pass, the way a sprite's does.
+	// A level of a few thousand props under a light that moves every frame - the
+	// ark's star turns with its sky - would otherwise draw every one of them twice
+	// a frame, once for a shadow nothing it stands in can receive.
+	NoShadow bool
 }
 
 func NewMeshComponent(meshIndex int) *MeshComponent {
@@ -153,23 +168,54 @@ func (q *MeshDrawer) Update(elapsed float64) {
 	}
 }
 
-func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader) {
+// Draw draws every copy of a model part in view with one call. The part's
+// texture and vertex array are bound once, each visible copy's transform and
+// light go into the part's instance buffer, and the part is drawn that many times
+// over. It used to be a draw call and three uniforms per copy - 1800 calls on the
+// ark's deck 6 - and on macOS a GL call is paid for in the driver, whatever the
+// GPU does with it.
+func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader, forShadows bool) {
 	meshShader.Begin()
 	q.drawCalls = 0
 	q.trianglesDrawn = 0
-	for _, meshes := range q.gameObjectsPerMesh {
+	for meshIndex, meshes := range q.gameObjectsPerMesh {
+		q.visible = q.visible[:0]
 		for _, mesh := range meshes {
-			if mesh.IsHidden || !mesh.GameObject().IsInViewFrustum(frustum) {
+			if mesh.IsHidden || (forShadows && mesh.NoShadow) || !mesh.GameObject().IsInViewFrustum(frustum) {
 				continue
 			}
-			if meshShader.HasUniform(MeshShaderEmissiveStrength) {
-				meshShader.SetFloat(MeshShaderEmissiveStrength, mesh.EmissiveStrength)
+			q.visible = append(q.visible, mesh)
+		}
+		if len(q.visible) == 0 {
+			continue
+		}
+		model := q.loadedMeshes[meshIndex]
+		q.nodes = model.RootNode.appendDrawn(q.nodes[:0])
+		for _, node := range q.nodes {
+			if len(node.drawPairs) == 0 {
+				continue
 			}
-			compoundMesh := q.loadedMeshes[mesh.MeshIndex]
-			compoundMesh.RootNode.SetParent(mesh.GameObject().Transform())
-			compoundMesh.Draw(meshShader, MeshShaderModelTransform)
-			q.trianglesDrawn += compoundMesh.TriangleCount()
-			q.drawCalls += compoundMesh.DrawCalls()
+			q.instances = q.instances[:0]
+			for _, mesh := range q.visible {
+				model.RootNode.SetParent(mesh.GameObject().Transform())
+				transform := node.GetTransformMatrix()
+				q.instances = append(q.instances, transform[:]...)
+				q.instances = append(q.instances, mesh.EmissiveStrength, mesh.BakedLight)
+			}
+			for _, pair := range node.drawPairs {
+				texture := model.textures[pair.TextureIndex]
+				texture.Begin()
+				pair.VertexData.Begin()
+				if !slices.Equal(pair.uploaded, q.instances) {
+					pair.VertexData.SetInstanceData(q.instances)
+					pair.uploaded = append(pair.uploaded[:0], q.instances...)
+				}
+				pair.VertexData.DrawInstanced(int32(len(q.visible)))
+				pair.VertexData.End()
+				texture.End()
+				q.drawCalls++
+				q.trianglesDrawn += pair.VertexData.TriangleCount() * len(q.visible)
+			}
 		}
 	}
 	meshShader.End()
@@ -180,7 +226,7 @@ func (q *MeshDrawer) Draw(frustum core.Culler, meshShader *glhf.Shader) {
 func (q *MeshDrawer) ForEachCaster(visit func(pos mgl32.Vec3)) {
 	for _, meshes := range q.gameObjectsPerMesh {
 		for _, mesh := range meshes {
-			if mesh.IsHidden {
+			if mesh.IsHidden || mesh.NoShadow {
 				continue
 			}
 			visit(mesh.GameObject().Transform().GetPosition())
@@ -209,8 +255,9 @@ func (q *MeshDrawer) DrawAABBs(frustum core.Culler, lineShader *glhf.Shader) {
 			if !hasDebugBox(mesh, frustum) {
 				continue
 			}
-			mesh.GameObject().Physics().AABBAt(mgl32.Vec3{}).
-				QueueDebugDraw(mesh.GameObject().Transform().GetTranslationMatrix())
+			// The box as the frustum test sees it, turned and placed - see
+			// PhysicsComponent.WorldAABB - so what this draws is what culls.
+			mesh.GameObject().Physics().WorldAABB().QueueDebugDraw(mgl32.Ident4())
 		}
 	}
 }

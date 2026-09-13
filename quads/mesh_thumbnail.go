@@ -82,11 +82,8 @@ func (a *GlApplication) MeshThumbnail(meshFile string) *image.RGBA {
 
 	a.setMainUBOCam(eye, centre.Sub(eye).Normalize(), projection.Mul4(view))
 	a.meshShader.Begin()
-	if a.meshShader.HasUniform(MeshShaderEmissiveStrength) {
-		a.meshShader.SetFloat(MeshShaderEmissiveStrength, 0)
-	}
 	mesh.RootNode.SetParent(nil)
-	mesh.Draw(a.meshShader, MeshShaderModelTransform)
+	mesh.Draw()
 	a.meshShader.End()
 
 	pixels := make([]uint8, ThumbSize*ThumbSize*4)

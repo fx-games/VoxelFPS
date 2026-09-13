@@ -228,6 +228,42 @@ func (a AABB) Extremes() (mgl32.Vec3, mgl32.Vec3) {
 	return a.Min(), a.Max()
 }
 
+// Rotated is the smallest axis-aligned box around this one once it has been
+// turned. Exact for the quarter turns a piece's facing= ever gives (a multiple
+// of 90 degrees stays axis-aligned) and conservative for anything else, which
+// is what an axis-aligned box can be about a rotation at all.
+//
+// It is for the places that hold a box as plain extents and have no transform
+// to apply - a frustum test, a debug outline. Anything that carries the
+// object's matrix (the collision solver, the picking ray - see OBB) must rotate
+// there and not here, or the rotation lands on the box twice.
+func (a AABB) Rotated(rotation mgl32.Quat) AABB {
+	min := mgl32.Vec3{math.MaxFloat32, math.MaxFloat32, math.MaxFloat32}
+	max := mgl32.Vec3{-math.MaxFloat32, -math.MaxFloat32, -math.MaxFloat32}
+	for i := 0; i < 8; i++ {
+		corner := mgl32.Vec3{
+			a.cornerAxis(i, 0),
+			a.cornerAxis(i, 1),
+			a.cornerAxis(i, 2),
+		}
+		turned := rotation.Rotate(corner)
+		for axis := 0; axis < 3; axis++ {
+			min[axis] = float32(math.Min(float64(min[axis]), float64(turned[axis])))
+			max[axis] = float32(math.Max(float64(max[axis]), float64(turned[axis])))
+		}
+	}
+	return NewAABB(min, max)
+}
+
+// cornerAxis is one coordinate of one of the box's eight corners: bit `axis` of
+// corner index i chooses the min or the max on that axis.
+func (a AABB) cornerAxis(corner, axis int) float32 {
+	if corner&(1<<axis) != 0 {
+		return a.maxCoords[axis]
+	}
+	return a.minCoords[axis]
+}
+
 // SweepAABB moves a along vel and reports when it first touches b: a time of
 // impact between 0 and 1, where 0.5 is halfway along the path and 1 is no
 // collision at all, together with the normal of the surface that was hit, which

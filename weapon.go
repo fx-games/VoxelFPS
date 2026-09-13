@@ -776,7 +776,7 @@ func (g *Game) muzzlePosition() mgl32.Vec3 {
 // follows the crosshair is what homing looks like from behind the gun anyway.
 func (g *Game) seekTarget() mgl32.Vec3 {
 	origin, direction := g.aim()
-	if hit := g.rayCast(origin, direction); hit.HitInfo.Hit {
+	if hit := g.rayCastIgnoringHolograms(origin, direction); hit.HitInfo.Hit {
 		return hit.WorldPosition()
 	}
 	return origin.Add(direction.Mul(seekReach))
@@ -896,7 +896,7 @@ func (g *Game) fireMelee(op wep.Op) {
 	if len(op.Args) > 0 && op.Args[0] > 0 {
 		reach = op.Args[0] * worldUnitsPerDoomUnit
 	}
-	hit := g.rayCast(origin, direction)
+	hit := g.rayCastIgnoringHolograms(origin, direction)
 	if !hit.HitInfo.Hit || hit.HitInfo.Distance > reach {
 		return
 	}
@@ -909,7 +909,7 @@ func (g *Game) fireMelee(op wep.Op) {
 // health to hurt, so what lands is the mark and the event.
 func (g *Game) explode(op wep.Op) {
 	origin, direction := g.aim()
-	hit := g.rayCast(origin, direction)
+	hit := g.rayCastIgnoringHolograms(origin, direction)
 	if !hit.HitInfo.Hit {
 		return
 	}

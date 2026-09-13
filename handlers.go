@@ -133,7 +133,7 @@ type HitscanEffect struct {
 // to stop, and asking the world twice for the same answer is one raycast the
 // shot has already paid for.
 func (g *Game) fireHitscanWith(weapon *Weapon, origin, direction mgl32.Vec3, shot wep.Op) RaycastResult {
-	hit := g.rayCast(origin, direction)
+	hit := g.rayCastIgnoringHolograms(origin, direction)
 	events.Publish(events.EventHitScanCollision, HitscanEffect{
 		Hit:       hit,
 		Direction: direction,
@@ -159,7 +159,7 @@ func (g *Game) hitScanCollision(id events.EventID, event events.Event) {
 	surfaceNormal := hit.HitInfo.Side.AsDirection().ToVec3()
 	g.createImpactEffects(hitScanEffect.Weapon, hitScanEffect.Shot, hit.HitObject, hitPos, surfaceNormal)
 	if hit.HitObject != nil && hitScanEffect.Shot.Damage > 0 {
-		if isNPC(hit.HitObject) {
+		if g.isNPC(hit.HitObject) {
 			g.splatterBehind(hitPos, hitScanEffect.Direction)
 		}
 		g.damage(hit, hitScanEffect.Shot.Damage)
@@ -328,7 +328,7 @@ func (g *Game) physicsCollision(id events.EventID, event events.Event) {
 // ponytail: fixed restart offset and range rather than the object's real extent.
 // Bodies in this game are all roughly a metre wide.
 func (g *Game) splatterBehind(hitPos, direction mgl32.Vec3) {
-	behind := g.rayCast(hitPos.Add(direction.Mul(1.0)), direction)
+	behind := g.rayCastIgnoringHolograms(hitPos.Add(direction.Mul(1.0)), direction)
 	if !behind.HitInfo.Hit || behind.HitObject != nil || behind.HitInfo.Distance > bloodSplatterRange {
 		return
 	}
@@ -385,9 +385,16 @@ const (
 // nothing of its own to draw, or for a body, which has no mod sprite for blood.
 // isNPC is who bleeds: a body with somewhere to walk to, which today is only
 // the Scientist. A barrel, a shelf's pickup or a decoration is hit the same
-// way a wall is - it has no blood of its own to spill.
-func isNPC(hitObject *quads.GameObject) bool {
-	return hitObject != nil && hitObject.HasComponent(quads.ComponentTypePathing)
+// way a wall is - it has no blood of its own to spill. Neither does a
+// hologram (SpriteKind.Hologram): it has a PathingComponent like any other
+// actor, but it is light, not a body, and TakeDamage already refuses it every
+// hit - this is the same fact applied to what a hit is allowed to paint.
+func (g *Game) isNPC(hitObject *quads.GameObject) bool {
+	if hitObject == nil || !hitObject.HasComponent(quads.ComponentTypePathing) {
+		return false
+	}
+	actor := g.actorFor(hitObject)
+	return actor == nil || actor.kind == nil || !actor.kind.Hologram
 }
 
 func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads.GameObject, pos, surfaceNormal mgl32.Vec3) {
@@ -395,7 +402,7 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 		g.spawnProjectileImpact(pos, g.AtlasSprites, g.projectileImpactAnim)
 		g.EmitParticlesByName(quads.ParticlesExplosion, pos, 80)
 		g.EmitParticlesByName(quads.ParticlesSmoke, pos, 40)
-		if isNPC(hitObject) {
+		if g.isNPC(hitObject) {
 			g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		}
 		return
@@ -405,7 +412,7 @@ func (g *Game) createImpactEffects(weapon *Weapon, shot wep.Op, hitObject *quads
 	// on whatever the barrel is aimed at. Held on a body it bled thirty
 	// particles a tic, forever. It still spawns its puff below, so the red dot
 	// lands on a barrel the same as it lands on a wall.
-	if isNPC(hitObject) && shot.Damage > 0 {
+	if g.isNPC(hitObject) && shot.Damage > 0 {
 		g.EmitParticlesByName(quads.ParticlesBlood, pos, 30)
 		return
 	}

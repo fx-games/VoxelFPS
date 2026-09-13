@@ -17,6 +17,11 @@ type Shader struct {
 	// Uniforms this program does not have that someone tried to set anyway, so the
 	// warning goes out once instead of once per frame. See warnMissingUniformOnce.
 	warnedUniforms map[int]bool
+	// mat4 and float hold the value SetMat4 and SetFloat hand to cgo. Taking the
+	// address of the parameter itself moves it to the heap on every call - a
+	// 64 byte allocation per prop per frame.
+	mat4  mgl32.Mat4
+	float float32
 }
 
 func NewBasicShader(vertexFmt, uniformFmt AttrFormat, vertexShader, fragmentShader string) (*Shader, error) {
@@ -362,7 +367,8 @@ func (s *Shader) SetMat4(uniform int, value mgl32.Mat4) (ok bool) {
 		s.warnMissingUniformOnce(uniform)
 		return false
 	}
-	gl.UniformMatrix4fv(s.uniformLoc[uniform], 1, false, &value[0])
+	s.mat4 = value
+	gl.UniformMatrix4fv(s.uniformLoc[uniform], 1, false, &s.mat4[0])
 	return true
 }
 
@@ -371,7 +377,8 @@ func (s *Shader) SetFloat(uniform int, value float32) (ok bool) {
 		s.warnMissingUniformOnce(uniform)
 		return false
 	}
-	gl.Uniform1fv(s.uniformLoc[uniform], 1, &value)
+	s.float = value
+	gl.Uniform1fv(s.uniformLoc[uniform], 1, &s.float)
 	return true
 }
 

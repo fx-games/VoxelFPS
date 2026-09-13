@@ -85,3 +85,27 @@ func TestSphereFrustum(t *testing.T) {
 		}
 	}
 }
+
+// A frustum taken once from a moved, turned camera answers exactly what the
+// camera itself does - it is what a pass culls with instead of the camera.
+func TestFrustumFromMatchesCamera(t *testing.T) {
+	c := testCam()
+	c.SetPosition(mgl32.Vec3{3, -2, 5})
+	c.SetRotation(mgl32.QuatRotate(mgl32.DegToRad(37), mgl32.Vec3{0, 1, 0}))
+	f := FrustumFrom(c.GetProjectionViewMatrix())
+	for x := float32(-60); x <= 60; x += 7 {
+		for z := float32(-120); z <= 60; z += 9 {
+			p := mgl32.Vec3{x, 1, z}
+			if f.IsInViewFrustum(p) != c.IsInViewFrustum(p) {
+				t.Errorf("point %v: frustum and camera disagree", p)
+			}
+			if f.IsSphereInViewFrustum(p, 2) != c.IsSphereInViewFrustum(p, 2) {
+				t.Errorf("sphere at %v: frustum and camera disagree", p)
+			}
+			lo, hi := p.Sub(mgl32.Vec3{1, 1, 1}), p.Add(mgl32.Vec3{1, 1, 1})
+			if f.IsCubeInViewFrustum(lo, hi) != c.IsCubeInViewFrustum(lo, hi) {
+				t.Errorf("box at %v: frustum and camera disagree", p)
+			}
+		}
+	}
+}

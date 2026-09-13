@@ -68,6 +68,12 @@ func (va *VertexArray[V]) SetInstanceData(data []float32) {
 		gl.BufferData(gl.ARRAY_BUFFER, sizeInBytes, gl.Ptr(data), gl.DYNAMIC_DRAW)
 		va.instanceBufferSize = sizeInBytes
 	} else {
+		// Orphan the old storage first. One instance buffer is shared by every
+		// batch of a frame, so without this the write lands in the storage the
+		// previous batch's draw is still using, and the driver waits for the GPU
+		// to finish that draw before it lets go - once a batch, which a level
+		// with sixty sprite kinds in view pays sixty times a frame.
+		gl.BufferData(gl.ARRAY_BUFFER, va.instanceBufferSize, nil, gl.DYNAMIC_DRAW)
 		gl.BufferSubData(gl.ARRAY_BUFFER, 0, sizeInBytes, gl.Ptr(data))
 	}
 	va.instanceVbo.restore()
@@ -76,6 +82,10 @@ func (va *VertexArray[V]) SetInstanceData(data []float32) {
 // DrawInstanced draws the whole indexed primitive instanceCount times.
 func (va *VertexArray[V]) DrawInstanced(instanceCount int32) {
 	if instanceCount <= 0 {
+		return
+	}
+	if !va.isIndexed() {
+		gl.DrawArraysInstanced(va.primitiveType, 0, int32(va.vertexCount), instanceCount)
 		return
 	}
 	gl.DrawElementsInstanced(va.primitiveType, int32(va.indexCount), va.indexType, gl.PtrOffset(0), instanceCount)

@@ -33,15 +33,23 @@ func (g *Game) spawnPlayer(cam *core.FPSCamera, spawn mgl32.Vec3, dir mgl32.Vec2
 	// Doom's player is 56 units tall and looks out of it at 41. Everything a
 	// weapon spawns is placed relative to those two numbers, so they are the
 	// ones to be, rather than approximately them.
-	physics := quads.NewPhysicsComponent(true, voxel.NewAABB(
-		mgl32.Vec3{-0.2, 0.0, -0.2},
-		mgl32.Vec3{0.2, playerHeight, 0.2},
-	))
+	physics := quads.NewPhysicsComponent(true, playerBox(playerHeight))
 	player.SetComponent(physics)
 	player.SetComponent(quads.NewCameraComponent(cam, float64(playerEyeHeight)))
+	// Where the eye is now, which crouching moves and has to start from.
+	g.eyeHeight = playerEyeHeight
 
 	g.physicsSystem.AddObject(physics)
 	return player
+}
+
+// playerBox is the collider the player walks around in, at whatever height they
+// are standing at - see crouch.go, which swaps one of these for another.
+func playerBox(height float32) voxel.AABB {
+	return voxel.NewAABB(
+		mgl32.Vec3{-crouchHalfSize, 0, -crouchHalfSize},
+		mgl32.Vec3{crouchHalfSize, height, crouchHalfSize},
+	)
 }
 
 func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.GameObject {
@@ -87,13 +95,21 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		mesh, meshAABB := g.Meshes.NewMesh(meshFile)
 		// A sign's picture is its writing, so a real one gets a model of its
 		// own to paint; the editor's ghost shares the blank one.
-		if entity.MeshName == signMeshName && entity.CreateCollider {
+		if (entity.MeshName == signMeshName || entity.MeshName == graffitiMeshName) && entity.CreateCollider {
 			mesh, meshAABB = g.Meshes.NewOwnMesh(meshFile)
 		}
+		// As measured, in the model's own space: the collider stays unturned
+		// here because everything that tests it turns it itself, with this
+		// object's own matrix - see PhysicsComponent.WorldAABB. Turning it here
+		// as well is the rotation landing on the box twice, which for the ark's
+		// half-turned ladders put their solid half back where the empty half of
+		// the tile is and left the player unable to stand in front of the rungs.
 		aabb = meshAABB
 
 		goFromEntity.SetComponent(mesh)
 		g.Meshes.Add(mesh)
+		mesh.BakedLight = bakedLightIn(g.CubeMap, spawnPos.Add(mgl32.Vec3{0, 0.5, 0}))
+		mesh.NoShadow = entity.NoShadow || entity.MeshName == graffitiMeshName
 
 		if piece, isScenery := g.scenery[entity.MeshName]; isScenery && piece.Screen != nil {
 			fps := piece.Screen.FPS
@@ -130,6 +146,10 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 			}
 		}
 		sprite := quads.NewSpriteFloor(atlas, entity.TextureIndices)
+		// Lit by the voxel it stands in, like a pickup: a crate in a lit room
+		// is not black. Sampled once - a prop stays where it is put.
+		sprite.BakedLight = bakedLightIn(g.CubeMap, spawnPos.Add(mgl32.Vec3{0, 0.5, 0}))
+		sprite.NoShadow = entity.NoShadow
 
 		if kind != nil {
 			// The kind's own six animations, and the size the art was drawn
@@ -137,6 +157,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 			// what makes that this kind's walk - see SpriteComponent.AnimBase.
 			sprite.AnimBase = kind.animBase
 			sprite.Size = kind.Size()
+			if kind.Tint != ([4]float32{}) {
+				sprite.Tint = mgl32.Vec4{kind.Tint[0], kind.Tint[1], kind.Tint[2], kind.Tint[3]}
+			}
+			sprite.Emissive = kind.Emissive
+			sprite.Additive = kind.Additive
 			// A decoration with more than one idle frame is an animation - a
 			// flickering barrel, a jet of steam - and has to be started, or it
 			// stands on frame zero forever. An actor's own idle is started by
@@ -176,8 +201,11 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	// A thing the world walks through, but still on the grid: the crosshair
 	// finds it, the OBB outlines it, and nothing is stopped by it. See
 	// core.MapEntity.PassThrough - it is how a hall of exhibits is a hall
-	// rather than a maze.
-	physics.PassThrough = entity.PassThrough
+	// rather than a maze. A hologram earns the same pass-through on its own
+	// account (see SpriteKind.Hologram) - it is light, not a body, so nothing
+	// in the world should be able to walk into it or be blocked by it either.
+	hologram := g.spriteKinds[entity.SpriteSheetName] != nil && g.spriteKinds[entity.SpriteSheetName].Hologram
+	physics.PassThrough = entity.PassThrough || hologram
 	goFromEntity.SetComponent(physics)
 
 	// And the other five, so that the box follows what is being drawn: a guard
@@ -259,6 +287,14 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		goFromEntity.Mesh().EmissiveStrength = signEmissiveStrength
 		if entity.CreateCollider {
 			g.spawnSign(goFromEntity, entity.Text)
+		}
+	case graffitiMeshName:
+		// Paint is not a thing to bump into or to pick.
+		physics.PassThrough = true
+		if entity.CreateCollider {
+			if err := g.Meshes.SetTexture(goFromEntity.Mesh().MeshIndex, 0, quads.GraffitiPicture(entity.Text)); err != nil {
+				log.Printf("[graffiti] could not paint %q: %v", entity.Text, err)
+			}
 		}
 	case torchMeshName:
 		// A torch head is bright on screen wherever the torch came from, the

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
 	"github.com/memmaker/goray/core"
@@ -50,6 +52,12 @@ type Actor struct {
 	// shot. Set and cleared from its own dialogue tree - see dialogueFor.
 	following bool
 
+	// touring marks this actor as a guide leading the player somewhere: it
+	// walks its own patrol once, leg by leg, instead of looping it forever,
+	// and waits at each leg for the player to catch up - see startTour and
+	// updateTour. Set from its own dialogue tree, the same way following is.
+	touring bool
+
 	// repathClock and attackClock are the two cooldowns a companion runs on:
 	// how often it re-aims its path at the player, and how often it fires. See
 	// followPlayer and attack for why neither may happen every frame.
@@ -95,6 +103,10 @@ type Actor struct {
 	// round trip a landing is - see applyFallDamage.
 	fallOrigin  float32
 	wasGrounded bool
+
+	// glitchClock counts down to this actor's next display error, for a kind
+	// that has one - see SpriteKind.Glitch and updateHologramGlitch.
+	glitchClock float64
 }
 
 // spawnActor turns a plain entity GameObject into an Actor: a pathing
@@ -152,11 +164,12 @@ func (g *Game) spawnActor(object *quads.GameObject, physics *quads.PhysicsCompon
 		wasGrounded:   true,
 	}
 	actor.Dialogue = dialogueFor(actor)
-	// Only if anything is going to walk it. SetDestination switches the pathing
-	// component on, and a level of actors that were told where to go before the
-	// switch was ever consulted is a level of actors all walking to the same
-	// corner.
-	if g.actorsActive {
+	// Only if anything is going to walk it, and not for a guide - see
+	// SpriteKind.Guide. SetDestination switches the pathing component on, and
+	// a level of actors that were told where to go before the switch was ever
+	// consulted is a level of actors all walking to the same corner; a guide
+	// gets its first destination from its own dialogue instead, see startTour.
+	if g.actorsActive && (kind == nil || !kind.Guide) {
 		pather.SetDestination(patrol[1])
 	}
 
@@ -214,6 +227,27 @@ func (g *Game) playActorCue(actor *Actor, role string) {
 	})
 }
 
+// hologramGlitchPeriod is how long a hologram stays steady between display
+// errors.
+const hologramGlitchPeriod = 2.6
+
+// updateHologramGlitch is a signal failure: every hologramGlitchPeriod, on a
+// clock like attackClock's rather than every frame, the sprite is thrown into
+// its own kind's "fire" slot - which for a Glitch kind is not a weapon but
+// five frames of torn, static-shot, ghosted and blown-out art (see
+// assets/sprites/actors/humans/scientist_hologram) - and PlayAnimationInterrupting
+// resumes whatever it was doing (walking, standing) the moment those frames run
+// out. A hologram that just went transparent for an instant would read as an
+// engine bug; this reads as the projector's.
+func (g *Game) updateHologramGlitch(actor *Actor, elapsed float64) {
+	actor.glitchClock -= elapsed
+	if actor.glitchClock > 0 {
+		return
+	}
+	actor.glitchClock = hologramGlitchPeriod
+	actor.object.Sprite().PlayAnimationInterrupting(int(quads.AnimFire))
+}
+
 // patrolRoute is the beat the map asked for: the whole route the editor's path
 // tool wrote, the one far end the older PatrolTo field names, or - for an entity
 // that says nothing - a default leg, so that an actor dropped into a map with no
@@ -245,6 +279,43 @@ func (g *Game) updateActors(elapsed float64) {
 		applyFallDamage(actor)
 		if actor.Health <= 0 {
 			actor.die()
+			continue
+		}
+		if actor.kind != nil && actor.kind.Glitch {
+			g.updateHologramGlitch(actor, elapsed)
+		}
+		// A guide leading a tour is doing something the player explicitly
+		// asked for through its own dialogue, not wandering or hunting on its
+		// own initiative - the "Actors Active" switch below is for freezing
+		// *that*, so it never gets a say over a tour already under way.
+		if actor.touring {
+			// Not while the conversation that started it is still on the
+			// screen. openDialogue is modal for the player but the world
+			// carries on updating behind it, so a guide agreed to on a reply
+			// used to walk the whole route - all of thirty metres of it - in
+			// the seconds the player spent reading the line that set it off,
+			// and was standing at the far end, tour already finished, by the
+			// time they closed it. It looked like a guide that would not go on
+			// its own and had to be asked again at every stop; what asking
+			// again did was start the route over. The player cannot move while
+			// a modal screen is up (see setupModal), and a guide that waits
+			// for the player at every leg has no business walking one while
+			// they are held still.
+			if !g.widgetsAreBlockingMovement {
+				g.updateTour(actor, elapsed)
+			}
+			continue
+		}
+		// A guide is never an ordinary actor, tour or no tour. Its route is a
+		// straight line between hand-picked points rather than anything the
+		// pathfinder found (see updateTour), and updateTour never promised a
+		// floor under the point it leaves it standing on - the ark's own tours
+		// both end in mid-air in the spine shaft, at the foot of the ladder up.
+		// Everything below here would either switch gravity back on (freeze,
+		// through halt) and drop it down that shaft, or hand its tour route to
+		// the pathfinder as a patrol beat and walk it back through the wall it
+		// came in by.
+		if actor.kind != nil && actor.kind.Guide {
 			continue
 		}
 		// Inactive actors stand where they are: no patrol, no chase, no
@@ -340,6 +411,128 @@ func (a *Actor) stopFollowing() {
 	a.following = false
 	a.patrol = nil
 	a.halt()
+}
+
+// tourWaitDistance is how close the player has to be before a touring guide
+// takes its next step - see updateTour. Loose enough that a player who sets
+// off the moment the guide does is still within it at the end of a leg twice
+// this long: the guide waits for you, it does not make you sprint.
+const tourWaitDistance = 9.0
+
+// tourWalkSpeed is how fast a guide leading a tour crosses a room - the same
+// brisk pace quads.PathingComponent's own default keeps an ordinary patrol to.
+const tourWalkSpeed = 2.5
+
+// tourArrivalRadius is how close counts as "there" - see the pathing
+// package's own waypointArrivalRadius, which this mirrors.
+const tourArrivalRadius = 0.2
+
+// startTour sends a guide off on the route its map entity was given, kicked
+// off by its own dialogue rather than the moment it spawns - see
+// SpriteKind.Guide. It is a no-op for a guide with nowhere to go: patrol
+// always has at least the spawn point in it, so one leg is what "no route"
+// looks like.
+func (a *Actor) startTour() {
+	if len(a.patrol) < 2 {
+		return
+	}
+	a.touring = true
+	a.patrolIndex = 1
+	a.object.Sprite().PlayAnimationLooping(int(quads.AnimWalk))
+}
+
+// tourIdle stops a touring guide's walk animation between legs, without
+// actor.halt's other side effects: switching the pathing component off (a
+// touring guide never turns it on to begin with - see startTour) and,
+// critically, switching gravity back on. A guide waiting mid-route stands
+// exactly where its own waypoint put it, on a floor updateTour never checks
+// because it never needs to - see its own comment on why that floor cannot
+// be trusted here at all. halt() turning gravity on every time a guide
+// paused to wait was dropping it through the nearest gap - the ark's own
+// ladder shafts among them - the moment the player fell behind by even one
+// leg, which is what made the next leg look like it walked through a wall:
+// it was above the deck it started on when it first found the wall solid,
+// and now under it.
+func (a *Actor) tourIdle() {
+	if a.object.Sprite().IsPlaying(int(quads.AnimWalk)) {
+		a.object.Sprite().PlayAnimationLooping(int(quads.AnimIdle))
+	}
+}
+
+// waypointText is the guide answering "where are we going?", from wherever it
+// has got to on its route. The route's points have no names - they are bare
+// positions off the ark's own floor plan, see assets/maps/ark/build.map - so
+// which stop of how many, and how far off it is, is the whole of what it can
+// honestly say. patrol's first point is the spawn rather than a stop, which is
+// why the count is one short of its length and patrolIndex reads directly as
+// the number of the stop being walked to.
+func (a *Actor) waypointText() string {
+	stops := len(a.patrol) - 1
+	switch {
+	case stops < 1:
+		return "I'm not going anywhere. This is the whole of my route."
+	case !a.touring && a.patrolIndex >= stops:
+		return fmt.Sprintf("Stop %d of %d - the last of them. The route ends here.", stops, stops)
+	case !a.touring:
+		return fmt.Sprintf("We haven't set off yet. It's %d stops from here once we do.", stops)
+	}
+	away := flatDistance(a.object.Transform().GetPosition(), a.patrol[a.patrolIndex])
+	if away <= tourArrivalRadius {
+		return fmt.Sprintf("Stop %d of %d. I'll wait here until you've caught up.", a.patrolIndex, stops)
+	}
+	return fmt.Sprintf("On our way to stop %d of %d, about %.0f metres ahead.", a.patrolIndex, stops, away)
+}
+
+// updateTour is a guide leading a tour: it walks a straight line to the next
+// point on its own route rather than handing the destination to
+// quads.PathfindingSystem, the way an ordinary patrol does. That system finds
+// a deck's own floor by scanning straight up from y=0 (see its groundHeight) -
+// a column that, eleven decks up a hull built round a central spine, is
+// vacuum at y=0 and never solid at all. Every hostile and every companion on
+// every other map goes through it just fine; a guide standing on the ark
+// cannot, because its own starting column already fails that scan.
+//
+// ponytail: straight-line movement, no A* and no collision check against the
+// route itself - correct here because every route is chosen off the ark's own
+// floor plan (see assets/maps/ark/build.map) to be a clear, flat, single-deck
+// corridor. A tour that had to turn a corner, dodge furniture or change decks
+// would need groundHeight's assumption fixed instead of a workaround here.
+//
+// It only leaves for its next leg once it has arrived at this one *and* the
+// player is close enough to have followed - a guide that walked on regardless
+// would end up talking to an empty corridor. Unlike an ordinary patrol (see
+// patrol, in hostile.go), the route runs once and stops at the far end
+// instead of looping back to the start.
+func (g *Game) updateTour(actor *Actor, elapsed float64) {
+	transform := actor.object.Transform()
+	position := transform.GetPosition()
+	target := actor.patrol[actor.patrolIndex]
+	toTarget := mgl32.Vec3{target.X() - position.X(), 0, target.Z() - position.Z()}
+	distance := toTarget.Len()
+
+	if distance <= tourArrivalRadius {
+		if actor.patrolIndex >= len(actor.patrol)-1 {
+			actor.touring = false
+			actor.tourIdle()
+			return
+		}
+		if g.player == nil || flatDistance(position, g.player.Transform().GetPosition()) > tourWaitDistance {
+			actor.tourIdle()
+			return
+		}
+		actor.patrolIndex++
+		actor.object.Sprite().PlayAnimationLooping(int(quads.AnimWalk))
+		return
+	}
+
+	transform.SetLookAt2D(target)
+	step := float32(tourWalkSpeed) * float32(elapsed)
+	if step > distance {
+		step = distance
+	}
+	// Through the physics system rather than the transform: the collider has
+	// to be re-listed on the grid it is picked out by - see Teleport.
+	actor.physicsSystem.Teleport(actor.object.Physics(), position.Add(toTarget.Normalize().Mul(step)))
 }
 
 // updateCompanion is one frame of a companion: shoot what the player is
@@ -484,8 +677,10 @@ func (a *Actor) Alive() bool { return a != nil && !a.dying && a.object.IsAlive()
 // function of whatever gun is pointed at it.
 //
 // Once dying, further hits are ignored: there is nothing left to kill twice.
+// A hologram (SpriteKind.Hologram) ignores every hit outright, dying or not -
+// light does not bleed, and there is nothing under it to empty a health bar.
 func (a *Actor) TakeDamage(hit Damage) {
-	if a.dying {
+	if a.dying || (a.kind != nil && a.kind.Hologram) {
 		return
 	}
 	switch {

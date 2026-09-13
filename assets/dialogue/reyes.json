@@ -1,0 +1,63 @@
+{
+  "speaker": "Orientation Officer Reyes (Hologram)",
+  "start": "greeting",
+  "lines": {
+    "greeting": {
+      "text": "Orientation Officer Reyes. One note before we start: access above deck six is temporarily restricted. Nothing to be concerned about - the tour still runs.",
+      "choices": [
+        {
+          "text": "What happened to this ship?",
+          "next": "what_happened"
+        },
+        {
+          "text": "Show me the tour.",
+          "next": "starting_tour",
+          "do": "tour"
+        },
+        {
+          "text": "Where are we going?",
+          "next": "waypoint",
+          "do": "waypoint"
+        },
+        {
+          "text": "Not right now.",
+          "next": "later"
+        }
+      ]
+    },
+    "what_happened": {
+      "text": "A debris field. A stellar accident, nothing more - the kind of thing every long crossing logs a few of. Repairs are proceeding on schedule. I can still take you to every deck; the routing's just been adjusted.",
+      "choices": [
+        {
+          "text": "Show me the tour.",
+          "next": "starting_tour",
+          "do": "tour"
+        },
+        {
+          "text": "Where are we going?",
+          "next": "waypoint",
+          "do": "waypoint"
+        },
+        {
+          "text": "Not right now.",
+          "next": "later"
+        }
+      ]
+    },
+    "starting_tour": {
+      "text": "This way. Deck seven is sealed for now, purely as a precaution, so we'll take the long way round."
+    },
+    "later": {
+      "text": "The tour departs from right here whenever you're ready."
+    },
+    "waypoint": {
+      "text": "Let me check the routing.",
+      "choices": [
+        {
+          "text": "Carry on.",
+          "next": "greeting"
+        }
+      ]
+    }
+  }
+}

@@ -145,7 +145,7 @@ func (a *Actor) attackInterval() float64 {
 // player - it is the picking ray as well as the shooting one.
 func (g *Game) landEnemyHitscan(muzzle, direction, playerPos mgl32.Vec3, damage int) {
 	reach := playerPos.Sub(muzzle).Len()
-	hit := g.rayCast(muzzle, direction)
+	hit := g.rayCastIgnoringHolograms(muzzle, direction)
 	if hit.HitInfo.Hit && hit.HitInfo.Distance < float64(reach) {
 		// Something solid stopped it short of the player: mark that instead.
 		g.createImpactEffects(nil, wep.Op{Puff: wep.PuffBullet}, hit.HitObject,

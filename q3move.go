@@ -19,8 +19,11 @@ const (
 	pmFriction      = 6.0
 	pmStopSpeed     = 100.0 * quakeUnit
 	pmSpeed         = 320.0 * quakeUnit
-	pmJumpVelocity  = 270.0 * quakeUnit
-	q3Gravity       = 800.0 * quakeUnit
+	// pmDuckScale is PM_CmdScale's own: a ducked player asks for half the speed
+	// a standing one does.
+	pmDuckScale    = 0.5
+	pmJumpVelocity = 270.0 * quakeUnit
+	q3Gravity      = 800.0 * quakeUnit
 	// pmStepSize is Q3's STEPSIZE: the tallest ledge that is walked straight up
 	// instead of blocking. Stairs are built under it, walls above it.
 	pmStepSize = 18.0 * quakeUnit
@@ -43,13 +46,13 @@ type q3Move struct {
 // Advance runs the pmove steps that fit into elapsed and returns the new
 // velocity. wishDir is the horizontal direction the player is asking for, zero
 // when no movement key is down.
-func (m *q3Move) Advance(velocity mgl32.Vec3, wishDir mgl32.Vec3, grounded bool, elapsed float64) mgl32.Vec3 {
+func (m *q3Move) Advance(velocity mgl32.Vec3, wishDir mgl32.Vec3, grounded, crouched bool, elapsed float64) mgl32.Vec3 {
 	if elapsed > pmoveMaxFrameTime {
 		elapsed = pmoveMaxFrameTime
 	}
 	m.accumulator += elapsed
 	for m.accumulator >= pmoveStep {
-		velocity = pmoveSingle(velocity, wishDir, grounded, pmoveStep)
+		velocity = pmoveSingle(velocity, wishDir, grounded, crouched, pmoveStep)
 		m.accumulator -= pmoveStep
 	}
 	return velocity
@@ -67,7 +70,7 @@ func (m *q3Move) CheckJump(pressed, grounded bool) bool {
 // the ground; in the air the acceleration is a tenth as strong but is still
 // allowed to reach the full wish speed, which is what lets a strafing player
 // gain speed beyond pmSpeed.
-func pmoveSingle(velocity, wishDir mgl32.Vec3, grounded bool, deltaTime float32) mgl32.Vec3 {
+func pmoveSingle(velocity, wishDir mgl32.Vec3, grounded, crouched bool, deltaTime float32) mgl32.Vec3 {
 	accel := float32(pmAirAccelerate)
 	if grounded {
 		velocity = pmFrictionStep(velocity, deltaTime)
@@ -76,7 +79,11 @@ func pmoveSingle(velocity, wishDir mgl32.Vec3, grounded bool, deltaTime float32)
 	if wishDir == (mgl32.Vec3{}) {
 		return velocity
 	}
-	return pmAccelerateStep(velocity, wishDir, pmSpeed, accel, deltaTime)
+	wishSpeed := float32(pmSpeed)
+	if crouched {
+		wishSpeed *= pmDuckScale
+	}
+	return pmAccelerateStep(velocity, wishDir, wishSpeed, accel, deltaTime)
 }
 
 // pmFrictionStep is PM_Friction: it only slows the horizontal velocity, and

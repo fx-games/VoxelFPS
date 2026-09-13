@@ -12,6 +12,9 @@ import (
 type DrawPair struct {
 	TextureIndex int
 	VertexData   *glhf.VertexArray[glhf.GlFloat]
+	// uploaded is what VertexData's instance buffer holds, as MeshDrawer.Draw last
+	// wrote it, so a frame that sees the same copies does not write them again.
+	uploaded []float32
 }
 
 type CompoundMesh struct {
@@ -65,8 +68,13 @@ func (m *CompoundMesh) getSamplerFrames(animationName string) [][]float32 {
 func (m *CompoundMesh) SetAnimationSpeed(newSpeed float64) {
 	m.animationSpeed = newSpeed
 }
-func (m *CompoundMesh) Draw(shader *glhf.Shader, modelTransformUniformIndex int) {
-	m.RootNode.Draw(shader, modelTransformUniformIndex, m.textures)
+
+// Draw draws the model once, where its root's parent puts it, with no emissive
+// glow and no baked light, using whichever mesh program is bound. It is the
+// preview renderer's and the debug cube's way in; a level's props go through
+// MeshDrawer.Draw, which draws every copy of a part in one call.
+func (m *CompoundMesh) Draw() {
+	m.RootNode.Draw(m.textures)
 }
 
 func (m *CompoundMesh) GetNodeByName(nodeName string) (*MeshNode, bool) {
@@ -173,26 +181,41 @@ func (m *MeshNode) CreateColliders() {
 	}
 }
 
-func (m *MeshNode) Draw(shader *glhf.Shader, modelTransformUniformIndex int, textures []*glhf.Texture) {
+func (m *MeshNode) Draw(textures []*glhf.Texture) {
 	m.drawCalls = 0
 	if m.hidden {
 		return
 	}
-	shader.SetMat4(modelTransformUniformIndex, m.GetTransformMatrix())
+	var instance [meshInstanceFloats]float32 // lit by nothing baked, glowing not at all
+	transform := m.GetTransformMatrix()
+	copy(instance[:], transform[:])
 	for _, pair := range m.drawPairs {
-		textureIndex := pair.TextureIndex
-		meshGroup := pair.VertexData
-		textures[textureIndex].Begin()
-		meshGroup.Begin()
-		meshGroup.Draw()
-		meshGroup.End()
-		textures[textureIndex].End()
+		textures[pair.TextureIndex].Begin()
+		pair.VertexData.Begin()
+		pair.VertexData.SetInstanceData(instance[:])
+		pair.uploaded = pair.uploaded[:0] // the buffer no longer holds MeshDrawer's copies
+		pair.VertexData.DrawInstanced(1)
+		pair.VertexData.End()
+		textures[pair.TextureIndex].End()
 		m.drawCalls++
 	}
 	for _, child := range m.children {
-		child.Draw(shader, modelTransformUniformIndex, textures)
+		child.Draw(textures)
 		m.drawCalls += child.DrawCalls()
 	}
+}
+
+// appendDrawn appends every node Draw would draw, parents before children: a
+// hidden node hides its whole subtree.
+func (m *MeshNode) appendDrawn(nodes []*MeshNode) []*MeshNode {
+	if m.hidden {
+		return nodes
+	}
+	nodes = append(nodes, m)
+	for _, child := range m.children {
+		nodes = child.appendDrawn(nodes)
+	}
+	return nodes
 }
 
 func (m *MeshNode) GetTransformMatrix() mgl32.Mat4 {
@@ -678,6 +701,7 @@ func (m SubMesh) ToVertexArray(shader *glhf.Shader) *glhf.VertexArray[glhf.GlFlo
 	}
 
 	slice.SetIndices32(m.Indices)
+	slice.SetInstanceFormat(MeshInstanceFormat)
 	slice.Begin()
 	slice.SetVertexData(m.VertexData)
 	slice.End()

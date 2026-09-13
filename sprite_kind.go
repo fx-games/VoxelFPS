@@ -74,6 +74,33 @@ type SpriteKind struct {
 	// of, so a re-import can be checked against what is already on disk.
 	Provenance map[string]string `json:"provenance,omitempty"`
 
+	// Tint multiplies the sprite's own colours, {0,0,0,0} (the zero value) for
+	// none - a hologram reads blue because its kind says so, not because the
+	// art was redrawn. An alpha under one is also what tells SpriteDrawer to
+	// draw it translucent - see SpriteDrawer.Add.
+	Tint [4]float32 `json:"tint"`
+	// Emissive is how far past white this kind's sprite glows, on top of its
+	// own tint - see SpriteComponent.Emissive.
+	Emissive float32 `json:"emissive"`
+	// Additive draws this kind with ZDoom's Add style instead of blending over
+	// the scene - see SpriteComponent.Additive.
+	Additive bool `json:"additive"`
+	// Glitch is whether this kind suffers its own display errors every so
+	// often: a burst of distorted frames from its own "fire" animation slot
+	// rather than a shot fired - see Game.updateHologramGlitch.
+	Glitch bool `json:"glitch"`
+	// Guide is whether an actor of this kind waits wherever it is placed
+	// instead of setting off on its patrol the moment it spawns - it is a fact
+	// about what the thing is, the same way Hostile is: a hologram guide waits
+	// to be asked, wherever it is standing. It only walks once its own
+	// dialogue says "tour" - see Actor.startTour.
+	Guide bool `json:"guide"`
+	// Hologram is whether this kind is a projection rather than a body: it
+	// takes no damage (Actor.TakeDamage) and its collider is PassThrough (see
+	// spawn_entities.go), so a player - or a wall's own collision check - goes
+	// straight through it instead of being stopped by light.
+	Hologram bool `json:"hologram"`
+
 	// animBase is where this kind's six animations start in SpriteDrawer's one
 	// list, filled in by registerSpriteKinds. A sprite of this kind carries the
 	// same number, which is what makes AnimWalk mean this kind's walk.

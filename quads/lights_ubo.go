@@ -178,11 +178,57 @@ func LightFromMap(light core.MapLight, shadowResolution int) LightInfo {
 	}
 }
 
+// SunLightFrom builds the level's star as a light: a spotlight standing off in
+// space, aimed at the ship, bracketing it with its own near and far planes. It
+// is placed where a sky that has not turned yet puts it - see SunStandpoint for
+// where it goes as the sky turns.
+//
+// Power is compensated for the standoff here rather than in the map, because the
+// falloff is inverse square referenced to LIGHT_REF_DIST: a light a hundred and
+// fifty units away needs a four-figure intensity to land as brightly as a lamp
+// on the wall, and a four-figure number in a map file reads as a typo.
+func SunLightFrom(sun *core.Sun, shadowResolution int) LightInfo {
+	towards := sun.Towards.Normalize()
+	position := sun.At.Add(towards.Mul(sun.Distance))
+	transform := core.NewPerspectiveTransformForSpotlight(
+		position,
+		mgl32.QuatBetweenVectors(mgl32.Vec3{0, 0, -1}, towards.Mul(-1)),
+		sun.Angle, sun.Distance+sun.Depth/2, shadowResolution,
+	)
+	transform.SetNearPlaneDist(max(spotlightMinNearPlane, sun.Distance-sun.Depth/2))
+	const lightRefDist = 2.5 // LIGHT_REF_DIST in the shader
+	standoff := sun.Distance / lightRefDist
+	return LightInfo{
+		PerspectiveTransform: transform,
+		Color:                sun.Color.Vec4(sun.Power * (1 + standoff*standoff)),
+	}
+}
+
+// spotlightMinNearPlane is core.spotlightNearPlane, which a sun is only allowed
+// to push further out.
+const spotlightMinNearPlane = float32(0.5)
+
+// SunStandpoint is where the sun stands and which way it points once the sky has
+// turned by spin radians about axis. The sky is turned by rotating it under a
+// fixed camera (GlApplication.SetSkyboxSpin), so a star drawn at Towards in the
+// cubemap's own frame is seen out there at the same rotation applied to it -
+// which is the only reason the light and the picture stay together.
+func SunStandpoint(sun *core.Sun, spin float32, axis mgl32.Vec3) (position, forward mgl32.Vec3) {
+	if axis.Len() == 0 {
+		axis = mgl32.Vec3{0, 1, 0}
+	}
+	turned := mgl32.HomogRotate3D(spin, axis.Normalize()).Mul4x1(sun.Towards.Normalize().Vec4(0)).Vec3()
+	return sun.At.Add(turned.Mul(sun.Distance)), turned.Mul(-1)
+}
+
 type LightsUBO struct {
 	*glhf.UniformBufferObject
 	lightCount int
 	lights     []LightInfo
 	rawBuffer  []glhf.GlFloat
+	// dirty is set when rawBuffer holds a moved light the GPU has not been given
+	// yet. See Flush.
+	dirty bool
 
 	// Slot 0 is the player's own light and nothing else. What kind it is, and what
 	// it hangs off - the camera - lives here, because this is what rebuilds the
@@ -271,6 +317,7 @@ func (lu *LightsUBO) setAll(lights []LightInfo) (dropped int) {
 	lu.Begin()
 	gl.BufferSubData(gl.UNIFORM_BUFFER, 0, totalSizeInBytes, gl.Ptr(lu.rawBuffer))
 	lu.End()
+	lu.dirty = false
 	return dropped
 }
 
@@ -289,6 +336,31 @@ func (lu *LightsUBO) SetStaticLights(infos ...LightInfo) (dropped int) {
 // AddLights appends to the scene's lights, keeping the ones already there.
 func (lu *LightsUBO) AddLights(infos ...LightInfo) (dropped int) {
 	return lu.setAll(append(lu.lights, infos...))
+}
+
+// AddMovableLight appends one light and hands back the slot it landed in, or -1
+// if the list was full. The slot is what MoveLight takes: a light that is moved
+// by something the map knows nothing about - the sun, which stands where the sky
+// says it does - is added once here and moved from then on.
+func (lu *LightsUBO) AddMovableLight(info LightInfo) int {
+	slot := len(lu.lights)
+	if lu.AddLights(info) > 0 {
+		return -1
+	}
+	return slot
+}
+
+// MoveLight stands a light somewhere else, points it somewhere else, and marks
+// its slot for the next Flush - the same one-slot update the player's light gets
+// every frame, rather than a rebuild of the whole list, which would hand out the
+// shadow layers again and throw away every cached depth map with them.
+func (lu *LightsUBO) MoveLight(index int, position, forward mgl32.Vec3) {
+	if index < 0 || index >= lu.lightCount {
+		return
+	}
+	lu.lights[index].SetPosition(position)
+	lu.lights[index].SetForward(forward)
+	lu.updateLightAt(index)
 }
 
 // MuteLights writes a light count of zero into the block the shaders read and
@@ -315,15 +387,29 @@ func (lu *LightsUBO) Lights() []LightInfo {
 	return lu.lights
 }
 
+// updateLightAt packs one light into rawBuffer and leaves the upload to Flush.
 func (lu *LightsUBO) updateLightAt(index int) {
-	light := lu.lights[index]
-	setLightAt(lu.rawBuffer, 4, index, floatsPerLightStruct, light)
-	rawBufferOffset := (index * floatsPerLightStruct) + 4
-	byteOffset := (4 + (index * floatsPerLightStruct)) * 4
+	setLightAt(lu.rawBuffer, 4, index, floatsPerLightStruct, lu.lights[index])
+	lu.dirty = true
+}
 
+// Flush gives the GPU every light moved since the last one, once a frame, before
+// anything is drawn with them.
+//
+// It used to be a BufferSubData per moved light, straight away. On the ark the sun
+// moves every frame and so does the player's light, and the second of those writes
+// landed on a buffer the GPU was still reading for the frame before: the driver
+// held the render thread in that call until it was done, 2.1 ms a frame. The
+// whole block is 4 KB, so it is handed over whole with BufferData, which gives the
+// buffer new storage and lets the frame still in flight keep the old.
+func (lu *LightsUBO) Flush() {
+	if !lu.dirty {
+		return
+	}
 	lu.Begin()
-	gl.BufferSubData(gl.UNIFORM_BUFFER, byteOffset, floatsPerLightStruct*4, gl.Ptr(lu.rawBuffer[rawBufferOffset:]))
+	gl.BufferData(gl.UNIFORM_BUFFER, len(lu.rawBuffer)*4, gl.Ptr(lu.rawBuffer), gl.STREAM_DRAW)
 	lu.End()
+	lu.dirty = false
 }
 
 func setLightAt(lightBuffer []glhf.GlFloat, offset int, index int, elementsPerStruct int, light LightInfo) {

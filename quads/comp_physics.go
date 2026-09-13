@@ -22,6 +22,14 @@ type PhysicsComponent struct {
 	PassThrough bool
 	aabb        voxel.AABB
 	aabbPerAnim map[AnimIndex]voxel.AABB
+	// turnedFrom, turnedBy and turned remember WorldAABB's last rotation: the
+	// local box, the rotation it was turned by and the result. Turning eight
+	// corners is most of what culling a prop costs, and a prop that is not
+	// turning asks for the same answer every frame.
+	turnedFrom voxel.AABB
+	turnedBy   mgl32.Quat
+	turned     voxel.AABB
+	hasTurned  bool
 	// collisionAABB is the box the solver moves, for a thing whose collider is
 	// not the box a ray picks it out by. A picture is drawn wide and flat and a
 	// collider that wide is one that catches on everything beside it, so an item
@@ -265,17 +273,25 @@ func (g *PhysicsComponent) gridAABBAt(pos mgl32.Vec3) voxel.AABB {
 				}
 			}
 		}
-		if !g.HasOrientedCollider() {
-			box = swungRound(box)
-		}
+		// Every listing is swung round its own position, whether the thing
+		// turns to face the camera or carries a rotation of its own: the cells
+		// are worked out from extents alone (they are only translated below),
+		// and a turned piece whose box is not square - a staircase is two tiles
+		// deep and one wide - is listed in the cells it would stand in
+		// unturned, so the solver never tests the cells it is really in.
+		box = swungRound(box)
 		g.gridBox = &box
 	}
 	return g.gridBox.Add(pos)
 }
 
-// swungRound is the box a billboard's box can reach into once it is turned to
-// face whoever is looking at it - see SpriteComponent.Orientation, which swings
-// the whole thing round its own position by the angle to the camera.
+// swungRound is the box a box can reach into at any turn about the vertical:
+// a billboard swung to face whoever is looking at it (see
+// SpriteComponent.Orientation), or a piece of scenery placed with a facing= of
+// its own. Exact for the quarter turns a piece is ever given, generous for the
+// angles in between, and - unlike turning the box by the rotation it has right
+// now - still true after a door swings or an actor turns round, which is what
+// lets one listing be cached and reused for removeFromGrid.
 //
 // Face on, a sprite's box is as wide as the picture and a few hundredths deep;
 // from the side those two swap over. Listed on the grid as drawn from one angle,
@@ -305,6 +321,32 @@ func swungRound(box voxel.AABB) voxel.AABB {
 // is looking.
 func (g *PhysicsComponent) HasOrientedCollider() bool {
 	return !g.resolver.HasComponent(ComponentTypeSprite)
+}
+
+// WorldAABB is where this collider really is, as plain extents: its own box,
+// turned the way the object is turned, at the position the object stands.
+//
+// A collider is held in the model's own space and every consumer that has the
+// object's matrix applies the rotation itself - the solver through WorldOBB,
+// the picking ray through OBB. The ones that cannot (a frustum test takes six
+// planes and a box, a debug outline draws one) ask here instead of translating
+// the local box and quietly drawing, culling or testing a turned piece where
+// the unturned one would have stood. That is what culled the ark's ladders: the
+// model is hard against its own +Z, the shaft's are turned to face the other
+// way, and the box left behind sat on the far side of the shaft from the rungs,
+// so the segments nearest the camera fell out of the frustum at a steep look up
+// or down while the rungs were plainly in shot.
+func (g *PhysicsComponent) WorldAABB() voxel.AABB {
+	transform := g.resolver.Transform()
+	box := g.CollisionAABBAt(mgl32.Vec3{})
+	if g.HasOrientedCollider() {
+		rotation := transform.GetRotation()
+		if !g.hasTurned || box != g.turnedFrom || rotation != g.turnedBy {
+			g.turnedFrom, g.turnedBy, g.turned, g.hasTurned = box, rotation, box.Rotated(rotation), true
+		}
+		box = g.turned
+	}
+	return box.Add(transform.GetPosition())
 }
 
 // WorldOBB is the collider in world space, independent of the camera.

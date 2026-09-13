@@ -226,21 +226,35 @@ func (q *SpriteDrawer) ClearPanes() {
 	q.paneAtlas = nil
 }
 
-// DrawPanes draws every window in one instanced call. It belongs after the
-// skybox: a pane writes no depth, so a sky drawn later would paint straight
-// over it.
-//
-// Farthest first. None of these quads writes depth, so what is drawn last is
-// what ends up on top whatever the distances say - and a station's windows are
-// a ring, so the far side of it is behind the near side through the glass all
-// day long. A decal never needs this because every decal on one wall is at the
-// same distance from it; a window is the case where it matters. The panes are
-// sorted where they live rather than through an index, because nothing else
-// holds a reference to one and the order barely changes between frames.
+// DrawPanes draws every window the observer can see in one instanced call. It
+// belongs after the skybox: a pane writes no depth, so a sky drawn later would
+// paint straight over it.
 func (q *SpriteDrawer) DrawPanes(observer core.Observer, spriteShader *glhf.Shader) {
+	q.drawQuads(observer, spriteShader, q.paneAtlas, q.panesToDraw(observer), 0)
+}
+
+// panesToDraw is the glass in front of the observer, farthest first.
+//
+// Farthest first because none of these quads writes depth, so what is drawn last
+// ends up on top whatever the distances say - and a station's windows are a
+// ring, so the far side of it is behind the near side through the glass all day
+// long. A decal never needs this: every decal on one wall is the same distance
+// from it.
+//
+// Culled before it is sorted, not after. A level's glass is counted in
+// thousands - the ark has 3626 panes - and sorting all of them to draw the
+// twenty in shot was the whole cost of the pass. A pane takes no parent, so its
+// centre is already world space and the cull is one sphere test each.
+func (q *SpriteDrawer) panesToDraw(observer core.Observer) []decal {
+	q.visiblePanes = q.visiblePanes[:0]
+	for _, pane := range q.panes {
+		if observer.IsSphereInViewFrustum(pane.center, pane.radius) {
+			q.visiblePanes = append(q.visiblePanes, pane)
+		}
+	}
 	eye := observer.GetPosition()
-	slices.SortFunc(q.panes, func(a, b decal) int {
+	slices.SortFunc(q.visiblePanes, func(a, b decal) int {
 		return cmp.Compare(b.center.Sub(eye).LenSqr(), a.center.Sub(eye).LenSqr())
 	})
-	q.drawQuads(observer, spriteShader, q.paneAtlas, q.panes, 0)
+	return q.visiblePanes
 }

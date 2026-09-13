@@ -56,6 +56,10 @@ func (g *Game) pollInput(elapsed float64) {
 
 	physics := g.player.Physics()
 
+	// Before the ladder and the suit below, both of which return: letting go of
+	// the key stands the player up wherever they are standing.
+	g.updateCrouch(upDown < 0 && g.gravitationEnabled, elapsed)
+
 	// The direction the player is asking to move in, flattened: looking up must
 	// not slow you down.
 	var wishDir mgl32.Vec3
@@ -99,7 +103,7 @@ func (g *Game) pollInput(elapsed float64) {
 		// finds out afterwards.
 		physics.SetGrounded(false)
 	}
-	physics.SetVelocity(g.move.Advance(velocity, wishDir, physics.IsGrounded(), elapsed))
+	physics.SetVelocity(g.move.Advance(velocity, wishDir, physics.IsGrounded(), g.crouched, elapsed))
 }
 
 func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
