@@ -178,6 +178,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 		if !obj.IsMovable() {
 			continue
 		}
+		obj.stepFrom = obj.Position()
 
 		// Before anything is done with it: a collider that changed shape under
 		// a thing standing still has left it inside the floor.
@@ -193,6 +194,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 		}
 
 		if velocity == zeroVec3 {
+			obj.stepTo = obj.Position()
 			continue
 		}
 
@@ -243,6 +245,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 				stepMovement = velocity.Mul(float32(deltaTime) / float32(steps))
 			}
 		}
+		obj.stepTo = obj.Position()
 		obj.SetGrounded(grounded)
 	}
 
@@ -301,11 +304,17 @@ func kinematic(acceleration mgl32.Vec3, velocity mgl32.Vec3, position mgl32.Vec3
 	return newPos
 }
 
+// stepFraction is how far the clock is into the next fixed step, 0 to 1.
+func (c *PhysicsSystem) stepFraction() float32 {
+	return float32(c.stepAccumulator / fixedTimeStep)
+}
+
 func (c *PhysicsSystem) PairsChecked() int {
 	return c.collisionPairsChecked
 }
 
 func (c *PhysicsSystem) AddObject(obj *PhysicsComponent) {
+	obj.system = c
 	c.movingObjects = append(c.movingObjects, obj)
 	obj.colliderBottom = obj.CollisionAABBAt(zeroVec3).Min().Y()
 	c.addToGrid(obj.Position(), obj)

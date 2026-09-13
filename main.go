@@ -1024,6 +1024,11 @@ func (g *Game) printDebugInfo() {
 		core.NewTableRow("Meshes", fmt.Sprintf("%d tris", meshTriangles), fmt.Sprintf("%d", meshDrawCalls)),
 		core.NewTableRow("Shadows", fmt.Sprintf("%d/%d lit", shadowPasses, litLights), fmt.Sprintf("gen %d", meshGen)),
 	}
+	// First, because it is the row read most: what a frame costs to draw, against
+	// the display's refresh. See GlApplication.WorkTimePercentiles.
+	if cost, budget := g.WorkTime(); cost != "" {
+		rows = append([]core.TableRow{core.NewTableRow("Draw ms", cost, budget)}, rows...)
+	}
 	debugLines := core.TableLayout(rows, []core.TextAlignment{core.AlignLeft, core.AlignRight, core.AlignRight})
 	g.PrintMulti(debugLines)
 }

@@ -51,6 +51,10 @@ type PhysicsComponent struct {
 	// can be noticed - see PhysicsSystem.keepStandingOnIt.
 	colliderBottom float32
 	isGrounded     bool
+	// system is the solver this is in, and stepFrom and stepTo where its last
+	// fixed step moved this thing from and to - see RenderPosition.
+	system           *PhysicsSystem
+	stepFrom, stepTo mgl32.Vec3
 }
 
 // PickBoxes is one kind's picking boxes: by animation, then by the facing the
@@ -75,6 +79,20 @@ func (g *PhysicsComponent) Position() mgl32.Vec3 {
 
 func (g *PhysicsComponent) SetPosition(pos mgl32.Vec3) {
 	g.resolver.Transform().SetPosition(pos)
+}
+
+// RenderPosition is where to draw this thing: part of the way from where the last
+// physics step started it to where that step left it, by how far the clock is
+// into the next one. The solver steps 60 times a second and the screen does not,
+// so drawing Position shows one place for two frames and then jumps - measured
+// on a 120 Hz panel as every other frame without a step. Moved since that step by
+// something other than the solver, a respawn say, it is drawn where it is.
+func (g *PhysicsComponent) RenderPosition() mgl32.Vec3 {
+	now := g.Position()
+	if g.system == nil || now != g.stepTo {
+		return now
+	}
+	return g.stepFrom.Add(now.Sub(g.stepFrom).Mul(g.system.stepFraction()))
 }
 
 // Transform is the frame this thing's collider stands in: where it is and which

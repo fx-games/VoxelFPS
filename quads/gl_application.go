@@ -46,9 +46,10 @@ type GlApplication struct {
 	ShouldDrawSprites    bool
 	ShouldDrawParticles  bool
 	ShouldDrawDebugInfo  bool
-	// ShouldShowPerformance gates the frame cost measurement and the title that
-	// reports it. Off means the work is not done at all, not merely hidden: the
-	// clock read, the ring write and the sort behind the title all stop.
+	// ShouldShowPerformance gates the frame cost measurement and the draw time row
+	// on the debug overlay that reports it. Off means the work is not done at all,
+	// not merely hidden: the clock read, the ring write and the sort behind the row
+	// all stop.
 	ShouldShowPerformance  bool
 	ShouldRenderFullscreen bool
 
@@ -149,6 +150,9 @@ type GlApplication struct {
 	workTimes     [workTimeWindow]float64
 	workTimeCount int
 	workTimeSort  []float64
+	// workTimeCost and workTimeBudget are the overlay's draw time row as last
+	// worked out - see WorkTime.
+	workTimeCost, workTimeBudget string
 
 	// A capture run: the frames to grab, where to write them, and the frame
 	// time to pretend every frame took. See Screenshots and FixedStep.
@@ -635,16 +639,16 @@ func (a *GlApplication) StartEventLoop() {
 				// Everything left in the frame is waiting for the compositor, so the
 				// work is measured here rather than at the swap - see WorkTimePercentiles.
 				a.recordWorkTime(glfw.GetTime() - time)
-				if a.Ticks%titleUpdateTicks == 0 {
-					a.Window.SetTitle(a.workTimeTitle())
+				if a.Ticks%workTimeUpdateTicks == 0 {
+					a.workTimeCost, a.workTimeBudget = a.workTimeText()
 				}
 			} else if a.workTimeCount > 0 {
 				// Switched off: drop the window rather than keep it, so turning the
-				// readout back on measures the scene it is turned on in, and take the
-				// last numbers out of the title rather than leave them there to be
-				// read as current.
+				// readout back on measures the scene it is turned on in, and blank the
+				// last numbers rather than leave them on the overlay to be read as
+				// current.
 				a.workTimeCount = 0
-				a.Window.SetTitle(windowTitle)
+				a.workTimeCost, a.workTimeBudget = "", ""
 			}
 
 			glhf.CheckGLError("end of frame") // no-op unless built with -tags debugGL
@@ -680,17 +684,18 @@ func (a *GlApplication) StartEventLoop() {
 	}
 }
 
-// workTimeWindow is how many frames the title's numbers are taken over, and
-// titleUpdateTicks is how often they are recomputed. Two seconds of window at 60
-// Hz is long enough that one hitch cannot move the middle of it, and short enough
-// to notice walking into a room that costs more to draw. The window is a count of
-// frames rather than a span of seconds so that sorting it is a fixed cost.
+// workTimeWindow is how many frames the overlay's draw time is taken over, and
+// workTimeUpdateTicks is how often it is recomputed - often enough to follow the
+// player into a heavier room, seldom enough that the digits can be read. Two
+// seconds of window at 60 Hz is long enough that one hitch cannot move the middle
+// of it. The window is a count of frames rather than a span of seconds so that
+// sorting it is a fixed cost.
 const (
-	workTimeWindow   = 120
-	titleUpdateTicks = 30
+	workTimeWindow      = 120
+	workTimeUpdateTicks = 30
 )
 
-// windowTitle is what the window is called when it is not reporting frame cost.
+// windowTitle is what the window is called.
 const windowTitle = "fps"
 
 // recordWorkTime keeps the last workTimeWindow work times, oldest overwritten
@@ -709,7 +714,7 @@ func (a *GlApplication) recordWorkTime(worked float64) {
 // have used, and measuring it made the readout say more about the window server
 // than about the renderer. A whole frame time cannot say whether there is room to
 // draw more. This can: it is the part of the refresh interval that is actually
-// yours, and the interval it has to fit inside is in the title next to it.
+// yours, and the interval it has to fit inside is on the overlay next to it.
 func (a *GlApplication) WorkTimePercentiles() (median, p95 float64) {
 	filled := a.filledWorkTimes()
 	if filled == 0 {
@@ -750,17 +755,24 @@ func (a *GlApplication) filledWorkTimes() int {
 	return a.workTimeCount
 }
 
-// workTimeTitle is the window title: what a frame costs, against what there is to
-// spend. The budget is left out when GLFW has no monitor to ask for a refresh
-// rate, which is a display asleep or a session with none.
-func (a *GlApplication) workTimeTitle() string {
+// workTimeText is the draw time row's two cells: what a frame costs, and what
+// there is to spend. The budget is left empty when GLFW has no monitor to ask for
+// a refresh rate, which is a display asleep or a session with none.
+func (a *GlApplication) workTimeText() (cost, budget string) {
 	median, p95 := a.WorkTimePercentiles()
-	title := fmt.Sprintf("draw ms median %.2f p95 %.2f", median*1000, p95*1000)
-	if budget := refreshInterval(); budget > 0 {
-		over, of := a.WorkFramesOverBudget(budget)
-		title += fmt.Sprintf(" of %.2f, %d of %d over", budget*1000, over, of)
+	cost = fmt.Sprintf("med %.2f p95 %.2f", median*1000, p95*1000)
+	if interval := refreshInterval(); interval > 0 {
+		over, of := a.WorkFramesOverBudget(interval)
+		budget = fmt.Sprintf("of %.2f, %d/%d over", interval*1000, over, of)
 	}
-	return title
+	return cost, budget
+}
+
+// WorkTime is the draw time as the debug overlay shows it, refreshed every
+// workTimeUpdateTicks: empty while Show Performance is off and until the first
+// refresh after it is turned on.
+func (a *GlApplication) WorkTime() (cost, budget string) {
+	return a.workTimeCost, a.workTimeBudget
 }
 
 // refreshInterval is how long one refresh of the primary monitor lasts, and 0 when

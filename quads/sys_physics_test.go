@@ -675,3 +675,31 @@ func TestNothingFallsWhereThereIsNoGravity(t *testing.T) {
 		t.Errorf("object inside the hull is at %v, want it fallen", pos)
 	}
 }
+
+// Drawn between steps, a thing walking at a steady speed covers the same ground
+// every frame. Drawn where the last step left it, a 120 Hz frame covers none and
+// then twice as much, which is what walking felt like on a ProMotion panel.
+func TestRenderPositionMovesEveryFrame(t *testing.T) {
+	system := NewCollisionSolver(func(x, y, z int32) bool { return false })
+	object := mover(t, mgl32.Vec3{0.5, 0.5, 0.5})
+	system.AddObject(object)
+
+	const frame, speed = 1.0 / 120.0, 6.0
+	last := object.RenderPosition().X()
+	for tick := 0; tick < 24; tick++ {
+		object.SetVelocity(mgl32.Vec3{speed, 0, 0})
+		system.Update(frame)
+		x := object.RenderPosition().X()
+		if moved := float64(x - last); tick > 2 && math.Abs(moved-speed*frame) > 0.002 {
+			t.Errorf("frame %d moved %.4f, want %.4f", tick, moved, speed*frame)
+		}
+		last = x
+	}
+
+	// Put somewhere by something other than the solver: drawn there, not
+	// slid across the level to it.
+	object.SetPosition(mgl32.Vec3{40, 0.5, 0.5})
+	if drawn := object.RenderPosition(); drawn != object.Position() {
+		t.Errorf("teleported to %v, drawn at %v", object.Position(), drawn)
+	}
+}
