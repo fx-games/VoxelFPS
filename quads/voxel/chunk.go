@@ -268,7 +268,9 @@ func (c *Chunk) GreedyMeshing() *MeshBuffer {
 		}
 	}
 
-	println(fmt.Sprintf("[Greedy] Chunk %d,%d,%d was meshed into %d triangles", c.chunkPosX, c.chunkPosY, c.chunkPosZ, mesh.TriangleCount()))
+	if glhf.Verbose {
+		println(fmt.Sprintf("[Greedy] Chunk %d,%d,%d was meshed into %d triangles", c.chunkPosX, c.chunkPosY, c.chunkPosZ, mesh.TriangleCount()))
+	}
 	//return c.meshBuffer
 	return mesh
 }

@@ -223,6 +223,7 @@ type Window struct {
 	frame       chan struct{}
 	raf         js.Func
 	funcs       []js.Func
+	presented   bool
 }
 
 func mods(e js.Value) ModifierKey {
@@ -392,6 +393,12 @@ func (w *Window) MakeContextCurrent() { windows = append(windows, w) }
 func (w *Window) SwapBuffers() {
 	js.Global().Call("requestAnimationFrame", w.raf)
 	<-w.frame
+	if !w.presented {
+		w.presented = true
+		if hook := js.Global().Get("__firstFrame"); hook.Type() == js.TypeFunction {
+			hook.Invoke() // the page drops its loading message
+		}
+	}
 }
 
 func (w *Window) ShouldClose() bool                            { return w.shouldClose }

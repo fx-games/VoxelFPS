@@ -105,7 +105,9 @@ func NewVertexArray[V any](shader *Shader, isDynamic bool) *VertexArray[V] {
 	gl.GenBuffers(1, &va.vbo.obj) // create buffer
 	defer va.vbo.bind().restore()
 
-	println("BUFFER name created", va.DebugName, va.vbo.obj)
+	if Verbose {
+		println("BUFFER name created", va.DebugName, va.vbo.obj)
+	}
 
 	glError = gl.GetError()
 	if glError != gl.NO_ERROR {
@@ -124,6 +126,10 @@ func NewVertexArray[V any](shader *Shader, isDynamic bool) *VertexArray[V] {
 
 	return va
 }
+
+// Verbose turns on the per-buffer and per-chunk debug prints. Off by default:
+// they are hundreds of lines per level load.
+var Verbose = false
 
 func (va *VertexArray[V]) CreateQuadIndexBuffer(quadCount int) {
 	indices := make([]uint32, quadCount*6)
@@ -362,7 +368,9 @@ func (va *VertexArray[V]) setVertexDataWithOffset(offset int, data []V) {
 
 func (va *VertexArray[V]) Orphanize() {
 	gl.BufferData(gl.ARRAY_BUFFER, va.currentBufferSize, nil, va.use)
-	println("BUFFER orphanized", va.DebugName, va.vbo.obj)
+	if Verbose {
+		println("BUFFER orphanized", va.DebugName, va.vbo.obj)
+	}
 }
 func (va *VertexArray[V]) SetVertexData(data []V) {
 	va.setVertexDataWithOffset(0, data)
@@ -372,7 +380,9 @@ func (va *VertexArray[V]) setNewBuffer(data []V) {
 	va.vertexCount = len(data) / va.ElementsPerVertex()
 	va.currentBufferSize = len(data) * va.arrayElementSizeInBytes
 	gl.BufferData(gl.ARRAY_BUFFER, va.currentBufferSize, gl.Ptr(data), va.use)
-	println("BUFFER created", va.vbo.obj, va.DebugName, "size", va.currentBufferSize)
+	if Verbose {
+		println("BUFFER created", va.vbo.obj, va.DebugName, "size", va.currentBufferSize)
+	}
 }
 
 func (va *VertexArray[V]) VertexData() []V {
