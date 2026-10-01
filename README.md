@@ -60,7 +60,7 @@ assets embedded, and puts it with `janus.wasm.gz` and `wasm_exec.js` next to the
 the site's `janus-station/play/`. The page's query string is the command line
 (`?weapon=colt45&at=18,1.6,6.5`). On the web there are no particles (they need a
 geometry shader), no wireframe, no GPU timers and no music (no soundfont); only
-`raymap` and the weapons in `keys.txt` are embedded, and nothing is saved.
+the Ark and the weapons in `keys.txt` are embedded, and nothing is saved.
 
 `-map <name>` picks any level under `assets/maps/`, and `-stress` generates one
 instead of loading it:
@@ -71,7 +71,7 @@ go run . -map doors                 # three slide doors and a swing door
 go run . -stress -stress-lights 8   # a hall of pillars and barrels, for frame times
 ```
 
-The shipped levels are `raymap` (the default), `shadowtest`, `stairs`, `actors`,
+The shipped levels are `ark` (the default, the generation ship), `raymap` (the old test map), `shadowtest`, `stairs`, `actors`,
 `doors` and `computer`.
 
 Frame times, for before/after on the render path:
@@ -222,7 +222,7 @@ together so a map can never be opened against another one's geometry, and a
 `map.json` with no `map.bin` beside it is an empty level, which is where
 building one from scratch starts.
 
-`-map <name>` picks one at startup (default `raymap`), and `F1 > Load Map` -
+`-map <name>` picks one at startup (default `ark`), and `F1 > Load Map` -
 or `R > Load Map` in the editor - switches between them while the game is
 running, listing whatever folders are there.
 

@@ -18,12 +18,12 @@ import (
 	"unsafe"
 )
 
-// What the default level (raymap) touches, plus the weapons keys.txt binds.
+// What the default level (the Ark) touches, plus the weapons keys.txt binds.
 // Left out: the other levels, the other 140-odd weapons, the soundfont (no
 // music on js), and the texture library and skyboxes the editor browses.
 //
 //go:embed assets/base assets/maps/ark assets/skybox/blink assets/meshes assets/dialogue
-//go:embed assets/sprites/items assets/sprites/props assets/sprites/actors/*/*/*.json assets/sprites/actors/humans/scientist
+//go:embed assets/sprites/items assets/sprites/props assets/sprites/actors/*/*/*.json assets/sprites/actors/humans/scientist assets/sprites/actors/humans/scientist_hologram
 //go:embed all:assets/weapons/_actors assets/weapons/_sprites.png assets/weapons/keys.txt
 //go:embed assets/weapons/small_gun assets/weapons/bd_fists assets/weapons/bd_axe assets/weapons/colt45
 //go:embed assets/weapons/blacktail_51_connector assets/weapons/fd_borstal_shotgun assets/weapons/fd_machine_gun
@@ -31,7 +31,7 @@ import (
 var webAssets embed.FS
 
 // webStubs lists, as "size path" lines, files that are looked at but never read
-// in a raymap session: the other actors' sheets and sounds (the sprite loader
+// in an Ark session: the sheets of actors the Ark does not place and sounds (the sprite loader
 // checks they exist) and the shared weapon pictures (the packed atlas is keyed by
 // their names and sizes). They are mounted with their size and no bytes, which
 // saves 26 MB. build_web.sh writes the list.
