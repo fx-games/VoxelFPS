@@ -4,12 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/audio"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/eassets"
 	"github.com/memmaker/goray/events"
+	"github.com/memmaker/goray/platform/glfw"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
@@ -202,6 +202,9 @@ type Game struct {
 
 	relativeHitPos mgl32.Vec3
 	entityMenu     *quads.GuiList
+	// lastEntityID is the highest instance number handed out in this level -
+	// see core.MapEntity.ID.
+	lastEntityID uint64
 
 	widgetStack                []InputReceiver
 	widgetsAreBlockingMovement bool
@@ -377,7 +380,7 @@ type Game struct {
 	// climbVolumes are the world-space boxes a ladder's Climbable boxes turned
 	// into: standing inside one lets pollInput move the player straight up or
 	// down instead of falling. See registerClimbable.
-	climbVolumes []voxel.AABB
+	climbVolumes []climbVolume
 
 	// actors are every NPC/monster in the level - see actor.go.
 	actors []*Actor
@@ -796,7 +799,11 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// Spawn Entities. Each one is remembered as it goes in, so that a save
 	// writes the whole level back out rather than only the part of it the
 	// editor happened to add this run.
-	g.placed = nil
+	g.placed, g.lastEntityID = nil, 0
+	// Numbers already in the file are kept, so a new one counts on past them.
+	for _, spawn := range mapLoad.Entities {
+		g.lastEntityID = max(g.lastEntityID, spawn.Entity.ID)
+	}
 	for _, spawn := range mapLoad.Entities {
 		spawnPos, entity := spawn.Position, spawn.Entity
 		object := g.spawnEntity(spawnPos, entity)
@@ -1093,7 +1100,11 @@ func (g *Game) DrawGui(elapsed float64) {
 		// collider like anything else, named, and waiting for the key that
 		// takes it.
 		topLeft := g.drawSelectionOutline(g.getHoveredOBB(pickup.object))
-		g.drawSelectionLabel(topLeft, pickup.object.DisplayName+"  [E]")
+		label := pickup.object.DisplayName + "  [E]"
+		if g.editor.active {
+			label = g.editorLabel(pickup.object)
+		}
+		g.drawSelectionLabel(topLeft, label)
 	} else if hoveredObj := g.hoveredObj(); hoveredObj != nil {
 		aabb, transform := g.getHoveredOBB(hoveredObj)
 		topLeft := g.drawSelectionOutline(aabb, transform)
@@ -1101,7 +1112,11 @@ func (g *Game) DrawGui(elapsed float64) {
 		if g.relativeHitPos.Y() > 0.6 && g.relativeHitPos.Y() < 0.8 {
 			hitZone = "head"
 		}
-		if g.drawSelectionLabel(topLeft, fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)) &&
+		label := fmt.Sprintf("%s (%s)", hoveredObj.DisplayName, hitZone)
+		if g.editor.active {
+			label = g.editorLabel(hoveredObj)
+		}
+		if g.drawSelectionLabel(topLeft, label) &&
 			g.entityMenu != nil {
 			g.entityMenu.Draw()
 		}
@@ -1184,8 +1199,9 @@ func (g *Game) hoveredObj() *quads.GameObject {
 	// stops a bullet and it caps the pickup beam - but the selection looks
 	// through it at whatever is standing on it, rather than outlining the shelf
 	// and offering to remove it.
+	// The editor is where picking the shelf itself is the point.
 	object := g.lastHitResult.HitObject
-	if g.furniture[object] {
+	if g.furniture[object] && !g.editor.active {
 		return nil
 	}
 	return object
@@ -1232,8 +1248,11 @@ func (g *Game) updateGUI(elapsed float64) {
 		if wallPos, facing, onWall := g.lastHitResult.WallPosition(); onWall && g.placingWallPiece() {
 			ghost.Transform().SetPosition(wallPos)
 			ghost.Transform().SetForward2D(facing)
+			if g.editor.grabbed != nil {
+				g.editor.grabEntity.Facing = facing
+			}
 		} else if groundPos, hitGround := g.lastHitResult.GroundPosition(); hitGround {
-			ghost.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid))
+			ghost.Transform().SetPosition(ghostPosition(groundPos, g.editor.snapToGrid).Add(mgl32.Vec3{0, g.editor.lift, 0}))
 		}
 	}
 
@@ -1368,6 +1387,17 @@ func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
 				continue
 			}
 			nearest, nearestObj = intersectionDistance, gObj
+		}
+		// A solid cell's face is the first thing in it. Graffiti or a sign on a
+		// wall overlaps the wall's cell as well as the air in front, so a ray
+		// entering the wall from behind met its box a whole voxel past the face
+		// and selected paint through the wall.
+		if nearestObj != nil && g.CubeMap.IsSolidBlockAt(x, y, z) {
+			cell := mgl32.Vec3{float32(x), float32(y), float32(z)}
+			face, _ := voxel.IntersectRayAABB(origin, direction, voxel.NewAABB(cell, cell.Add(mgl32.Vec3{1, 1, 1})))
+			if nearest > face+1e-3 {
+				nearestObj = nil
+			}
 		}
 		if nearestObj != nil {
 			collisionWorldPos := origin.Add(direction.Mul(float32(nearest)))

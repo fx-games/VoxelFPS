@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/goray/platform/glfw"
 	"log"
 	"maps"
 	"os"
@@ -58,6 +58,7 @@ const (
 	ActionEditorCycleMode         = "EditorCycleMode"
 	ActionEditorRotate            = "EditorRotate"
 	ActionEditorOpenPicker        = "EditorOpenPicker"
+	ActionEditorMove              = "EditorMove"
 	ActionToggleEmissiveTexture   = "ToggleEmissiveTexture"
 	ActionEntityMenuNext          = "EntityMenuNext"
 	ActionEntityMenuPrevious      = "EntityMenuPrevious"
@@ -112,7 +113,9 @@ var defaultKeyBindings = map[string]glfw.Key{
 	ActionEditorCycleMode: glfw.KeyQ,
 	ActionEditorRotate:    glfw.KeyZ,
 	// B for browse, next to the other two editor keys and free in every mode.
-	ActionEditorOpenPicker:      glfw.KeyB,
+	ActionEditorOpenPicker: glfw.KeyB,
+	// M for move: takes what the crosshair is on into hand - see grabHovered.
+	ActionEditorMove:            glfw.KeyM,
 	ActionToggleEmissiveTexture: glfw.KeyX,
 	ActionEntityMenuNext:        glfw.KeyL,
 	ActionEntityMenuPrevious:    glfw.KeyK,

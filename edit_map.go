@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
 	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/goray/platform/glfw"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 )
@@ -133,6 +133,10 @@ func (g *Game) openVoxelEditMenu() {
 // atlas holds copies, and this is where the copies that nothing points at any
 // more are dropped.
 func (g *Game) saveMap() error {
+	// A thing in hand is out of the level, so a save would lose it: back it goes.
+	if g.editor.grabbed != nil {
+		g.dropGrabbed(false)
+	}
 	// The block list and the block in the brush point at slots too, and a bake
 	// that dropped them would leave both painting with whatever moved in.
 	designs := g.editor.blocks
@@ -298,6 +302,14 @@ type Editor struct {
 	actors        []core.MapEntity
 	actorIndex    int
 	selectedActor *Actor
+
+	// The thing the move key has taken out of the level: grabbed is the object
+	// it was - dead, and the key to its record until it is put down - grabEntity
+	// what putting it down writes, turned and sized by then, and lift how far
+	// above the surface under the crosshair it is held. See grabHovered.
+	grabbed    *quads.GameObject
+	grabEntity core.MapEntity
+	lift       float32
 
 	// The ghost following the crosshair: what a click would leave standing
 	// there. Which piece it is is the placement palette's own propIndex, so the

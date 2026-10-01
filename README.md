@@ -1,8 +1,9 @@
-# go-fps
+# Janus Station
 
-A from-scratch first-person engine in Go: OpenGL 3.3 core renderer, voxel/quad world,
-in-game level editor. Not a game — a sandbox that boots into a small test map you
-can walk around, shoot in, and edit while it runs.
+A first-person shooter set aboard a space station, on a from-scratch engine in Go
+(the go-fps engine): OpenGL 3.3 core renderer, voxel/quad world, in-game level
+editor. Still more sandbox than game — it boots into a small test map you can walk
+around, shoot in, and edit while it runs. It also runs in the browser (WebGL2).
 
 ![Go](https://img.shields.io/badge/go-1.23-blue)
 
@@ -51,6 +52,15 @@ Needs cgo, a C toolchain and GLFW system libs (`brew install glfw` on macOS).
 ```bash
 go run .
 ```
+
+### In the browser
+
+`./build_web.sh` builds `janus.wasm` (WebAssembly + WebGL2) with the default level's
+assets embedded, and puts it with `janus.wasm.gz` and `wasm_exec.js` next to the page in
+the site's `janus-station/play/`. The page's query string is the command line
+(`?weapon=colt45&at=18,1.6,6.5`). On the web there are no particles (they need a
+geometry shader), no wireframe, no GPU timers and no music (no soundfont); only
+`raymap` and the weapons in `keys.txt` are embedded, and nothing is saved.
 
 `-map <name>` picks any level under `assets/maps/`, and `-stress` generates one
 instead of loading it:

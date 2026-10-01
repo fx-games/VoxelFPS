@@ -1,9 +1,9 @@
 package glhf
 
 import (
-	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/platform/gl"
 	"math"
 	"math/rand"
 )

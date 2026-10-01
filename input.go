@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-gl/gl/v3.3-core/gl"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/events"
+	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/goray/platform/glfw"
 	"maps"
 )
 
@@ -144,7 +144,10 @@ func (g *Game) HandleKeyEvents(key glfw.Key, scancode int, action glfw.Action, m
 			g.editorTabAction()
 		}
 		if key == g.key(ActionEditorRotate) {
-			g.rotateProp()
+			g.rotateProp(mods&glfw.ModShift != 0)
+		}
+		if key == g.key(ActionEditorMove) {
+			g.grabHovered()
 		}
 		// One key, every mode: the browser for whatever this mode places. The
 		// palettes are hundreds of pieces long now, so the wheel is for the
@@ -408,6 +411,13 @@ func (g *Game) HandleMouseButtonEvents(xpos float64, ypos float64, button glfw.M
 // editor mode - is whatever the current mode says. Left builds, right takes
 // back: a pending voxel corner, a prop, the last waypoint of a route.
 func (g *Game) editorClick(button glfw.MouseButton) {
+	// Something in hand is put down or put back, whatever the mode.
+	if g.editor.grabbed != nil {
+		if button == glfw.MouseButtonLeft || button == glfw.MouseButtonRight {
+			g.dropGrabbed(button == glfw.MouseButtonLeft)
+		}
+		return
+	}
 	if g.editor.mode.placesProps() {
 		if button == glfw.MouseButtonRight {
 			g.deleteHovered()

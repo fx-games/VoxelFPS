@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 )
 
 const SizeOfFloat32 = 4

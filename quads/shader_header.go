@@ -371,7 +371,7 @@ vec4 finalColor(vec4 surfaceColor, vec3 fragWorldPos, vec3 fragWorldNormal, vec3
     // GLSL does not zero locals: this is accumulated into below, so it has to start at 0.
     vec3 spotLightColor = vec3(0.0);
     uint lightCount = uint(lightCounts.x);
-    for (uint i = 0; i < lightCount; i++) {
+    for (uint i = 0u; i < lightCount; i++) {
         LightInfo curLight = lights[i];
         // switched off, and its shadow map is stale
         if (curLight.color.rgb == vec3(0.0) || curLight.color.a <= 0.0) {

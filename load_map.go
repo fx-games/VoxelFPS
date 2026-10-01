@@ -39,6 +39,7 @@ type mapFile struct {
 	SkyFullSphere bool
 	Station       *core.Station
 	Panes         []core.Pane
+	Edited        bool `json:",omitempty"`
 }
 
 func toMapFile(m core.MapLoadResult) mapFile {
@@ -64,6 +65,7 @@ func toMapFile(m core.MapLoadResult) mapFile {
 		SkyFullSphere:   m.SkyFullSphere,
 		Station:         m.Station,
 		Panes:           m.Panes,
+		Edited:          m.Edited,
 	}
 }
 
@@ -83,6 +85,7 @@ func (f mapFile) toLoadResult() core.MapLoadResult {
 		SkyFullSphere:   f.SkyFullSphere,
 		Station:         f.Station,
 		Panes:           f.Panes,
+		Edited:          f.Edited,
 	}
 }
 
@@ -119,7 +122,7 @@ func loadJSONMap(filename string) (core.MapLoadResult, error) {
 const mapDir = "assets/maps"
 
 // defaultMapName is the level a run with no -map starts in.
-const defaultMapName = "raymap"
+const defaultMapName = "ark"
 
 const (
 	mapFileName   = "map.json"

@@ -42,7 +42,7 @@ func (g *Game) climbVelocity(physics *quads.PhysicsComponent, wishDir mgl32.Vec3
 // onLadder reports whether pos is inside any registered climb volume.
 func (g *Game) onLadder(pos mgl32.Vec3) bool {
 	for _, volume := range g.climbVolumes {
-		if volume.Contains(pos) {
+		if volume.piece.IsAlive() && volume.box.Contains(pos) {
 			return true
 		}
 	}

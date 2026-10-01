@@ -121,6 +121,12 @@ func TestAShelfIsOneThingAndIsNotSelectable(t *testing.T) {
 	if looking(barrel, false).hoveredObj() == nil {
 		t.Errorf("the selection lost the barrel with the shelves")
 	}
+	// The editor picks out everything, furniture included.
+	editing := looking(rack, true)
+	editing.editor.active = true
+	if editing.hoveredObj() != rack {
+		t.Errorf("the editor could not select %s", rack.DisplayName)
+	}
 }
 
 // ladderAt is one of the ark's own ladder segments: the piece out of its

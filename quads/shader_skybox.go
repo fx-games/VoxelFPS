@@ -2,8 +2,8 @@ package quads
 
 import (
 	"fmt"
-	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/platform/gl"
 	"github.com/memmaker/goray/quads/glhf"
 )
 
@@ -18,7 +18,9 @@ func LoadSkyboxShader(cam core.Camera, uboBlock string) *glhf.Shader {
 			{Name: "position", Type: glhf.Vec3},
 		}
 		uniformFormat = glhf.AttrFormat{
-			glhf.Attr{Name: "camProjectionView", Type: glhf.Mat4},
+			// Not camProjectionView: the fragment stage includes the Main block, which has
+			// a field of that name, and GLSL ES does not allow the two to share it.
+			glhf.Attr{Name: "skyProjectionView", Type: glhf.Mat4},
 			glhf.Attr{Name: "horizonFadeDegrees", Type: glhf.Float},
 			//glhf.Attr{Name: "drawColor", Type: glhf.Vec3},
 		}
@@ -51,13 +53,13 @@ const skyboxVertexShaderSource = `#version 400 core
 
 in vec3 position;
 
-uniform mat4 camProjectionView;
+uniform mat4 skyProjectionView;
 
 out vec3 TexCoords;
 
 void main() {
     TexCoords = position;
-    vec4 pos = camProjectionView * vec4(position, 1.0);
+    vec4 pos = skyProjectionView * vec4(position, 1.0);
     gl_Position = pos.xyww;
 }`
 

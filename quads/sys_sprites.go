@@ -2,9 +2,9 @@ package quads
 
 import (
 	"cmp"
-	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/platform/gl"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
 	"slices"
@@ -23,6 +23,10 @@ const (
 	// quad that did not turn at all would go edge on and vanish as you walked
 	// round it. See SpriteComponent.BeamTo.
 	SpriteModeBeam
+	// SpriteModeFacing is a quad that does not turn to be looked at: it faces
+	// the way its transform is rotated, and from behind it is not there. A
+	// picture on the face of a block that is otherwise air.
+	SpriteModeFacing
 )
 
 type SpriteOrigin uint8

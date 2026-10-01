@@ -13,9 +13,10 @@
 //	go run ./tools/mapgen -help                 # every command, with its arguments
 //
 // The text is the source and the two files are the output, the same way
-// tools/genstairs owns the stairs it draws. Editing a built level in the game
-// and saving writes map.bin back, and the next build overwrites it - so a level
-// is authored in one place or the other, not both.
+// tools/genstairs owns the stairs it draws - until the level is saved from the
+// game's editor. That unlinks it: map.json says Edited, the editor is the
+// level's source from then on, and a build refuses to overwrite it (-force
+// does, and throws the edits away).
 //
 // Commands, one a line, # to end of line is a comment, blank lines ignored.
 // Positional arguments first, then any number of key=value options.
@@ -153,6 +154,7 @@ func main() {
 	checkLeaks := flag.Bool("leaks", false, "after building, flood the air from the spawn and say whether it reaches vacuum")
 	checkReach := flag.Bool("reach", false, "after building, say whether every sign can be got to from the spawn")
 	gallery := flag.Bool("gallery", false, "write the imported gallery's build.map from whatever is installed")
+	force := flag.Bool("force", false, "build even over a level the editor has saved, throwing its edits away")
 	flag.Parse()
 
 	if *gallery {
@@ -178,6 +180,15 @@ func main() {
 			fmt.Print(slice(blocks, int32(*show)))
 		}
 		return
+	}
+
+	// A level saved from the editor is its own source now and build.map no longer
+	// describes it, so building would throw the editing away.
+	if existing, err := os.ReadFile(filepath.Join(dir, mapFileName)); err == nil && !*force {
+		var saved struct{ Edited bool }
+		if json.Unmarshal(existing, &saved) == nil && saved.Edited {
+			fatal(fmt.Errorf("%s has been saved from the editor, so %s no longer describes it; -force builds over the edits", *name, scriptName))
+		}
 	}
 
 	script, err := os.ReadFile(filepath.Join(dir, scriptName))
@@ -610,6 +621,11 @@ func (l *level) run(words []string, options map[string]string) error {
 				return err
 			}
 			entity.Facing = direction
+		}
+		// scale= stands a piece bigger or smaller than its model or picture, as
+		// the editor's wheel does - see core.MapEntity.Scale.
+		if entity.Scale, err = option(options, "scale", 0); err != nil {
+			return err
 		}
 		// patrol= is the route a walking entity beats, one leg an "X,Y,Z"
 		// point and ";" between them - see core.MapEntity.Patrol. An actor

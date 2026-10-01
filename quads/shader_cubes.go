@@ -1,8 +1,8 @@
 package quads
 
 import (
-	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/platform/gl"
 	"github.com/memmaker/goray/quads/glhf"
 )
 
@@ -14,6 +14,7 @@ const (
 	CubeShaderEmissiveCutoff
 	CubeShaderEmissiveSaturation
 	CubeShaderAmbientOcclusion
+	CubeShaderSmoothTexels
 )
 
 // Marking a texture emissive does not light the whole tile: it lights the texels that
@@ -60,6 +61,9 @@ func LoadCubeShader(uboBlock string) *glhf.Shader {
 			glhf.Attr{Name: "emissiveSaturation", Type: glhf.Float}, // 5
 			// How dark a fully enclosed corner gets, 0 for no ambient occlusion.
 			glhf.Attr{Name: "ambientOcclusion", Type: glhf.Float}, // 6
+			// Not 0: the texels of a face are blended, not drawn as squares. Off
+			// unless a game asks, see GlApplication.SetSmoothBlocks.
+			glhf.Attr{Name: "smoothTexels", Type: glhf.Int}, // 7
 		}
 		shader *glhf.Shader
 	)
@@ -238,6 +242,7 @@ uniform sampler2D tex;
 uniform usamplerBuffer voxelLookup;
 uniform float emissiveStrength;
 uniform float ambientOcclusion;
+uniform int smoothTexels;
 
 // One lookup entry describes one face: the top bit marks it emissive, the next four
 // carry its baked torch light, then a bit saying a block is there at all, the rest is
@@ -338,31 +343,45 @@ void main() {
     uint tileY = uint(textureIndex / uint(atlasGridSize.x)) * tileHeight;
 
     // Compute texel coordinate within the tile
-    uint localU = uint(0);
-    uint localV = uint(0);
+    float localU = 0.0;
+    float localV = 0.0;
 
     if (VertNormal.z > 0.0) {
-        localU = uint(fract(VertPos.x) * tileWidth);
-        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
+        localU = fract(VertPos.x) * float(tileWidth);
+        localV = (1.0 - fract(VertPos.y)) * float(tileHeight);
     } else if (VertNormal.z < 0.0) {
-        localU = uint((1.0 - fract(VertPos.x)) * tileWidth);
-        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
+        localU = (1.0 - fract(VertPos.x)) * float(tileWidth);
+        localV = (1.0 - fract(VertPos.y)) * float(tileHeight);
     } else if (VertNormal.x > 0.0) {
-        localU = uint((1.0 - fract(VertPos.z)) * tileWidth);
-        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
+        localU = (1.0 - fract(VertPos.z)) * float(tileWidth);
+        localV = (1.0 - fract(VertPos.y)) * float(tileHeight);
     } else if (VertNormal.x < 0.0) {
-        localU = uint(fract(VertPos.z) * tileWidth);
-        localV = uint((1.0 - fract(VertPos.y)) * tileHeight);
+        localU = fract(VertPos.z) * float(tileWidth);
+        localV = (1.0 - fract(VertPos.y)) * float(tileHeight);
     } else if (VertNormal.y > 0.0) {
-        localU = uint(fract(VertPos.x) * tileWidth);
-        localV = uint(fract(VertPos.z) * tileHeight);
+        localU = fract(VertPos.x) * float(tileWidth);
+        localV = fract(VertPos.z) * float(tileHeight);
     } else if (VertNormal.y < 0.0) {
-        localU = uint((1.0 - fract(VertPos.x)) * tileWidth);
-        localV = uint(fract(VertPos.z) * tileHeight);
+        localU = (1.0 - fract(VertPos.x)) * float(tileWidth);
+        localV = fract(VertPos.z) * float(tileHeight);
     }
-    ivec2 texelCoord = ivec2(tileX + localU, tileY + localV);
+    ivec2 tileOrigin = ivec2(tileX, tileY);
+    ivec2 lastTexel = ivec2(tileWidth, tileHeight) - 1;
 
-    vec4 surfaceColor = texelFetch(tex, texelCoord, 0);
+    vec4 surfaceColor = texelFetch(tex, tileOrigin + ivec2(uvec2(localU, localV)), 0);
+    if (smoothTexels != 0) {
+        // Bilinear between the four nearest texels, all of this tile: the atlas
+        // sampler would blend in the next tile at the edges.
+        vec2 at = vec2(localU, localV) - 0.5;
+        ivec2 low = ivec2(floor(at));
+        vec2 f = at - vec2(low);
+        ivec2 a = clamp(low, ivec2(0), lastTexel);
+        ivec2 b = clamp(low + 1, ivec2(0), lastTexel);
+        surfaceColor = mix(
+            mix(texelFetch(tex, tileOrigin + a, 0), texelFetch(tex, tileOrigin + ivec2(b.x, a.y), 0), f.x),
+            mix(texelFetch(tex, tileOrigin + ivec2(a.x, b.y), 0), texelFetch(tex, tileOrigin + b, 0), f.x),
+            f.y);
+    }
     
     vec3 fragWorldNormal = (modelTransform * vec4(VertNormal, 0.0)).xyz;
 

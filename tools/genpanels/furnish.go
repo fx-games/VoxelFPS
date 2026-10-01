@@ -298,6 +298,22 @@ func drawTile(atlas *image.NRGBA, area image.Rectangle, tile string, seed int64)
 
 func clamp(v int) uint8 { return uint8(max(0, min(255, v))) }
 
+// crop narrows a square cell's UV rectangle to a w by h face's proportions,
+// keeping its middle, so a texel is as wide on the face as it is tall. The
+// face's longer side gets the whole cell: a crate's front wears its whole
+// stencil, a pipe the strip through its texture's middle.
+func crop(uv [4]float32, w, h float32) (u0, v0, u1, v1 float32) {
+	side := max(w, h)
+	du := (uv[2] - uv[0]) * (1 - w/side) / 2
+	dv := (uv[3] - uv[1]) * (1 - h/side) / 2
+	return uv[0] + du, uv[1] + dv, uv[2] - du, uv[3] - dv
+}
+
+// span is the length of a box edge, which runs along one axis.
+func span(a, b [3]float32) float32 {
+	return max(a[0]-b[0], b[0]-a[0]) + max(a[1]-b[1], b[1]-a[1]) + max(a[2]-b[2], b[2]-a[2])
+}
+
 // texturedBox is box with a texture rectangle per face: front on the face
 // looking along -Z, side on the other five.
 func texturedBox(min, max [3]float32, side, front [4]float32,
@@ -322,7 +338,11 @@ func texturedBox(min, max [3]float32, side, front [4]float32,
 			*positions = append(*positions, corners[c])
 			*normals = append(*normals, f.normal)
 		}
-		u0, v0, u1, v1 := f.uv[0], f.uv[1], f.uv[2], f.uv[3]
+		// u runs from the face's second corner to its third, v from its first
+		// to its second.
+		u0, v0, u1, v1 := crop(f.uv,
+			span(corners[f.corner[1]], corners[f.corner[2]]),
+			span(corners[f.corner[0]], corners[f.corner[1]]))
 		*uvs = append(*uvs, [2]float32{u0, v0}, [2]float32{u0, v1}, [2]float32{u1, v1}, [2]float32{u1, v0})
 		*indices = append(*indices, base, base+1, base+2, base, base+2, base+3)
 	}

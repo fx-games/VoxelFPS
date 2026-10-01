@@ -146,7 +146,7 @@ func loadScenery(dir string) (map[string]*Scenery, error) {
 func (s *Scenery) colliders(piece *quads.GameObject) []*quads.PhysicsComponent {
 	boxes := make([]*quads.PhysicsComponent, 0, len(s.Colliders))
 	for _, box := range s.Colliders {
-		physics := quads.NewPhysicsComponent(false, voxel.NewAABB(box[0], box[1]))
+		physics := quads.NewPhysicsComponent(false, voxel.NewAABB(box[0], box[1]).Scaled(piece.Transform().GetScale()))
 		physics.Init(piece)
 		boxes = append(boxes, physics)
 	}
@@ -166,8 +166,8 @@ func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo 
 	// as world extents and checked against the player's position directly, with
 	// no piece and no matrix anywhere in the path - see Game.onLadder.
 	for _, box := range def.Climbable {
-		world := voxel.NewAABB(box[0], box[1]).Rotated(rotation).Add(pos)
-		g.climbVolumes = append(g.climbVolumes, world)
+		world := voxel.NewAABB(box[0], box[1]).Scaled(piece.Transform().GetScale()).Rotated(rotation).Add(pos)
+		g.climbVolumes = append(g.climbVolumes, climbVolume{box: world, piece: piece})
 	}
 	if climbTo != nil && g.Pathfinder != nil {
 		bottom := geometry.Point{X: int(pos.X()), Y: int(pos.Z())}
@@ -224,4 +224,12 @@ func (g *Game) spawnScenery(id string, pos mgl32.Vec3, solid bool) *quads.GameOb
 		return nil
 	}
 	return g.spawnEntity(pos, core.MapEntity{Name: piece.Name, MeshName: id, CreateCollider: solid})
+}
+
+// climbVolume is a ladder's climbable box in the world and the piece it belongs
+// to, so a ladder the editor has moved or deleted stops being climbable where it
+// was.
+type climbVolume struct {
+	box   voxel.AABB
+	piece *quads.GameObject
 }

@@ -214,6 +214,8 @@ func (s *SpriteComponent) Orientation(observer core.Transformer) mgl32.Mat4 {
 	case SpriteModeFollowHorizontalAndVertical:
 		rotation := observer.GetRotationMatrix()
 		transformMatrix = transformMatrix.Mul4(rotation)
+	case SpriteModeFacing:
+		transformMatrix = transformMatrix.Mul4(s.resolver.Transform().GetRotationMatrix())
 	}
 	return transformMatrix
 }

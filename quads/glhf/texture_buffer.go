@@ -1,9 +1,11 @@
+//go:build !js
+
 package glhf
 
 import (
 	"runtime"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 )
 
 // TextureBuffer is an OpenGL 3D texture.

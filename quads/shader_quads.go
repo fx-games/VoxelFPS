@@ -1,8 +1,8 @@
 package quads
 
 import (
-	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/goray/platform/gl"
 	"github.com/memmaker/goray/quads/glhf"
 )
 
@@ -180,7 +180,7 @@ out vec4 fragmentColor;
 void main() {
     vec4 surfaceColor = texture(tex, VertUV);
 
-    if (surfaceColor.a == 0) {
+    if (surfaceColor.a == 0.0) {
         discard;
     } else {
         // apply tint

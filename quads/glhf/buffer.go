@@ -3,7 +3,7 @@ package glhf
 import (
 	"runtime"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 )
 
 type Buffer struct {

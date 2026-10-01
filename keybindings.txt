@@ -53,3 +53,4 @@ P => EntityMenuScrollDown
 Q => EditorCycleMode
 Z => EditorRotate
 B => EditorOpenPicker
+M => EditorMove

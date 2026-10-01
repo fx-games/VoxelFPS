@@ -112,6 +112,11 @@ type MapLoadResult struct {
 	// to a table in the engine for the same reason the fog does: which deck you
 	// are standing on is what decides it.
 	Music string
+
+	// Edited is a level the editor has saved. It is its own source from then on,
+	// and tools/mapgen will not build over it from build.map - -force does, and
+	// throws the edits away.
+	Edited bool `json:",omitempty"`
 }
 
 // EntitySpawn is one entity and where it stands, in world units. A slice, not a
@@ -157,6 +162,15 @@ type MapEntity struct {
 	// with both keeps Patrol; one with neither gets the spawner's default.
 	PatrolTo *mgl32.Vec3
 	Patrol   []mgl32.Vec3
+
+	// ID is this one instance's own number, unique in its level: handed out
+	// the first time the engine sees an entity without one (Game.recordPlaced)
+	// and kept by the map file from then on, through every move and save.
+	ID uint64 `json:",omitempty"`
+
+	// Scale is how many times its model's or picture's own size this entity is
+	// drawn and collides at. Zero is as authored.
+	Scale float32 `json:",omitempty"`
 
 	// Facing is which way this entity is turned, as a direction on the floor.
 	// The zero vector is "however the model was exported", which is what

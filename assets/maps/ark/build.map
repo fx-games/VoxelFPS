@@ -814,12 +814,12 @@ entity - mesh=lab/ss3d_27_probe at=95.5,128,63.5 facing=-1,0 shadow=false
 entity - mesh=lab/ss3d_30_controlpan at=96.5,128,66.5 facing=-1,0 shadow=false
 entity - mesh=lab/ss3d_28_x_ray_mach at=97.5,128,68.6 facing=-1,0 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=97.4,128,73.5 facing=-1,0 shadow=false
-entity - mesh=electronics/ss3d_07_monitor at=97.6,128.42,73.3 facing=-1,0 shadow=false
-entity - mesh=electronics/ss3d_04_keyboard at=97.2,128.42,73.7 facing=-1,0 shadow=false
+entity - mesh=electronics/ss3d_07_monitor at=97.6,128.38,73.3 facing=-1,0 shadow=false
+entity - mesh=electronics/ss3d_04_keyboard at=97.2,128.38,73.7 facing=-1,0 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=96.6,128,73.5 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=91.5,128,76.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=91,128.53,76.6 facing=0,-1 shadow=false
-entity - mesh=electronics/ss3d_05_small_cpu at=92.3,128.53,76.6 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=91,128.48,76.6 facing=0,-1 shadow=false
+entity - mesh=electronics/ss3d_05_small_cpu at=92.3,128.48,76.6 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=91.5,128,75.6 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=87.5,128,77.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=88.2,128,77.7 facing=0,-1 shadow=false
@@ -851,7 +851,7 @@ entity - sprite=props/medical/bs_small_alien_canister at=71.5,128,62.6 shadow=fa
 entity - sprite=props/medical/bs_small_alien_canister at=72.1,128,62.8 shadow=false
 entity - sprite=props/medical/bs_scan_alien_ready_small_alien_canister at=71.5,128,76.4 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=75,128,62.4 facing=0,1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=74.8,128.42,62.4 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=74.8,128.38,62.4 facing=0,1 shadow=false
 entity - mesh=medical/ss3d_23_chair at=75,128,63.2 facing=0,-1 shadow=false
 graffiti 72.5 128 62.02 0,1 !THEIR CHILDREN|FIRST. AGAIN.
 entity - sprite=props/debris/ss_broken_pan at=65.6,128,69.2 passthrough=true shadow=false
@@ -2348,11 +2348,11 @@ light 100.5 132.8 88.5 color=1,0.3,0.2 power=3 baked
 light 100.5 132.8 97.5 color=1,0.3,0.2 power=3 baked
 
 # --- D8 staff flats, y=135 - officers and scientists, six by six, burnt and looted
-entity - mesh=lab/ss3d_25_microscope at=57.3,135.42,55.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=57.3,135.38,55.5 facing=0,1 shadow=false
 light 66 136.8 58 color=1,0.4,0.25 power=3 baked
-entity - mesh=lab/ss3d_25_microscope at=64.3,135.42,55.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=64.3,135.38,55.5 facing=0,1 shadow=false
 entity - mesh=computer at=67,135,59.5 facing=0,1 shadow=false
-entity - mesh=computer at=73.4,135.53,56.3 facing=0,1 shadow=false
+entity - mesh=computer at=73.4,135.48,56.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=70.25,135,58.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=71.5,135,59.6 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=75,135,59.4 facing=0,1 shadow=false
@@ -2360,7 +2360,7 @@ entity - mesh=furniture/ss3d_15_end_table at=75.6,135,58.5 shadow=false
 entity - sprite=props/wall_art/ss_paint at=75.5,135,55.4 shadow=false
 light 80 136.8 58 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_09_lux_dsk at=80,135,56.3 facing=0,1 shadow=false
-entity - mesh=computer at=80.4,135.53,56.3 facing=0,1 shadow=false
+entity - mesh=computer at=80.4,135.48,56.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=80,135,55.55 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=77.25,135,58.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=78.5,135,59.6 facing=0,1 shadow=false
@@ -2369,7 +2369,7 @@ entity - mesh=furniture/ss3d_15_end_table at=82.6,135,58.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=77.5,135,55.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=82.5,135,55.4 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=85.5,135,55.5 facing=0,1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=85.3,135.42,55.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=85.3,135.38,55.5 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=85.5,135,56.2 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=89.7,135,57 facing=-1,0 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=85,135,59.8 facing=0,1 shadow=false
@@ -2379,11 +2379,11 @@ entity - sprite=props/containers/ss_beaker at=88.15,135,57.49 shadow=false
 entity - sprite=props/containers/ss_beaker at=87.49,135,56.43 shadow=false
 entity - sprite=props/clutter/ss_papers at=87.24,135,56.11 passthrough=true shadow=false
 light 94 136.8 58 color=1,0.4,0.25 power=3 baked
-entity - mesh=lab/ss3d_25_microscope at=92.3,135.42,55.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=92.3,135.38,55.5 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=92,135,59.8 facing=0,1 shadow=false
 entity - sprite=props/clutter/ss_papers at=91.81,135,58.29 passthrough=true shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=57.5,135,70.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=57.3,135.42,70.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=57.3,135.38,70.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=57.5,135,69.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=60.5,135,70.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=61.7,135,69 facing=-1,0 shadow=false
@@ -2415,7 +2415,7 @@ entity - sprite=props/clutter/ss_briefcase at=70.93,135,65.61 passthrough=true s
 graffiti 73.5 135 70.98 0,-1 !SHE|TOLD|THE AI
 light 80 136.8 68 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_09_lux_dsk at=80,135,69.7 facing=0,-1 shadow=false
-entity - mesh=computer at=80.4,135.53,69.7 facing=0,-1 shadow=false
+entity - mesh=computer at=80.4,135.48,69.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=80,135,70.45 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=77.25,135,67.8 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=78.5,135,66.4 facing=0,-1 shadow=false
@@ -2424,7 +2424,7 @@ entity - mesh=furniture/ss3d_15_end_table at=82.6,135,67.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=77.5,135,70.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=82.5,135,70.6 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=85.5,135,70.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=85.3,135.42,70.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=85.3,135.38,70.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=85.5,135,69.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=88.5,135,70.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=89.7,135,69 facing=-1,0 shadow=false
@@ -2436,7 +2436,7 @@ entity - sprite=props/clutter/ss_papers at=85.35,135,67.59 passthrough=true shad
 entity - sprite=props/clutter/ss_papers at=84.67,135,67.63 passthrough=true shadow=false
 light 94 136.8 68 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_09_lux_dsk at=94,135,69.7 facing=0,-1 shadow=false
-entity - mesh=computer at=94.4,135.53,69.7 facing=0,-1 shadow=false
+entity - mesh=computer at=94.4,135.48,69.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=94,135,70.45 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=91.25,135,67.8 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=92.5,135,66.4 facing=0,-1 shadow=false
@@ -2445,7 +2445,7 @@ entity - mesh=furniture/ss3d_15_end_table at=96.6,135,67.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=91.5,135,70.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=96.5,135,70.6 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=99.5,135,70.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=99.3,135.42,70.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=99.3,135.38,70.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=99.5,135,69.8 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=99,135,66.2 facing=0,-1 shadow=false
 entity - sprite=props/clutter/ss_papers at=101.93,135,69.49 passthrough=true shadow=false
@@ -2454,7 +2454,7 @@ entity - sprite=props/containers/ss_beaker at=101.01,135,67.97 shadow=false
 entity - sprite=props/clutter/ss_papers at=102.46,135,68.94 passthrough=true shadow=false
 light 59 136.8 75 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_09_lux_dsk at=59,135,73.3 facing=0,1 shadow=false
-entity - mesh=computer at=59.4,135.53,73.3 facing=0,1 shadow=false
+entity - mesh=computer at=59.4,135.48,73.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=59,135,72.55 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=56.25,135,75.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=57.5,135,76.6 facing=0,1 shadow=false
@@ -2498,7 +2498,7 @@ entity - sprite=props/clutter/ss_clothes at=81.98,135,75.47 passthrough=true sha
 graffiti 80.5 135 72.02 0,1 !TRAITOR
 light 87 136.8 75 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_09_lux_dsk at=87,135,73.3 facing=0,1 shadow=false
-entity - mesh=computer at=87.4,135.53,73.3 facing=0,1 shadow=false
+entity - mesh=computer at=87.4,135.48,73.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=87,135,72.55 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=84.25,135,75.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=85.5,135,76.6 facing=0,1 shadow=false
@@ -2507,7 +2507,7 @@ entity - mesh=furniture/ss3d_15_end_table at=89.6,135,75.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=84.5,135,72.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=89.5,135,72.4 shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=94,135,73.3 facing=0,1 shadow=false
-entity - mesh=computer at=94.4,135.53,73.3 facing=0,1 shadow=false
+entity - mesh=computer at=94.4,135.48,73.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=94,135,72.55 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=91.25,135,75.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=92.5,135,76.6 facing=0,1 shadow=false
@@ -2516,13 +2516,13 @@ entity - mesh=furniture/ss3d_15_end_table at=96.6,135,75.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=91.5,135,72.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=96.5,135,72.4 shadow=false
 light 101 136.8 75 color=1,0.4,0.25 power=3 baked
-entity - mesh=computer at=101.4,135.53,73.3 facing=0,1 shadow=false
+entity - mesh=computer at=101.4,135.48,73.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=98.25,135,75.2 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=99.5,135,76.6 facing=0,1 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=98.5,135,72.5 passthrough=true shadow=false
 light 59 136.8 85 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=57.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=57.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=57.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=57.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=60.5,135,87.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=61.7,135,86 facing=-1,0 shadow=false
@@ -2533,7 +2533,7 @@ entity - sprite=props/containers/ss_beaker at=56.13,135,84.57 shadow=false
 entity - sprite=props/containers/ss_flask at=56.52,135,85.39 shadow=false
 entity - sprite=props/containers/ss_flask at=61.55,135,84.28 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=64.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=64.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=64.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=64.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=67.5,135,87.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=68.7,135,86 facing=-1,0 shadow=false
@@ -2545,7 +2545,7 @@ entity - sprite=props/clutter/ss_papers at=68.15,135,85.96 passthrough=true shad
 entity - sprite=props/containers/ss_flask at=68.97,135,84.22 shadow=false
 light 73 136.8 85 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=71.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=71.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=71.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=71.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=74.5,135,87.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=75.7,135,86 facing=-1,0 shadow=false
@@ -2556,14 +2556,14 @@ entity - sprite=props/containers/ss_flask at=74.46,135,86.9 shadow=false
 entity - sprite=props/clutter/ss_papers at=73.12,135,84.34 passthrough=true shadow=false
 entity - sprite=props/containers/ss_flask at=72.61,135,84.47 shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=80,135,86.7 facing=0,-1 shadow=false
-entity - mesh=computer at=80.4,135.53,86.7 facing=0,-1 shadow=false
+entity - mesh=computer at=80.4,135.48,86.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=80,135,87.45 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_15_end_table at=82.6,135,84.5 shadow=false
 entity - sprite=props/nature/bs_plant_2 at=77.5,135,87.5 passthrough=true shadow=false
 entity - sprite=props/wall_art/ss_paint at=82.5,135,87.6 shadow=false
 light 87 136.8 85 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=85.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=85.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=85.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=85.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=88.5,135,87.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=89.7,135,86 facing=-1,0 shadow=false
@@ -2573,7 +2573,7 @@ entity - sprite=props/containers/ss_beaker at=84.49,135,86.78 shadow=false
 entity - sprite=props/containers/ss_flask at=88.5,135,84.33 shadow=false
 entity - sprite=props/clutter/ss_papers at=84.34,135,86.36 passthrough=true shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=92.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=92.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=92.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=92.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=95.5,135,87.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=96.7,135,86 facing=-1,0 shadow=false
@@ -2585,14 +2585,14 @@ entity - sprite=props/clutter/ss_papers at=96.98,135,86.79 passthrough=true shad
 entity - sprite=props/containers/ss_beaker at=92.35,135,84.65 shadow=false
 light 101 136.8 85 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=99.5,135,87.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=99.3,135.42,87.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=99.3,135.38,87.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=99.5,135,86.8 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=99,135,83.2 facing=0,-1 shadow=false
 entity - sprite=props/containers/ss_beaker at=98.81,135,85.32 shadow=false
 entity - sprite=props/clutter/ss_papers at=101.51,135,85.84 passthrough=true shadow=false
 entity - sprite=props/clutter/ss_papers at=102.89,135,85.31 passthrough=true shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=59,135,90.3 facing=0,1 shadow=false
-entity - mesh=computer at=59.4,135.53,90.3 facing=0,1 shadow=false
+entity - mesh=computer at=59.4,135.48,90.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=59,135,89.55 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=61,135,93.4 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_15_end_table at=61.6,135,92.5 shadow=false
@@ -2623,7 +2623,7 @@ entity - sprite=props/debris/ss_broken_clk at=73.47,135,94.51 passthrough=true s
 graffiti 73.5 135 89.02 0,1 !EAT|THE|RICH
 light 80 136.8 92 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=78.5,135,89.5 facing=0,1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=78.3,135.42,89.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=78.3,135.38,89.5 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=78.5,135,90.2 facing=0,1 shadow=false
 entity - mesh=shelves at=81.5,135,89.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=82.7,135,91 facing=-1,0 shadow=false
@@ -2634,7 +2634,7 @@ entity - sprite=props/containers/ss_flask at=82.92,135,91.07 shadow=false
 entity - sprite=props/containers/ss_flask at=80.9,135,91.43 shadow=false
 entity - sprite=props/containers/ss_beaker at=80.88,135,91.43 shadow=false
 entity - mesh=furniture/ss3d_10_funct_dsk at=85.5,135,89.5 facing=0,1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=85.3,135.42,89.5 facing=0,1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=85.3,135.38,89.5 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=85.5,135,90.2 facing=0,1 shadow=false
 entity - mesh=shelves at=88.5,135,89.3 facing=0,1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=89.7,135,91 facing=-1,0 shadow=false
@@ -2666,12 +2666,12 @@ entity - sprite=props/clutter/ss_briefcase at=99.18,135,91.46 passthrough=true s
 entity - sprite=props/clutter/ss_papers at=100.66,135,94.32 passthrough=true shadow=false
 graffiti 101.5 135 89.02 0,1 !EAT|THE|RICH
 light 66 136.8 102 color=1,0.4,0.25 power=3 baked
-entity - mesh=computer at=66.4,135.53,103.7 facing=0,-1 shadow=false
+entity - mesh=computer at=66.4,135.48,103.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=64.5,135,100.4 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_13_hideaway_bd at=68,135,100.6 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_15_end_table at=68.6,135,101.5 shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=73,135,103.7 facing=0,-1 shadow=false
-entity - mesh=computer at=73.4,135.53,103.7 facing=0,-1 shadow=false
+entity - mesh=computer at=73.4,135.48,103.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=73,135,104.45 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=70.25,135,101.8 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=71.5,135,100.4 facing=0,-1 shadow=false
@@ -2680,7 +2680,7 @@ entity - mesh=furniture/ss3d_15_end_table at=75.6,135,101.5 shadow=false
 entity - sprite=props/wall_art/ss_paint at=75.5,135,104.6 shadow=false
 light 80 136.8 102 color=1,0.4,0.25 power=3 baked
 entity - mesh=furniture/ss3d_10_funct_dsk at=78.5,135,104.5 facing=0,-1 shadow=false
-entity - mesh=lab/ss3d_25_microscope at=78.3,135.42,104.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=78.3,135.38,104.5 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_14_chair at=78.5,135,103.8 facing=0,-1 shadow=false
 entity - mesh=shelves at=81.5,135,104.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_11_cabinet at=82.7,135,103 facing=-1,0 shadow=false
@@ -2691,7 +2691,7 @@ entity - sprite=props/containers/ss_flask at=82.62,135,102.31 shadow=false
 entity - sprite=props/clutter/ss_papers at=78.52,135,103.08 passthrough=true shadow=false
 entity - sprite=props/containers/ss_beaker at=82.94,135,101.85 shadow=false
 entity - mesh=furniture/ss3d_09_lux_dsk at=87,135,103.7 facing=0,-1 shadow=false
-entity - mesh=computer at=87.4,135.53,103.7 facing=0,-1 shadow=false
+entity - mesh=computer at=87.4,135.48,103.7 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_17_exechair at=87,135,104.45 facing=0,-1 shadow=false
 entity - mesh=furniture/ss3d_12_shelf at=84.25,135,101.8 facing=1,0 shadow=false
 entity - mesh=furniture/ss3d_16_couch at=85.5,135,100.4 facing=0,-1 shadow=false
@@ -2708,7 +2708,7 @@ entity - sprite=props/clutter/ss_clothes at=92.66,135,99.11 passthrough=true sha
 entity - sprite=props/clutter/ss_briefcase at=92.25,135,102.46 passthrough=true shadow=false
 entity - sprite=props/debris/ss_broken_clk at=92.27,135,99.56 passthrough=true shadow=false
 entity - sprite=props/clutter/ss_briefcase at=96.94,135,99.78 passthrough=true shadow=false
-entity - mesh=lab/ss3d_25_microscope at=99.3,135.42,104.5 facing=0,-1 shadow=false
+entity - mesh=lab/ss3d_25_microscope at=99.3,135.38,104.5 facing=0,-1 shadow=false
 # The corridors.
 entity - mesh=ark/pipes at=62.5,136,62.5 facing=0,1 collider=false shadow=false
 entity - mesh=ark/pipes at=66.5,136,62.5 facing=0,1 collider=false shadow=false step=1,0,0 times=29

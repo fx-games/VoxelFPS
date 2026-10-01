@@ -3,7 +3,7 @@ package quads
 import (
 	"testing"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/goray/platform/glfw"
 )
 
 func TestGuiOptionFloatAppliesOnEveryStep(t *testing.T) {

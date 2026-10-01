@@ -1217,7 +1217,7 @@ from the editor's scenery menu and by `entity ... mesh=ss3d_NN`.
   objects with it name a mesh where `TPoly`, `FlatPoly` and `TLPoly` name none
   at all. The rest keep their resource number, and every folder carries the
   number anyway (`ss3d_16_couch`) so the order on disk is the order in the file.
-- **A model unit is a voxel, so nothing is resized.** The models are drawn by
+- **A model unit is a voxel, then shrunk to 0.9** (`modelScale`: faithful read too big beside the player). The models are drawn by
   the same `g3` pipeline as the sprites and in the same world units: a vertex is
   fix 16.16, and one of those units is one map square (`obj_coord_from_fix` in
   `map.h` is a shift of eight off a coordinate whose top byte is the square).

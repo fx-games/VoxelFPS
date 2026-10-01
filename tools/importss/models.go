@@ -71,7 +71,11 @@ const (
 // and PhysicsZ in the common properties, in units nothing here shares; read
 // those and convert if a particular piece ever has to be a size its own
 // geometry does not imply.
-const modelScale = 1.0
+//
+// 0.9 rather than one: faithful still read a size too big beside the player
+// (2026-09-13). A desk shrinks with it, so anything stood on one in a level
+// script comes down too - see the ark's .38 and .48 tops.
+const modelScale = 0.9
 
 // installModels writes a folder per model: the glTF, the shared picture, and a
 // scenery.json that makes it a piece the editor can place.

@@ -1,6 +1,6 @@
 # Context
 
-Glossary for the go-fps domain. Terms only — no implementation detail.
+Glossary for the Janus Station (go-fps engine) domain. Terms only — no implementation detail.
 
 ## Weapons
 

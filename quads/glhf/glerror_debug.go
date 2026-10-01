@@ -5,7 +5,7 @@ package glhf
 import (
 	"fmt"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 )
 
 // CheckGLError panics on a pending GL error. Only compiled in with -tags debugGL:

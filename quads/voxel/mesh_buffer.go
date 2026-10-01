@@ -2,7 +2,7 @@ package voxel
 
 import (
 	"fmt"
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 	"github.com/memmaker/goray/quads/glhf"
 	"math"
 )

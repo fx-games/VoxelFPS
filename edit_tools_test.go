@@ -351,3 +351,28 @@ func TestASignHangsOnTheWallItIsAimedAt(t *testing.T) {
 		t.Error("a sign is furniture, so the editor cannot reach it to write on it")
 	}
 }
+
+// The turn key walks as modelled, east, south, west and back to the numbers it
+// started from, and fifteen-degree turns come round too, so a map file neither
+// drifts nor fills up with 0.99999994.
+func TestTurnFacingComesRound(t *testing.T) {
+	facing := turnFacing(mgl32.Vec3{}, 90)
+	if facing != (mgl32.Vec3{1, 0, 0}) {
+		t.Errorf("a quarter turn from as modelled is %v, want east", facing)
+	}
+	for range 3 {
+		facing = turnFacing(facing, 90)
+	}
+	if facing != (mgl32.Vec3{0, 0, -1}) {
+		t.Errorf("four quarter turns came to %v", facing)
+	}
+	for range 24 {
+		facing = turnFacing(facing, 15)
+	}
+	if facing.Sub(mgl32.Vec3{0, 0, -1}).Len() > 0.01 {
+		t.Errorf("twenty-four fine turns came to %v", facing)
+	}
+	if hatch := (mgl32.Vec3{0, -1, 0}); turnFacing(hatch, 90) != hatch {
+		t.Errorf("a hatch turned about the vertical")
+	}
+}

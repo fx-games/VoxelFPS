@@ -1,12 +1,14 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/platform/glfw"
 	"github.com/memmaker/goray/quads"
 	"github.com/memmaker/goray/quads/voxel"
 )
@@ -186,6 +188,10 @@ func (g *Game) paletteIndex() int {
 // that hang on a wall rather than stand on the floor - which is the sign, and
 // so far only the sign.
 func (g *Game) placingWallPiece() bool {
+	if g.editor.grabbed != nil {
+		mesh := g.editor.grabEntity.MeshName
+		return mesh == signMeshName || mesh == graffitiMeshName
+	}
 	palette := g.palette()
 	index := g.paletteIndex()
 	return index >= 0 && index < len(palette) && palette[index].scenery == signMeshName
@@ -291,6 +297,10 @@ func (g *Game) editorScroll(yoff float64) {
 	step := 1
 	if yoff < 0 {
 		step = -1
+	}
+	if g.editor.grabbed != nil {
+		g.sizeGrabbed(step)
+		return
 	}
 	if g.editor.mode.placesProps() {
 		g.selectProp(g.paletteIndex() + step)
@@ -447,6 +457,9 @@ func (g *Game) decorationEntity(solid bool) core.MapEntity {
 
 // clearGhost takes whatever is on the crosshair off it.
 func (g *Game) clearGhost() {
+	if g.editor.grabbed != nil {
+		g.dropGrabbed(false)
+	}
 	if g.editor.gameObjectForSpawning != nil {
 		g.editor.gameObjectForSpawning.Kill()
 		g.editor.gameObjectForSpawning = nil
@@ -455,8 +468,18 @@ func (g *Game) clearGhost() {
 
 // rotateProp is the turn key: a quarter turn of the piece on the crosshair,
 // which is the whole of rotation because everything in a voxel map lines up
-// with the grid anyway. See propFacing for why turn zero is not a rotation.
-func (g *Game) rotateProp() {
+// with the grid anyway. See propFacing for why turn zero is not a rotation. A
+// grabbed thing turns too, and with fine (Shift) fifteen degrees at a time.
+func (g *Game) rotateProp(fine bool) {
+	if g.editor.grabbed != nil {
+		degrees := float32(90)
+		if fine {
+			degrees = 15
+		}
+		g.editor.grabEntity.Facing = turnFacing(g.editor.grabEntity.Facing, degrees)
+		g.reghost()
+		return
+	}
 	g.editor.facing = (g.editor.facing + 1) % 4
 	g.applyGhostFacing()
 }
@@ -574,6 +597,16 @@ func (g *Game) deleteHovered() {
 	if object == nil {
 		return
 	}
+	g.unplace(object)
+	// Same as placing one: removing a keypad has to give its door back, and
+	// removing a door has to leave its keypad holding nothing.
+	g.bindKeypads()
+	g.Toast("Removed " + object.DisplayName)
+}
+
+// unplace takes a thing out of the running level: the kill, and what does not
+// die with the object.
+func (g *Game) unplace(object *quads.GameObject) {
 	object.Kill()
 	// A torch is a light as much as a model, and killing the model does not put
 	// the light out: the flood fill lives in the voxels, not on the object.
@@ -583,10 +616,114 @@ func (g *Game) deleteHovered() {
 	if actor := g.actorFor(object); actor != nil && actor == g.editor.selectedActor {
 		g.editor.selectedActor = nil
 	}
-	// Same as placing one: removing a keypad has to give its door back, and
-	// removing a door has to leave its keypad holding nothing.
+}
+
+// grabHovered is the move key. What the crosshair is on comes out of the level
+// and onto the crosshair as a ghost - the ghost a piece being placed is, so it
+// lands on floors, table tops and, a sign, walls the same way. The turn key
+// turns it, the wheel sizes it and Shift with the wheel lifts it; a click or the
+// key again puts it down, the right button puts it back.
+func (g *Game) grabHovered() {
+	if g.editor.grabbed != nil {
+		g.dropGrabbed(true)
+		return
+	}
+	object := g.editorHoveredObject()
+	record := g.placedRecord(object)
+	if object == nil || record == nil {
+		return
+	}
+	record.entity = g.entityNow(*record)
+	g.clearGhost()
+	g.unplace(object)
+	g.editor.grabbed, g.editor.grabEntity, g.editor.lift = object, record.entity, 0
+	g.reghost()
+	g.Toast("Moving " + object.DisplayName)
+}
+
+// reghost puts the grabbed thing's ghost on the crosshair again, built from what
+// putting it down would write, so a turn or a new size shows at once.
+func (g *Game) reghost() {
+	at := mgl32.Vec3{}
+	if old := g.editor.gameObjectForSpawning; old != nil {
+		at = old.Transform().GetPosition()
+		old.Kill()
+	} else if record := g.placedRecord(g.editor.grabbed); record != nil {
+		at = record.pos
+	}
+	ghost := g.editor.grabEntity
+	ghost.CreateCollider = false
+	var object *quads.GameObject
+	if index, isWeapon := g.weaponByID[ghost.WeaponName]; isWeapon {
+		object, _ = g.newPickupObject(g.weapons[index], ghost.WeaponAmmo, at)
+	} else {
+		object = g.spawnEntity(at, ghost)
+	}
+	g.editor.gameObjectForSpawning = object
+	if object != nil {
+		g.ghostItem(object, true)
+	}
+}
+
+// sizeGrabbed is the wheel on a grabbed thing: a tenth bigger or smaller a
+// notch or, with Shift held, a tenth of a unit higher or lower off whatever it
+// stands on - which is how a piece goes somewhere the ray cannot land it.
+func (g *Game) sizeGrabbed(step int) {
+	if g.Window.GetKey(glfw.KeyLeftShift) == glfw.Press || g.Window.GetKey(glfw.KeyRightShift) == glfw.Press {
+		g.editor.lift += float32(step) * 0.1
+		return
+	}
+	scale := cmp.Or(g.editor.grabEntity.Scale, 1) * float32(math.Pow(1.1, float64(step)))
+	scale = max(0.1, min(10, float32(math.Round(float64(scale)*100)/100)))
+	if scale == 1 {
+		scale = 0 // as authored, and left out of the file
+	}
+	g.editor.grabEntity.Scale = scale
+	g.reghost()
+}
+
+// dropGrabbed puts the grabbed thing down where its ghost stands or, keep false,
+// back where it was taken from. Either way it is spawned afresh from its record:
+// the one path that builds a piece's colliders, climb volume, light and keypad
+// pairing, rather than chasing each of those to where the model went.
+func (g *Game) dropGrabbed(keep bool) {
+	record := g.placedRecord(g.editor.grabbed)
+	ghost := g.editor.gameObjectForSpawning
+	g.editor.grabbed, g.editor.gameObjectForSpawning = nil, nil
+	if ghost != nil {
+		if keep && record != nil {
+			record.pos = ghost.Transform().GetPosition()
+			record.entity = g.editor.grabEntity
+		}
+		ghost.Kill()
+	}
+	if record == nil {
+		return // the level it came out of has been left
+	}
+	record.object = g.spawnEntity(record.pos, record.entity)
+	if record.entity.MeshName == torchMeshName {
+		g.dropTorch(record.pos)
+	}
 	g.bindKeypads()
-	g.Toast("Removed " + object.DisplayName)
+	if g.editor.mode.placesProps() {
+		g.selectProp(g.paletteIndex())
+	}
+}
+
+// turnFacing turns a facing about the vertical, the way the turn key goes: as
+// modelled, east, south, west. Zero is as modelled, which looks along -Z. A
+// facing out of the floor plane - a hatch - is left alone. Rounded, so a quarter
+// turn writes 1 and not 0.99999994.
+func turnFacing(facing mgl32.Vec3, degrees float32) mgl32.Vec3 {
+	if facing.Y() != 0 {
+		return facing
+	}
+	if facing.Len() == 0 {
+		facing = mgl32.Vec3{0, 0, -1}
+	}
+	turned := mgl32.QuatRotate(mgl32.DegToRad(-degrees), mgl32.Vec3{0, 1, 0}).Rotate(facing)
+	round := func(v float32) float32 { return float32(math.Round(float64(v)*1000) / 1000) }
+	return mgl32.Vec3{round(turned.X()), 0, round(turned.Z())}
 }
 
 // editorHoveredObject is whatever the crosshair is on, furniture included.
@@ -694,12 +831,17 @@ type placedEntity struct {
 }
 
 func (g *Game) recordPlaced(object *quads.GameObject, entity core.MapEntity, at mgl32.Vec3) {
+	if entity.ID == 0 {
+		g.lastEntityID++
+		entity.ID = g.lastEntityID
+	}
 	g.placed = append(g.placed, placedEntity{object: object, entity: entity, pos: at})
 }
 
 // placedRecord is what the map file says about an object standing in the world,
 // or nil for one that is not in it - a projectile, the player. A linear scan of
-// a level's furniture is fine: this runs on a click, not on a frame.
+// a level's furniture is fine: a few thousand pointer compares, once a frame at
+// most, for the editor's label.
 func (g *Game) placedRecord(object *quads.GameObject) *placedEntity {
 	for i := range g.placed {
 		if g.placed[i].object == object {
@@ -707,6 +849,47 @@ func (g *Game) placedRecord(object *quads.GameObject) *placedEntity {
 		}
 	}
 	return nil
+}
+
+// editorLabel is what the editor says a thing is: its type and its instance
+// number, both as the map file has them.
+func (g *Game) editorLabel(object *quads.GameObject) string {
+	record := g.placedRecord(object)
+	if record == nil {
+		return object.DisplayName + "  (not in the map)"
+	}
+	return fmt.Sprintf("%s  #%d", typeID(record.entity), record.entity.ID)
+}
+
+// typeID is which kind of thing an entity is, as the id it is spawned by: the
+// weapon, the model's or the picture's folder, or a bare decoration's slot in
+// the sprite atlas.
+func typeID(entity core.MapEntity) string {
+	switch {
+	case entity.WeaponName != "" && entity.WeaponAmmo:
+		return entity.WeaponName + "/ammo"
+	case entity.WeaponName != "":
+		return entity.WeaponName
+	case entity.MeshName != "":
+		return entity.MeshName
+	case entity.SpriteSheetName != "":
+		return entity.SpriteSheetName
+	case len(entity.TextureIndices) > 0:
+		return fmt.Sprintf("sprite/%d", entity.TextureIndices[0])
+	}
+	return entity.Name
+}
+
+// entityNow is what the file should say about a placed thing right now: its
+// record, with an actor's route as the path tool has since left it. Point zero
+// is the spawn, which the position already says.
+func (g *Game) entityNow(placed placedEntity) core.MapEntity {
+	entity := placed.entity
+	if actor := g.actorFor(placed.object); actor != nil && len(actor.patrol) > 1 {
+		entity.Patrol = slices.Clone(actor.patrol[1:])
+		entity.PatrolTo = nil
+	}
+	return entity
 }
 
 // mapWithPlacedEntities is the loaded map with its entity list rebuilt from
@@ -721,6 +904,9 @@ func (g *Game) placedRecord(object *quads.GameObject) *placedEntity {
 // simply where the thing stands.
 func (g *Game) mapWithPlacedEntities() core.MapLoadResult {
 	result := g.mapSource
+	// Saved from here, a generated level is unlinked from its build.map: see
+	// core.MapLoadResult.Edited.
+	result.Edited = true
 	// The fill light as the knob left it, so a level keeps what it was lit with.
 	result.AmbientColor, result.AmbientStrength = g.ambientColor, g.ambientStrength
 	result.Entities = nil
@@ -728,15 +914,7 @@ func (g *Game) mapWithPlacedEntities() core.MapLoadResult {
 		if placed.object != nil && !placed.object.IsAlive() {
 			continue
 		}
-		entity := placed.entity
-		if actor := g.actorFor(placed.object); actor != nil && len(actor.patrol) > 1 {
-			// The live route, not the one it was spawned with: the path tool
-			// edits the actor, and the actor is what the file has to agree with.
-			// Point zero is the spawn, which the position already says.
-			entity.Patrol = slices.Clone(actor.patrol[1:])
-			entity.PatrolTo = nil
-		}
-		result.Entities = append(result.Entities, core.EntitySpawn{Position: placed.pos, Entity: entity})
+		result.Entities = append(result.Entities, core.EntitySpawn{Position: placed.pos, Entity: g.entityNow(placed)})
 	}
 	return result
 }
@@ -753,8 +931,8 @@ func (g *Game) drawEditorHUD() {
 		g.editorModeLine(),
 		g.editorStateLine(),
 		g.editorKeyLine(),
-		fmt.Sprintf("%s mode   %s menu   %s fly   Ctrl+S save   %s play",
-			g.keyLabel(ActionEditorCycleMode), g.keyLabel(ActionOpenVoxelEditMenu),
+		fmt.Sprintf("%s move   %s mode   %s menu   %s fly   Ctrl+S save   %s play",
+			g.keyLabel(ActionEditorMove), g.keyLabel(ActionEditorCycleMode), g.keyLabel(ActionOpenVoxelEditMenu),
 			g.keyLabel(ActionToggleGravity), g.keyLabel(ActionToggleEditorMode)),
 	})
 	_, guiHeight := g.GuiSize()
@@ -781,6 +959,10 @@ func (g *Game) editorModeLine() string {
 // lay and the shape it would lay it in, the piece on the crosshair and how it
 // will land, the actor whose route is being drawn.
 func (g *Game) editorStateLine() string {
+	if g.editor.grabbed != nil {
+		return fmt.Sprintf("moving %s   size %.2f   lift %+.1f",
+			typeID(g.editor.grabEntity), cmp.Or(g.editor.grabEntity.Scale, 1), g.editor.lift)
+	}
 	if g.editor.mode.placesProps() {
 		placement := "free"
 		if g.editor.snapToGrid {
@@ -825,6 +1007,10 @@ func (g *Game) editorStateLine() string {
 func (g *Game) editorKeyLine() string {
 	tab := g.keyLabel(ActionEditorTabAction)
 	pick := g.keyLabel(ActionEditorOpenPicker)
+	if g.editor.grabbed != nil {
+		return fmt.Sprintf("LMB/%s put down   RMB put back   %s turn (Shift fine)   wheel size   Shift+wheel lift",
+			g.keyLabel(ActionEditorMove), g.keyLabel(ActionEditorRotate))
+	}
 	if g.editor.mode == ModeWeapons {
 		return fmt.Sprintf("1-9/wheel gun   %s browse   %s gun/ammo   LMB place   RMB delete", pick, tab)
 	}

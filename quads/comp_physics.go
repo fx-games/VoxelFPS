@@ -104,7 +104,14 @@ func (g *PhysicsComponent) Transform(cam *core.FPSCamera) mgl32.Mat4 {
 		sprite := g.resolver.GetComponent(ComponentTypeSprite).(*SpriteComponent)
 		return sprite.Orientation(cam)
 	}
-	return g.GameObject().Transform().GetTransformMatrix()
+	return placedMatrix(g.GameObject().Transform())
+}
+
+// placedMatrix is where a thing stands and which way it is turned, without how
+// big it is drawn: a collider is built at the size it is drawn at (see the
+// game's spawnEntity), and a matrix that scaled it again would count it twice.
+func placedMatrix(t *core.Transform) mgl32.Mat4 {
+	return t.GetTranslationMatrix().Mul4(t.GetRotationMatrix())
 }
 
 func (g *PhysicsComponent) IsMovable() bool {
@@ -371,6 +378,6 @@ func (g *PhysicsComponent) WorldAABB() voxel.AABB {
 func (g *PhysicsComponent) WorldOBB() voxel.OBB {
 	return voxel.OBB{
 		AABB:      g.AABBAt(mgl32.Vec3{}),
-		Transform: g.GameObject().Transform().GetTransformMatrix(),
+		Transform: placedMatrix(g.GameObject().Transform()),
 	}
 }

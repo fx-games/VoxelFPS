@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/goray/platform/glfw"
 )
 
 // frameProfile splits a benchmark's frame into the passes it is made of, and

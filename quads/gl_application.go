@@ -2,10 +2,10 @@ package quads
 
 import (
 	"fmt"
-	"github.com/go-gl/gl/v3.3-core/gl"
-	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/goray/core"
+	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/goray/platform/glfw"
 	"github.com/memmaker/goray/quads/glhf"
 	"github.com/memmaker/goray/quads/voxel"
 	"image"
@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -337,7 +338,7 @@ func Start(parentApp GlGame, mapLoad core.MapLoadResult, screenW, screenH int) {
 			AtlasSprites:      atlasSprites,
 
 			ShouldDrawSprites: true, ShouldDrawMeshes: true, ShouldDrawParticles: true, ShouldUseVsync: true,
-			ShouldDrawDebugInfo: true, ShouldShowPerformance: true,
+			ShouldDrawDebugInfo: runtime.GOOS != "js", ShouldShowPerformance: true, // the overlay is a dev tool; F1 menu turns it on
 		}
 
 		// Baseline for the fullscreen toggle, in case the first thing that happens
@@ -696,7 +697,7 @@ const (
 )
 
 // windowTitle is what the window is called.
-const windowTitle = "fps"
+const windowTitle = "Janus Station"
 
 // recordWorkTime keeps the last workTimeWindow work times, oldest overwritten
 // first.
@@ -1004,6 +1005,9 @@ func (a *GlApplication) SetupUnitCubes() {
 }
 
 func (a *GlApplication) SetupParticleSystem(name ParticleName, count int) {
+	if runtime.GOOS == "js" {
+		return // the particle quads come out of a geometry shader, which WebGL2 has not got
+	}
 	ps := glhf.NewParticleSystem(count)
 	a.particleSystems[name] = ps
 }
@@ -1013,7 +1017,7 @@ func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool, maxHei
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
 	a.minimap = NewMiniMap(a.guiShader, width, height, getColor)
 	a.minimap.Resize(a.GuiSize())
-	a.ShouldDrawMinimap = true
+	a.ShouldDrawMinimap = runtime.GOOS != "js" // an editor/debug view (README), not HUD
 }
 
 func (a *GlApplication) EmitParticlesByName(name ParticleName, pos mgl32.Vec3, count int) {
@@ -1607,6 +1611,18 @@ func (a *GlApplication) SetCubeAtlasGridSize() {
 	gridSize := glhf.IntVec2{int32(a.AtlasMap.GridWidth()), int32(a.AtlasMap.GridHeight())}
 	a.cubeShader.Begin()
 	a.cubeShader.SetUniformAttr(CubeShaderAtlasGridSize, gridSize)
+	a.cubeShader.End()
+}
+
+// SetSmoothBlocks blends the texels of block faces instead of drawing each as a
+// square: for textures that are pictures rather than pixel art. Off by default.
+func (a *GlApplication) SetSmoothBlocks(smooth bool) {
+	on := int32(0)
+	if smooth {
+		on = 1
+	}
+	a.cubeShader.Begin()
+	a.cubeShader.SetUniformAttr(CubeShaderSmoothTexels, on)
 	a.cubeShader.End()
 }
 

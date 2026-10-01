@@ -42,18 +42,19 @@ import (
 // turns it about its own middle, and its picture is on the face that looks
 // along -Z - which is what "as modelled" means for a prop nobody has turned.
 const (
-	keypadWidth  = 0.20
+	keypadWidth  = 0.21 // 3:4, the readable face's picture
 	keypadHeight = 0.28
 	keypadDepth  = 0.05
 	keypadBottom = 0.42
 )
 
-// The note: a square of paper on a floor or a table top, oversized on purpose
+// The note: a sheet of paper on a floor or a table top, oversized on purpose
 // (about half a metre) so that a sheet lying on the ground is something you can
-// see across a room rather than a speck. Thin enough to read as paper and thick
-// enough that a ray along its plane still meets a face.
+// see across a room rather than a speck. 3:4 like its picture, thin enough to
+// read as paper and thick enough that a ray along its plane still meets a face.
 const (
-	noteSize      = 0.32
+	noteWidth     = 0.24
+	noteDepth     = 0.32
 	noteThickness = 0.012
 )
 
@@ -163,15 +164,14 @@ func main() {
 		[3]float32{0, 0, -1}, &kPos, &kNorm, &kUV, &kIdx)
 	write("keypad", keypadTexture(), kPos, kNorm, kUV, kIdx)
 
-	noteHalf := float32(noteSize) / 2
+	noteHalfX, noteHalfZ := float32(noteWidth)/2, float32(noteDepth)/2
 	var nPos, nNorm [][3]float32
 	var nUV [][2]float32
 	var nIdx []uint16
 	// A note lies flat and is read from above, so its picture is on its top
-	// face - which is also why it needs no facing: a square seen from overhead
-	// reads the same however it was turned.
-	box([3]float32{-noteHalf, 0, -noteHalf},
-		[3]float32{noteHalf, noteThickness, noteHalf},
+	// face.
+	box([3]float32{-noteHalfX, 0, -noteHalfZ},
+		[3]float32{noteHalfX, noteThickness, noteHalfZ},
 		[3]float32{0, 1, 0}, &nPos, &nNorm, &nUV, &nIdx)
 	write("note", noteTexture(), nPos, nNorm, nUV, nIdx)
 

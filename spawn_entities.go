@@ -86,6 +86,13 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	}
 
 	var aabb voxel.AABB
+	// Everything a thing is sized by - its model, its picture, every box it is
+	// picked and stopped by - grows together, from the feet it stands on.
+	scale := entity.Scale
+	if scale == 0 {
+		scale = 1
+	}
+	grow := mgl32.Vec3{scale, scale, scale}
 
 	if entity.MeshName != "" {
 		meshFile := g.meshFile(entity.MeshName)
@@ -104,7 +111,8 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		// as well is the rotation landing on the box twice, which for the ark's
 		// half-turned ladders put their solid half back where the empty half of
 		// the tile is and left the player unable to stand in front of the rungs.
-		aabb = meshAABB
+		aabb = meshAABB.Scaled(grow)
+		goFromEntity.Transform().SetScale(grow)
 
 		goFromEntity.SetComponent(mesh)
 		g.Meshes.Add(mesh)
@@ -179,9 +187,10 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		// An imported kind brings one box per animation, measured off its sheet
 		// at import time - see SpriteKind.box. Anything else is measured here,
 		// off the card, from the one frame there is to measure.
+		sprite.Size = sprite.Size.Mul(scale)
 		if kind != nil {
 			if measured, ok := kind.box("idle"); ok {
-				aabb = measured
+				aabb = measured.Scaled(grow)
 			} else {
 				aabb = quads.SpriteAABB(atlas, int(entity.TextureIndices[0]), sprite.Size)
 			}
@@ -216,20 +225,21 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	if kind := g.spriteKinds[entity.SpriteSheetName]; kind != nil {
 		for anim := quads.AnimIndex(0); anim < quads.AnimCount; anim++ {
 			if measured, ok := kind.box(animOrder[anim]); ok {
-				physics.SetAABBForAnimation(anim, measured)
+				physics.SetAABBForAnimation(anim, measured.Scaled(grow))
 			}
 		}
 		// And the box of every picture it is drawn as, for the ray rather than
 		// the solver: a bird with its wings out is twice the bird it is with
 		// them folded, and one box for both is one the crosshair picks out
 		// beside itself. See SpriteKind.pickBoxes.
-		physics.SetPickBoxes(kind.pickBoxes())
+		physics.SetPickBoxes(scaledPickBoxes(kind.pickBoxes(), grow))
 	}
 
 	// What walks is what its own folder says walks: a map entity naming a
 	// sprite kind marked actor gets an Actor, anything else is a prop standing
-	// in the level. The name in the map file is a label, not the decision.
-	if kind := g.spriteKinds[entity.SpriteSheetName]; kind != nil && kind.Actor {
+	// in the level. The name in the map file is a label, not the decision. The
+	// editor's ghost of one - no collider, see below - is only its picture.
+	if kind := g.spriteKinds[entity.SpriteSheetName]; kind != nil && kind.Actor && entity.CreateCollider {
 		g.spawnActor(goFromEntity, physics, entity, spawnPos)
 	} else if len(entity.TextureIndices) > 0 && entity.MeshName == "" {
 		// A sprite decoration - a barrel, a crate, whatever the atlas holds -
@@ -304,7 +314,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 		goFromEntity.Mesh().EmissiveStrength = torchEmissiveStrength
 	}
 
-	if piece, isScenery := g.scenery[entity.MeshName]; isScenery && len(piece.Climbable) > 0 {
+	if piece, isScenery := g.scenery[entity.MeshName]; isScenery && entity.CreateCollider && len(piece.Climbable) > 0 {
 		g.registerClimbable(goFromEntity, piece, entity.ClimbTo)
 	}
 
@@ -366,6 +376,25 @@ func slideDoorPlacement(object *quads.GameObject, spawnPos mgl32.Vec3) mgl32.Vec
 		return spawnPos // upright, or as near as makes no difference
 	}
 	return spawnPos.Add(mgl32.Vec3{0, 1, 0}).Sub(up.Mul(0.5))
+}
+
+// scaledPickBoxes is a kind's picking boxes at a size of the thing's own. The
+// kind's are shared by every one of it, so a bigger one gets a copy.
+func scaledPickBoxes(boxes quads.PickBoxes, grow mgl32.Vec3) quads.PickBoxes {
+	if grow == (mgl32.Vec3{1, 1, 1}) || boxes == nil {
+		return boxes
+	}
+	scaled := make(quads.PickBoxes, len(boxes))
+	for anim, facings := range boxes {
+		scaled[anim] = make([][]voxel.AABB, len(facings))
+		for facing, frames := range facings {
+			scaled[anim][facing] = make([]voxel.AABB, len(frames))
+			for frame, box := range frames {
+				scaled[anim][facing][frame] = box.Scaled(grow)
+			}
+		}
+	}
+	return scaled
 }
 
 // weaponRangeEntity is what the map calls the marker the test range is laid

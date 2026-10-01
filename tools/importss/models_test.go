@@ -66,15 +66,16 @@ func TestAFullFaceSpansItsWholeCell(t *testing.T) {
 }
 
 // A model's vertices are already in the units the whole game is drawn in: one
-// unit is one map square, and a map square is a voxel here. So the import has
-// nothing to resize - all engineSpace does is stand the thing up, because the
-// game's vertical is the second coordinate and counts downwards.
+// unit is one map square, and a map square is a voxel here - then shrunk to
+// modelScale, a tenth under faithful, because faithful read too big. Beyond
+// that engineSpace only stands the thing up, because the game's vertical is
+// the second coordinate and counts downwards.
 //
 // It used to multiply by two, and every piece of the station's furniture came
 // out twice the size: a chair 2.3 metres tall next to a 1.7-metre mutant.
 func TestAModelUnitIsAVoxel(t *testing.T) {
-	if got := engineSpace([3]float32{1, -1, 1}); got != [3]float32{1, 1, 1} {
-		t.Errorf("one unit of model space is %v voxels, want one each way", got)
+	if got := engineSpace([3]float32{1, -1, 1}); got != [3]float32{0.9, 0.9, 0.9} {
+		t.Errorf("one unit of model space is %v voxels, want 0.9 each way", got)
 	}
 }
 

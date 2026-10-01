@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/memmaker/goray/platform/glfw"
 	"github.com/memmaker/goray/quads"
 )
 

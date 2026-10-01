@@ -3,7 +3,7 @@ package glhf
 import (
 	"testing"
 
-	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/memmaker/goray/platform/gl"
 )
 
 // resetBindings puts the shadow back to a known context with nothing bound, so a
