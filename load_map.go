@@ -114,8 +114,8 @@ func loadJSONMap(filename string) (core.MapLoadResult, error) {
 	return f.toLoadResult(), nil
 }
 
-// mapDir is the folder of folders, one to a level: a map.json and the map.bin
-// beside it. Which levels exist is decided by which folders are present, the
+// mapDir is the folder of folders, one to a level: a map.json and the region
+// files beside it. Which levels exist is decided by which folders are present, the
 // same way the weapons and the scenery decide what exists - a new level is a
 // folder, not a line of Go, which is the whole reason the test maps stopped
 // being Go in the first place.
@@ -124,20 +124,17 @@ const mapDir = "assets/maps"
 // defaultMapName is the level a run with no -map starts in.
 const defaultMapName = "ark"
 
-const (
-	mapFileName   = "map.json"
-	voxelFileName = "map.bin"
-)
+const mapFileName = "map.json"
 
 // mapPathFor and voxelPathFor are the two halves of the level called name.
 func mapPathFor(name string) string   { return filepath.Join(mapDir, name, mapFileName) }
-func voxelPathFor(name string) string { return filepath.Join(mapDir, name, voxelFileName) }
+func voxelPathFor(name string) string { return filepath.Join(mapDir, name) }
 
 // voxelFileFor is where the blocks of the map at this path live: beside it, so
 // the two halves of a level travel together and a map can never be opened
 // against another one's geometry.
 func voxelFileFor(mapPath string) string {
-	return filepath.Join(filepath.Dir(mapPath), voxelFileName)
+	return filepath.Dir(mapPath)
 }
 
 // mapNames is every level under mapDir, in a fixed order, for a menu and for
@@ -179,10 +176,12 @@ func loadMap(name string) (core.MapLoadResult, *voxel.Map, error) {
 // error to stop on.
 func loadVoxelFile(path string) *voxel.Map {
 	blocks := newLevel(defaultLevelSize)
-	if _, err := os.Stat(path); err != nil {
+	if !voxel.HasRegions(path) {
 		return blocks
 	}
-	blocks.LoadFromDisk(path)
+	if err := blocks.LoadRegions(path); err != nil {
+		panic(err)
+	}
 	return blocks
 }
 

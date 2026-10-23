@@ -35,7 +35,9 @@ glTF models, particles, audio base, platform/GL.
       `collide.OBB`, `projectile.Hitscan`, `character` (`MoveQuake`, `Climber`), `nav.Graph.Links`.
       The game switches to OBB, q3move, ladders and hitscan in steps 2-3, once its
       world and physics run on VoxelLib (the APIs are float64 and world-based).
-- [ ] 2. World: VoxelLib `voxel.World` replaces `quads/voxel`; maps converted.
+- [x] 2. World: a VoxelLib `voxel.World` holds the blocks (`voxelfps:cube`, face
+      slots as properties); the GL chunks are a synced render cache until step 5.
+      Maps are region files (`tools/convertmaps`, round-trip checked).
 - [ ] 3. Physics, movement, pathing on `collide`/`nav`.
 - [ ] 4. Render features into VoxelLib: decals, sprites, spotlight shadows.
 - [ ] 5. Client on `voxel/engine` + `voxel/render`, ui, audio.

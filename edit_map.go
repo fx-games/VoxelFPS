@@ -157,7 +157,7 @@ func (g *Game) saveMap() error {
 	if err := g.saveBlocks(); err != nil {
 		return err
 	}
-	if err := g.CubeMap.SaveToDisk(g.voxelFile()); err != nil {
+	if err := g.CubeMap.SaveRegions(g.voxelFile()); err != nil {
 		return err
 	}
 	// The generated stress rig has no folder to go back to. Its voxels are

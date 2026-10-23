@@ -5,14 +5,16 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"fmt"
-	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/core"
-	"github.com/memmaker/voxelfps/platform/gl"
-	"github.com/memmaker/voxelfps/quads/glhf"
 	"math"
 	"os"
 	"slices"
 	"time"
+
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/platform/gl"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	lv "github.com/memmaker/voxellib/voxel"
 )
 
 type Map struct {
@@ -43,6 +45,8 @@ type Map struct {
 	torchLights           map[Int3]bool
 	locationTex           int32
 	locationVox           int32
+	world                 *lv.World
+	reg                   *lv.Registry
 }
 
 func NewDefaultMap(width, height, depth int32) *Map {
@@ -63,6 +67,7 @@ func NewMap(width, height, depth, chunkSizeHorizontal, chunkSizeHeight int32) *M
 	}
 
 	m.ChunkSizeCube = m.ChunkSizeHorizontal * m.ChunkSizeHeight * m.ChunkSizeHorizontal
+	m.resetWorld()
 	//m.culler = occlusion.NewOcclusionCuller(512, m)
 	return m
 }
@@ -138,8 +143,8 @@ func (m *Map) SetSize(width, height, depth int32) {
 		y := (i / int(width)) % int(height)
 		z := i / (int(width) * int(height))
 		m.chunks[i] = NewChunk(m, int32(x), int32(y), int32(z))
-		println("Created empty chunk at", x, y, z)
 	}
+	m.resetWorld()
 }
 
 func (m *Map) SetChunk(x, y, z int32, c *Chunk) {
@@ -520,8 +525,7 @@ func (m *Map) GetBlockAndChunk(blockPos Int3) (*Block, *Chunk) {
 }
 
 func (m *Map) IsSolidBlockAt(x int32, y int32, z int32) bool {
-	block := m.GetGlobalBlock(x, y, z)
-	return block != nil && !block.IsAir()
+	return m.Contains(x, y, z) && m.world.Block(int(x), int(y), int(z)) != lv.Air
 }
 
 func (m *Map) ContainsGrid(position Int3) bool {
@@ -996,83 +1000,7 @@ func (m *Map) ChunkIndex(x int32, y int32, z int32) int {
 	return int(x + y*m.width + z*m.width*m.height)
 }
 
-func (m *Map) SaveToDisk(filename string) error {
-	// serialize this map manually to a byte array
-	outfile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	// use a gzip writer to compress the byte array
-	// then write the compressed byte array to the file
-
-	gzipWriter := gzip.NewWriter(outfile)
-	// write 2xint32
-	binary.Write(gzipWriter, binary.LittleEndian, m.ChunkSizeHorizontal)
-	binary.Write(gzipWriter, binary.LittleEndian, m.ChunkSizeHeight)
-
-	// write 3xint32
-	binary.Write(gzipWriter, binary.LittleEndian, m.width)
-	binary.Write(gzipWriter, binary.LittleEndian, m.height)
-	binary.Write(gzipWriter, binary.LittleEndian, m.depth)
-	// ...and the level's own size inside that buffer, see SetBounds.
-	bounds := m.Bounds()
-	binary.Write(gzipWriter, binary.LittleEndian, bounds.X)
-	binary.Write(gzipWriter, binary.LittleEndian, bounds.Y)
-	binary.Write(gzipWriter, binary.LittleEndian, bounds.Z)
-	// write the map dimensions
-	m.logVoxelInfo(fmt.Sprintf("[Map] Saving map with dimensions %d %d %d", m.width, m.height, m.depth))
-
-	// write the number of chunks
-	chunkCount := int16(len(m.chunks))
-	binary.Write(gzipWriter, binary.LittleEndian, chunkCount)
-	m.logVoxelInfo(fmt.Sprintf("[Map] Saving %d chunks", chunkCount))
-
-	// write the chunks
-	for _, chunk := range m.chunks {
-		binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosX)
-		binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosY)
-		binary.Write(gzipWriter, binary.LittleEndian, chunk.chunkPosZ)
-		m.logVoxelInfo(fmt.Sprintf("[Map] Saving chunk %d %d %d", chunk.chunkPosX, chunk.chunkPosY, chunk.chunkPosZ))
-		for _, block := range chunk.data {
-			if block.IsSolid {
-				err = binary.Write(gzipWriter, binary.LittleEndian, uint8(1))
-				if err != nil {
-					return err
-				}
-				for cs := CubeSide(0); cs < 6; cs++ {
-					var texIndex uint16
-					if texIdOfSide, hasTexId := block.Textures[cs]; hasTexId {
-						texIndex = texIdOfSide
-					}
-					err = binary.Write(gzipWriter, binary.LittleEndian, texIndex)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				err = binary.Write(gzipWriter, binary.LittleEndian, uint8(0))
-				if err != nil {
-					return err
-				}
-			}
-		}
-		m.logVoxelInfo(fmt.Sprintf("[Map] Saved %d blocks", len(chunk.data)))
-	}
-	err = gzipWriter.Flush()
-	if err != nil {
-		return err
-	}
-	err = gzipWriter.Close()
-	if err != nil {
-		return err
-	}
-	err = outfile.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
+// LoadFromDisk reads the old map.bin format, for tools/convertmaps.
 func (m *Map) LoadFromDisk(filename string) {
 
 	buffer, readErr := os.ReadFile(filename)
@@ -1137,7 +1065,7 @@ func (m *Map) LoadFromMemory(source []byte) {
 		}
 		chunk.SetDirty()
 	}
-
+	m.syncWorld()
 	m.textureBufferIsDirty = true
 }
 
@@ -1147,6 +1075,7 @@ func (m *Map) SetBlockSide(blockPos Int3, side CubeSide, index uint16) {
 		return
 	}
 	block.Textures[side] = uint16(index)
+	m.syncCell(blockPos.X, blockPos.Y, blockPos.Z)
 	blockIndex := (m.getBlockIndex(blockPos.X, blockPos.Y, blockPos.Z) * 6) + int32(side)
 	m.lookupVoxels.SetPixels(int(blockIndex), []uint16{m.packFaceLookup(index, blockPos, int(side))})
 }
@@ -1162,6 +1091,7 @@ func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index uint16) {
 	block := m.GetBlockFromInt3(blockPos)
 	textureToReplace = block.GetTexture(side)
 	block.Textures[side] = uint16(index)
+	m.syncCell(blockPos.X, blockPos.Y, blockPos.Z)
 	m.textureBufferIsDirty = true
 
 	exposedSideOffset := side.AsDirection()
@@ -1235,6 +1165,7 @@ func (m *Map) SetBlockSideFill(blockPos Int3, side CubeSide, index uint16) {
 			}
 
 			neighborBlock.Textures[side] = uint16(index)
+			m.syncCell(neighbor.X, neighbor.Y, neighbor.Z)
 			push(neighbor)
 		}
 	}
@@ -1305,5 +1236,6 @@ func (m *Map) RemapTextures(remap map[uint16]uint16) {
 		}
 		m.emissiveTextures = moved
 	}
+	m.syncWorld()
 	m.textureBufferIsDirty = true
 }

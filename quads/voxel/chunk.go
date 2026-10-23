@@ -70,6 +70,7 @@ func (c *Chunk) GetLocalBlock(i, j, k int32) *Block {
 func (c *Chunk) SetBlock(x, y, z int32, block *Block) {
 	c.data[c.blockIndex(x, y, z)] = block
 	c.isDirty = true
+	c.m.syncCell(c.chunkPosX*c.m.ChunkSizeHorizontal+x, c.chunkPosY*c.m.ChunkSizeHeight+y, c.chunkPosZ*c.m.ChunkSizeHorizontal+z)
 	if !block.IsSolid { // repair holes in neighboring chunks, when destroying a block
 		neighborChunks := c.getNeighborChunks(x, y, z)
 		for _, chunk := range neighborChunks {

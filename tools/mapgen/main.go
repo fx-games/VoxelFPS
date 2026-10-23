@@ -1,13 +1,13 @@
 // Command mapgen builds a level out of a text file.
 //
-// A level on disk is two files nothing can hand-edit: map.bin is gzipped
-// chunks, map.json is a few hundred lines of generated JSON. Everything that
+// A level on disk is two files nothing can hand-edit: the region files hold
+// the blocks, map.json is a few hundred lines of generated JSON. Everything that
 // wants to make or change a level has therefore had to be the running editor,
 // with a mouse in it. This is the other door: build.map, a plain text file of
 // one command a line, next to the level it describes.
 //
 //	go run ./tools/mapgen -gallery              # write the imported gallery's script
-//	go run ./tools/mapgen -map station          # build.map -> map.bin + map.json
+//	go run ./tools/mapgen -map station          # build.map -> regions + map.json
 //	go run ./tools/mapgen -map station -show 15 # what is solid at height 15
 //	go run ./tools/mapgen -map ark -side 56     # what is solid in the x-y plane at z=56
 //	go run ./tools/mapgen -help                 # every command, with its arguments
@@ -132,10 +132,9 @@ import (
 )
 
 const (
-	mapDir        = "assets/maps"
-	scriptName    = "build.map"
-	voxelFileName = "map.bin"
-	mapFileName   = "map.json"
+	mapDir      = "assets/maps"
+	scriptName  = "build.map"
+	mapFileName = "map.json"
 	// atlasFileName is the atlas a level's folder draws with, named after the
 	// template it would otherwise be given a copy of (quads.UseMapAtlasIn).
 	atlasFileName = "map_64x64.png"
@@ -173,7 +172,9 @@ func main() {
 
 	if *show >= 0 || *side >= 0 {
 		blocks := voxel.NewMapWithEmptyChunks(1, 1, 1, chunkSize, chunkSize)
-		blocks.LoadFromDisk(filepath.Join(dir, voxelFileName))
+		if err := blocks.LoadRegions(dir); err != nil {
+			fatal(err)
+		}
 		if *side >= 0 {
 			fmt.Print(sideSlice(blocks, int32(*side)))
 		} else {
@@ -199,7 +200,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	if err := level.blocks.SaveToDisk(filepath.Join(dir, voxelFileName)); err != nil {
+	if err := level.blocks.SaveRegions(dir); err != nil {
 		fatal(err)
 	}
 	if len(level.textures) > 0 {

@@ -1,10 +1,11 @@
 package voxel
 
 import (
-	"fmt"
+	"errors"
+	"math"
+
 	"github.com/memmaker/voxelfps/platform/gl"
 	"github.com/memmaker/voxelfps/quads/glhf"
-	"math"
 )
 
 type DrawMode int
@@ -184,7 +185,7 @@ func ShaderValidate(shaderId uint32) {
 
 		infoLog := make([]byte, logLen)
 		gl.GetProgramInfoLog(shaderId, logLen, nil, &infoLog[0])
-		shaderErr := fmt.Errorf(string(infoLog))
+		shaderErr := errors.New(string(infoLog))
 		panic(shaderErr)
 	}
 }
