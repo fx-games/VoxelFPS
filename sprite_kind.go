@@ -17,6 +17,7 @@ import (
 	"github.com/memmaker/voxelfps/quads"
 	"github.com/memmaker/voxelfps/quads/glhf"
 	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxellib/grid"
 )
 
 // A SpriteKind is a thing in the world that is a picture rather than a model:
@@ -37,7 +38,7 @@ type SpriteKind struct {
 	Name string `json:"name"`
 	// Tile is how big one frame on the sheet is. The sheet is a plain grid, so
 	// this plus the sheet's own width is the whole layout.
-	Tile geometry.Point `json:"tile"`
+	Tile grid.Point `json:"tile"`
 	// Actor is whether this walks and can be shot. A kind that does is placed
 	// with the editor's actor tool and gets an Actor; one that does not is a
 	// decoration in the props palette.

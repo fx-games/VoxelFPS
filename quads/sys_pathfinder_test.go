@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxellib/grid"
 )
 
 // A 6x6 ground floor (one voxel solid at y=0, so groundHeight is 1 everywhere)
@@ -31,8 +31,8 @@ func TestPathfindingCannotCrossAFourVoxelCliffWithoutAClimbLink(t *testing.T) {
 
 func TestPathfindingClimbsARegisteredLadder(t *testing.T) {
 	pf := NewPathfindingSystem(towerIsSolid, 8)
-	bottom := geometry.Point{X: 3, Y: 1}
-	top := geometry.Point{X: 4, Y: 1}
+	bottom := grid.Point{X: 3, Y: 1}
+	top := grid.Point{X: 4, Y: 1}
 	pf.AddClimbLink(bottom, top, 1, 4)
 
 	path := pf.calculatePath(mgl32.Vec3{1.5, 1, 1.5}, mgl32.Vec3{4.5, 4, 1.5})

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/tpack"
 )
 
 func main() {

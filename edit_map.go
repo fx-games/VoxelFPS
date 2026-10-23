@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/core"
-	"github.com/memmaker/voxelfps/geometry"
 	"github.com/memmaker/voxelfps/platform/glfw"
 	"github.com/memmaker/voxelfps/quads"
 	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxellib/grid"
 )
 
 // openSceneryMenu browses assets/meshes and puts the model that is clicked on
@@ -661,7 +661,7 @@ func (v *VoxelBrushLine) StartDrag(pos voxel.Int3) []voxel.Int3 {
 
 func (v *VoxelBrushLine) Drag(cur voxel.Int3) []voxel.Int3 {
 	var line []voxel.Int3
-	geometry.Bresenham3D(int(v.start.X), int(v.start.Y), int(v.start.Z), int(cur.X), int(cur.Y), int(cur.Z), func(x, y, z int) bool {
+	grid.Bresenham3D(int(v.start.X), int(v.start.Y), int(v.start.Z), int(cur.X), int(cur.Y), int(cur.Z), func(x, y, z int) bool {
 		line = append(line, voxel.Int3{X: int32(x), Y: int32(y), Z: int32(z)})
 		return true
 	})

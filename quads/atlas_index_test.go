@@ -10,7 +10,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/memmaker/voxelfps/png_chunks"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 
 	"github.com/memmaker/voxelfps/quads/voxel"
 )

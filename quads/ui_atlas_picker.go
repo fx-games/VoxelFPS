@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/geometry"
 	"github.com/memmaker/voxelfps/platform/glfw"
 	"github.com/memmaker/voxelfps/quads/glhf"
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/grid"
+	"github.com/memmaker/voxellib/tpack"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,16 +19,16 @@ type GuiAtlasPicker struct {
 	fontHeight            int
 	textColor             mgl32.Vec4
 	textSelectColor       mgl32.Vec4
-	screenSize            geometry.Point
+	screenSize            grid.Point
 	shouldClose           bool
 	onClose               func()
 	onIndexClicked        func(selection int)
 	onIndexRightClicked   func(selection int)
 	selectionTexture      *glhf.Texture
 	currentSelectionIndex int
-	atlasTopLeft          geometry.Point
-	scaledTileSize        geometry.PointF
-	atlasSize             geometry.Point
+	atlasTopLeft          grid.Point
+	scaledTileSize        grid.PointF
+	atlasSize             grid.Point
 	screenScale           mgl32.Vec2
 
 	verticalScrollOffset float32
@@ -308,7 +308,7 @@ func realBaseName(name string) string {
 }
 
 func (a *GuiAtlasPicker) HandleResize(screenWidth int, screenHeight int, screenCoordScale mgl32.Vec2) {
-	a.screenSize = geometry.Point{X: screenWidth, Y: screenHeight}
+	a.screenSize = grid.Point{X: screenWidth, Y: screenHeight}
 	a.screenScale = screenCoordScale
 	borderSize := a.screenSize.Scaled(0.9, 0.4)
 	borderDrawPos := a.screenSize.CenterInBottomHalf(borderSize)
@@ -319,15 +319,15 @@ func (a *GuiAtlasPicker) HandleResize(screenWidth int, screenHeight int, screenC
 	a.layoutAtlas(borderDrawPos, borderSize)
 }
 
-func (a *GuiAtlasPicker) layoutAtlas(borderDrawPos geometry.Point, borderSize geometry.Point) {
+func (a *GuiAtlasPicker) layoutAtlas(borderDrawPos grid.Point, borderSize grid.Point) {
 	atlasWidth, _ := a.atlas.Width(), a.atlas.Height()
 
-	a.atlasTopLeft, a.atlasSize = borderDrawPos.CenterInParent(borderSize, geometry.PointF{X: 0.9, Y: 0.9})
+	a.atlasTopLeft, a.atlasSize = borderDrawPos.CenterInParent(borderSize, grid.PointF{X: 0.9, Y: 0.9})
 
 	minU, minV, maxU, maxV := a.atlas.GetUVInPx(0)
 	itemSizeX, itemSizeY := maxU-minU, maxV-minV
 	a.tileScaleFactor = float32(a.atlasSize.X) / float32(atlasWidth)
-	a.scaledTileSize = geometry.PointF{X: float64(itemSizeX) * float64(a.tileScaleFactor), Y: float64(itemSizeY) * float64(a.tileScaleFactor)}
+	a.scaledTileSize = grid.PointF{X: float64(itemSizeX) * float64(a.tileScaleFactor), Y: float64(itemSizeY) * float64(a.tileScaleFactor)}
 
 	a.selectionTexture = glhf.NewRectOutlineTexture(int(a.scaledTileSize.X), int(a.scaledTileSize.Y), 1)
 
@@ -337,8 +337,8 @@ func (a *GuiAtlasPicker) layoutAtlas(borderDrawPos geometry.Point, borderSize ge
 }
 
 func (a *GuiAtlasPicker) UpdateAtlas() {
-	pos := geometry.Point{X: int(a.border.position.X()), Y: int(a.border.position.Y())}
-	size := geometry.Point{X: int(a.border.size.X()), Y: int(a.border.size.Y())}
+	pos := grid.Point{X: int(a.border.position.X()), Y: int(a.border.position.Y())}
+	size := grid.Point{X: int(a.border.size.X()), Y: int(a.border.size.Y())}
 	a.layoutAtlas(pos, size)
 }
 func (a *GuiAtlasPicker) atlasCutoff() glhf.IntVec2 {

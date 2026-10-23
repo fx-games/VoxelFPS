@@ -2,8 +2,8 @@ package quads
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/geometry"
 	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxellib/grid"
 )
 
 // pathGridSize bounds the A* search area: any (x,z) cell outside a square this
@@ -17,7 +17,7 @@ const pathGridSize = 128
 // produces switches gravity off and drives straight at Top's exact position -
 // see PathfindingSystem.Update.
 type ClimbLink struct {
-	Bottom, Top   geometry.Point
+	Bottom, Top   grid.Point
 	BottomY, TopY float32
 }
 
@@ -29,7 +29,7 @@ type ClimbLink struct {
 // for the player on the same staircase; this only tells the search the two
 // tiles are neighbours at all.
 type WalkLink struct {
-	Bottom, Top geometry.Point
+	Bottom, Top grid.Point
 }
 
 type PathfindingSystem struct {
@@ -56,7 +56,7 @@ func NewPathfindingSystem(isSolid func(x int32, y int32, z int32) bool, maxHeigh
 
 // AddClimbLink registers a ladder. Both directions are added, so a path may
 // climb or descend it.
-func (c *PathfindingSystem) AddClimbLink(bottom, top geometry.Point, bottomY, topY float32) {
+func (c *PathfindingSystem) AddClimbLink(bottom, top grid.Point, bottomY, topY float32) {
 	c.climbLinks = append(c.climbLinks,
 		ClimbLink{Bottom: bottom, Top: top, BottomY: bottomY, TopY: topY},
 		ClimbLink{Bottom: top, Top: bottom, BottomY: topY, TopY: bottomY},
@@ -65,7 +65,7 @@ func (c *PathfindingSystem) AddClimbLink(bottom, top geometry.Point, bottomY, to
 
 // AddWalkLink registers a staircase (or similar). Both directions are added,
 // so a path may go up or down it.
-func (c *PathfindingSystem) AddWalkLink(bottom, top geometry.Point) {
+func (c *PathfindingSystem) AddWalkLink(bottom, top grid.Point) {
 	c.walkLinks = append(c.walkLinks,
 		WalkLink{Bottom: bottom, Top: top},
 		WalkLink{Bottom: top, Top: bottom},
@@ -176,19 +176,19 @@ func (c *PathfindingSystem) DrawPathfindingDebug(lineShader *glhf.Shader) {
 }
 
 type AstarFinder struct {
-	neighbours func(geometry.Point) []geometry.Point
+	neighbours func(grid.Point) []grid.Point
 }
 
-func (a AstarFinder) Neighbors(point geometry.Point) []geometry.Point {
+func (a AstarFinder) Neighbors(point grid.Point) []grid.Point {
 	return a.neighbours(point)
 }
 
-func (a AstarFinder) Cost(point geometry.Point, point2 geometry.Point) int {
-	return geometry.DistanceManhattan(point, point2)
+func (a AstarFinder) Cost(point grid.Point, point2 grid.Point) int {
+	return grid.DistanceManhattan(point, point2)
 }
 
-func (a AstarFinder) Estimation(point geometry.Point, point2 geometry.Point) int {
-	return geometry.DistanceSquared(point, point2)
+func (a AstarFinder) Estimation(point grid.Point, point2 grid.Point) int {
+	return grid.DistanceSquared(point, point2)
 }
 
 // calculatePath is a 2D grid search whose walkability test looks up each
@@ -210,26 +210,26 @@ func (c *PathfindingSystem) calculatePath(position mgl32.Vec3, destination mgl32
 	origin := topDownPoint(position)
 	target := topDownPoint(destination)
 
-	climbFrom := make(map[geometry.Point][]ClimbLink, len(c.climbLinks))
-	climbEdge := make(map[[2]geometry.Point]ClimbLink, len(c.climbLinks))
+	climbFrom := make(map[grid.Point][]ClimbLink, len(c.climbLinks))
+	climbEdge := make(map[[2]grid.Point]ClimbLink, len(c.climbLinks))
 	for _, link := range c.climbLinks {
 		climbFrom[link.Bottom] = append(climbFrom[link.Bottom], link)
-		climbEdge[[2]geometry.Point{link.Bottom, link.Top}] = link
+		climbEdge[[2]grid.Point{link.Bottom, link.Top}] = link
 	}
-	walkFrom := make(map[geometry.Point][]geometry.Point, len(c.walkLinks))
+	walkFrom := make(map[grid.Point][]grid.Point, len(c.walkLinks))
 	for _, link := range c.walkLinks {
 		walkFrom[link.Bottom] = append(walkFrom[link.Bottom], link.Top)
 	}
 
-	pathrange := geometry.NewPathRange(geometry.NewRect(0, 0, pathGridSize, pathGridSize))
+	pathrange := grid.NewPathRange(grid.NewRect(0, 0, pathGridSize, pathGridSize))
 	path := pathrange.AstarPath(AstarFinder{
-		neighbours: func(point geometry.Point) []geometry.Point {
+		neighbours: func(point grid.Point) []grid.Point {
 			height, hasFloor := c.groundHeight(int32(point.X), int32(point.Y))
 			if !hasFloor {
 				return nil
 			}
-			var result []geometry.Point
-			for _, p := range []geometry.Point{
+			var result []grid.Point
+			for _, p := range []grid.Point{
 				{X: point.X - 1, Y: point.Y},
 				{X: point.X + 1, Y: point.Y},
 				{X: point.X, Y: point.Y - 1},
@@ -258,7 +258,7 @@ func (c *PathfindingSystem) calculatePath(position mgl32.Vec3, destination mgl32
 	result := make([]Waypoint, 0, len(path)-1)
 	for i := 1; i < len(path); i++ {
 		prev, p := path[i-1], path[i]
-		if link, isClimb := climbEdge[[2]geometry.Point{prev, p}]; isClimb {
+		if link, isClimb := climbEdge[[2]grid.Point{prev, p}]; isClimb {
 			result = append(result, Waypoint{
 				Pos:   mgl32.Vec3{float32(p.X) + 0.5, link.TopY, float32(p.Y) + 0.5},
 				Climb: true,
@@ -353,6 +353,6 @@ func (c *PathfindingSystem) hasLineOfSight(a, b mgl32.Vec3) bool {
 	return true
 }
 
-func topDownPoint(worldPos mgl32.Vec3) geometry.Point {
-	return geometry.Point{X: int(worldPos.X()), Y: int(worldPos.Z())}
+func topDownPoint(worldPos mgl32.Vec3) grid.Point {
+	return grid.Point{X: int(worldPos.X()), Y: int(worldPos.Z())}
 }

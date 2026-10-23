@@ -9,8 +9,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/memmaker/voxelfps/png_chunks"
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/tpack"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 )
 
 // Writing a weapon folder is the same job whether the frames came out of a mod

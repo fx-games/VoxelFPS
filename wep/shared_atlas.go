@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/memmaker/voxelfps/png_chunks"
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/tpack"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 )
 
 // Everything a weapon throws into the world is drawn from one atlas, packed

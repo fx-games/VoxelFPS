@@ -2,7 +2,7 @@ package core
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxellib/grid"
 	"image/color"
 	"math"
 )
@@ -138,7 +138,7 @@ type MapEntity struct {
 	TextureIndices      []uint16
 	MeshName            string
 	SpriteSheetName     string
-	SpriteSheetTileSize geometry.Point
+	SpriteSheetTileSize grid.Point
 	IsTransparent       bool
 	CreateCollider      bool
 

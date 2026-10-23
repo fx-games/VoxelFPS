@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxellib/grid"
 )
 
 // spriteDir is the folder of folders, one to a kind. It matches the game's own
@@ -22,7 +22,7 @@ const spriteDir = "assets/sprites"
 // called, how big one frame is, and which frame it stands on facing each way.
 type spriteKind struct {
 	Name       string                 `json:"name"`
-	Tile       geometry.Point         `json:"tile"`
+	Tile       grid.Point             `json:"tile"`
 	Animations map[string]*spriteAnim `json:"animations"`
 }
 

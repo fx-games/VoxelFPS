@@ -15,9 +15,9 @@ import (
 	"strings"
 
 	"github.com/memmaker/voxelfps/audio"
-	"github.com/memmaker/voxelfps/png_chunks"
-	"github.com/memmaker/voxelfps/tpack"
 	"github.com/memmaker/voxelfps/wep"
+	"github.com/memmaker/voxellib/tpack"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 )
 
 // Write puts a compiled weapon into its own folder: the behaviour as JSON, the

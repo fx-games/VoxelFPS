@@ -127,8 +127,8 @@ import (
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/core"
-	"github.com/memmaker/voxelfps/png_chunks"
 	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 )
 
 const (

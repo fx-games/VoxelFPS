@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/tpack"
 )
 
 // GridWeapon is everything a weapon cut out of a grid needs. Only Sheet, ID,

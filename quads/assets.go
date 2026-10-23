@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/quads/glhf"
-	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxellib/tpack"
 	"image"
 	"image/color"
 	_ "image/png"

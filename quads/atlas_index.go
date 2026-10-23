@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/voxelfps/png_chunks"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 
 	"github.com/memmaker/voxelfps/quads/glhf"
 	"github.com/memmaker/voxelfps/quads/voxel"

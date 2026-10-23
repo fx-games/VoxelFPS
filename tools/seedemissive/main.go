@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/memmaker/voxelfps/png_chunks"
 	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxellib/tpack/png_chunks"
 )
 
 func main() {
