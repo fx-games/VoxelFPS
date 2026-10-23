@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // DECORATE arguments are expressions, not literals: a recoil amount is written

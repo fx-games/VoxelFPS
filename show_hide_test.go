@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // The performance readout is a render-pass toggle like the rest, so it belongs in

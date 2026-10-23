@@ -1,6 +1,6 @@
 package glhf
 
-import "github.com/memmaker/goray/platform/gl"
+import "github.com/memmaker/voxelfps/platform/gl"
 
 // InstanceAttr is one float-typed vertex attribute that advances once per
 // instance instead of once per vertex. The location is given explicitly rather

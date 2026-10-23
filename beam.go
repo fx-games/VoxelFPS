@@ -15,9 +15,9 @@ import (
 	"image/color"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // What a beam looks like.

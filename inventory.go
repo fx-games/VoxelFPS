@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // What the player is carrying, and what the HUD says about the one in hand.

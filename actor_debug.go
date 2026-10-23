@@ -13,7 +13,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // actorAnimations is the debug page's list of things to play, in the order the

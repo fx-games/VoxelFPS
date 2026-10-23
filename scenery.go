@@ -9,10 +9,10 @@ import (
 	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // Scenery is a piece of furniture the world is furnished with: a folder under

@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/memmaker/goray/audio"
+	"github.com/memmaker/voxelfps/audio"
 )
 
 // Most of a Doom mod's sounds are not files in any format a decoder knows: they

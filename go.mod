@@ -1,4 +1,4 @@
-module github.com/memmaker/goray
+module github.com/memmaker/voxelfps
 
 go 1.23.0
 

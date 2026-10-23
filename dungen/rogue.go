@@ -1,7 +1,7 @@
 package dungen
 
 import (
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/geometry"
 	"math"
 	"math/rand"
 )

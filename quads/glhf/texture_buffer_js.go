@@ -5,7 +5,7 @@ package glhf
 import (
 	"runtime"
 
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // TextureBuffer on js: WebGL2 has no buffer textures, so the uint16 table is a

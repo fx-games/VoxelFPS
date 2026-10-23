@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/wep"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

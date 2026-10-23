@@ -3,7 +3,7 @@ package quads
 import (
 	"testing"
 
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // TestScreenAnimationTick exercises the frame-advance math with no GL context

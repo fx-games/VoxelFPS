@@ -10,7 +10,7 @@ package main
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // Damage is one hit arriving at something that can be hurt.

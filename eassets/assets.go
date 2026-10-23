@@ -2,7 +2,7 @@ package eassets
 
 import (
 	"embed"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 	"io/fs"
 )
 

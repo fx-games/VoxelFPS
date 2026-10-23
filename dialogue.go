@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // openDialogue puts the Fallout-3-shaped conversation screen up, starting at

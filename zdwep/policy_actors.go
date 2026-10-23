@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // A weapon spawns things, and those things have scripts of their own: a rocket

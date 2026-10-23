@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // An item in hand goes on the first solid thing inside a block of the player,

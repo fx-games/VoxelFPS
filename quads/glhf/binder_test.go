@@ -3,7 +3,7 @@ package glhf
 import (
 	"testing"
 
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // resetBindings puts the shadow back to a known context with nothing bound, so a

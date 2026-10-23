@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"unsafe"
 
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 const SizeOfFloat32 = 4

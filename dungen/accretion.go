@@ -3,7 +3,7 @@ package dungen
 import (
 	"cmp"
 	"fmt"
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/geometry"
 	"math/rand"
 	"slices"
 )

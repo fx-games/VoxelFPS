@@ -15,7 +15,7 @@ import (
 	"os"
 	"sort"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // raiseTics is generous headroom for a weapon's own raise animation; the

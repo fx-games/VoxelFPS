@@ -1,7 +1,7 @@
 package glhf
 
 import (
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 	"runtime"
 )
 

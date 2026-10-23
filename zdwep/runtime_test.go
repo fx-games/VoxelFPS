@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

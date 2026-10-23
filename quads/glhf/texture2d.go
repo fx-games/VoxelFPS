@@ -10,8 +10,8 @@ import (
 	"unsafe"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // Texture is an OpenGL texture.

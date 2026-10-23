@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // A sign is a display on a wall with a few words on it: which deck this is,

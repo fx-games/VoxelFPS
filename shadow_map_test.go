@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // The shadow rig, as it ships. It exists so shadow bias can be judged by eye,

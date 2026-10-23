@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // A SpriteKind is a thing in the world that is a picture rather than a model:

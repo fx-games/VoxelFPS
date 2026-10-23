@@ -2,7 +2,7 @@ package glhf
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/tpack"
 	"image"
 )
 

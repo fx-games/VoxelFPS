@@ -18,9 +18,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/eassets"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/eassets"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // The three roots the sprite tools browse, one per role - see spriteRole.

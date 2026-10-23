@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // Every folder under assets/sprites has to be loadable and has to index frames

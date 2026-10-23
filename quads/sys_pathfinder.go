@@ -2,8 +2,8 @@ package quads
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // pathGridSize bounds the A* search area: any (x,z) cell outside a square this

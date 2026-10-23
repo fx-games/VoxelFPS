@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/wep"
-	"github.com/memmaker/goray/zdwep"
+	"github.com/memmaker/voxelfps/wep"
+	"github.com/memmaker/voxelfps/zdwep"
 )
 
 func main() {

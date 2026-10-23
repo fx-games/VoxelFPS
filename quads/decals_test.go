@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
+	"github.com/memmaker/voxelfps/core"
 )
 
 // A decal stuck to a moving GameObject - a door's own panel, say - has to

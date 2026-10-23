@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/tpack"
 )
 
 // The weapons folder is data a person can edit, so it is checked on load even

@@ -3,8 +3,8 @@ package quads
 import (
 	"bytes"
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/tpack"
 	"image"
 	"image/color"
 	_ "image/png"

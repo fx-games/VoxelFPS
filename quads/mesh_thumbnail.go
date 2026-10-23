@@ -4,8 +4,8 @@ import (
 	"image"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/platform/gl"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/platform/gl"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // ThumbSize is how big one model's preview is, in pixels. It matches the texture

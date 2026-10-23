@@ -5,7 +5,7 @@ package glhf
 import (
 	"fmt"
 
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // CheckGLError panics on a pending GL error. Only compiled in with -tags debugGL:

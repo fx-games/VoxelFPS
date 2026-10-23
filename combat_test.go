@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // The three shapes a hit comes in, and what each side of a fight charges itself

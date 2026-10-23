@@ -7,7 +7,7 @@ import (
 	"image/png"
 	"testing"
 
-	"github.com/memmaker/goray/png_chunks"
+	"github.com/memmaker/voxelfps/png_chunks"
 	"github.com/stretchr/testify/assert"
 )
 

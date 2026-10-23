@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // stairsMap is the shipped stairs level: the blocks the game would put in the

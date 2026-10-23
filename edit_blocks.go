@@ -23,7 +23,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // blockDesign is a block's six atlas slots, indexed by voxel.CubeSide.

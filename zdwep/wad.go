@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/memmaker/goray/png_chunks"
+	"github.com/memmaker/voxelfps/png_chunks"
 )
 
 // A mod takes the game's own data for granted: Final Doomer's weapons spawn

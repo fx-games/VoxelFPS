@@ -30,7 +30,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 const (

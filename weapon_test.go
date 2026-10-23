@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // A vanilla weapon frame's own offset is (width/2 - 160, height - 168). Every

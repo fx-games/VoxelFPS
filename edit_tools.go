@@ -7,10 +7,10 @@ import (
 	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/platform/glfw"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/platform/glfw"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // The map editor's three tools, and the one idea that keeps them off menus:

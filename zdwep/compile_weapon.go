@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // Result is everything one weapon needs, compiled.

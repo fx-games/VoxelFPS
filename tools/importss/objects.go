@@ -19,7 +19,7 @@ import (
 	"path"
 
 	"github.com/inkyblackness/hacked/ss1/content/object"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // objectBlockStart is the first block of the first object. Block zero of the

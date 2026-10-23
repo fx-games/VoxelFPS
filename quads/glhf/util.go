@@ -1,6 +1,6 @@
 package glhf
 
-import "github.com/memmaker/goray/platform/gl"
+import "github.com/memmaker/voxelfps/platform/gl"
 
 // bindKey names one GL binding slot. Most targets have exactly one slot per
 // context, but a texture binding belongs to a texture unit and the element array

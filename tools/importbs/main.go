@@ -17,7 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/audio"
+	"github.com/memmaker/voxelfps/audio"
 )
 
 func main() {

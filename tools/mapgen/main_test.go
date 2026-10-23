@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // One script through the whole of build: the two shapes that are not boxes, the

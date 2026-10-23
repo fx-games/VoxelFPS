@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // defaultActorHealth backs both the fall-damage pool and bodyShotsToKill: a

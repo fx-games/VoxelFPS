@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // character is one of the game's inhabitants: the prefix its frames are named

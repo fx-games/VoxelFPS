@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 type TextAlign int

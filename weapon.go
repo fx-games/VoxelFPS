@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/events"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/events"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // Weapon is what the player holds. Everything about it, from the frames it

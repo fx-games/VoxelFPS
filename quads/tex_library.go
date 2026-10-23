@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // TexLibraryRoot is the folder every texture in the game is chosen from. It is

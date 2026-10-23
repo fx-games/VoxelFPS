@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // Carrying an item. The carry key takes whatever the selection is on into the

@@ -6,7 +6,7 @@ import (
 	"runtime"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // TextureArray is an OpenGL 3D texture.

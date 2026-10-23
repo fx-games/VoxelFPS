@@ -2,7 +2,7 @@ package core
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/geometry"
 	"image/color"
 	"math"
 )

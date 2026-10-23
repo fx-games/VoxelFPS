@@ -14,10 +14,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/png_chunks"
-	"github.com/memmaker/goray/tpack"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/png_chunks"
+	"github.com/memmaker/voxelfps/tpack"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // Write puts a compiled weapon into its own folder: the behaviour as JSON, the

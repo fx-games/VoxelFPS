@@ -19,7 +19,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 func main() {

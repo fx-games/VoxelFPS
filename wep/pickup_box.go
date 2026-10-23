@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/tpack"
 )
 
 // A weapon lying on the floor, and the box of ammo beside it, are one picture

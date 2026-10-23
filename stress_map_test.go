@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 func TestStressMapIsWalledPillaredAndPopulated(t *testing.T) {

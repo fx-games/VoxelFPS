@@ -30,7 +30,7 @@ import (
 	"github.com/inkyblackness/hacked/ss1/resource"
 	"github.com/inkyblackness/hacked/ss1/resource/lgres"
 	"github.com/inkyblackness/hacked/ss1/serial"
-	"github.com/memmaker/goray/audio"
+	"github.com/memmaker/voxelfps/audio"
 )
 
 // gamePalette is the resource holding the palette every in-game bitmap is drawn

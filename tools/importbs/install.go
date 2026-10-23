@@ -20,9 +20,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/geometry"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/geometry"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // installDirs are where each kind of thing lands, relative to the repo root.

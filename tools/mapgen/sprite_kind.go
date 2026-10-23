@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/geometry"
 )
 
 // spriteDir is the folder of folders, one to a kind. It matches the game's own

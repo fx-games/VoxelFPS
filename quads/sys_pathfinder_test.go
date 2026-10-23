@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/geometry"
 )
 
 // A 6x6 ground floor (one voxel solid at y=0, so groundHeight is 1 everywhere)

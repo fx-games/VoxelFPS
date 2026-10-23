@@ -29,8 +29,8 @@ import (
 	"github.com/inkyblackness/hacked/ss1/resource"
 	"github.com/inkyblackness/hacked/ss1/resource/lgres"
 	"github.com/inkyblackness/hacked/ss1/serial"
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/geometry"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/geometry"
 )
 
 // Where each kind of thing lands, relative to the repo root.

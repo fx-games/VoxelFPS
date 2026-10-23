@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // doorSlideMeshName and doorSwingLeafMeshName are the two prototype doors: a

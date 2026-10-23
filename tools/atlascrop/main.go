@@ -6,7 +6,7 @@ import (
 	"image/png"
 	"os"
 
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/tpack"
 )
 
 func main() {

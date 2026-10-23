@@ -2,7 +2,7 @@ package tpack
 
 import (
 	"bytes"
-	"github.com/memmaker/goray/png_chunks"
+	"github.com/memmaker/voxelfps/png_chunks"
 	"image"
 	"image/draw"
 	"image/png"

@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // An audio log is a note that talks: a data cartridge lying in the level with a

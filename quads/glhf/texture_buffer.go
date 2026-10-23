@@ -5,7 +5,7 @@ package glhf
 import (
 	"runtime"
 
-	"github.com/memmaker/goray/platform/gl"
+	"github.com/memmaker/voxelfps/platform/gl"
 )
 
 // TextureBuffer is an OpenGL 3D texture.

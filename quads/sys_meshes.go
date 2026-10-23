@@ -5,9 +5,9 @@ import (
 	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 type MeshDrawer struct {

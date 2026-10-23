@@ -9,8 +9,8 @@ import (
 	"slices"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // mapFile is core.MapLoadResult's on-disk shape: the same fields, but with a

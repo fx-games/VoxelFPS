@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // The policy is the checked-in record of what every DECORATE action function

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 func vertexShaderHeader(uboBlock string) string {

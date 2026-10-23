@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/memmaker/goray/platform/gl"
-	"github.com/memmaker/goray/platform/glfw"
+	"github.com/memmaker/voxelfps/platform/gl"
+	"github.com/memmaker/voxelfps/platform/glfw"
 )
 
 // frameProfile splits a benchmark's frame into the passes it is made of, and

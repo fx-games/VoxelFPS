@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // godMode makes Player.TakeDamage do nothing. It is checked there rather than

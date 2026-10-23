@@ -5,11 +5,11 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/events"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/quads/voxel"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/events"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // EditorTool is what a left click does while a map authoring tool is picked.

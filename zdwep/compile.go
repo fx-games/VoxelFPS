@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // Compiling is the second phase: the index says what the mod contains, and this

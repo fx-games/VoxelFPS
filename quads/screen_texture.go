@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 // ScreenAnimation swaps one material slot of a mesh on a timer - a computer

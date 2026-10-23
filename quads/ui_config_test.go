@@ -3,7 +3,7 @@ package quads
 import (
 	"testing"
 
-	"github.com/memmaker/goray/platform/glfw"
+	"github.com/memmaker/voxelfps/platform/glfw"
 )
 
 func TestGuiOptionFloatAppliesOnEveryStep(t *testing.T) {

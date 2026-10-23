@@ -2,9 +2,9 @@ package quads
 
 import (
 	"fmt"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/platform/gl"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/platform/gl"
+	"github.com/memmaker/voxelfps/quads/glhf"
 )
 
 const (

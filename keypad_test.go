@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/platform/glfw"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/platform/glfw"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 func testKeypad(code string, at mgl32.Vec3) *Keypad {

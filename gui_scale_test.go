@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // The menu shows these labels and applies the step at the same index, so the two

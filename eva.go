@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // Outside the hull there is no air, no floor and no up. The walk is gone and

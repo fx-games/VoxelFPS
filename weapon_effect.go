@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/quads/voxel"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/core"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // A weapon throws things into the world: muzzle smoke, an ejected shell, a

@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/memmaker/goray/png_chunks"
+	"github.com/memmaker/voxelfps/png_chunks"
 
-	"github.com/memmaker/goray/quads/glhf"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads/glhf"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // maxAtlasSlots is what a texture index can address: the voxel lookup buffer packs

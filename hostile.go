@@ -9,9 +9,9 @@ package main
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads"
-	"github.com/memmaker/goray/quads/voxel"
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/quads"
+	"github.com/memmaker/voxelfps/quads/voxel"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // How a hostile behaves, in numbers.

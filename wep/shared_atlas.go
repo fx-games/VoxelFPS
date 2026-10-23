@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/memmaker/goray/png_chunks"
-	"github.com/memmaker/goray/tpack"
+	"github.com/memmaker/voxelfps/png_chunks"
+	"github.com/memmaker/voxelfps/tpack"
 )
 
 // Everything a weapon throws into the world is drawn from one atlas, packed

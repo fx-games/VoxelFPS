@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // Painting a level, for the generated test maps.

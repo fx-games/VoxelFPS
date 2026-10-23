@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/memmaker/goray/platform/glfw"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/platform/glfw"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 func testAudioLog(cue, title string) *AudioLog {

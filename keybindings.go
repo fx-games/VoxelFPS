@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/memmaker/goray/platform/glfw"
+	"github.com/memmaker/voxelfps/platform/glfw"
 	"log"
 	"maps"
 	"os"

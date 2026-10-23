@@ -2,8 +2,8 @@ package quads
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/platform/glfw"
-	"github.com/memmaker/goray/quads/glhf"
+	"github.com/memmaker/voxelfps/platform/glfw"
+	"github.com/memmaker/voxelfps/quads/glhf"
 	"image"
 )
 

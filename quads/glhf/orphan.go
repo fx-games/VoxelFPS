@@ -1,6 +1,6 @@
 package glhf
 
-import "github.com/memmaker/goray/platform/gl"
+import "github.com/memmaker/voxelfps/platform/gl"
 
 // Init initializes OpenGL by loading function pointers from the active OpenGL context.
 // This function must be manually run inside the main thread (using "github.com/gopxl/mainthread/v2"

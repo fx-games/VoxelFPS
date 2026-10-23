@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/events"
-	"github.com/memmaker/goray/platform/gl"
-	"github.com/memmaker/goray/platform/glfw"
+	"github.com/memmaker/voxelfps/events"
+	"github.com/memmaker/voxelfps/platform/gl"
+	"github.com/memmaker/voxelfps/platform/glfw"
 	"maps"
 )
 

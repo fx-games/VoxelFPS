@@ -10,9 +10,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/memmaker/goray/png_chunks"
+	"github.com/memmaker/voxelfps/png_chunks"
 
-	"github.com/memmaker/goray/quads/voxel"
+	"github.com/memmaker/voxelfps/quads/voxel"
 )
 
 // Baking an atlas renumbers every texture in it, and the map has to be moved onto

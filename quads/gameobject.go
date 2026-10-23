@@ -2,7 +2,7 @@ package quads
 
 import (
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/core"
+	"github.com/memmaker/voxelfps/core"
 )
 
 type AnimIndex uint8

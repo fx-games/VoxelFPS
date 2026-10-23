@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/memmaker/goray/audio"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/audio"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // The soundtrack: one MIDI file per track under assets/audio, played through

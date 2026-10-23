@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/goray/platform/glfw"
-	"github.com/memmaker/goray/quads"
+	"github.com/memmaker/voxelfps/platform/glfw"
+	"github.com/memmaker/voxelfps/quads"
 )
 
 // A locked door, Prey's way round: the door itself knows nothing about codes.

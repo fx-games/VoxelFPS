@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/memmaker/goray/platform/glfw"
+	"github.com/memmaker/voxelfps/platform/glfw"
 )
 
 func TestLoadKeyBindingsDefaultFileMatchesDefaults(t *testing.T) {

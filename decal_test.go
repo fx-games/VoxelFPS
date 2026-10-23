@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/memmaker/goray/wep"
+	"github.com/memmaker/voxelfps/wep"
 )
 
 // What a hitscan marks the wall with, by ZDoom's rules: the weapon's own decal
