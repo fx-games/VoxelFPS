@@ -1011,8 +1011,8 @@ func (a *GlApplication) SetupParticleSystem(name ParticleName, count int) {
 	ps := glhf.NewParticleSystem(count)
 	a.particleSystems[name] = ps
 }
-func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool, maxHeight int32) {
-	a.Pathfinder = NewPathfindingSystem(isSolid, maxHeight)
+func (a *GlApplication) SetupPathfinder(isSolid func(x, y, z int32) bool) {
+	a.Pathfinder = NewPathfindingSystem(isSolid)
 }
 func (a *GlApplication) SetupMinimap(width, height int, getColor func(x, y int) [4]uint8) {
 	a.minimap = NewMiniMap(a.guiShader, width, height, getColor)

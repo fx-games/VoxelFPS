@@ -12,7 +12,6 @@ import (
 	"github.com/memmaker/voxelfps/core"
 	"github.com/memmaker/voxelfps/quads"
 	"github.com/memmaker/voxelfps/quads/voxel"
-	"github.com/memmaker/voxellib/grid"
 )
 
 // Scenery is a piece of furniture the world is furnished with: a folder under
@@ -170,9 +169,7 @@ func (g *Game) registerClimbable(piece *quads.GameObject, def *Scenery, climbTo 
 		g.climbVolumes = append(g.climbVolumes, climbVolume{box: world, piece: piece})
 	}
 	if climbTo != nil && g.Pathfinder != nil {
-		bottom := grid.Point{X: int(pos.X()), Y: int(pos.Z())}
-		top := grid.Point{X: int(climbTo.X()), Y: int(climbTo.Z())}
-		g.Pathfinder.AddClimbLink(bottom, top, pos.Y(), climbTo.Y())
+		g.Pathfinder.AddClimbLink(pos, *climbTo)
 	}
 }
 

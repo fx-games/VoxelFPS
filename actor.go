@@ -485,18 +485,13 @@ func (a *Actor) waypointText() string {
 
 // updateTour is a guide leading a tour: it walks a straight line to the next
 // point on its own route rather than handing the destination to
-// quads.PathfindingSystem, the way an ordinary patrol does. That system finds
-// a deck's own floor by scanning straight up from y=0 (see its groundHeight) -
-// a column that, eleven decks up a hull built round a central spine, is
-// vacuum at y=0 and never solid at all. Every hostile and every companion on
-// every other map goes through it just fine; a guide standing on the ark
-// cannot, because its own starting column already fails that scan.
+// quads.PathfindingSystem, the way an ordinary patrol does.
 //
 // ponytail: straight-line movement, no A* and no collision check against the
 // route itself - correct here because every route is chosen off the ark's own
 // floor plan (see assets/maps/ark/build.map) to be a clear, flat, single-deck
-// corridor. A tour that had to turn a corner, dodge furniture or change decks
-// would need groundHeight's assumption fixed instead of a workaround here.
+// corridor. The pathfinder walks the ark's decks now (nav.Graph is 3D), so a
+// tour that has to turn corners can hand its legs to it.
 //
 // It only leaves for its next leg once it has arrived at this one *and* the
 // player is close enough to have followed - a guide that walked on regardless

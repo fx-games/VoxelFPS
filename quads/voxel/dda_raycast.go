@@ -1,8 +1,12 @@
 package voxel
 
 import (
-	"github.com/go-gl/mathgl/mgl32"
 	"math"
+
+	lv "github.com/memmaker/voxellib/voxel"
+	"github.com/memmaker/voxellib/voxel/physics"
+
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 type HitInfo2D struct {
@@ -211,130 +215,51 @@ func (d HitInfo3D) WithDistance(newDist float64) HitInfo3D {
 	return d
 }
 
-// DDARaycast walks the voxel grid along the ray until stopRay reports a solid
-// voxel or maxDistance is exceeded. maxDistance is measured in rayDir lengths,
-// so pass a normalized direction to get world units. A ray that reaches
-// maxDistance without a hit returns HitInfo3D{Hit: false}.
+// DDARaycast walks the voxel grid along the ray (VoxelLib physics.Walk) until
+// stopRay reports a solid voxel or maxDistance is exceeded. maxDistance is
+// measured in rayDir lengths, so pass a normalized direction to get world
+// units. A ray that reaches maxDistance without a hit returns HitInfo3D{Hit: false}.
 func DDARaycast(rayStart, rayDir mgl32.Vec3, maxDistance float64, stopRay func(x, y, z int32) bool) HitInfo3D {
-	// adapted from: https://github.com/fenomas/fast-voxel-raycast/blob/master/index.js
-	t := 0.0
-	ix := int32(math.Floor(float64(rayStart.X())))
-	iy := int32(math.Floor(float64(rayStart.Y())))
-	iz := int32(math.Floor(float64(rayStart.Z())))
-
-	stepx := int32(-1)
-	if rayDir.X() > 0 {
-		stepx = 1
+	length := float64(rayDir.Len())
+	if length == 0 {
+		return HitInfo3D{}
 	}
-	stepy := int32(-1)
-	if rayDir.Y() > 0 {
-		stepy = 1
-	}
-	stepz := int32(-1)
-	if rayDir.Z() > 0 {
-		stepz = 1
-	}
-
-	txDelta := math.Abs(float64(1.0 / rayDir.X()))
-	tyDelta := math.Abs(float64(1.0 / rayDir.Y()))
-	tzDelta := math.Abs(float64(1.0 / rayDir.Z()))
-
-	xdist := float64(rayStart.X()) - float64(ix)
-	if stepx > 0 {
-		xdist = float64(ix+1) - float64(rayStart.X())
-	}
-	ydist := float64(rayStart.Y()) - float64(iy)
-	if stepy > 0 {
-		ydist = float64(iy+1) - float64(rayStart.Y())
-	}
-	zdist := float64(rayStart.Z()) - float64(iz)
-	if stepz > 0 {
-		zdist = float64(iz+1) - float64(rayStart.Z())
-	}
-
-	txMax := math.Inf(1)
-	if txDelta < math.Inf(1) {
-		txMax = txDelta * xdist
-	}
-	tyMax := math.Inf(1)
-	if tyDelta < math.Inf(1) {
-		tyMax = tyDelta * ydist
-	}
-	tzMax := math.Inf(1)
-	if tzDelta < math.Inf(1) {
-		tzMax = tzDelta * zdist
-	}
-
-	steppedIndex := -1
-
-	for t <= maxDistance {
-		if stopRay(ix, iy, iz) {
-			var previousGridPosition Int3
+	u := rayDir.Mul(float32(1 / length))
+	var hit HitInfo3D
+	physics.Walk(nil, float64(rayStart.X()), float64(rayStart.Y()), float64(rayStart.Z()), float64(u.X()), float64(u.Y()), float64(u.Z()), maxDistance*length,
+		func(x, y, z int, _ lv.StateID, f lv.Face, t float64) bool {
+			if !stopRay(int32(x), int32(y), int32(z)) {
+				return false
+			}
+			cell := Int3{X: int32(x), Y: int32(y), Z: int32(z)}
 			var side CubeSide
-			if steppedIndex == 0 {
-				if stepx > 0 {
-					side = West
-					previousGridPosition = Int3{ix - 1, iy, iz}
-				} else {
-					side = East
-					previousGridPosition = Int3{ix + 1, iy, iz}
-				}
+			var previous Int3
+			if t > 0 { // zero: the ray starts inside the cell
+				side = faceSide[f]
+				previous = cell.Add(side.AsDirection())
 			}
-			if steppedIndex == 1 {
-				if stepy > 0 {
-					side = Bottom
-					previousGridPosition = Int3{ix, iy - 1, iz}
-				} else {
-					side = Top
-					previousGridPosition = Int3{ix, iy + 1, iz}
-				}
-			}
-			if steppedIndex == 2 {
-				if stepz > 0 {
-					side = North
-					previousGridPosition = Int3{ix, iy, iz - 1}
-				} else {
-					side = South
-					previousGridPosition = Int3{ix, iy, iz + 1}
-				}
-			}
-
-			return HitInfo3D{
+			hit = HitInfo3D{
 				Hit:                    true,
-				Distance:               t,
+				Distance:               t / length,
 				Side:                   side,
-				CollisionWorldPosition: rayStart.Add(rayDir.Mul(float32(t))),
-				PreviousGridPosition:   previousGridPosition,
-				CollisionGridPosition:  Int3{X: ix, Y: iy, Z: iz},
+				CollisionWorldPosition: rayStart.Add(u.Mul(float32(t))),
+				PreviousGridPosition:   previous,
+				CollisionGridPosition:  cell,
 			}
-		}
+			return true
+		})
+	return hit
+}
 
-		if txMax < tyMax {
-			if txMax < tzMax {
-				ix += stepx
-				t = txMax
-				txMax += txDelta
-				steppedIndex = 0
-			} else {
-				iz += stepz
-				t = tzMax
-				tzMax += tzDelta
-				steppedIndex = 2
-			}
-		} else {
-			if tyMax < tzMax {
-				iy += stepy
-				t = tyMax
-				tyMax += tyDelta
-				steppedIndex = 1
-			} else {
-				iz += stepz
-				t = tzMax
-				tzMax += tzDelta
-				steppedIndex = 2
-			}
-		}
-	}
+// FaceSide is the side of a cell a ray enters through face f.
+func FaceSide(f lv.Face) CubeSide { return faceSide[f] }
 
-	return HitInfo3D{Hit: false}
+// faceSide is the side of a cell a ray enters it through.
+var faceSide = [lv.FaceCount]CubeSide{
+	lv.FaceDown:  Bottom,
+	lv.FaceUp:    Top,
+	lv.FaceNorth: North,
+	lv.FaceSouth: South,
+	lv.FaceWest:  West,
+	lv.FaceEast:  East,
 }

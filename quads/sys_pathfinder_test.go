@@ -4,10 +4,9 @@ import (
 	"testing"
 
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxellib/grid"
 )
 
-// A 6x6 ground floor (one voxel solid at y=0, so groundHeight is 1 everywhere)
+// A 6x6 ground floor (one voxel solid at y=0, so the feet cells are at y=1)
 // with a 4-voxel tower at x in [4,5]: too tall for climbStep, so only a
 // ClimbLink can reach it.
 func towerIsSolid(x, y, z int32) bool {
@@ -22,7 +21,7 @@ func towerIsSolid(x, y, z int32) bool {
 }
 
 func TestPathfindingCannotCrossAFourVoxelCliffWithoutAClimbLink(t *testing.T) {
-	pf := NewPathfindingSystem(towerIsSolid, 8)
+	pf := NewPathfindingSystem(towerIsSolid)
 	path := pf.calculatePath(mgl32.Vec3{1.5, 1, 1.5}, mgl32.Vec3{4.5, 4, 1.5})
 	if path != nil {
 		t.Fatalf("expected no path across a 3-voxel rise with no ladder, got %v", path)
@@ -30,10 +29,8 @@ func TestPathfindingCannotCrossAFourVoxelCliffWithoutAClimbLink(t *testing.T) {
 }
 
 func TestPathfindingClimbsARegisteredLadder(t *testing.T) {
-	pf := NewPathfindingSystem(towerIsSolid, 8)
-	bottom := grid.Point{X: 3, Y: 1}
-	top := grid.Point{X: 4, Y: 1}
-	pf.AddClimbLink(bottom, top, 1, 4)
+	pf := NewPathfindingSystem(towerIsSolid)
+	pf.AddClimbLink(mgl32.Vec3{3.5, 1, 1.5}, mgl32.Vec3{4.5, 4, 1.5})
 
 	path := pf.calculatePath(mgl32.Vec3{1.5, 1, 1.5}, mgl32.Vec3{4.5, 4, 1.5})
 	if path == nil {
@@ -81,12 +78,12 @@ func TestPathingComponentStaysArrivedUntilGivenANewDestination(t *testing.T) {
 }
 
 // A diagonal walk across open flat ground has nothing between the start and
-// the end to actually block a straight line, so pruneLineOfSight should
+// the end to actually block a straight line, so smoothing should
 // collapse A*'s zigzag of single-axis grid steps down to just the
 // destination - not the handful of intermediate grid-aligned waypoints a raw
 // A* path would otherwise produce.
 func TestPathfindingPrunesZigzagOnOpenGround(t *testing.T) {
-	pf := NewPathfindingSystem(towerIsSolid, 8)
+	pf := NewPathfindingSystem(towerIsSolid)
 	path := pf.calculatePath(mgl32.Vec3{0.5, 1, 0.5}, mgl32.Vec3{3.5, 1, 3.5})
 	if len(path) != 1 {
 		t.Fatalf("expected the open-ground diagonal to prune to a single waypoint, got %v", path)

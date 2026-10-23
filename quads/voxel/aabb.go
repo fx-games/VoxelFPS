@@ -1,10 +1,11 @@
 package voxel
 
 import (
+	"math"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/platform/gl"
 	"github.com/memmaker/voxelfps/quads/glhf"
-	"math"
 )
 
 type CollisionInfo struct {
@@ -14,14 +15,6 @@ type CollisionInfo struct {
 	SurfaceNormal mgl32.Vec3
 	// IsCollision reports whether the sweep touched anything, ie. TimeOfImpact < 1.
 	IsCollision bool
-}
-
-func NewCollisionInfo(intersection bool, timeOfImpact float32, normalAtImpact mgl32.Vec3) CollisionInfo {
-	return CollisionInfo{
-		TimeOfImpact:  timeOfImpact,
-		SurfaceNormal: normalAtImpact,
-		IsCollision:   intersection,
-	}
 }
 
 type AABB struct {
@@ -70,12 +63,6 @@ func (a AABB) HalfExtents() mgl32.Vec3 {
 
 func (a AABB) InflatedBy(extents mgl32.Vec3) AABB {
 	return NewAABB(a.Min().Sub(extents), a.Max().Add(extents))
-}
-
-func (a AABB) MinkowskiDifference(other AABB) AABB {
-	minM := other.Min().Sub(a.Max())
-	extM := a.Extents().Add(other.Extents())
-	return NewAABBFromMin(minM, extM)
 }
 
 // The F1 debug boxes - "Show AABBs" and "Show OBBs" - are collected here and
@@ -264,128 +251,6 @@ func (a AABB) cornerAxis(corner, axis int) float32 {
 	return a.minCoords[axis]
 }
 
-// SweepAABB moves a along vel and reports when it first touches b: a time of
-// impact between 0 and 1, where 0.5 is halfway along the path and 1 is no
-// collision at all, together with the normal of the surface that was hit, which
-// is what movement is slid along.
-//
-// Boxes that already overlap collide at 0, along the shallowest way out - see
-// SweepAABBFromMinkowski.
-func SweepAABB(a, b AABB, vel mgl32.Vec3) CollisionInfo {
-	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
-	m := a.MinkowskiDifference(b)
-	return SweepAABBFromMinkowski(m, vel)
-}
-
-func SweepAABBFromMinkowski(m AABB, vel mgl32.Vec3) CollisionInfo {
-	// Boxes that already overlap are the one case the plane tests below cannot
-	// answer. Every face of m is then behind the origin, so each of them
-	// reports a negative time and is thrown away, and the sweep comes back
-	// clear - the boxes are hollow, as this used to say. Something standing on
-	// the floor whose collider grew downwards by a hair was suddenly inside the
-	// floor, found nothing to stand on, and fell out of the map: a sprite
-	// changing animation does exactly that, because its box is measured off the
-	// picture and the pictures are not all the same height.
-	//
-	// So an overlap collides at once, pushed along the shallowest way out. It is
-	// what CheckAABBVsOBB has always done with a ray that starts inside the box;
-	// this is the axis aligned half of the same rule.
-	//
-	// ponytail: the caller separates them by its own epsilon per pass rather
-	// than by the depth this could report, so a deep overlap takes a few frames
-	// to climb out of. Return the depth if that ever shows.
-	if overlapsOrigin(m) {
-		return CollisionInfo{
-			TimeOfImpact:  0,
-			SurfaceNormal: m.GetNearestFaceNormal(mgl32.Vec3{}),
-			IsCollision:   true,
-		}
-	}
-
-	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
-	h := float32(1.0)
-	nx := 0
-	ny := 0
-	nz := 0
-	var s float32
-	nullVec := mgl32.Vec3{}
-
-	// X Min
-	s = LineToPlaneIntersection(nullVec, vel, m.Min(), mgl32.Vec3{-1, 0, 0})
-	if s >= 0 && vel.X() > 0 && s < h && InRange(s*vel.Y(), m.Min().Y(), m.Max().Y()) && InRange(s*vel.Z(), m.Min().Z(), m.Max().Z()) {
-		nx = -1
-		h = s
-		ny = 0
-		nz = 0
-	}
-
-	// X Max
-	s = LineToPlaneIntersection(nullVec, vel, mgl32.Vec3{m.Max().X(), m.Min().Y(), m.Min().Z()}, mgl32.Vec3{1, 0, 0})
-	if s >= 0 && vel.X() < 0 && s < h && InRange(s*vel.Y(), m.Min().Y(), m.Max().Y()) && InRange(s*vel.Z(), m.Min().Z(), m.Max().Z()) {
-		nx = 1
-		h = s
-		ny = 0
-		nz = 0
-	}
-
-	// Y Min
-	s = LineToPlaneIntersection(nullVec, vel, m.Min(), mgl32.Vec3{0, -1, 0})
-	if s >= 0 && vel.Y() > 0 && s < h && InRange(s*vel.X(), m.Min().X(), m.Max().X()) && InRange(s*vel.Z(), m.Min().Z(), m.Max().Z()) {
-		nx = 0
-		h = s
-		ny = -1
-		nz = 0
-	}
-
-	// Y Max
-	s = LineToPlaneIntersection(nullVec, vel, mgl32.Vec3{m.Min().X(), m.Max().Y(), m.Min().Z()}, mgl32.Vec3{0, 1, 0})
-	if s >= 0 && vel.Y() < 0 && s < h && InRange(s*vel.X(), m.Min().X(), m.Max().X()) && InRange(s*vel.Z(), m.Min().Z(), m.Max().Z()) {
-		nx = 0
-		h = s
-		ny = 1
-		nz = 0
-	}
-
-	// Z Min
-	s = LineToPlaneIntersection(nullVec, vel, m.Min(), mgl32.Vec3{0, 0, -1})
-	if s >= 0 && vel.Z() > 0 && s < h && InRange(s*vel.X(), m.Min().X(), m.Max().X()) && InRange(s*vel.Y(), m.Min().Y(), m.Max().Y()) {
-		nx = 0
-		h = s
-		ny = 0
-		nz = -1
-	}
-
-	// Z Max
-	s = LineToPlaneIntersection(nullVec, vel, mgl32.Vec3{m.Min().X(), m.Min().Y(), m.Max().Z()}, mgl32.Vec3{0, 0, 1})
-	if s >= 0 && vel.Z() < 0 && s < h && InRange(s*vel.X(), m.Min().X(), m.Max().X()) && InRange(s*vel.Y(), m.Min().Y(), m.Max().Y()) {
-		nx = 0
-		h = s
-		ny = 0
-		nz = 1
-	}
-
-	return CollisionInfo{
-		TimeOfImpact:  h,
-		SurfaceNormal: mgl32.Vec3{float32(nx), float32(ny), float32(nz)},
-		IsCollision:   h < 1,
-	}
-}
-
-// overlapsOrigin is whether the origin lies strictly inside this Minkowski
-// difference, which is what it means for the two boxes it was built from to
-// actually overlap. Strictly, because touching is not penetration: an object
-// resting on a surface is exactly there, and shoving it off would be a bounce.
-func overlapsOrigin(m AABB) bool {
-	for axis := 0; axis < 3; axis++ {
-		if m.Min()[axis] >= 0 || m.Max()[axis] <= 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// Union is the smallest box holding both. A box that measures nothing
-// contributes nothing, so a union over a list can start from the zero box.
 func (a AABB) Union(b AABB) AABB {
 	if a.IsEmpty() {
 		return b
@@ -424,21 +289,6 @@ func LineToPlaneIntersection(lineStart, lineEnd, planeCoord, planeNormal mgl32.V
 		return math.MaxFloat32
 	}
 	return planeNormal.Dot(planeCoord.Sub(lineStart)) / NdotU
-}
-
-func IntersectRayAABB(rayOrigin, rayDir mgl32.Vec3, aabb AABB) (intersectionDistance float64, intersection bool) {
-	tMin := aabb.Min().Sub(rayOrigin)
-	tMax := aabb.Max().Sub(rayOrigin)
-	tMin = Vec3Div(tMin, rayDir)
-	tMax = Vec3Div(tMax, rayDir)
-	t1 := mgl32.Vec3{float32(min(float64(tMin.X()), float64(tMax.X()))), float32(min(float64(tMin.Y()), float64(tMax.Y()))), float32(min(float64(tMin.Z()), float64(tMax.Z())))}
-	t2 := mgl32.Vec3{float32(max(float64(tMin.X()), float64(tMax.X()))), float32(max(float64(tMin.Y()), float64(tMax.Y()))), float32(max(float64(tMin.Z()), float64(tMax.Z())))}
-	tNear := max(max(float64(t1.X()), float64(t1.Y())), float64(t1.Z()))
-	tFar := min(min(float64(t2.X()), float64(t2.Y())), float64(t2.Z()))
-	if tNear > tFar || tFar < 0 {
-		return -1, false
-	}
-	return tNear, true
 }
 
 func Vec3Div(a, b mgl32.Vec3) mgl32.Vec3 {

@@ -1,6 +1,9 @@
 package main
 
-import "github.com/go-gl/mathgl/mgl32"
+import (
+	"github.com/go-gl/mathgl/mgl32"
+	"github.com/memmaker/voxellib/character"
+)
 
 // Player movement taken from Quake 3's bg_pmove.c: friction, acceleration
 // towards a wish direction, weak acceleration in the air (which is what makes
@@ -14,11 +17,8 @@ import "github.com/go-gl/mathgl/mgl32"
 const quakeUnit = 0.9 / 56.0
 
 const (
-	pmAccelerate    = 10.0
-	pmAirAccelerate = 1.0
-	pmFriction      = 6.0
-	pmStopSpeed     = 100.0 * quakeUnit
-	pmSpeed         = 320.0 * quakeUnit
+	// pmSpeed is the top running speed (character.PMoveStep's own).
+	pmSpeed = 320.0 * quakeUnit
 	// pmDuckScale is PM_CmdScale's own: a ducked player asks for half the speed
 	// a standing one does.
 	pmDuckScale    = 0.5
@@ -27,8 +27,6 @@ const (
 	// pmStepSize is Q3's STEPSIZE: the tallest ledge that is walked straight up
 	// instead of blocking. Stairs are built under it, walls above it.
 	pmStepSize = 18.0 * quakeUnit
-	// Below this speed friction stops the player outright, as in PM_Friction.
-	pmMinSpeed = 1.0 * quakeUnit
 	// pmoveStep is Q3's pmove_fixed interval (8ms). Movement is advanced in
 	// these so friction and acceleration do not depend on the framerate.
 	pmoveStep = 1.0 / 125.0
@@ -66,58 +64,12 @@ func (m *q3Move) CheckJump(pressed, grounded bool) bool {
 	return jump
 }
 
-// pmoveSingle is PM_WalkMove / PM_AirMove for one step. Friction only applies on
-// the ground; in the air the acceleration is a tenth as strong but is still
-// allowed to reach the full wish speed, which is what lets a strafing player
-// gain speed beyond pmSpeed.
+// pmoveSingle is PM_WalkMove / PM_AirMove for one step (VoxelLib
+// character.PMoveStep). Friction only applies on the ground; in the air the
+// acceleration is a tenth as strong but may still reach the full wish speed,
+// which is what lets a strafing player gain speed beyond pmSpeed.
 func pmoveSingle(velocity, wishDir mgl32.Vec3, grounded, crouched bool, deltaTime float32) mgl32.Vec3 {
-	accel := float32(pmAirAccelerate)
-	if grounded {
-		velocity = pmFrictionStep(velocity, deltaTime)
-		accel = pmAccelerate
-	}
-	if wishDir == (mgl32.Vec3{}) {
-		return velocity
-	}
-	wishSpeed := float32(pmSpeed)
-	if crouched {
-		wishSpeed *= pmDuckScale
-	}
-	return pmAccelerateStep(velocity, wishDir, wishSpeed, accel, deltaTime)
-}
-
-// pmFrictionStep is PM_Friction: it only slows the horizontal velocity, and
-// below pmStopSpeed it bites at a constant rate so the player comes to a halt
-// instead of creeping.
-func pmFrictionStep(velocity mgl32.Vec3, deltaTime float32) mgl32.Vec3 {
-	flat := mgl32.Vec3{velocity.X(), 0, velocity.Z()}
-	speed := flat.Len()
-	if speed < pmMinSpeed {
-		return mgl32.Vec3{0, velocity.Y(), 0}
-	}
-	control := speed
-	if control < pmStopSpeed {
-		control = pmStopSpeed
-	}
-	newSpeed := speed - control*pmFriction*deltaTime
-	if newSpeed < 0 {
-		newSpeed = 0
-	}
-	scale := newSpeed / speed
-	return mgl32.Vec3{velocity.X() * scale, velocity.Y(), velocity.Z() * scale}
-}
-
-// pmAccelerateStep is PM_Accelerate: only the part of the wish speed that is not
-// already reached is added, so running straight ahead tops out at wishSpeed
-// while movement sideways to the current velocity keeps adding to it.
-func pmAccelerateStep(velocity, wishDir mgl32.Vec3, wishSpeed, accel, deltaTime float32) mgl32.Vec3 {
-	addSpeed := wishSpeed - velocity.Dot(wishDir)
-	if addSpeed <= 0 {
-		return velocity
-	}
-	accelSpeed := accel * deltaTime * wishSpeed
-	if accelSpeed > addSpeed {
-		accelSpeed = addSpeed
-	}
-	return velocity.Add(wishDir.Mul(accelSpeed))
+	vx, vz := character.PMoveStep(float64(velocity.X()), float64(velocity.Z()), float64(wishDir.X()), float64(wishDir.Z()),
+		grounded, crouched, float64(deltaTime))
+	return mgl32.Vec3{float32(vx), velocity.Y(), float32(vz)}
 }

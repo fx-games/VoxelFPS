@@ -2,14 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"path/filepath"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/core"
 	"github.com/memmaker/voxelfps/quads"
 	"github.com/memmaker/voxelfps/quads/glhf"
 	"github.com/memmaker/voxelfps/quads/voxel"
-	"github.com/memmaker/voxellib/grid"
-	"log"
-	"path/filepath"
 )
 
 func (g *Game) spawnProjectileImpact(worldPos mgl32.Vec3, atlas *glhf.TextureAtlasFixed, spriteAnimationIndex int) {
@@ -321,9 +321,7 @@ func (g *Game) spawnEntity(spawnPos mgl32.Vec3, entity core.MapEntity) *quads.Ga
 	// A staircase (or anything else bridging an elevation change) tells
 	// pathfinding about the two tiles it connects; see core.MapEntity.StepTo.
 	if entity.StepTo != nil && g.Pathfinder != nil {
-		from := grid.Point{X: int(spawnPos.X()), Y: int(spawnPos.Z())}
-		to := grid.Point{X: int(entity.StepTo.X()), Y: int(entity.StepTo.Z())}
-		g.Pathfinder.AddWalkLink(from, to)
+		g.Pathfinder.AddWalkLink(spawnPos, *entity.StepTo)
 	}
 
 	// A piece of scenery that names its own boxes collides as those instead of

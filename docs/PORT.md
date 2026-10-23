@@ -38,7 +38,17 @@ glTF models, particles, audio base, platform/GL.
 - [x] 2. World: a VoxelLib `voxel.World` holds the blocks (`voxelfps:cube`, face
       slots as properties); the GL chunks are a synced render cache until step 5.
       Maps are region files (`tools/convertmaps`, round-trip checked).
-- [ ] 3. Physics, movement, pathing on `collide`/`nav`.
+- [x] 3. Physics, movement, pathing on `collide`/`nav`:
+      - the solver's sweeps and ray-box tests are `collide.SweepAABBVsOBB`,
+        `collide.IntersectRayOBB` and `collide.RayAABB` (`quads/voxel/obb.go` wraps them);
+      - block raycasts are `physics.Walk`, picking and shots are `projectile.Hitscan`
+        with physics objects as OBB shapes;
+      - player movement steps are `character.PMoveStep`;
+      - actors path on `nav.Graph` (3D, same-height steps), stairs and ladders as `Links`.
+      The player stays on the game's own solver, not `character.Character`, because
+      it collides with entities (props, doors, actors), which `Character` does not.
+      Ladders stay game climb volumes: they are oriented scenery pieces, not blocks,
+      so `character.Climber` does not apply.
 - [ ] 4. Render features into VoxelLib: decals, sprites, spotlight shadows.
 - [ ] 5. Client on `voxel/engine` + `voxel/render`, ui, audio.
 - [ ] 6. Remove GL, web build, dead code; screenshot check.

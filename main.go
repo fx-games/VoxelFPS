@@ -3,6 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	_ "image/png"
+	"log"
+	"math"
+	"os"
+	"path/filepath"
+	"runtime/pprof"
+	"strings"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/audio"
@@ -14,13 +22,9 @@ import (
 	"github.com/memmaker/voxelfps/quads/glhf"
 	"github.com/memmaker/voxelfps/quads/voxel"
 	"github.com/memmaker/voxelfps/wep"
-	_ "image/png"
-	"log"
-	"math"
-	"os"
-	"path/filepath"
-	"runtime/pprof"
-	"strings"
+	"github.com/memmaker/voxellib/projectile"
+	lv "github.com/memmaker/voxellib/voxel"
+	"github.com/memmaker/voxellib/voxel/collide"
 )
 
 func main() {
@@ -785,14 +789,7 @@ func (g *Game) mapLoad(mapLoad core.MapLoadResult, hotReload bool) {
 	// Feet on the floor is the game, flying is building - a level loaded from
 	// inside the editor, a new one above all, is loaded flying. F switches.
 	g.setGravity(!g.editor.active)
-	// Bounds, not VoxelDimensions: the voxel buffer is padded up to a whole
-	// number of chunks (a 7-tall level allocates a 32-tall buffer), and every
-	// layer above the level itself is chunk padding, not carved-out air - it
-	// reads as solid. Scanning up to the padded height made groundHeight find
-	// "floor" at y=33 on every column instead of the real surface, and the
-	// search only ever explored a stack of one-tile-wide solid ceilings that no
-	// path could get down from.
-	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt, g.CubeMap.Bounds().Y)
+	g.SetupPathfinder(g.CubeMap.IsSolidBlockAt)
 
 	// The props sample the baked light where they stand, so it has to exist.
 	g.CubeMap.BakeTorchlight()
@@ -1358,65 +1355,80 @@ func (g *Game) rayCastFromScreenPos(screenPosX, screenPosY float64) RaycastResul
 const rayCastRange = 100.0
 
 func (g *Game) rayCast(origin, direction mgl32.Vec3) RaycastResult {
-	var hitInfo voxel.HitInfo3D
-	var hitObject *quads.GameObject
-	var worldPos mgl32.Vec3
-	var relativePos mgl32.Vec3
-	var onTop bool
-	hitInfo = voxel.DDARaycast(origin, direction, rayCastRange, func(x, y, z int32) (stopRay bool) {
-		if !g.CubeMap.Contains(int32(x), int32(y), int32(z)) {
-			return false // outside the map there is nothing to hit, keep going until the ray runs out
-		}
-		// The nearest thing in this cell, not the first one the map happens to
-		// hand over. A cell holds one barrel and it never mattered; a cell of
-		// the weapon room holds a shelf's five boxes and the guns standing on
-		// them, and picking whichever came out of the map first meant looking
-		// at a gun and selecting the board behind it - differently each frame.
-		nearest := math.MaxFloat64
-		var nearestObj *quads.PhysicsComponent
+	direction = direction.Normalize()
+	// The things in the cells the ray crosses up to the first solid one are
+	// the only ones it can meet; projectile.Hitscan picks the nearest of them
+	// and the block, so paint on a wall seen from behind loses to the wall.
+	var targets []projectile.Target
+	seen := map[*quads.PhysicsComponent]bool{}
+	voxel.DDARaycast(origin, direction, rayCastRange, func(x, y, z int32) bool {
 		for gObj := range g.physicsSystem.GetCollidersAt(x, y, z) {
 			// A projectile in flight is not something to look at, interact with or
 			// shoot: it is skipped here rather than in hoveredObj, so the HUD frame,
 			// the label and the hitscan weapons all lose it at once.
-			if gObj.GameObject() == g.player.GameObject || gObj.GameObject() == g.editor.gameObjectForSpawning ||
+			if seen[gObj] || gObj.GameObject() == g.player.GameObject || gObj.GameObject() == g.editor.gameObjectForSpawning ||
 				gObj.GameObject().HasComponent(quads.ComponentTypeProjectile) {
 				continue
 			}
-			intersectionDistance, intersects := voxel.IntersectRayOBB(origin, direction, gObj.OBB(g.Camera))
-			if !intersects || intersectionDistance >= nearest {
-				continue
-			}
-			nearest, nearestObj = intersectionDistance, gObj
-		}
-		// A solid cell's face is the first thing in it. Graffiti or a sign on a
-		// wall overlaps the wall's cell as well as the air in front, so a ray
-		// entering the wall from behind met its box a whole voxel past the face
-		// and selected paint through the wall.
-		if nearestObj != nil && g.CubeMap.IsSolidBlockAt(x, y, z) {
-			cell := mgl32.Vec3{float32(x), float32(y), float32(z)}
-			face, _ := voxel.IntersectRayAABB(origin, direction, voxel.NewAABB(cell, cell.Add(mgl32.Vec3{1, 1, 1})))
-			if nearest > face+1e-3 {
-				nearestObj = nil
-			}
-		}
-		if nearestObj != nil {
-			collisionWorldPos := origin.Add(direction.Mul(float32(nearest)))
-			hitObject = nearestObj.GameObject()
-			worldPos = collisionWorldPos
-			relativePos = collisionWorldPos.Sub(nearestObj.Position())
-			onTop = onLid(nearestObj.OBB(g.Camera), collisionWorldPos)
-			return true
+			seen[gObj] = true
+			targets = append(targets, obbTarget{gObj, gObj.OBB(g.Camera)})
 		}
 		return g.CubeMap.IsSolidBlockAt(x, y, z)
 	})
-
-	return RaycastResult{
-		HitObject: hitObject,
-		WorldPos:  worldPos,
-		Relative:  relativePos,
-		HitInfo:   hitInfo,
-		OnTop:     onTop,
+	hit, ok := projectile.Hitscan(g.CubeMap.World(), cubeBoxes, [3]float64{float64(origin.X()), float64(origin.Y()), float64(origin.Z())},
+		[3]float64{float64(direction.X()), float64(direction.Y()), float64(direction.Z())}, rayCastRange, targets)
+	if !ok {
+		return RaycastResult{}
 	}
+	point := mgl32.Vec3{float32(hit.X), float32(hit.Y), float32(hit.Z)}
+	if hit.Block {
+		cell := voxel.Int3{X: int32(hit.BlockPos.X), Y: int32(hit.BlockPos.Y), Z: int32(hit.BlockPos.Z)}
+		side := voxel.FaceSide(hit.Face)
+		return RaycastResult{HitInfo: voxel.HitInfo3D{
+			Hit: true, Distance: hit.Dist, Side: side, CollisionWorldPosition: point,
+			CollisionGridPosition: cell, PreviousGridPosition: cell.Add(side.AsDirection()),
+		}}
+	}
+	target := hit.Target.(obbTarget)
+	return RaycastResult{
+		HitObject: target.obj.GameObject(),
+		WorldPos:  point,
+		Relative:  point.Sub(target.obj.Position()),
+		HitInfo:   voxel.HitInfo3D{Hit: true, Distance: hit.Dist, CollisionWorldPosition: point, CollisionGridPosition: voxel.PositionToGridInt3(point)},
+		OnTop:     onLid(target.obb, point),
+	}
+}
+
+// cubeBoxes is every solid cell's ray box: the whole cell.
+func cubeBoxes(x, y, z int, id lv.StateID, buf []collide.AABB) []collide.AABB {
+	if id == lv.Air {
+		return buf
+	}
+	return append(buf, collide.Block(x, y, z))
+}
+
+// obbTarget is a physics object as a projectile.Shape, hit at its oriented box.
+type obbTarget struct {
+	obj *quads.PhysicsComponent
+	obb voxel.OBB
+}
+
+func (t obbTarget) Box() collide.AABB { return t.obj.AABB().Collide() }
+
+func (t obbTarget) Frame() (x, y, z, yaw float64) {
+	p := t.obj.Position()
+	return float64(p.X()), float64(p.Y()), float64(p.Z()), 0
+}
+
+func (t obbTarget) Intersect(x0, y0, z0, x1, y1, z1 float64) (x, y, z float64, part int, ok bool) {
+	o, d := [3]float64{x0, y0, z0}, [3]float64{x1 - x0, y1 - y0, z1 - z0}
+	dist, _, hit := collide.IntersectRayOBB(o, d, t.obb.Collide())
+	segment := math.Sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2])
+	if !hit || dist > segment {
+		return 0, 0, 0, -1, false
+	}
+	s := dist / segment
+	return x0 + d[0]*s, y0 + d[1]*s, z0 + d[2]*s, -1, true
 }
 
 // rayCastIgnoringHolograms is rayCast for anything that should treat a
