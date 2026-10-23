@@ -45,8 +45,9 @@ glTF models, particles, audio base, platform/GL.
         with physics objects as OBB shapes;
       - player movement steps are `character.PMoveStep`;
       - actors path on `nav.Graph` (3D, same-height steps), stairs and ladders as `Links`.
-      The player stays on the game's own solver, not `character.Character`, because
-      it collides with entities (props, doors, actors), which `Character` does not.
+      Entities (props, doors, actors, items) are bodies in a `collide.Bodies` index;
+      every mover, player included, sweeps, slides and steps up with `collide.Mover`
+      (`Slide`/`StepSlide`), so the game's own solver and collision grid are gone.
       Ladders stay game climb volumes: they are oriented scenery pieces, not blocks,
       so `character.Climber` does not apply.
 - [ ] 4. Render features into VoxelLib: decals, sprites, spotlight shadows.

@@ -1,11 +1,13 @@
 package quads
 
 import (
+	"math"
+	"testing"
+
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/memmaker/voxelfps/events"
 	"github.com/memmaker/voxelfps/quads/voxel"
-	"math"
-	"testing"
+	"github.com/memmaker/voxellib/voxel/collide"
 )
 
 // mover is a half unit cube that starts at the given position.
@@ -162,7 +164,7 @@ func TestObjectsThatLeaveTheMapKeepFalling(t *testing.T) {
 	if pos := escaping.Position(); pos.X() < 15 || pos.Y() > 0 {
 		t.Errorf("at %v, want well past the edge and fallen below the floor", pos)
 	}
-	if cells := len(system.objectsOnGrid); cells > 8 {
+	if cells := system.bodies.Cells(); cells > 8 {
 		t.Errorf("%d grid cells left behind by one falling box", cells)
 	}
 }
@@ -359,15 +361,14 @@ func walkInto(t *testing.T, colliders func(x, y, z int32) []LinkedAABB, stepHeig
 	t.Helper()
 	moving := mover(t, mgl32.Vec3{1.5, 0.25, 0.5})
 	movement := mgl32.Vec3{0.5, 0, 0}
-	blocked, _, normals := CheckForCollisions(moving, moving.Position().Add(movement), colliders)
-	if !blockedByWall(normals) {
-		t.Fatalf("expected the ledge to block the move, ended at %v", blocked)
+	m := cellMover(moving, colliders)
+	box := moving.CollisionAABBAt(moving.Position()).Collide()
+	move := [3]float64{float64(movement.X()), 0, float64(movement.Z())}
+	if _, contacts := m.Slide(box, move); !collide.Wall(contacts) {
+		t.Fatalf("expected the ledge to block the move")
 	}
-	position, _, _, stepped := StepOver(moving, movement, blocked, stepHeight, colliders)
-	if !stepped {
-		return blocked
-	}
-	return position
+	offset, _ := m.StepSlide(box, move, float64(stepHeight))
+	return moving.Position().Add(mgl32.Vec3{float32(offset[0]), float32(offset[1]), float32(offset[2])})
 }
 
 // A ledge lower than the step height is walked up, and the mover ends up

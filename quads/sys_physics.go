@@ -1,23 +1,23 @@
 package quads
 
 import (
+	"math"
+
 	"github.com/go-gl/mathgl/mgl32"
-	"github.com/memmaker/voxelfps/core"
 	"github.com/memmaker/voxelfps/events"
 	"github.com/memmaker/voxelfps/quads/voxel"
-	"math"
+	"github.com/memmaker/voxellib/voxel/collide"
 )
 
 type PhysicsSystem struct {
 	movingObjects           []*PhysicsComponent
 	staticObjects           []*PhysicsComponent
-	objectsOnGrid           map[core.Int3]map[*PhysicsComponent]bool
+	bodies                  *collide.Bodies
 	accelerationFromGravity mgl32.Vec3
 	isSolid                 func(x int32, y int32, z int32) bool
 	collisionPairsChecked   int
 	gravityEnabled          bool
 	weightlessAt            func(mgl32.Vec3) bool
-	colliderScratch         []LinkedAABB
 	stepAccumulator         float64
 	stepHeight              float32
 }
@@ -64,14 +64,37 @@ func (c *PhysicsSystem) weightless(position mgl32.Vec3) bool {
 func NewCollisionSolver(isSolid func(x int32, y int32, z int32) bool) *PhysicsSystem {
 	return &PhysicsSystem{
 		isSolid:                 isSolid,
-		objectsOnGrid:           make(map[core.Int3]map[*PhysicsComponent]bool),
+		bodies:                  collide.NewBodies(),
 		accelerationFromGravity: mgl32.Vec3{0, -9.8, 0},
 	}
 }
 
 func (c *PhysicsSystem) moveObjectOnGrid(obj *PhysicsComponent, oldPos mgl32.Vec3, newPos mgl32.Vec3) {
-	c.removeFromGrid(oldPos, obj)
-	c.addToGrid(newPos, obj)
+	if obj.body < 0 {
+		return
+	}
+	c.bodies.Set(obj.body, bodyOf(obj, newPos))
+}
+
+// bodyOf is obj standing at pos as a VoxelLib body: its collision box (turned
+// ones as their oriented box, enclosed by the turned extents), listed under
+// everything it can be picked by.
+func bodyOf(obj *PhysicsComponent, pos mgl32.Vec3) collide.Body {
+	b := collide.Body{Box: obj.CollisionAABBAt(pos).Collide(), Bounds: obj.gridAABBAt(pos).Collide(), Solid: true, Data: obj}
+	if obj.HasOrientedCollider() {
+		b.Box = obj.WorldAABB().Collide()
+		o := obj.WorldOBB().Collide()
+		b.OBB = &o
+		b.Bounds = union(b.Bounds, b.Box)
+	}
+	return b
+}
+
+func union(a, b collide.AABB) collide.AABB {
+	return collide.AABB{
+		MinX: min(a.MinX, b.MinX), MinY: min(a.MinY, b.MinY), MinZ: min(a.MinZ, b.MinZ),
+		MaxX: max(a.MaxX, b.MaxX), MaxY: max(a.MaxY, b.MaxY), MaxZ: max(a.MaxZ, b.MaxZ),
+	}
 }
 
 const epsilon = 0.001
@@ -144,28 +167,7 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 
 	// finalPos := (0.5 * accel * deltaTime^2) + (vel * deltaTime) + pos
 
-	// One closure and one scratch slice per step instead of per object: the
-	// collision test consumes the returned colliders before asking for the next
-	// cell, so a single reused buffer is enough.
-	getCollidersAt := func(x, y, z int32) []LinkedAABB {
-		c.colliderScratch = c.colliderScratch[:0]
-		if c.isSolid(x, y, z) {
-			c.colliderScratch = append(c.colliderScratch, LinkedAABB{
-				AABB: voxel.NewAABBFromMin(mgl32.Vec3{float32(x), float32(y), float32(z)}, mgl32.Vec3{1, 1, 1}),
-			})
-			return c.colliderScratch
-		}
-		for collider := range c.objectsOnGrid[core.Int3{X: x, Y: y, Z: z}] {
-			if !collider.GameObject().IsAlive() || collider.PassThrough {
-				continue
-			}
-			c.colliderScratch = append(c.colliderScratch, LinkedAABB{
-				AABB:       collider.AABB(),
-				GameObject: collider,
-			})
-		}
-		return c.colliderScratch
-	}
+	solids := collide.SolidsFunc(func(x, y, z int) bool { return c.isSolid(int32(x), int32(y), int32(z)) })
 
 	for id := len(c.movingObjects) - 1; id >= 0; id-- {
 		obj := c.movingObjects[id]
@@ -208,21 +210,23 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 		}
 		stepMovement := movement.Mul(1 / float32(steps))
 
+		mover := c.moverFor(obj, solids)
 		grounded := false
 		for step := 0; step < steps; step++ {
 			oldPos := obj.Position()
-			correctedPos, pairsChecked, hitNormals := CheckForCollisions(obj, oldPos.Add(stepMovement), getCollidersAt)
-			c.collisionPairsChecked += pairsChecked
-
+			box := obj.CollisionAABBAt(oldPos).Collide()
+			move := [3]float64{float64(stepMovement.X()), float64(stepMovement.Y()), float64(stepMovement.Z())}
+			var offset [3]float64
+			var contacts []collide.Contact
 			// A move a wall stopped gets one more chance: over the top of it, if
 			// the wall turns out to be low enough to be a stair.
-			if c.stepHeight > 0 && obj.AffectedByGravity() && blockedByWall(hitNormals) {
-				steppedPos, steppedNormals, stepPairs, stepped := StepOver(obj, stepMovement, correctedPos, c.stepHeight, getCollidersAt)
-				c.collisionPairsChecked += stepPairs
-				if stepped {
-					correctedPos, hitNormals = steppedPos, steppedNormals
-				}
+			if c.stepHeight > 0 && obj.AffectedByGravity() {
+				offset, contacts = mover.StepSlide(box, move, float64(c.stepHeight))
+			} else {
+				offset, contacts = mover.Slide(box, move)
 			}
+			c.collisionPairsChecked += len(contacts)
+			correctedPos := oldPos.Add(mgl32.Vec3{float32(offset[0]), float32(offset[1]), float32(offset[2])})
 
 			obj.SetPosition(correctedPos)
 			c.moveObjectOnGrid(obj, oldPos, correctedPos)
@@ -232,15 +236,16 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 			}
 
 			// Movement into a surface is spent, the rest of it keeps going.
-			for _, normal := range hitNormals {
+			for _, contact := range contacts {
+				normal := mgl32.Vec3{float32(contact.Normal[0]), float32(contact.Normal[1]), float32(contact.Normal[2])}
 				if into := velocity.Dot(normal); into < 0 {
 					velocity = velocity.Sub(normal.Mul(into))
 				}
-				if normal.Y() > groundNormalThreshold {
-					grounded = true
-				}
 			}
-			if len(hitNormals) > 0 {
+			if collide.Grounded(contacts) {
+				grounded = true
+			}
+			if len(contacts) > 0 {
 				obj.SetVelocity(velocity)
 				stepMovement = velocity.Mul(float32(deltaTime) / float32(steps))
 			}
@@ -252,51 +257,41 @@ func (c *PhysicsSystem) step(deltaTime float64) {
 	//c.updateProjectiles(deltaTime)
 }
 
-// blockedByWall reports whether any of these surfaces is steep enough to be a
-// wall. A floor underfoot or a ceiling overhead stops a move too, and neither is
-// something to try and climb.
-func blockedByWall(normals []mgl32.Vec3) bool {
-	for _, normal := range normals {
-		if math.Abs(float64(normal.Y())) < groundNormalThreshold {
-			return true
-		}
+// moverFor is the VoxelLib mover obj moves with: blocks, and every body but
+// its own that it does not pass through. Each surface hit is published, and a
+// thing that died of it stops there.
+func (c *PhysicsSystem) moverFor(obj *PhysicsComponent, solids collide.Solids) *collide.Mover {
+	return &collide.Mover{
+		Shapes: c.bodies.Shapes(solids, obj.body, func(_ int32, b *collide.Body) bool { return passesThrough(obj, b.Data.(*PhysicsComponent)) }),
+		OnContact: func(contact collide.Contact) bool {
+			var other *PhysicsComponent
+			if contact.Body >= 0 {
+				other = c.bodies.Get(contact.Body).Data.(*PhysicsComponent)
+			}
+			at := obj.Position().Add(mgl32.Vec3{float32(contact.Point[0]), float32(contact.Point[1]), float32(contact.Point[2])})
+			events.Publish(events.EventPhysicsCollision, CollisionEvent{
+				ObjectA:       obj,
+				ObjectB:       other,
+				WorldPos:      at,
+				SurfaceNormal: mgl32.Vec3{float32(contact.Normal[0]), float32(contact.Normal[1]), float32(contact.Normal[2])},
+			})
+			return obj.GameObject().IsAlive()
+		},
 	}
-	return false
 }
 
-// StepOver is Quake 3's PM_StepSlideMove: a move that ran into a wall is tried
-// again from stepHeight higher up and then dropped back down again, which walks
-// an object up a stair without needing a ramp to slide along. The entity is
-// expected to still be standing where the blocked move started.
+// passesThrough is whether mover goes through collider rather than stopping.
 //
-// It reports false, and changes nothing, unless the retry got further along than
-// the blocked move did - otherwise a wall too tall to climb would still nudge
-// the climber upwards every frame it is walked into.
-func StepOver(movingEntity *PhysicsComponent, movement mgl32.Vec3, blockedPos mgl32.Vec3, stepHeight float32, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, []mgl32.Vec3, int, bool) {
-	startPos := movingEntity.Position()
-	up := mgl32.Vec3{0, stepHeight, 0}
-	pairs := 0
-
-	// Up, along, and back down. Each leg starts from where the last one ended,
-	// so a low ceiling shortens the first leg instead of pushing the entity
-	// through it.
-	risen, upPairs, _ := CheckForCollisions(movingEntity, startPos.Add(up), collidersAt)
-	movingEntity.SetPosition(risen)
-	moved, alongPairs, _ := CheckForCollisions(movingEntity, risen.Add(movement), collidersAt)
-	movingEntity.SetPosition(moved)
-	landed, downPairs, landingNormals := CheckForCollisions(movingEntity, moved.Sub(up), collidersAt)
-	movingEntity.SetPosition(startPos)
-	pairs = upPairs + alongPairs + downPairs
-
-	if flatDistance(landed, startPos) <= flatDistance(blockedPos, startPos)+epsilon {
-		return blockedPos, nil, pairs, false
-	}
-	return landed, landingNormals, pairs, true
-}
-
-// flatDistance is the distance between two points ignoring height.
-func flatDistance(a, b mgl32.Vec3) float32 {
-	return mgl32.Vec2{a.X() - b.X(), a.Z() - b.Z()}.Len()
+// A thing that is walked through is not a thing that gets shoved. PassThrough
+// takes an item out of everybody else's way; the other half of the same
+// contract is that the item does not resolve a collision against the player -
+// out of a box it is already deep inside, so it goes the shortest way, which is
+// downwards through the floor and out of the map. Only against things that
+// move under their own steam: the level and its furniture are what an item
+// rests on, and it has to keep colliding with those.
+func passesThrough(mover, collider *PhysicsComponent) bool {
+	return !collider.GameObject().IsAlive() || collider.PassThrough ||
+		(mover.PassThrough && collider.AffectedByGravity())
 }
 
 func kinematic(acceleration mgl32.Vec3, velocity mgl32.Vec3, position mgl32.Vec3, deltaTime float64) mgl32.Vec3 {
@@ -329,7 +324,7 @@ func (c *PhysicsSystem) AddObject(obj *PhysicsComponent) {
 // starts firing, the box it stands in drops by however much that gap differs: a
 // pixel's worth for most of them, most of a tile for a turret's corpse. It is
 // inside the floor from that moment, and it used to fall through the world for
-// it. voxel.SweepAABB now pushes it back out instead, but over several frames
+// it. The collide mover now pushes it back out instead, but over several frames
 // and visibly; moving it up by exactly what the box dropped is neither.
 //
 // Only the shape of the box is watched, never where it is. A thing walking down
@@ -350,49 +345,7 @@ func (c *PhysicsSystem) keepStandingOnIt(obj *PhysicsComponent) {
 }
 
 func (c *PhysicsSystem) addToGrid(pos mgl32.Vec3, obj *PhysicsComponent) {
-	forEachGridCell(obj.gridAABBAt(pos), func(gridPos core.Int3) {
-		if c.objectsOnGrid[gridPos] == nil {
-			c.objectsOnGrid[gridPos] = make(map[*PhysicsComponent]bool)
-		}
-		c.objectsOnGrid[gridPos][obj] = true
-	})
-}
-
-func (c *PhysicsSystem) removeFromGrid(atPos mgl32.Vec3, obj *PhysicsComponent) {
-	forEachGridCell(obj.gridAABBAt(atPos), func(gridPos core.Int3) {
-		if c.objectsOnGrid[gridPos] != nil {
-			delete(c.objectsOnGrid[gridPos], obj)
-			// An empty cell goes too, or something falling off the level
-			// leaves a trail of them all the way down.
-			if len(c.objectsOnGrid[gridPos]) == 0 {
-				delete(c.objectsOnGrid, gridPos)
-			}
-		}
-	})
-}
-
-// forEachGridCell visits every cell the box reaches into.
-//
-// Its eight corners are not enough, which is what this used to walk. A box wider
-// than a cell has whole cells in the middle of it that no corner of it lands in,
-// and a thing left out of those is a thing the picking ray walks straight
-// through: the ray tests what the cell it is in lists, and nothing else. Whether
-// that happened at all depended on which cells the ray happened to cross, which
-// is why it came and went with the angle you looked from.
-//
-// Floor rather than a cast, too: a cast truncates towards zero, so everything
-// between -1 and 0 landed in cell 0 and the half of the map with negative
-// coordinates was listed one cell over.
-func forEachGridCell(aabb voxel.AABB, visit func(core.Int3)) {
-	cell := func(v float32) int32 { return int32(math.Floor(float64(v))) }
-	min, max := aabb.Min(), aabb.Max()
-	for x := cell(min.X()); x <= cell(max.X()); x++ {
-		for y := cell(min.Y()); y <= cell(max.Y()); y++ {
-			for z := cell(min.Z()); z <= cell(max.Z()); z++ {
-				visit(core.Int3{X: x, Y: y, Z: z})
-			}
-		}
-	}
+	obj.body = c.bodies.Add(bodyOf(obj, pos))
 }
 
 func (c *PhysicsSystem) onProjectileObjectCollision(projectile *PhysicsComponent, collidingObject *PhysicsComponent, worldPosOfCollision mgl32.Vec3) {
@@ -424,7 +377,8 @@ func (c *PhysicsSystem) RemoveObject(obj *PhysicsComponent) {
 }
 
 func (c *PhysicsSystem) remove(id int, obj *PhysicsComponent) {
-	c.removeFromGrid(obj.Position(), obj)
+	c.bodies.Remove(obj.body)
+	obj.body = -1
 	c.movingObjects = append(c.movingObjects[:id], c.movingObjects[id+1:]...)
 }
 
@@ -444,12 +398,14 @@ func (c *PhysicsSystem) Teleport(obj *PhysicsComponent, pos mgl32.Vec3) {
 }
 
 func (c *PhysicsSystem) GetCollidersAt(x int32, y int32, z int32) map[*PhysicsComponent]bool {
-	mapPos := core.Int3{X: x, Y: y, Z: z}
-	m, ok := c.objectsOnGrid[mapPos]
-	if !ok {
-		return nil
-	}
-	return m
+	var found map[*PhysicsComponent]bool
+	c.bodies.Query(collide.Block(int(x), int(y), int(z)), func(_ int32, b *collide.Body) {
+		if found == nil {
+			found = map[*PhysicsComponent]bool{}
+		}
+		found[b.Data.(*PhysicsComponent)] = true
+	})
+	return found
 }
 
 /*
@@ -901,126 +857,65 @@ func IntersectCapsuleCapsule(capsule1, capsule2 Capsule, velocity1, velocity2 mg
 	return true, timeOfImpact, normal
 }
 
-// maxCollisionPasses is how often a single move may be redirected by a surface
-// before the rest of it is dropped.
-const maxCollisionPasses = 8
-
-// CheckForCollisions moves the entity towards newPos, stopping at and sliding
-// along whatever is in the way. It returns the corrected position, how many
-// pairs were tested, and the surface normal of every distinct surface that was
-// hit, so the caller can take the movement into them out of its velocity.
-//
-// The cells to test are taken from the bounding box of the whole move, so the
-// work grows with the cube of the distance: keep single calls short, see
-// PhysicsSystem.Update.
+// CheckForCollisions moves the entity towards newPos with the same VoxelLib
+// mover the system uses, against the colliders collidersAt lists per cell. It
+// returns the corrected position, how many surfaces were touched, and their
+// normals. The system itself reads its body index instead; this is for tests
+// and callers with their own idea of what is in the way.
 func CheckForCollisions(movingEntity *PhysicsComponent, newPos mgl32.Vec3, collidersAt func(x int32, y int32, z int32) []LinkedAABB) (mgl32.Vec3, int, []mgl32.Vec3) {
-	pairsChecked := 0
-	var hitNormals []mgl32.Vec3
-	// adapted from: https://luisreis.net/blog/aabb_collision_handling/
-	prevPos := movingEntity.Position()
-	boxFromPos := movingEntity.CollisionAABBAt
+	old := movingEntity.Position()
+	m := cellMover(movingEntity, collidersAt)
+	d := newPos.Sub(old)
+	offset, contacts := m.Slide(movingEntity.CollisionAABBAt(old).Collide(), [3]float64{float64(d.X()), float64(d.Y()), float64(d.Z())})
+	normals := make([]mgl32.Vec3, len(contacts))
+	for i, c := range contacts {
+		normals[i] = mgl32.Vec3{float32(c.Normal[0]), float32(c.Normal[1]), float32(c.Normal[2])}
+	}
+	return old.Add(mgl32.Vec3{float32(offset[0]), float32(offset[1]), float32(offset[2])}), len(contacts), normals
+}
 
-	// Each pass slides the rest of the movement along the surface that was hit.
-	// A corner can keep producing new surfaces, so the passes are capped
-	// instead of trusting the movement to run out.
-	for pass := 0; pass < maxCollisionPasses; pass++ {
-		velocity := newPos.Sub(prevPos)
-
-		if velocity == zeroVec3 {
-			break
-		}
-
-		prevBox := boxFromPos(prevPos)
-		newBox := boxFromPos(newPos)
-		minX := int32(math.Floor(math.Min(float64(newBox.Min().X()), float64(prevBox.Min().X()))))
-		maxX := int32(math.Floor(math.Max(float64(newBox.Max().X()), float64(prevBox.Max().X()))))
-
-		minY := int32(math.Floor(math.Min(float64(newBox.Min().Y()), float64(prevBox.Min().Y()))))
-		maxY := int32(math.Floor(math.Max(float64(newBox.Max().Y()), float64(prevBox.Max().Y()))))
-
-		minZ := int32(math.Floor(math.Min(float64(newBox.Min().Z()), float64(prevBox.Min().Z()))))
-		maxZ := int32(math.Floor(math.Max(float64(newBox.Max().Z()), float64(prevBox.Max().Z()))))
-
-		earliestCollision := voxel.CollisionInfo{
-			TimeOfImpact:  1,
-			SurfaceNormal: mgl32.Vec3{0, 0, 0},
-		}
-		var earliestCollider *PhysicsComponent
-
-		for yi := minY; yi <= maxY; yi++ {
-			for zi := minZ; zi <= maxZ; zi++ {
-				for xi := minX; xi <= maxX; xi++ {
-					collidersHere := collidersAt(xi, yi, zi)
-					if len(collidersHere) == 0 {
-						continue
+// cellMover is a mover over collidersAt, publishing hits as the system does.
+func cellMover(obj *PhysicsComponent, collidersAt func(x, y, z int32) []LinkedAABB) *collide.Mover {
+	var others []*PhysicsComponent
+	m := &collide.Mover{Shapes: func(area collide.AABB, out []collide.Shape) []collide.Shape {
+		others = others[:0]
+		seen := map[*PhysicsComponent]bool{}
+		for x := int32(math.Floor(area.MinX)); x <= int32(math.Floor(area.MaxX)); x++ {
+			for y := int32(math.Floor(area.MinY)); y <= int32(math.Floor(area.MaxY)); y++ {
+				for z := int32(math.Floor(area.MinZ)); z <= int32(math.Floor(area.MaxZ)); z++ {
+					for _, l := range collidersAt(x, y, z) {
+						s := collide.Shape{Box: l.AABB.Collide(), Body: -1}
+						if l.GameObject != nil {
+							if l.GameObject == obj || seen[l.GameObject] || passesThrough(obj, l.GameObject) {
+								continue
+							}
+							seen[l.GameObject] = true
+							if l.GameObject.HasOrientedCollider() {
+								o := l.GameObject.WorldOBB().Collide()
+								s.OBB = &o
+							}
+							s.Body = int32(len(others))
+							others = append(others, l.GameObject)
+						}
+						out = append(out, s)
 					}
-
-					for _, collider := range collidersHere {
-						if movingEntity == collider.GameObject {
-							continue
-						}
-						// A thing that is walked through is not a thing that
-						// gets shoved. PassThrough already takes an item out of
-						// everybody else's way; this is the other half of the
-						// same contract, and without it walking into an item
-						// leaves the *item* resolving a collision against the
-						// player - out of a box it is already deep inside, so
-						// it goes the shortest way, which is downwards through
-						// the floor and out of the map.
-						//
-						// Only against things that move under their own steam:
-						// the level and its furniture are what an item rests
-						// on, and it has to keep colliding with those.
-						if movingEntity.PassThrough && collider.GameObject != nil &&
-							collider.GameObject.AffectedByGravity() {
-							continue
-						}
-						var c voxel.CollisionInfo
-						if collider.GameObject != nil && collider.GameObject.HasOrientedCollider() {
-							c = voxel.CheckAABBVsOBB(prevBox, collider.GameObject.WorldOBB(), velocity)
-						} else {
-							c = voxel.SweepAABB(prevBox, collider.AABB, velocity)
-						}
-						pairsChecked++
-						if c.TimeOfImpact < earliestCollision.TimeOfImpact {
-							earliestCollision = c
-							earliestCollider = collider.GameObject
-						}
-					}
-
 				}
 			}
 		}
-
-		epsilon := float32(0.001)
-		newPos = prevPos.Add(velocity.Mul(earliestCollision.TimeOfImpact).Add(earliestCollision.SurfaceNormal.Mul(epsilon)))
-		if earliestCollision.TimeOfImpact == 1 {
-			break
+		return out
+	}}
+	m.OnContact = func(c collide.Contact) bool {
+		var other *PhysicsComponent
+		if c.Body >= 0 {
+			other = others[c.Body]
 		}
-
-		// One event for the surface that was actually hit, not for every
-		// collider that happened to be in the way.
 		events.Publish(events.EventPhysicsCollision, CollisionEvent{
-			ObjectA:       movingEntity,
-			ObjectB:       earliestCollider,
-			WorldPos:      prevPos.Add(velocity.Mul(earliestCollision.TimeOfImpact)),
-			SurfaceNormal: earliestCollision.SurfaceNormal,
+			ObjectA:       obj,
+			ObjectB:       other,
+			WorldPos:      obj.Position().Add(mgl32.Vec3{float32(c.Point[0]), float32(c.Point[1]), float32(c.Point[2])}),
+			SurfaceNormal: mgl32.Vec3{float32(c.Normal[0]), float32(c.Normal[1]), float32(c.Normal[2])},
 		})
-		if !movingEntity.GameObject().IsAlive() {
-			return newPos, pairsChecked, hitNormals
-		}
-		hitNormals = append(hitNormals, earliestCollision.SurfaceNormal)
-
-		BdotB := earliestCollision.SurfaceNormal.Dot(earliestCollision.SurfaceNormal)
-
-		if BdotB != 0 {
-			prevPos = newPos
-			AdotB := (1 - earliestCollision.TimeOfImpact) * velocity.Dot(earliestCollision.SurfaceNormal)
-			//translation = translation.AddFlat(velocity.Mul(1 - r.Result)).Sub(r.Normal.Mul(AdotB / BdotB))
-			newPos = newPos.Add(velocity.Mul(1 - earliestCollision.TimeOfImpact).Sub(earliestCollision.SurfaceNormal.Mul(AdotB / BdotB)))
-		}
-
+		return obj.GameObject().IsAlive()
 	}
-
-	return newPos, pairsChecked, hitNormals
+	return m
 }

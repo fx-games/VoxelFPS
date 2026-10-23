@@ -55,6 +55,8 @@ type PhysicsComponent struct {
 	// fixed step moved this thing from and to - see RenderPosition.
 	system           *PhysicsSystem
 	stepFrom, stepTo mgl32.Vec3
+	// body is this thing's id in the system's collide.Bodies.
+	body int32
 }
 
 // PickBoxes is one kind's picking boxes: by animation, then by the facing the
@@ -130,6 +132,7 @@ func NewPhysicsComponent(applyGravity bool, aabb voxel.AABB) *PhysicsComponent {
 	return &PhysicsComponent{
 		ApplyGravity: applyGravity,
 		aabb:         aabb,
+		body:         -1,
 	}
 }
 
@@ -280,8 +283,8 @@ func isEmptyBox(box voxel.AABB) bool {
 // selected nothing.
 //
 // Being one box for every animation also means a thing takes its listing with it
-// when it moves: removeFromGrid works out the same cells addToGrid did, rather
-// than the cells of whatever animation happens to be playing now.
+// when it moves: its body's bounds stay the same box, rather than whatever
+// animation happens to be playing now.
 func (g *PhysicsComponent) gridAABBAt(pos mgl32.Vec3) voxel.AABB {
 	if g.gridBox == nil {
 		box := g.aabb
@@ -316,7 +319,7 @@ func (g *PhysicsComponent) gridAABBAt(pos mgl32.Vec3) voxel.AABB {
 // its own. Exact for the quarter turns a piece is ever given, generous for the
 // angles in between, and - unlike turning the box by the rotation it has right
 // now - still true after a door swings or an actor turns round, which is what
-// lets one listing be cached and reused for removeFromGrid.
+// lets one listing be cached and reused for every move.
 //
 // Face on, a sprite's box is as wide as the picture and a few hundredths deep;
 // from the side those two swap over. Listed on the grid as drawn from one angle,
